@@ -1,45 +1,23 @@
 #include <iostream>
 #include <exception>
 #include <stdexcept>
-#include <sstream>
 
+#include "Integrator.h"
 #include "Util.h"
-#include "IOUtils.h"
-#include "include/json.hpp"
-
-using json = nlohmann::json;
-
-void handleExceptions(const std::exception_ptr pExc)
-{
-    try
-    {
-	if (pExc)
-	    std::rethrow_exception(pExc);
-    }
-    catch (const json::exception &e)
-    {
-	std::cout << "Encountered a json parse error."
-		  << "\nMake sure the .json file is correct and filenames are correct.\n"
-		  << e.what()
-		  << std::endl;
-    }
-    catch (const std::exception &e)
-    {
-	std::cout << "Unhandled exception!\n" << e.what() << std::endl;
-	throw e;
-    }
-}
 
 int main(int argc, char **argv)
 {
     std::exception_ptr pExc = nullptr;
 
-    if (argc != 2)
+    if (argc != 4)
     {
-	std::cerr << "One argument is required."
-		  << "\nUsage: " << argv[0] << " filename"
-		  << "\nfilename = the name of the (.json) file that contains"
+	std::cerr << "Three arguments are required."
+		  << "\nUsage: " << argv[0] << " inputFile outputFile saveFile"
+		  << "\ninputFile = the name of the (.json) file that contains"
 		  << " the necessary inputs."
+		  << "\noutputFile = file where the program output is written to"
+		  << "\nsaveFile = file that can be used as a input file"
+		  << " to continue from an earlier run"
 		  << std::endl;
 	
 	return EXIT_FAILURE;
@@ -47,21 +25,13 @@ int main(int argc, char **argv)
     
     try
     {
-	json data;
-	readFileToJSON(argv[1], data);
-	
-	data["newThing"] = "this really cool new thing";
-	data["vector of things"] = {1, 2, 4, 1337, 3.1415};
-	
-	std::stringstream ss;
-	ss << _XSTRINGIFY(DATA_PATH) << "output.json";
-	
-	writeJSONToFile(ss.str(), data);
+	cubble::Integrator integrator(argv[1], argv[2], argv[3]);
+	integrator.integrate(3.1415);
     }
     catch (const std::exception &e)
     {
 	pExc = std::current_exception();
-	handleExceptions(pExc);
+	cubble::exception::handleException(pExc);
 	
 	return EXIT_FAILURE;
     }
