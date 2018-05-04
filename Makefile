@@ -5,7 +5,7 @@ DATA_PATH = data/
 PRG = $(SRC_PATH)Main.cpp
 
 CC = g++
-COMMON_FLAGS = -Wall -std=c++11
+COMMON_FLAGS = -Wall -std=c++11 -DDATA_PATH="$(DATA_PATH)"
 OPTIM_FLAGS = -O3
 FLAGS = $(COMMON_FLAGS) $(OPTIM)
 
