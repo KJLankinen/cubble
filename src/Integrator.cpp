@@ -6,14 +6,14 @@
 
 #include "include/json.hpp"
 
-using cubble;
+using namespace cubble;
 
 Integrator::Integrator(const std::string &inF,
 		       const std::string &outF,
 		       const std::string &saveF)
 {
     inputFile = std::string(_XSTRINGIFY(DATA_PATH) + inF);
-    outFile = std::string(_XSTRINGIFY(DATA_PATH) + outF);
+    outputFile = std::string(_XSTRINGIFY(DATA_PATH) + outF);
     saveFile = std::string(_XSTRINGIFY(DATA_PATH) + saveF);
     
     deserialize();
@@ -24,7 +24,7 @@ Integrator::~Integrator()
     serialize();
 }
 
-void integrate(double dt)
+void Integrator::integrate(double dt)
 {
     phi = dt * 0.1;
     alpha = dt + 5.0;

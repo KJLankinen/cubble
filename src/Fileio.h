@@ -49,7 +49,7 @@ namespace cubble
 	    
 	    void operator<<(const json &j)
 		{
-		    file << j;
+		    file << std::setw(4) << j;
 		}
 	    
 	    std::string filename;
