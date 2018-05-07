@@ -4,6 +4,7 @@
 
 #include "Integrator.h"
 #include "Util.h"
+#include "Vector3.h"
 
 int main(int argc, char **argv)
 {
@@ -26,7 +27,7 @@ int main(int argc, char **argv)
     try
     {
 	cubble::Integrator integrator(argv[1], argv[2], argv[3]);
-	integrator.integrate(3.1415);
+	integrator.run();
     }
     catch (const std::exception &e)
     {

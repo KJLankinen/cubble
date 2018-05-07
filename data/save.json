@@ -1,0 +1,7 @@
+{
+    "avgRad": 0.21,
+    "minRad": 1e-08,
+    "numBubbles": 1000,
+    "phi": 0.1,
+    "stdDevRad": 0.06
+}

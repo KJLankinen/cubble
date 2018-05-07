@@ -35,4 +35,6 @@ namespace cubble
 	    }
 	}
     }
+
+    const double epsilon = 1.0e-10;
 }

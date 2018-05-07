@@ -1,4 +1,7 @@
 {
-"alpha" : 1.337,
-"phi" : 0.1
+    "phi" : 0.1,
+    "avgRad" : 0.21,
+    "stdDevRad" : 0.06,
+    "minRad" : 1e-8,
+    "numBubbles" : 1000
 }
