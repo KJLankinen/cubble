@@ -3,5 +3,6 @@
     "avgRad" : 0.21,
     "stdDevRad" : 0.06,
     "minRad" : 1e-8,
-    "numBubbles" : 1000
+    "numBubbles" : 1000,
+    "cellsPerDim" : 10
 }

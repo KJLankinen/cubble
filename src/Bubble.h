@@ -16,6 +16,10 @@ namespace cubble
 	    , radius(r)
 	{}
 	Bubble() {}
+	Bubble(const Bubble& o)
+	    : position(o.position)
+	    , radius(o.radius)
+	{}
 	Bubble(Bubble &&o)
 	    : position(o.position)
 	    , radius(o.radius)

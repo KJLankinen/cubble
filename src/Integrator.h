@@ -27,9 +27,11 @@ namespace cubble
 	void run();
 	
     private:
+	class Cell;
 	//----------
 	// Functions
 	//----------
+	void prepareCells();
 	void generateBubble(Vector3<double> intervalStart, Vector3<double> intervalEnd);
 	void integrate(double dt);
 	void readWriteParameters(bool read);
@@ -46,8 +48,10 @@ namespace cubble
 	std::string saveFile;
 
 	std::vector<Bubble> bubbles;
+	std::vector<Cell> cells;
 
 	size_t numBubbles = 0;
+	size_t cellsPerDim = 1;
 	
 	double phi = 0.0;
 	double avgRad = 0.0;
