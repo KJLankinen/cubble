@@ -8,6 +8,8 @@
 #include <vector>
 #include <random>
 
+#include "include/json.hpp"
+
 typedef std::uniform_real_distribution<double> urdd;
 typedef std::normal_distribution<double> ndd;
 
@@ -30,8 +32,7 @@ namespace cubble
 	//----------
 	void generateBubble(Vector3<double> intervalStart, Vector3<double> intervalEnd);
 	void integrate(double dt);
-	void serialize();
-	void deserialize();
+	void readWriteParameters(bool read);
 
 	// ----------
 	// Parameters

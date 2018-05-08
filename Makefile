@@ -25,4 +25,4 @@ $(BIN_DIR)/%.o : $(SRC_PATH)%.cpp
 .PHONY : clean
 clean :
 	rm -fr $(BIN_DIR)
-	rm -f *~
+	rm -f $(SRC_PATH)*~

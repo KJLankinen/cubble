@@ -2,9 +2,7 @@
 
 #include "Integrator.h"
 #include "Fileio.h"
-#include "Util.h"
-
-#include "include/json.hpp"
+#include "Macros.h"
 
 using namespace cubble;
 
@@ -20,7 +18,7 @@ Integrator::Integrator(const std::string &inF,
     generator = std::mt19937(rngSeed);
     uniDist = urdd(0, 1);
     
-    deserialize();
+    readWriteParameters(true);
 
     bubbles.reserve(numBubbles);    
     normDist = ndd(avgRad, stdDevRad);
@@ -28,7 +26,7 @@ Integrator::Integrator(const std::string &inF,
 
 Integrator::~Integrator()
 {
-    serialize();
+    readWriteParameters(false);
 }
 
 void Integrator::run()
@@ -40,8 +38,7 @@ void Integrator::run()
     for (size_t i = 0; i < numBubbles; ++i)
 	generateBubble(Vector3<double>(0, 0, 0), Vector3<double>(1, 1, 1));
 
-    for (const Bubble &b : bubbles)
-	std::cout << b << std::endl;
+    fileio::writeVectorToFile(outputFile, bubbles);
 }
 
 void Integrator::generateBubble(Vector3<double> intervalStart, Vector3<double> intervalEnd)
@@ -59,9 +56,9 @@ void Integrator::generateBubble(Vector3<double> intervalStart, Vector3<double> i
 	};
 
     Vector3<double> position = generatePosition();
-    double radius = normDist(generator) * avgRad;
+    double radius = normDist(generator);
     while (radius < minRad)
-	radius = normDist(generator) * avgRad;
+	radius = normDist(generator);
     
     bubbles.emplace_back(position, radius);
 }
@@ -71,30 +68,25 @@ void Integrator::integrate(double dt)
     phi = dt * 0.1;
 }
 
-void Integrator::deserialize()
+void Integrator::readWriteParameters(bool read)
 {
-    std::cout << "Reading state from file..." << std::endl;
+    std::string msg = read
+	? "Reading parameters from file " + inputFile
+	: "Saving parameters to file " + saveFile;
     
-    json inputParams;
-    fileio::readFileToJSON(inputFile, inputParams);
+    std::cout << msg << std::endl;
 
-    phi = inputParams["phi"];
-    avgRad = inputParams["avgRad"];
-    stdDevRad = inputParams["stdDevRad"];
-    minRad = inputParams["minRad"];
-    numBubbles = inputParams["numBubbles"];
-}
+    nlohmann::json params;
 
-void Integrator::serialize()
-{
-    std::cout << "Writing state to file..." << std::endl;
+    if (read)
+	fileio::readFileToJSON(inputFile, params);
     
-    json outputParams;
-    outputParams["phi"] = phi;
-    outputParams["avgRad"] = avgRad;
-    outputParams["stdDevRad"] = stdDevRad;
-    outputParams["minRad"] = minRad;
-    outputParams["numBubbles"] = numBubbles;
+    _PARAMETERIZE(read, phi, params);
+    _PARAMETERIZE(read, avgRad, params);
+    _PARAMETERIZE(read, stdDevRad, params);
+    _PARAMETERIZE(read, minRad, params);
+    _PARAMETERIZE(read, numBubbles, params);
 
-    fileio::writeJSONToFile(saveFile, outputParams);
+    if (!read)
+	fileio::writeJSONToFile(saveFile, params);
 }

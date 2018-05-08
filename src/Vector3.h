@@ -43,12 +43,12 @@ namespace cubble
 	
 	Vector3<T> operator+(const Vector3<T> &o) const
 	{
-	    return Vector3<T>(o.x + x, o.y + y, o.z + z);
+	    return Vector3<T>(x + o.x, y + o.y, z + o.z);
 	}
 	
 	Vector3<T> operator-(const Vector3<T> &o) const
 	{
-	    return Vector3<T>(o.x - x, o.y - y, o.z - z);
+	    return Vector3<T>(x - o.x, y - o.y, z - o.z);
 	}
 	
 	Vector3<T> operator*(const T s) const

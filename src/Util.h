@@ -6,9 +6,6 @@
 
 #include "include/json.hpp"
 
-#define _XSTRINGIFY(s) _STRINGIFY(s)
-#define _STRINGIFY(s) #s
-
 namespace cubble
 {
     namespace exception

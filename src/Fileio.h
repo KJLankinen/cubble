@@ -7,9 +7,8 @@
 #include <string>
 #include <fstream>
 #include <assert.h>
-#include "include/json.hpp"
 
-using json = nlohmann::json;
+#include "include/json.hpp"
 
 namespace cubble
 {
@@ -45,34 +44,50 @@ namespace cubble
 		}	
 	    }
 	    
-	    void operator>>(json &j)
+	    void operator>>(nlohmann::json &j)
 	    {
 		file >> j;
 	    }
 	    
-	    void operator<<(const json &j)
+	    void operator<<(const nlohmann::json &j)
 	    {
 		file << std::setw(4) << j;
+	    }
+
+	    template <typename T>
+	    void operator<<(const T &val)
+	    {
+		file << val << "\n";
 	    }
 	    
 	    std::string filename;
 	    std::fstream file;
 	    
 	    // Only friend functions listed here are allowed to use this implementation.
-	    friend void readFileToJSON(const std::string&, json&);
-	    friend void writeJSONToFile(const std::string&, const json&);
+	    friend void readFileToJSON(const std::string&, nlohmann::json&);
+	    friend void writeJSONToFile(const std::string&, const nlohmann::json&);
+	    template <typename T>
+	    friend void writeVectorToFile(const std::string&, const std::vector<T>&);
 	};
 	
-	inline void readFileToJSON(const std::string &filename, json &j)
+	void readFileToJSON(const std::string &filename, nlohmann::json &j)
 	{
 	    FileWrapper file(filename, true);
 	    file >> j;
 	}
 	
-	inline void writeJSONToFile(const std::string &filename, const json &j)
+	void writeJSONToFile(const std::string &filename, const nlohmann::json &j)
 	{
 	    FileWrapper file(filename, false);
 	    file << j;
+	}
+
+	template <typename T>
+	void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
+	{
+	    FileWrapper file(filename, false);
+	    for (const auto &val : v)
+		file << val;
 	}
     }
 }
