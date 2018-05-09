@@ -35,6 +35,7 @@ namespace cubble
 	void prepareCells();
 	void generateBubble();
 	void removeBubble(const Bubble &bubble);
+	void removeIntersectingBubbles();
 	void integrate(double dt);
 	void readWriteParameters(bool read);
 

@@ -1,5 +1,5 @@
 #include <iostream>
-#include <memory>
+#include <sstream>
 
 #include "Integrator.h"
 #include "Fileio.h"
@@ -31,25 +31,39 @@ Integrator::~Integrator()
 
 void Integrator::run()
 {
-    // Start the simulation.
-    // Do the necessary pre-simulation steps and then start
-    // the 'main loop'.
+    size_t n = 0;
+    size_t numGenSweeps = 0;
+    while (true)
+    {
+	if (n == numBubbles || numGenSweeps > 10000)
+	    break;
+	
+	for (size_t i = n; i < numBubbles; ++i)
+	    generateBubble();
 
-    for (size_t i = 0; i < numBubbles; ++i)
-	generateBubble();
+	removeIntersectingBubbles();
+	n = bubbles.size();
+	
+	numGenSweeps++;
+    }
 
-    std::vector<Bubble> bubblesVec;
-    for (const auto &pair : bubbles)
-	bubblesVec.push_back(pair.second);
-    fileio::writeVectorToFile(outputFile, bubblesVec);
+    Bubble tempBubble;
+    std::cout << "Generated " << n
+	      << " bubbles over " << numGenSweeps
+	      << " sweeps."
+	      << "\nNumber of failed generations: " << tempBubble.getUID() - (size_t)n
+	      << std::endl;
     
-    std::vector<Bubble*> bubbleRefs;
+    size_t cellIndex = 0;
     for (const auto &c : cells)
+    {
+	std::vector<Bubble*> bubbleRefs;
 	c.getBubbleRefsAsVector(bubbleRefs);
-    
-    fileio::writeVectorToFile("data/bubble_refs.dat", bubbleRefs);
-
-    removeBubble(bubbles[0]);
+	std::stringstream ss;
+	ss << "data/bubble_refs_" << cellIndex << ".dat";
+	fileio::writeVectorToFile(ss.str(), bubbleRefs);
+	cellIndex++;
+    }
 }
 
 void Integrator::prepareCells()
@@ -72,7 +86,7 @@ void Integrator::prepareCells()
     {
 	// Calculate 3D coordinates from index
 	size_t x = n % cellsPerDim;
-	size_t y = n / cellsPerDim;
+	size_t y = (n % cellsPerDim * cellsPerDim) / cellsPerDim;
 	size_t z = n / (cellsPerDim * cellsPerDim);
 	
 	size_t xp = x < cellsPerDim - 1 ? x + 1 : 0;
@@ -143,6 +157,36 @@ void Integrator::removeBubble(const Bubble &bubble)
 {
     cells[bubble.getCellIndex()].removeBubbleRef(bubble.getUID());
     bubbles.erase(bubble.getUID());
+}
+
+void Integrator::removeIntersectingBubbles()
+{
+    std::map<size_t, Bubble*> toBeDeleted;
+    for (const auto &c : cells)
+    {
+	std::map<size_t, Bubble*> cellBubbles;
+	std::map<size_t, Bubble*> neighborhoodBubbles;
+	c.getSelfBubbleRefs(cellBubbles);
+	c.getNeighborhoodBubbleRefs(neighborhoodBubbles);
+
+	for (const auto &pair : cellBubbles)
+	{
+	    for (const auto &pair2 : neighborhoodBubbles)
+	    {
+		if (pair.second->overlapsWith(*pair2.second))
+		{
+		    // IFF neither of the overlapping bubbles are yet marked as
+		    // to be deleted, mark one.
+		    if (toBeDeleted.find(pair.second->getUID()) == toBeDeleted.end()
+			&& toBeDeleted.find(pair2.second->getUID()) == toBeDeleted.end())
+			toBeDeleted[pair.second->getUID()] = pair.second;
+		}
+	    }
+	}
+    }
+
+    for (const auto &pair : toBeDeleted)
+	removeBubble(*pair.second);
 }
 
 void Integrator::integrate(double dt)

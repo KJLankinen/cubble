@@ -28,3 +28,20 @@ void Cell::getBubbleRefsAsVector(std::vector<Bubble*> &bubbles) const
     for (auto pair : bubbleMap)
 	bubbles.push_back(pair.second);
 }
+
+void Cell::getSelfBubbleRefs(std::map<size_t, Bubble*> &bm) const
+{
+    bm = bubbleMap;
+}
+
+void Cell::getNeighborhoodBubbleRefs(std::map<size_t, Bubble*> &bm) const
+{
+    bm.insert(bubbleMap.begin(), bubbleMap.end());
+
+    for (const Cell *neighbor : neighbors)
+    {
+	std::map<size_t, Bubble*> temp;
+	neighbor->getSelfBubbleRefs(temp);
+	bm.insert(temp.begin(), temp.end());
+    }
+}

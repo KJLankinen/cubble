@@ -8,6 +8,10 @@ size_t Bubble::newUID = 0;
 
 bool Bubble::overlapsWith(const Bubble &b) const
 {
+    // No self-overlapping
+    if (this == &b)
+	return false;
+    
     double rads = b.radius + radius;
     return (b.position - position).getSquaredLength() < rads * rads;
 }
