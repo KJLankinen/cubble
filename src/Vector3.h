@@ -5,6 +5,8 @@
 #include <math.h>
 #include <iostream>
 
+#include "include/json.hpp"
+
 #include "Util.h"
 
 namespace cubble
@@ -85,6 +87,14 @@ namespace cubble
 	    y = o.y;
 	    z = o.z;
 	}
+
+	template <typename T2>
+	void operator=(const Vector3<T2> &o)
+	{
+	    x = (T)o.getX();
+	    y = (T)o.getY();
+	    z = (T)o.getZ();
+	}
 	
 	bool operator==(const Vector3<T> &o) const
 	{
@@ -113,4 +123,21 @@ namespace cubble
 	T y = 0;
 	T z = 0;
     };
+
+    template <typename T>
+    void to_json(nlohmann::json &j, const Vector3<T> &v)
+    {
+	j = nlohmann::json{
+	    {"x", v.getX()},
+	    {"y", v.getY()},
+	    {"z", v.getZ()}};
+    }
+
+    template <typename T>
+    void from_json(const nlohmann::json &j, Vector3<T> &v)
+    {
+	v.setX(j.at("x").get<T>());
+	v.setY(j.at("y").get<T>());
+	v.setZ(j.at("z").get<T>());
+    }
 }

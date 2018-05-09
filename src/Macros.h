@@ -2,7 +2,7 @@
 
 #define _XSTRINGIFY(s) _STRINGIFY(s)
 #define _STRINGIFY(s) #s
-#define _PARAMETERIZE(read, param, j)		\
+#define _PARAMETER(read, j, param)		\
     do						\
     {						\
 	if (read)				\

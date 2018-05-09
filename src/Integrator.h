@@ -3,9 +3,11 @@
 #pragma once
 
 #include "Bubble.h"
+#include "Cell.h"
 
 #include <string>
 #include <vector>
+#include <map>
 #include <random>
 
 #include "include/json.hpp"
@@ -27,12 +29,12 @@ namespace cubble
 	void run();
 	
     private:
-	class Cell;
 	//----------
 	// Functions
 	//----------
 	void prepareCells();
-	void generateBubble(Vector3<double> intervalStart, Vector3<double> intervalEnd);
+	void generateBubble();
+	void removeBubble(const Bubble &bubble);
 	void integrate(double dt);
 	void readWriteParameters(bool read);
 
@@ -47,15 +49,21 @@ namespace cubble
 	std::string outputFile;
 	std::string saveFile;
 
-	std::vector<Bubble> bubbles;
 	std::vector<Cell> cells;
+	std::map<size_t, Bubble> bubbles;
 
 	size_t numBubbles = 0;
 	size_t cellsPerDim = 1;
 	
-	double phi = 0.0;
+	double phiTarget = 0.0;
 	double avgRad = 0.0;
 	double stdDevRad = 0.0;
 	double minRad = 0.0;
+
+	// Two vectors that define the volume of the simulation area:
+	// lbb = left bottom back corner
+	// tfr = top front right corner
+	Vector3<double> lbb;
+	Vector3<double> tfr;
     };
 }

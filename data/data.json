@@ -1,8 +1,18 @@
 {
-    "phi" : 0.1,
+    "phiTargetExpl" : "The target volume fraction.", 
+    "phiTarget" : 0.1,
+    "avgRadExpl" : "The average radius of the bubbles.",
     "avgRad" : 0.21,
+    "stdDevRadExpl" : "The standard deviation of the bubble radii.",
     "stdDevRad" : 0.06,
+    "minRadExpl" : "The minimum radius of a bubble, below which a bubble disappears.",
     "minRad" : 1e-8,
+    "numBubblesExpl" : "How many bubbles to spawn at the start of the simulation.",
     "numBubbles" : 1000,
-    "cellsPerDim" : 10
+    "cellsPerDimExpl" : "How many cells in each dimension should the simulation box have.",
+    "cellsPerDim" : 10,
+    "lbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
+    "lbb" : {"x" : 0, "y" : 0, "z" : 0},
+    "tfrExpl" : "The coordinates of the top front right corner of the simulation box.",
+    "tfr" : {"x" : 1, "y" : 1, "z" : 1}
 }

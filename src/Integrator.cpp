@@ -1,55 +1,11 @@
 #include <iostream>
+#include <memory>
 
 #include "Integrator.h"
 #include "Fileio.h"
 #include "Macros.h"
 
 using namespace cubble;
-
-class Integrator::Cell
-{
-public:
-    Cell() {}
-    ~Cell() {}
-
-    void addNeighbor(Cell *cell)
-    {
-	if (cell)
-	    neighbors.push_back(cell);
-	else
-	    std::cerr << "Cell to add was a nullptr!" << std::endl;
-    }
-
-    void addBubble(Bubble *bubble)
-    {
-	if (bubble)
-	    bubbles.push_back(bubble);
-	else
-	    std::cerr << "Bubble to add was a nullptr!" << std::endl;
-    }
-
-    void getOwnBubbles(std::vector<Bubble*> &b) const
-    {
-        b = bubbles;
-    }
-
-    void getAllBubbles(std::vector<Bubble*> &b) const
-    {
-	b.clear();
-	b.insert(b.end(), bubbles.begin(), bubbles.end());
-	
-	std::vector<Bubble*> temp;
-	for (const Cell *c : neighbors)
-	{
-	    c->getOwnBubbles(temp);
-	    b.insert(b.end(), temp.begin(), temp.end());
-	}
-    }
-    
-private:
-    std::vector<Cell*> neighbors;
-    std::vector<Bubble*> bubbles;
-};
 
 Integrator::Integrator(const std::string &inF,
 		       const std::string &outF,
@@ -65,7 +21,6 @@ Integrator::Integrator(const std::string &inF,
     generator = std::mt19937(rngSeed);
     uniDist = urdd(0, 1);
     normDist = ndd(avgRad, stdDevRad);
-    bubbles.reserve(numBubbles);
     prepareCells();
 }
 
@@ -81,9 +36,20 @@ void Integrator::run()
     // the 'main loop'.
 
     for (size_t i = 0; i < numBubbles; ++i)
-	generateBubble(Vector3<double>(0, 0, 0), Vector3<double>(1, 1, 1));
+	generateBubble();
 
-    fileio::writeVectorToFile(outputFile, bubbles);
+    std::vector<Bubble> bubblesVec;
+    for (const auto &pair : bubbles)
+	bubblesVec.push_back(pair.second);
+    fileio::writeVectorToFile(outputFile, bubblesVec);
+    
+    std::vector<Bubble*> bubbleRefs;
+    for (const auto &c : cells)
+	c.getBubbleRefsAsVector(bubbleRefs);
+    
+    fileio::writeVectorToFile("data/bubble_refs.dat", bubbleRefs);
+
+    removeBubble(bubbles[0]);
 }
 
 void Integrator::prepareCells()
@@ -130,42 +96,58 @@ void Integrator::prepareCells()
 	// of the neighbors are used.
 	for (size_t i : yVec)
 	{
-	    c.addNeighbor(&cells[getIndexFromCoords(xm, i, z)]);
+	    c.addNeighborRef(&cells[getIndexFromCoords(xm, i, z)]);
 	    
 	    for (size_t j : xVec)
-		c.addNeighbor(&cells[getIndexFromCoords(j, i, zm)]);
+		c.addNeighborRef(&cells[getIndexFromCoords(j, i, zm)]);
 	}
 
-	c.addNeighbor(&cells[getIndexFromCoords(x, ym, z)]);
+	c.addNeighborRef(&cells[getIndexFromCoords(x, ym, z)]);
     }
 }
 
-void Integrator::generateBubble(Vector3<double> intervalStart, Vector3<double> intervalEnd)
+void Integrator::generateBubble()
 {
-    auto generatePosition = [=]() -> Vector3<double>
+    auto generatePosition = [=](Vector3<size_t> &cellIndex) -> Vector3<double>
 	{
 	    Vector3<double> position(uniDist(generator),
 				     uniDist(generator),
 				     uniDist(generator));
-	    
-	    position *= intervalEnd - intervalStart;
-	    position += intervalStart;
+
+	    cellIndex = position * cellsPerDim;
+	    position *= tfr - lbb;
+	    position += lbb;
 
 	    return position;
 	};
 
-    Vector3<double> position = generatePosition();
+    Vector3<size_t> cellIndex;
+    Vector3<double> position = generatePosition(cellIndex);
+    
     double radius = normDist(generator);
     while (radius < minRad)
 	radius = normDist(generator);
 
+    size_t i = cellIndex.getZ() * cellsPerDim * cellsPerDim
+	+ cellIndex.getY() * cellsPerDim
+	+ cellIndex.getX();
+
     Bubble bubble(position, radius);
-    bubbles.push_back(bubble);
+    bubble.setCellIndex(i);
+    bubbles[bubble.getUID()] = bubble;
+    
+    cells[i].addBubbleRef(&bubbles[bubble.getUID()]);
+}
+
+void Integrator::removeBubble(const Bubble &bubble)
+{
+    cells[bubble.getCellIndex()].removeBubbleRef(bubble.getUID());
+    bubbles.erase(bubble.getUID());
 }
 
 void Integrator::integrate(double dt)
 {
-    phi = dt * 0.1;
+    phiTarget = dt * 0.1;
 }
 
 void Integrator::readWriteParameters(bool read)
@@ -181,13 +163,16 @@ void Integrator::readWriteParameters(bool read)
     if (read)
 	fileio::readFileToJSON(inputFile, params);
 
-    // These parameters can be found from the .json that's given as the inputFile
-    _PARAMETERIZE(read, phi, params);
-    _PARAMETERIZE(read, avgRad, params);
-    _PARAMETERIZE(read, stdDevRad, params);
-    _PARAMETERIZE(read, minRad, params);
-    _PARAMETERIZE(read, numBubbles, params);
-    _PARAMETERIZE(read, cellsPerDim, params);
+    // When adding new parameters, be sure to add them to the input .json as well
+    // and with the exact same name as here.
+    _PARAMETER(read, params, phiTarget);
+    _PARAMETER(read, params, avgRad);
+    _PARAMETER(read, params, stdDevRad);
+    _PARAMETER(read, params, minRad);
+    _PARAMETER(read, params, numBubbles);
+    _PARAMETER(read, params, cellsPerDim);
+    _PARAMETER(read, params, lbb);
+    _PARAMETER(read, params, tfr);
 
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);

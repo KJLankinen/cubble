@@ -2,13 +2,13 @@ BIN_DIR = bin
 SRC_PATH = src/
 DATA_PATH = data/
 
-OBJ_NAMES := Bubble.o Integrator.o
+OBJ_NAMES := Bubble.o Integrator.o Cell.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 EXEC = $(BIN_DIR)/cubble
 
 CC := g++
-COMMON_FLAGS := -Wall -std=c++11 -DDATA_PATH="$(DATA_PATH)"
+COMMON_FLAGS := -Wall -std=c++14 -DDATA_PATH="$(DATA_PATH)"
 OPTIM_FLAGS := -O3
 FLAGS := $(COMMON_FLAGS) $(OPTIM)
 

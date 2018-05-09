@@ -4,6 +4,8 @@
 
 using namespace cubble;
 
+size_t Bubble::newUID = 0;
+
 bool Bubble::overlapsWith(const Bubble &b) const
 {
     double rads = b.radius + radius;
