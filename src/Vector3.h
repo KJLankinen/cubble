@@ -52,15 +52,31 @@ namespace cubble
 	{
 	    return Vector3<T>(x - o.x, y - o.y, z - o.z);
 	}
+
+	Vector3<T> operator-() const
+	{
+	    return Vector3<T>(-x, -y, -z);
+	}
 	
-	Vector3<T> operator*(const T s) const
+	Vector3<T> operator*(T s) const
 	{
 	    return Vector3<T>(s * x, s * y, s * z);
+	}
+
+	template <typename T2>
+	Vector3<T2> operator*(T2 s) const
+	{
+	    return Vector3<T2>((T2)(s * x), (T2)(s * y), (T2)(s * z));
 	}
 
 	Vector3<T> operator*(const Vector3<T> &o) const
 	{
 	    return Vector3<T>(x * o.x, y * o.y, z * o.z);
+	}
+
+	Vector3<T> operator/(const Vector3<T> &o) const
+	{
+	    return Vector3<T>(x / o.x, y / o.y, z / o.z);
 	}
 
 	void operator+=(const Vector3<T> &o)
@@ -76,6 +92,11 @@ namespace cubble
 	void operator*=(const Vector3<T> &o)
 	{
 	    *this = *this * o;
+	}
+
+	void operator*=(T s)
+	{
+	    *this = *this * s;
 	}
 	
 	void operator=(const Vector3<T> &o)
@@ -139,5 +160,11 @@ namespace cubble
 	v.setX(j.at("x").get<T>());
 	v.setY(j.at("y").get<T>());
 	v.setZ(j.at("z").get<T>());
+    }
+
+    template <typename T>
+    Vector3<T> operator*(T s, const Vector3<T> &o)
+    {
+	return o * s;
     }
 }

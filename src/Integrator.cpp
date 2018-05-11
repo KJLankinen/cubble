@@ -54,6 +54,9 @@ void Integrator::run()
 	      << " sweeps."
 	      << "\nNumber of failed generations: " << tempBubble.getUID() - (size_t)n
 	      << std::endl;
+
+    for (size_t i = 0; i < 10; ++i)
+	integrate();
     
     size_t cellIndex = 0;
     for (const auto &c : cells)
@@ -192,19 +195,19 @@ void Integrator::applyBoundaryConditionsForBubble(Bubble *b)
     Vector3<double> pos = b->getPosition();
 
     if (pos.getX() > tfr.getX())
-	pos.x = lbb.getX() + (pos.getX() - tfr.getX());
+	pos.setX(lbb.getX() + (pos.getX() - tfr.getX()));
     else if (pos.getX() < lbb.getX())
-	pos.x = tfr.getX() - (lbb.getX() - tfr.getX());
+	pos.setX(tfr.getX() - (lbb.getX() - tfr.getX()));
     
     if (pos.getY() > tfr.getY())
-	pos.y = lbb.getY() + (pos.getY() - tfr.getY());
+	pos.setY(lbb.getY() + (pos.getY() - tfr.getY()));
     else if (pos.getY() < lbb.getY())
-	pos.y = tfr.getY() - (lbb.getY() - tfr.getY());
+	pos.setY(tfr.getY() - (lbb.getY() - tfr.getY()));
     
     if (pos.getZ() > tfr.getZ())
-	pos.z = lbb.getZ() + (pos.getZ() - tfr.getZ());
+	pos.setZ(lbb.getZ() + (pos.getZ() - tfr.getZ()));
     else if (pos.getZ() < lbb.getZ())
-	pos.z = tfr.getZ() - (lbb.getZ() - tfr.getZ());
+	pos.setZ(tfr.getZ() - (lbb.getZ() - tfr.getZ()));
 
     // Checking for a change in the bit pattern.
     if (pos != b->getPosition())
@@ -212,7 +215,7 @@ void Integrator::applyBoundaryConditionsForBubble(Bubble *b)
 	b->setPosition(pos);
 	
 	// Update the cell the bubble belongs to
-	size_t newCellIndex = getCellIndexForPos(pos);
+	size_t newCellIndex = getCellIndexForPosition(pos);
 	if (newCellIndex != b->getCellIndex())
 	{
 	    cells[b->getCellIndex()].removeBubbleRef(b->getUID());
@@ -225,7 +228,7 @@ void Integrator::applyBoundaryConditionsForBubble(Bubble *b)
 double Integrator::getSimulationBoxVolume()
 {
     Vector3<double> temp(tfr - lbb);
-    return temp.x * temp.y * temp.z;
+    return temp.getX() * temp.getY() * temp.getZ();
 }
 
 size_t Integrator::getCellIndexForPosition(Vector3<double> pos)
@@ -265,8 +268,10 @@ void Integrator::integrate()
 	    return maxDiff;
 	};
 
+    double maxDifference = -1;
     do
     {
+	maxDifference = -1;
 	computeForces();
 	
 	// Prediction step
@@ -278,7 +283,7 @@ void Integrator::integrate()
 				      b->getPreviousVelocity(),
 				      timeStep));
 	    
-	    applyBoundaryConditionsForBubble(*b);
+	    applyBoundaryConditionsForBubble(b);
 	    
 	    b->updateVelocity(fZeroPerMuZero * predict(b->getVelocity(),
 						       b->getForce(),
@@ -290,7 +295,6 @@ void Integrator::integrate()
 	computeForces();
 	
 	// Correction step
-	double maxDifference = -1;
 	for (auto &pair : bubbles)
 	{
 	    Bubble *b = &pair.second;
@@ -299,7 +303,7 @@ void Integrator::integrate()
 				      b->getPreviousVelocity(),
 				      timeStep));
 	    
-	    applyBoundaryConditionsForBubble(*b);
+	    applyBoundaryConditionsForBubble(b);
 	    
 	    double length = getMaxDifference(b->getPosition(), b->getPreviousPosition());
 	    
@@ -344,7 +348,7 @@ void Integrator::computeForces()
 	    for (auto &pair2 : neighborhoodBubbles)
 	    {
 		Bubble *b2 = pair2.second;
-		if (b1->overlapsWith(b2))
+		if (b1->overlapsWith(*b2))
 		{
 		    Vector3<double> force = (b1->getPosition() - b2->getPosition());
 		    double magnitude = force.getLength();

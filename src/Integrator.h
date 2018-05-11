@@ -38,14 +38,14 @@ namespace cubble
 	void generateBubble();
 	void removeBubble(const Bubble &bubble);
 	void removeIntersectingBubbles();
-	void applyBoundaryConditionsForBubble(Bubble &b);
+	void applyBoundaryConditionsForBubble(Bubble *b);
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
 	size_t getCellIndexForPosition(Vector3<double> pos);
 
 	// Integration functions
-	void integrate(double dt);
+	void integrate();
 	void computeForces();
 
 	// Parameter & io functions
