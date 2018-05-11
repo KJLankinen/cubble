@@ -32,11 +32,23 @@ namespace cubble
 	//----------
 	// Functions
 	//----------
+	
+	// Setup functions
 	void prepareCells();
 	void generateBubble();
 	void removeBubble(const Bubble &bubble);
 	void removeIntersectingBubbles();
+	void applyBoundaryConditionsForBubble(Bubble &b);
+
+	// Auxiliary functions
+	double getSimulationBoxVolume();
+	size_t getCellIndexForPosition(Vector3<double> pos);
+
+	// Integration functions
 	void integrate(double dt);
+	void computeForces();
+
+	// Parameter & io functions
 	void readWriteParameters(bool read);
 
 	// ----------
@@ -57,9 +69,14 @@ namespace cubble
 	size_t cellsPerDim = 1;
 	
 	double phiTarget = 0.0;
+	double muZero = 0.0;
+	double sigmaZero = 0.0;
+	double fZeroPerMuZero = 0.0;
 	double avgRad = 0.0;
 	double stdDevRad = 0.0;
 	double minRad = 0.0;
+	double errorTolerance = 0.0;
+	double timeStep = 0.0;
 
 	// Two vectors that define the volume of the simulation area:
 	// lbb = left bottom back corner

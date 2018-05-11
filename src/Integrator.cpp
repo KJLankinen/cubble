@@ -18,6 +18,7 @@ Integrator::Integrator(const std::string &inF,
     
     readWriteParameters(true);
 
+    fZeroPerMuZero = sigmaZero * avgRad / muZero;
     generator = std::mt19937(rngSeed);
     uniDist = urdd(0, 1);
     normDist = ndd(avgRad, stdDevRad);
@@ -122,29 +123,24 @@ void Integrator::prepareCells()
 
 void Integrator::generateBubble()
 {
-    auto generatePosition = [=](Vector3<size_t> &cellIndex) -> Vector3<double>
+    auto generatePosition = [=]() -> Vector3<double>
 	{
 	    Vector3<double> position(uniDist(generator),
 				     uniDist(generator),
 				     uniDist(generator));
 
-	    cellIndex = position * cellsPerDim;
 	    position *= tfr - lbb;
 	    position += lbb;
 
 	    return position;
 	};
 
-    Vector3<size_t> cellIndex;
-    Vector3<double> position = generatePosition(cellIndex);
-    
+    Vector3<double> position = generatePosition();
     double radius = normDist(generator);
     while (radius < minRad)
 	radius = normDist(generator);
 
-    size_t i = cellIndex.getZ() * cellsPerDim * cellsPerDim
-	+ cellIndex.getY() * cellsPerDim
-	+ cellIndex.getX();
+    size_t i = getCellIndexForPosition(position);
 
     Bubble bubble(position, radius);
     bubble.setCellIndex(i);
@@ -162,7 +158,7 @@ void Integrator::removeBubble(const Bubble &bubble)
 void Integrator::removeIntersectingBubbles()
 {
     std::map<size_t, Bubble*> toBeDeleted;
-    for (const auto &c : cells)
+    for (const Cell &c : cells)
     {
 	std::map<size_t, Bubble*> cellBubbles;
 	std::map<size_t, Bubble*> neighborhoodBubbles;
@@ -189,9 +185,182 @@ void Integrator::removeIntersectingBubbles()
 	removeBubble(*pair.second);
 }
 
-void Integrator::integrate(double dt)
+void Integrator::applyBoundaryConditionsForBubble(Bubble *b)
 {
-    phiTarget = dt * 0.1;
+    assert(b != nullptr);
+    
+    Vector3<double> pos = b->getPosition();
+
+    if (pos.getX() > tfr.getX())
+	pos.x = lbb.getX() + (pos.getX() - tfr.getX());
+    else if (pos.getX() < lbb.getX())
+	pos.x = tfr.getX() - (lbb.getX() - tfr.getX());
+    
+    if (pos.getY() > tfr.getY())
+	pos.y = lbb.getY() + (pos.getY() - tfr.getY());
+    else if (pos.getY() < lbb.getY())
+	pos.y = tfr.getY() - (lbb.getY() - tfr.getY());
+    
+    if (pos.getZ() > tfr.getZ())
+	pos.z = lbb.getZ() + (pos.getZ() - tfr.getZ());
+    else if (pos.getZ() < lbb.getZ())
+	pos.z = tfr.getZ() - (lbb.getZ() - tfr.getZ());
+
+    // Checking for a change in the bit pattern.
+    if (pos != b->getPosition())
+    {
+	b->setPosition(pos);
+	
+	// Update the cell the bubble belongs to
+	size_t newCellIndex = getCellIndexForPos(pos);
+	if (newCellIndex != b->getCellIndex())
+	{
+	    cells[b->getCellIndex()].removeBubbleRef(b->getUID());
+	    cells[newCellIndex].addBubbleRef(b);
+	    b->setCellIndex(newCellIndex);
+	}
+    }
+}
+
+double Integrator::getSimulationBoxVolume()
+{
+    Vector3<double> temp(tfr - lbb);
+    return temp.x * temp.y * temp.z;
+}
+
+size_t Integrator::getCellIndexForPosition(Vector3<double> pos)
+{
+    Vector3<double> normedPosVec = (pos - lbb) / (tfr - lbb);
+    Vector3<size_t> iv = normedPosVec * cellsPerDim;
+    
+    return iv.getZ() * cellsPerDim * cellsPerDim
+	+ iv.getY() * cellsPerDim
+	+ iv.getX();   
+}
+
+void Integrator::integrate()
+{
+    auto predict = [](const Vector3<double> &a,
+		      const Vector3<double> &b,
+		      const Vector3<double> &c,
+		      double dt) -> Vector3<double>
+	{
+	    return a + dt * 0.5 * (3.0 * b + c);
+	};
+
+    auto correct = [](const Vector3<double> &a,
+		      const Vector3<double> &b,
+		      const Vector3<double> &c,
+		      double dt) -> Vector3<double>
+	{
+	    return a + dt * 0.5 * (b + c);
+	};
+
+    auto getMaxDifference = [](Vector3<double> a, Vector3<double> b) -> double
+	{
+	    double maxDiff = std::abs(a.getX() - b.getX());
+	    maxDiff = std::max(std::abs(a.getY() - b.getY()), maxDiff);
+	    maxDiff = std::max(std::abs(a.getZ() - b.getZ()), maxDiff);
+
+	    return maxDiff;
+	};
+
+    do
+    {
+	computeForces();
+	
+	// Prediction step
+	for (auto &pair : bubbles)
+	{
+	    Bubble *b = &pair.second;
+	    b->updatePosition(predict(b->getPosition(),
+				      b->getVelocity(),
+				      b->getPreviousVelocity(),
+				      timeStep));
+	    
+	    applyBoundaryConditionsForBubble(*b);
+	    
+	    b->updateVelocity(fZeroPerMuZero * predict(b->getVelocity(),
+						       b->getForce(),
+						       b->getPreviousForce(),
+						       timeStep));
+	}
+	
+	// Forces at predicted states
+	computeForces();
+	
+	// Correction step
+	double maxDifference = -1;
+	for (auto &pair : bubbles)
+	{
+	    Bubble *b = &pair.second;
+	    b->updatePosition(correct(b->getPreviousPosition(),
+				      b->getVelocity(),
+				      b->getPreviousVelocity(),
+				      timeStep));
+	    
+	    applyBoundaryConditionsForBubble(*b);
+	    
+	    double length = getMaxDifference(b->getPosition(), b->getPreviousPosition());
+	    
+	    b->updateVelocity(fZeroPerMuZero * correct(b->getPreviousVelocity(),
+						       b->getForce(),
+						       b->getPreviousForce(),
+						       timeStep));
+	    
+	    length = std::max(
+		std::max(getMaxDifference(b->getVelocity(), b->getPreviousVelocity()),
+			 length),
+		maxDifference);
+	}
+
+	if (maxDifference > errorTolerance)
+	    timeStep /= 2.0;
+	else if (maxDifference < errorTolerance / 10 && timeStep < 0.1)
+	    timeStep *= 1.9;
+    }
+    while (maxDifference > errorTolerance);
+
+    std::cout << "We're out of the while loop!" << std::endl;
+	
+}
+
+void Integrator::computeForces()
+{
+    // TODO: Add spring forces to walls, when compressing the simulation box.
+    for (auto &pair : bubbles)
+	pair.second.resetForce();
+    
+    for (const Cell &c : cells)
+    {
+	std::map<size_t, Bubble*> cellBubbles;
+	std::map<size_t, Bubble*> neighborhoodBubbles;
+	c.getSelfBubbleRefs(cellBubbles);
+	c.getNeighborhoodBubbleRefs(neighborhoodBubbles);
+
+	for (auto &pair1 : cellBubbles)
+	{
+	    Bubble *b1 = pair1.second;
+	    for (auto &pair2 : neighborhoodBubbles)
+	    {
+		Bubble *b2 = pair2.second;
+		if (b1->overlapsWith(b2))
+		{
+		    Vector3<double> force = (b1->getPosition() - b2->getPosition());
+		    double magnitude = force.getLength();
+		    double radii = b1->getRadius() + b2->getRadius();
+		    
+		    // This should always be true,
+		    // if the overlap check above works correctly.
+		    assert(radii - magnitude >= 0);
+		    
+		    force *= (radii - magnitude) / (radii * magnitude);
+		    b1->addForce(force);
+		    b2->addForce(-force);
+		}
+	    }
+	}
+    }
 }
 
 void Integrator::readWriteParameters(bool read)
@@ -210,6 +379,8 @@ void Integrator::readWriteParameters(bool read)
     // When adding new parameters, be sure to add them to the input .json as well
     // and with the exact same name as here.
     _PARAMETER(read, params, phiTarget);
+    _PARAMETER(read, params, muZero);
+    _PARAMETER(read, params, sigmaZero);
     _PARAMETER(read, params, avgRad);
     _PARAMETER(read, params, stdDevRad);
     _PARAMETER(read, params, minRad);
@@ -217,6 +388,8 @@ void Integrator::readWriteParameters(bool read)
     _PARAMETER(read, params, cellsPerDim);
     _PARAMETER(read, params, lbb);
     _PARAMETER(read, params, tfr);
+    _PARAMETER(read, params, errorTolerance);
+    _PARAMETER(read, params, timeStep);
 
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);

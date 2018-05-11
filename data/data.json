@@ -1,6 +1,10 @@
 {
     "phiTargetExpl" : "The target volume fraction.", 
     "phiTarget" : 0.1,
+    "muZeroExpl" : "The viscosity of the fluid",
+    "muZero" : 1.0,
+    "sigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
+    "sigmaZero" : 1.0,
     "avgRadExpl" : "The average radius of the bubbles.",
     "avgRad" : 0.06,
     "stdDevRadExpl" : "The standard deviation of the bubble radii.",
@@ -14,5 +18,9 @@
     "lbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "tfrExpl" : "The coordinates of the top front right corner of the simulation box.",
-    "tfr" : {"x" : 10, "y" : 10, "z" : 10}
+    "tfr" : {"x" : 10, "y" : 10, "z" : 10},
+    "errorToleranceExpl" : "The error tolerance level for the integration.",
+    "errorTolerance" : 1e-7,
+    "timeStepExpl" : "The initial time step with which to increment the simulation time.",
+    "timeStep" : 0.01
 }
