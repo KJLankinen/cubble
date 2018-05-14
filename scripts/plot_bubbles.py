@@ -22,7 +22,7 @@ def drawSphere(xCenter, yCenter, zCenter, r):
 
 def main():
     num_points = 1000
-    num_files = 1000
+    num_files = 1
     final_x = np.zeros((num_points))
     final_y = np.zeros((num_points))
     final_z = np.zeros((num_points))
@@ -31,7 +31,7 @@ def main():
     
     j = 0
     for i in range(num_files):
-        path = "./data/bubble_refs_" + str(i) + ".dat"
+        path = "./data/bubble_data.dat"
         if (is_non_zero_file(path)):
             data = np.loadtxt(path, delimiter=',')
 

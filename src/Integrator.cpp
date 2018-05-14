@@ -5,6 +5,7 @@
 #include "Integrator.h"
 #include "Fileio.h"
 #include "Macros.h"
+#include "Bubble.h"
 
 using namespace cubble;
 
@@ -41,7 +42,7 @@ void Integrator::run()
     size_t numTotalGen = 0;
     while (true)
     {
-	if (n == dataStride * numBubbles || numGenSweeps > 10000)
+	if (n == numBubbles || numGenSweeps > 100)
 	    break;
 	
 	for (size_t i = n; i < numBubbles; ++i)
@@ -57,11 +58,33 @@ void Integrator::run()
 	numGenSweeps++;
     }
 
+    double bubbleVolume = 0;
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	double rad = bubbleData[i * dataStride + 3];
+	rad *= rad * rad;
+	bubbleVolume += rad;
+    }
+
+    bubbleVolume *= 4.0 / 3.0 * M_PI;
+
     std::cout << "Generated " << n
 	      << " bubbles over " << numGenSweeps
 	      << " sweeps."
 	      << "\nNumber of failed generations: " << numTotalGen - n
+	      << "\nVolume fraction: " << bubbleVolume / getSimulationBoxVolume()
 	      << std::endl;
+
+    std::vector<Bubble> temp;
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	Vector3<double> pos(bubbleData[i * dataStride],
+			    bubbleData[i * dataStride + 1],
+			    bubbleData[i * dataStride + 2]);
+	Bubble b(pos, bubbleData[i * dataStride + 3]);
+	temp.push_back(b);
+    }
+    fileio::writeVectorToFile("data/bubble_data.dat", temp);
 }
 
 void Integrator::generateBubble()
@@ -76,7 +99,7 @@ void Integrator::generateBubble()
 	r = normDist(generator);
 
     maxRadius = maxRadius < r ? r : maxRadius;
-
+    
     bubbleData.push_back(x);
     bubbleData.push_back(y);
     bubbleData.push_back(z);
@@ -294,17 +317,17 @@ void Integrator::updateNearestNeighbors()
 
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	Vector3<double> pos1 = Vector3<double>(bubbleData[i],
-					       bubbleData[i + i],
-					       bubbleData[i + 2]);
-	double radius = bubbleData[i + 3];
+	Vector3<double> pos1 = Vector3<double>(bubbleData[i * dataStride],
+					       bubbleData[i * dataStride + 1],
+					       bubbleData[i * dataStride + 2]);
+	double radius = bubbleData[i * dataStride + 3];
 	
 	for (const size_t &j : tentativeNearestNeighbors[i])
 	{
-	    Vector3<double> pos2 = Vector3<double>(bubbleData[j],
-						   bubbleData[j + i],
-						   bubbleData[j + 2]);
-	    double radii = bubbleData[j + 3] + radius;
+	    Vector3<double> pos2 = Vector3<double>(bubbleData[j * dataStride],
+						   bubbleData[j * dataStride + 1],
+						   bubbleData[j * dataStride + 2]);
+	    double radii = bubbleData[j * dataStride + 3] + radius;
 
 	    if ((pos1-pos2).getSquaredLength() < radii * radii)
 		nearestNeighbors[i].push_back(j);

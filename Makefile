@@ -2,7 +2,7 @@ BIN_DIR = bin
 SRC_PATH = src/
 DATA_PATH = data/
 
-OBJ_NAMES := Integrator.o
+OBJ_NAMES := Integrator.o Bubble.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 EXEC = $(BIN_DIR)/cubble
