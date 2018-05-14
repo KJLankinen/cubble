@@ -52,7 +52,7 @@ void Integrator::run()
 
 	updateNearestNeighbors();
 	removeIntersectingBubbles();
-	n = bubbles.size();
+	n = bubbleData.size() / dataStride;
 	
 	numGenSweeps++;
     }
@@ -62,17 +62,6 @@ void Integrator::run()
 	      << " sweeps."
 	      << "\nNumber of failed generations: " << numTotalGen - n
 	      << std::endl;
-    
-    size_t cellIndex = 0;
-    for (const auto &c : cells)
-    {
-	std::vector<Bubble*> bubbleRefs;
-	c.getBubbleRefsAsVector(bubbleRefs);
-	std::stringstream ss;
-	ss << "data/bubble_refs_" << cellIndex << ".dat";
-	fileio::writeVectorToFile(ss.str(), bubbleRefs);
-	cellIndex++;
-    }
 }
 
 void Integrator::generateBubble()
@@ -82,11 +71,11 @@ void Integrator::generateBubble()
     double y = uniDist(generator) * interval.getY() + lbb.getY();
     double z = uniDist(generator) * interval.getZ() + lbb.getZ();	    
 
-    double radius = normDist(generator);
-    while (radius < minRad)
-	radius = normDist(generator);
+    double r = normDist(generator);
+    while (r < minRad)
+	r = normDist(generator);
 
-    maxRadius = maxRadius < radius ? radius : maxRadius;
+    maxRadius = maxRadius < r ? r : maxRadius;
 
     bubbleData.push_back(x);
     bubbleData.push_back(y);
@@ -100,7 +89,7 @@ double Integrator::getSimulationBoxVolume()
     return temp.getX() * temp.getY() * temp.getZ();
 }
 
-size_t getCellIndexFromPos(const Vector3<double> &pos, size_t numCellsPerDim)
+size_t Integrator::getCellIndexFromPos(const Vector3<double> &pos, size_t numCellsPerDim)
 {
     Vector3<double> normedPosVec = (pos - lbb) / (tfr - lbb);
     Vector3<size_t> iv = normedPosVec * numCellsPerDim;
@@ -108,7 +97,8 @@ size_t getCellIndexFromPos(const Vector3<double> &pos, size_t numCellsPerDim)
     return getCellIndexFromCellIndexVec(iv, numCellsPerDim);
 }
 
-Vector3<size_t> getCellIndexVecFromCellIndex(size_t cellIndex, size_t numCellsPerDim)
+Vector3<size_t> Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
+							 size_t numCellsPerDim)
 {
     assert(cellIndex < numCellsPerDim * numCellsPerDim * numCellsPerDim);
     return Vector3<size_t>(cellIndex % numCellsPerDim,
@@ -116,7 +106,8 @@ Vector3<size_t> getCellIndexVecFromCellIndex(size_t cellIndex, size_t numCellsPe
 			   cellIndex / (numCellsPerDim * numCellsPerDim));
 }
 
-size_t getCellIndexFromCellIndexVec(Vector3<size_t> cellIndexVec, size_t numCellsPerDim)
+size_t Integrator::getCellIndexFromCellIndexVec(Vector3<size_t> cellIndexVec,
+						size_t numCellsPerDim)
 {
     // Periodic boundary conditions:
     cellIndexVec %= Vector3<size_t>(1, 1, 1) * numCellsPerDim;
@@ -153,13 +144,12 @@ void Integrator::updateNearestNeighbors()
     
     // ASSUMPTION: 3 dimensional data
     // ASSMPTION: simulation box is a cube
-    size_t numCellsPerDim = std::floor(1.0 / (2.0 * maxRadius / (tfr - lbb).getX()));
-    double cellSize = 1.0 / numCellsPerDim;
+    size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb).getX()));
+    double cellSize = (tfr - lbb).getX() / numCellsPerDim;
     double diam = 2.0 * maxRadius;
-    double sqDiam = diam * diam;
 
     // If everything works correctly, this should always be true.
-    assert(cellsize > diam);
+    assert(cellSize > diam);
 
     nearestNeighbors.clear();
     tentativeNearestNeighbors.clear();
@@ -173,11 +163,12 @@ void Integrator::updateNearestNeighbors()
     assert(bubbleData.size() % dataStride == 0);
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
+	tentativeNearestNeighbors.emplace_back();
 	Vector3<double> position(bubbleData[i], bubbleData[i + 1], bubbleData[i + 2]);
-	size_t cellIndex = getCellIndexFromPos(numCellsPerDim, position);
+	size_t cellIndex = getCellIndexFromPos(position, numCellsPerDim);
 	cellIndices[cellIndex].push_back(i);
 
-	Vector3<size_t> cellIndexVec = getCellIndexVecFromCellIndex(celIndex,
+	Vector3<size_t> cellIndexVec = getCellIndexVecFromCellIndex(cellIndex,
 								    numCellsPerDim);
 	Vector3<double> cellLbb = cellIndexVec * cellSize;
 	Vector3<double> cellTfr = (cellIndexVec + 1) * cellSize;
@@ -321,24 +312,28 @@ void Integrator::updateNearestNeighbors()
     }
 }
 
-void removeIntersectingBubbles()
+void Integrator::removeIntersectingBubbles()
 {
     std::set<size_t> toBeDeleted;
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
 	for (const size_t &j : nearestNeighbors[i])
-	    set.insert(j);
+	{
+	    if (toBeDeleted.find(i) == toBeDeleted.end() &&
+		toBeDeleted.find(j) == toBeDeleted.end())
+		toBeDeleted.insert(j);
+	}
     }
 
     // Remove data from the data vector, from the last item to delete
     // to the first so the indices aren't invalidated.
-    for (auto it = toBeDeleted.end(); it != toBeDeleted.begin(); ++it)
+    for (auto it = toBeDeleted.end(); it != toBeDeleted.begin(); --it)
     {
-	bubbleData.erase(it + dataStride - 1);
-	bubbleData.erase(it + dataStride - 2);
-	bubbleData.erase(it + dataStride - 3);
-	bubbleData.erase(it + dataStride - 4);
-    }	
+	auto b = bubbleData.begin() + *it;
+	auto e = bubbleData.begin() + *it + dataStride;
+	assert(e < bubbleData.end());
+	bubbleData.erase(b, e);
+    }
 }
 
 void Integrator::readWriteParameters(bool read)
@@ -363,7 +358,6 @@ void Integrator::readWriteParameters(bool read)
     _PARAMETER(read, params, stdDevRad);
     _PARAMETER(read, params, minRad);
     _PARAMETER(read, params, numBubbles);
-    _PARAMETER(read, params, cellsPerDim);
     _PARAMETER(read, params, lbb);
     _PARAMETER(read, params, tfr);
     _PARAMETER(read, params, errorTolerance);

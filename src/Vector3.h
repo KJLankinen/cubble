@@ -47,6 +47,11 @@ namespace cubble
 	{
 	    return Vector3<T>(x + o.x, y + o.y, z + o.z);
 	}
+
+	Vector3<T> operator+(T s) const
+	{
+	    return Vector3<T>(x + s, y + s, z + s);
+	}
 	
 	Vector3<T> operator-(const Vector3<T> &o) const
 	{
@@ -83,6 +88,11 @@ namespace cubble
 	{
 	    return Vector3<T>(x % o.x, y % o.y, z % o.z);
 	}
+	
+	Vector3<T> operator%(const Vector3<T> &&o) const
+	{
+	    return Vector3<T>(x % o.x, y % o.y, z % o.z);
+	}
 
 	void operator+=(const Vector3<T> &o)
 	{
@@ -102,6 +112,16 @@ namespace cubble
 	void operator*=(T s)
 	{
 	    *this = *this * s;
+	}
+
+	void operator%=(Vector3<T> &o)
+	{
+	    *this = *this % o;
+	}
+
+	void operator%=(Vector3<T> &&o)
+	{
+	    *this = *this % o;
 	}
 	
 	void operator=(const Vector3<T> &o)

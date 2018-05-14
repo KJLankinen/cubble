@@ -8,6 +8,8 @@
 
 #include "include/json.hpp"
 
+#include "Vector3.h"
+
 typedef std::uniform_real_distribution<double> urdd;
 typedef std::normal_distribution<double> ndd;
 
