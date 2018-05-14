@@ -79,6 +79,11 @@ namespace cubble
 	    return Vector3<T>(x / o.x, y / o.y, z / o.z);
 	}
 
+	Vector3<T> operator%(const Vector3<T> &o) const
+	{
+	    return Vector3<T>(x % o.x, y % o.y, z % o.z);
+	}
+
 	void operator+=(const Vector3<T> &o)
 	{
 	    *this = *this + o;

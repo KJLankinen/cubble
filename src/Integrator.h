@@ -2,12 +2,8 @@
 
 #pragma once
 
-#include "Bubble.h"
-#include "Cell.h"
-
 #include <string>
 #include <vector>
-#include <map>
 #include <random>
 
 #include "include/json.hpp"
@@ -34,19 +30,19 @@ namespace cubble
 	//----------
 	
 	// Setup functions
-	void prepareCells();
 	void generateBubble();
-	void removeBubble(const Bubble &bubble);
-	void removeIntersectingBubbles();
-	void applyBoundaryConditionsForBubble(Bubble *b);
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
-	size_t getCellIndexForPosition(Vector3<double> pos);
+	size_t getCellIndexFromPos(const Vector3<double> &pos, size_t numCellsPerDim);
+	Vector3<size_t> getCellIndexVecFromCellIndex(size_t cellIndex,
+						     size_t numCellsPerDim);
+	size_t getCellIndexFromCellIndexVec(Vector3<size_t> cellIndexVec,
+					    size_t numCellsPerDim);
+	void updateNearestNeighbors();
+	void removeIntersectingBubbles();
 
 	// Integration functions
-	void integrate();
-	void computeForces();
 
 	// Parameter & io functions
 	void readWriteParameters(bool read);
@@ -62,12 +58,10 @@ namespace cubble
 	std::string outputFile;
 	std::string saveFile;
 
-	std::vector<Cell> cells;
-	std::map<size_t, Bubble> bubbles;
-
 	size_t numBubbles = 0;
-	size_t cellsPerDim = 1;
-	
+	size_t dataStride = 4;
+
+	double maxRadius = -1;
 	double phiTarget = 0.0;
 	double muZero = 0.0;
 	double sigmaZero = 0.0;
@@ -83,5 +77,9 @@ namespace cubble
 	// tfr = top front right corner
 	Vector3<double> lbb;
 	Vector3<double> tfr;
+
+	std::vector<double> bubbleData;
+	std::vector<std::vector<size_t>> nearestNeighbors;
+	std::vector<std::vector<size_t>> tentativeNearestNeighbors;
     };
 }
