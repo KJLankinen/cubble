@@ -15,7 +15,7 @@ namespace cubble
 	    : uid(newUID++)
 	{}
 	
-	Bubble(vec<double, 3> pos, double r)
+	Bubble(dvec pos, double r)
 	    : Bubble()
 	{
 	    position = pos;
@@ -24,15 +24,15 @@ namespace cubble
 	
 	~Bubble() {}
 
-	inline void updatePosition(const vec<double, 3> &newPos)
+	inline void updatePosition(const dvec &newPos)
 	{
 	    previousPosition = position;
 	    setPosition(newPos);
 	}   
-	inline void setPosition(const vec<double, 3> &newPos) { position = newPos; }
-	inline void setPosition(const vec<double, 3> &&newPos) { position = newPos; }
-	inline vec<double, 3> getPosition() const { return position; }	
-	inline vec<double, 3> getPreviousPosition() const { return previousPosition; }
+	inline void setPosition(const dvec &newPos) { position = newPos; }
+	inline void setPosition(const dvec &&newPos) { position = newPos; }
+	inline dvec getPosition() const { return position; }	
+	inline dvec getPreviousPosition() const { return previousPosition; }
 	
 	inline double getRadius() const { return radius; }
 	inline void setRadius(double newRad) { radius = newRad; }
@@ -42,23 +42,23 @@ namespace cubble
 	inline void setCellIndex(size_t i) { cellIndex = i; }
 	inline size_t getCellIndex() const { return cellIndex; }
 	
-	inline void updateVelocity(vec<double, 3> &vel)
+	inline void updateVelocity(dvec &vel)
 	{
 	    previousVelocity = velocity;
 	    setVelocity(vel);
 	}
-	inline void updateVelocity(vec<double, 3> &&vel)
+	inline void updateVelocity(dvec &&vel)
 	{
 	    previousVelocity = velocity;
 	    setVelocity(vel);
 	}
-	inline void setVelocity(const vec<double, 3> &vel) { velocity = vel; }
-	inline void setVelocity(const vec<double, 3> &&vel) { velocity = vel; }
-	inline vec<double, 3> getVelocity() { return velocity; }
-	inline vec<double, 3> getPreviousVelocity() { return previousVelocity; }
+	inline void setVelocity(const dvec &vel) { velocity = vel; }
+	inline void setVelocity(const dvec &&vel) { velocity = vel; }
+	inline dvec getVelocity() { return velocity; }
+	inline dvec getPreviousVelocity() { return previousVelocity; }
 	
-	inline void addForce(const vec<double, 3> &dF) { force += dF; }
-	inline void addForce(const vec<double, 3> &&dF){ force += dF; }
+	inline void addForce(const dvec &dF) { force += dF; }
+	inline void addForce(const dvec &&dF){ force += dF; }
 	inline void resetForce()
 	{
 	    previousForce = force;
@@ -66,8 +66,8 @@ namespace cubble
 	    force.setComponent(0, 1);
 	    force.setComponent(0, 2);
 	}
-	inline vec<double, 3> getForce() { return force; }
-	inline vec<double, 3> getPreviousForce() { return previousForce; }
+	inline dvec getForce() { return force; }
+	inline dvec getPreviousForce() { return previousForce; }
 	
 	bool overlapsWith(const Bubble &b) const;
 	double getOverlapRadiusSquared(const Bubble &b) const;
@@ -87,11 +87,11 @@ namespace cubble
 	
         double radius = 0;
 	
-        vec<double, 3> position;
-	vec<double, 3> previousPosition;
-	vec<double, 3> velocity;
-	vec<double, 3> previousVelocity;
-	vec<double, 3> force;
-	vec<double, 3> previousForce;
+        dvec position;
+	dvec previousPosition;
+	dvec velocity;
+	dvec previousVelocity;
+	dvec force;
+	dvec previousForce;
     };
 }

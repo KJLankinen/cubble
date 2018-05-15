@@ -58,32 +58,20 @@ void Integrator::run()
 	numGenSweeps++;
     }
 
-    double bubbleVolume = 0;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
-    {
-	// ASSUMPTION: 3-dimensional data
-	double rad = bubbleData[(i + 1) * dataStride - 1];
-	rad *= rad * rad;
-	bubbleVolume += rad;
-    }
-
-    // ASSUMPTION: 3-dimensional data
-    bubbleVolume *= 4.0 / 3.0 * M_PI;
-
     std::cout << "Generated " << n
 	      << " bubbles over " << numGenSweeps
 	      << " sweeps."
 	      << "\nNumber of failed generations: " << numTotalGen - n
-	      << "\nVolume fraction: " << bubbleVolume / getSimulationBoxVolume()
+	      << "\nVolume fraction: " << getBubbleVolume() / getSimulationBoxVolume()
 	      << std::endl;
 
     std::vector<Bubble> temp;
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	// ASSUMPTION: 3-dimensional data
-	dvec pos = {bubbleData[i * dataStride],
-		    bubbleData[i * dataStride + 1],
-		    bubbleData[i * dataStride + 2]};
+	dvec pos;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    pos.setComponent(bubbleData[i * dataStride + j], j);
+	
 	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
 	temp.push_back(b);
     }
@@ -93,11 +81,12 @@ void Integrator::run()
 
 void Integrator::generateBubble()
 {
-    // ASSUMPTION: 3-dimensional data
     dvec interval = tfr - lbb;
     double x = uniDist(generator) * interval[0] + lbb[0];
     double y = uniDist(generator) * interval[1] + lbb[1];
-    double z = uniDist(generator) * interval[2] + lbb[2];	    
+#if(NUM_DIM == 3)
+    double z = uniDist(generator) * interval[2] + lbb[2];
+#endif
 
     double r = normDist(generator);
     while (r < minRad)
@@ -107,15 +96,20 @@ void Integrator::generateBubble()
     
     bubbleData.push_back(x);
     bubbleData.push_back(y);
+#if(NUM_DIM == 3)
     bubbleData.push_back(z);
+#endif
     bubbleData.push_back(r);
 }
 
 double Integrator::getSimulationBoxVolume()
 {
-    // ASSUMPTION: 3-dimensional data
     dvec temp(tfr - lbb);
-    return temp[0] * temp[1] * temp[2];
+    double volume = temp[0] * temp[1];
+#if(NUM_DIM == 3)
+    volume *= temp[2];
+#endif
+    return volume;
 }
 
 size_t Integrator::getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim)
@@ -129,18 +123,26 @@ size_t Integrator::getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim)
 uvec Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
 					      size_t numCellsPerDim)
 {
-    // ASSUMPTION: 3-dimensional data
-    assert(cellIndex < numCellsPerDim * numCellsPerDim * numCellsPerDim);
-    return uvec({cellIndex % numCellsPerDim,
-		(cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim,
-		cellIndex / (numCellsPerDim * numCellsPerDim)});
+#ifndef NDEBUG
+    size_t totalNumCells = 1;
+    for (size_t i = 0; i < NUM_DIM; ++i)
+	totalNumCells *= numCellsPerDim;
+    assert(cellIndex < totalNumCells);
+#endif
+
+    uvec temp;
+    temp.setComponent(cellIndex % numCellsPerDim, 0);
+    temp.setComponent((cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim, 1);
+#if(NUM_DIM == 3)
+    temp.setComponent(cellIndex / (numCellsPerDim * numCellsPerDim), 2);
+#endif
+    
+    return temp;
 }
 
 size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
 						int numCellsPerDim)
 {
-    // ASSUMPTION: 3-dimensional data
-    
     // Periodic boundary conditions:
     int x = cellIndexVec[0];
     x = x > 0
@@ -151,13 +153,19 @@ size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
     y = y > 0
 	? (y < numCellsPerDim ? y : y % numCellsPerDim)
 	: (y + numCellsPerDim) % numCellsPerDim;
+
+    size_t index = y * numCellsPerDim + x;
     
+#if(NUM_DIM == 3)
     int z = cellIndexVec[2];
     z = z > 0
 	? (z < numCellsPerDim ? z : z % numCellsPerDim)
 	: (z + numCellsPerDim) % numCellsPerDim;
+
+    index += (size_t)(z * numCellsPerDim * numCellsPerDim);
+#endif
     
-    return (size_t)(z * numCellsPerDim * numCellsPerDim + y * numCellsPerDim + x);
+    return index;
 }
 
 void Integrator::updateNearestNeighbors()
@@ -185,49 +193,62 @@ void Integrator::updateNearestNeighbors()
      * neighbors vector for later use when the forces and velocities are calculated.
      */
     
-    // ASSUMPTION: 3-dimensional data
-    // ASSMPTION: simulation box is a cube
+    // ASSUMPTION: simulation box is a cube
     size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
     double cellSize = (tfr - lbb)[0] / numCellsPerDim;
     double diam = 2.0 * maxRadius;
 
-    // If everything works correctly, this should always be true.
     assert(cellSize > diam);
 
     nearestNeighbors.clear();
     tentativeNearestNeighbors.clear();
 
     std::vector<std::vector<size_t>> cellIndices;
-    cellIndices.reserve(numCellsPerDim * numCellsPerDim * numCellsPerDim);
+    size_t maxNumCellIndices = numCellsPerDim * numCellsPerDim;
+#if(NUM_DIM == 3)
+    maxNumCellIndices *= numCellsPerDim;
+#endif
+    cellIndices.reserve(maxNumCellIndices);
 
-    for (size_t i = 0; i < numCellsPerDim * numCellsPerDim * numCellsPerDim; ++i)
+    for (size_t i = 0; i < maxNumCellIndices; ++i)
 	cellIndices.emplace_back();
     
     assert(bubbleData.size() % dataStride == 0);
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
 	tentativeNearestNeighbors.emplace_back();
-	dvec position = {bubbleData[i], bubbleData[i + 1], bubbleData[i + 2]};
+	dvec position;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    position.setComponent(bubbleData[i * dataStride + j], j);
+
 	size_t cellIndex = getCellIndexFromPos(position, numCellsPerDim);
 	cellIndices[cellIndex].push_back(i);
 
-	ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex,
-								    numCellsPerDim);
+	ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex, numCellsPerDim);
 	dvec cellLbb = cellIndexVec * cellSize;
 	dvec cellTfr = (cellIndexVec + 1) * cellSize;
 
 	bool intersectNegX = std::abs(cellLbb[0] - position[0]) > diam;
 	bool intersectNegY = std::abs(cellLbb[1] - position[1]) > diam;
+	bool intersectPosY = std::abs(cellTfr[1] - position[1]) > diam;
+#if(NUM_DIM == 3)
 	bool intersectNegZ = std::abs(cellLbb[2] - position[2]) > diam;
 	bool intersectPosX = std::abs(cellTfr[0] - position[0]) > diam;
-	bool intersectPosY = std::abs(cellTfr[1] - position[1]) > diam;
+#endif
 	
 	std::vector<size_t> cellsToSearchNeighborsFrom;
         cellsToSearchNeighborsFrom.push_back(cellIndex);
 	
 	if (intersectNegX)
 	{
-	    ivec temp = cellIndexVec + ivec({-1, 0, 0});
+	    ivec temp;
+#if(NUM_DIM == 3)
+	    temp = cellIndexVec + ivec({-1, 0, 0});
+#elif(NUM_DIM == 2)
+	    temp = cellIndexVec + ivec({-1, 0});
+#else
+	    std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
+#endif
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 
@@ -235,13 +256,27 @@ void Integrator::updateNearestNeighbors()
 	    // since the cell size is larger than the maximum diameter of all bubbles.
 	    if (intersectNegY)
 	    {
-		ivec temp = cellIndexVec + ivec({-1, -1, 0});
+		ivec temp;
+#if(NUM_DIM == 3)
+		temp = cellIndexVec + ivec({-1, -1, 0});
+#elif(NUM_DIM == 2)
+		temp = cellIndexVec + ivec({-1, -1});
+#else
+		std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
+#endif
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	    }
 	    else if (intersectPosY)
 	    {
-		ivec temp = cellIndexVec + ivec({-1, 1, 0});
+		ivec temp;
+#if(NUM_DIM == 3)
+		temp = cellIndexVec + ivec({-1, 1, 0});
+#elif(NUM_DIM == 2)
+		temp = cellIndexVec + ivec({-1, 1});
+#else
+		std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
+#endif
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));	
 	    }
@@ -249,11 +284,19 @@ void Integrator::updateNearestNeighbors()
 
 	if (intersectNegY)
 	{
-	    ivec temp = cellIndexVec + ivec({0, -1, 0});
+	    ivec temp;
+#if(NUM_DIM == 3)
+	    temp = cellIndexVec + ivec({0, -1, 0});
+#elif(NUM_DIM == 2)
+	    temp = cellIndexVec + ivec({0, -1});
+#else
+	    std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
+#endif
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	}
-	
+
+#if(NUM_DIM == 3)
 	if (intersectNegZ)
 	{
 	    ivec temp = cellIndexVec + ivec({0, 0, -1});
@@ -310,7 +353,8 @@ void Integrator::updateNearestNeighbors()
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	    }
 	}
-
+#endif
+	
 	// Temporarily add the cell indices, not the bubble indices.
 	nearestNeighbors.push_back(cellsToSearchNeighborsFrom);
     }
@@ -337,17 +381,17 @@ void Integrator::updateNearestNeighbors()
 
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	dvec pos1 = {bubbleData[i * dataStride],
-		     bubbleData[i * dataStride + 1],
-		     bubbleData[i * dataStride + 2]};
 	double radius = bubbleData[(i + 1) * dataStride - 1];
+	dvec pos1;
+	for (size_t k = 0; k < NUM_DIM; ++k)
+	    pos1.setComponent(bubbleData[i * dataStride + k], k);
 	
 	for (const size_t &j : tentativeNearestNeighbors[i])
 	{
-	    dvec pos2 = {bubbleData[j * dataStride],
-			 bubbleData[j * dataStride + 1],
-			 bubbleData[j * dataStride + 2]};
 	    double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
+	    dvec pos2;
+	    for (size_t k = 0; k < NUM_DIM; ++k)
+		pos2.setComponent(bubbleData[j * dataStride + k], k);
 
 	    if ((pos1-pos2).getSquaredLength() < radii * radii)
 		nearestNeighbors[i].push_back(j);
@@ -379,6 +423,32 @@ void Integrator::removeIntersectingBubbles()
 	
 	bubbleData.erase(b, e);
     }
+}
+
+double Integrator::getBubbleVolume()
+{
+    double bubbleVolume = 0;
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	double rad = bubbleData[(i + 1) * dataStride - 1];
+	
+#if(NUM_DIM == 3)
+	rad *= rad * rad;
+#elif(NUM_DIM == 2)
+	rad *= rad;
+#endif
+	bubbleVolume += rad;
+    }
+
+#if(NUM_DIM == 3)
+    bubbleVolume *= 4.0 / 3.0 * M_PI;
+#elif(NUM_DIM == 2)
+    bubbleVolume *= M_PI;
+#else
+    std::cout << "Dimensionality of simulation is neither 2D nor 3D..." << std::endl;
+#endif
+
+    return bubbleVolume;
 }
 
 void Integrator::readWriteParameters(bool read)

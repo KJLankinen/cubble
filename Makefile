@@ -7,11 +7,11 @@ OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 EXEC = $(BIN_DIR)/cubble
 
-NUM_DIM := 3
+NUM_DIM := 2
 
 CC := g++
 COMMON_FLAGS := -Wall -std=c++14 -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
-OPTIM_FLAGS := -O3 -DNDEBUG
+OPTIM_FLAGS := -O2
 FLAGS := $(COMMON_FLAGS) $(OPTIM_FLAGS)
 
 .PHONY : all
@@ -22,8 +22,16 @@ set_debug_flags :
 	$(eval OPTIM_FLAGS = -O0 -g3)
 	$(eval FLAGS = $(COMMON_FLAGS) $(OPTIM_FLAGS))
 
+.PHONY : set_final_flags
+set_final_flags :
+	$(eval OPTIM_FLAGS = -O3 -DNDEBUG)
+	$(eval FLAGS = $(COMMON_FLAGS) $(OPTIM_FLAGS))
+
 .PHONY : debug
 debug : set_debug_flags $(EXEC)
+
+.PHONY : final
+final : set_final_flags $(EXEC)
 
 $(EXEC) : $(SRC_PATH)Main.cpp $(OBJS) $(HEADERS)
 	$(CC) $< $(OBJS) $(FLAGS) -o $@

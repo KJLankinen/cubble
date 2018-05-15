@@ -44,6 +44,7 @@ namespace cubble
 					    int numCellsPerDim);
 	void updateNearestNeighbors();
 	void removeIntersectingBubbles();
+	double getBubbleVolume();
 
 	// Integration functions
 
