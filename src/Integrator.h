@@ -36,11 +36,11 @@ namespace cubble
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
-	size_t getCellIndexFromPos(const vec<double, 3> &pos, size_t numCellsPerDim);
-	vec<size_t, 3> getCellIndexVecFromCellIndex(size_t cellIndex,
-						    size_t numCellsPerDim);
+	size_t getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim);
+	uvec getCellIndexVecFromCellIndex(size_t cellIndex,
+					  size_t numCellsPerDim);
 	
-	size_t getCellIndexFromCellIndexVec(vec<int, 3> cellIndexVec,
+	size_t getCellIndexFromCellIndexVec(ivec cellIndexVec,
 					    int numCellsPerDim);
 	void updateNearestNeighbors();
 	void removeIntersectingBubbles();
@@ -62,7 +62,7 @@ namespace cubble
 	std::string saveFile;
 
 	size_t numBubbles = 0;
-	size_t dataStride = 4;
+	size_t dataStride = NUM_DIM + 1;
 
 	double maxRadius = -1;
 	double phiTarget = 0.0;
@@ -78,8 +78,8 @@ namespace cubble
 	// Two vectors that define the volume of the simulation area:
 	// lbb = left bottom back corner
 	// tfr = top front right corner
-	vec<double, 3> lbb;
-	vec<double, 3> tfr;
+	dvec lbb;
+	dvec tfr;
 
 	std::vector<double> bubbleData;
 	std::vector<std::vector<size_t>> nearestNeighbors;

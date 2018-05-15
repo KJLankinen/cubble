@@ -12,8 +12,7 @@
 #include "Util.h"
 
 namespace cubble
-{   
-    // ASSUMPTION: At maximum 4 dimensional vectors.
+{
     template <typename T, size_t SIZE>
     class vec
     {
@@ -24,11 +23,6 @@ namespace cubble
 			  "Vectors of more than 4 dimension aren't supported.");
 	    components.fill((T)0);
 	}
-	
-	/*vec(const vec<T, SIZE> &o) : vec()
-	{
-	    *this = o;
-	}*/
 	
 	template <typename T2>
 	vec(const vec<T2, SIZE> &o)
@@ -352,4 +346,8 @@ namespace cubble
     private:
 	std::array<T, SIZE> components;
     };
+
+    typedef vec<double, NUM_DIM> dvec;
+    typedef vec<int, NUM_DIM> ivec;
+    typedef vec<size_t, NUM_DIM> uvec;
 }

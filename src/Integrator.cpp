@@ -14,9 +14,9 @@ Integrator::Integrator(const std::string &inF,
 		       const std::string &saveF,
 		       const int rngSeed)
 {
-    inputFile = std::string(_XSTRINGIFY(DATA_PATH) + inF);
-    outputFile = std::string(_XSTRINGIFY(DATA_PATH) + outF);
-    saveFile = std::string(_XSTRINGIFY(DATA_PATH) + saveF);
+    inputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + inF);
+    outputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + outF);
+    saveFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + saveF);
     
     readWriteParameters(true);
 
@@ -61,11 +61,13 @@ void Integrator::run()
     double bubbleVolume = 0;
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	double rad = bubbleData[i * dataStride + 3];
+	// ASSUMPTION: 3-dimensional data
+	double rad = bubbleData[(i + 1) * dataStride - 1];
 	rad *= rad * rad;
 	bubbleVolume += rad;
     }
 
+    // ASSUMPTION: 3-dimensional data
     bubbleVolume *= 4.0 / 3.0 * M_PI;
 
     std::cout << "Generated " << n
@@ -78,18 +80,21 @@ void Integrator::run()
     std::vector<Bubble> temp;
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	vec<double, 3> pos = {bubbleData[i * dataStride],
-			      bubbleData[i * dataStride + 1],
-			      bubbleData[i * dataStride + 2]};
-	Bubble b(pos, bubbleData[i * dataStride + 3]);
+	// ASSUMPTION: 3-dimensional data
+	dvec pos = {bubbleData[i * dataStride],
+		    bubbleData[i * dataStride + 1],
+		    bubbleData[i * dataStride + 2]};
+	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
 	temp.push_back(b);
     }
+    
     fileio::writeVectorToFile("data/bubble_data.dat", temp);
 }
 
 void Integrator::generateBubble()
 {
-    vec<double, 3> interval = tfr - lbb;
+    // ASSUMPTION: 3-dimensional data
+    dvec interval = tfr - lbb;
     double x = uniDist(generator) * interval[0] + lbb[0];
     double y = uniDist(generator) * interval[1] + lbb[1];
     double z = uniDist(generator) * interval[2] + lbb[2];	    
@@ -108,31 +113,34 @@ void Integrator::generateBubble()
 
 double Integrator::getSimulationBoxVolume()
 {
-    vec<double, 3> temp(tfr - lbb);
+    // ASSUMPTION: 3-dimensional data
+    dvec temp(tfr - lbb);
     return temp[0] * temp[1] * temp[2];
 }
 
-size_t Integrator::getCellIndexFromPos(const vec<double, 3> &pos, size_t numCellsPerDim)
+size_t Integrator::getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim)
 {
-    vec<double, 3> normedPosVec = (pos - lbb) / (tfr - lbb);
-    vec<size_t, 3> iv = normedPosVec * numCellsPerDim;
+    dvec normedPosVec = (pos - lbb) / (tfr - lbb);
+    uvec iv = normedPosVec * numCellsPerDim;
 
     return getCellIndexFromCellIndexVec(iv, numCellsPerDim);
 }
 
-vec<size_t, 3> Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
-						     size_t numCellsPerDim)
+uvec Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
+					      size_t numCellsPerDim)
 {
+    // ASSUMPTION: 3-dimensional data
     assert(cellIndex < numCellsPerDim * numCellsPerDim * numCellsPerDim);
-    return vec<size_t, 3>({cellIndex % numCellsPerDim,
+    return uvec({cellIndex % numCellsPerDim,
 		(cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim,
 		cellIndex / (numCellsPerDim * numCellsPerDim)});
 }
 
-size_t Integrator::getCellIndexFromCellIndexVec(vec<int, 3> cellIndexVec,
+size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
 						int numCellsPerDim)
 {
-    // ASSUMPTION: 3-dimensional vectors
+    // ASSUMPTION: 3-dimensional data
+    
     // Periodic boundary conditions:
     int x = cellIndexVec[0];
     x = x > 0
@@ -177,7 +185,7 @@ void Integrator::updateNearestNeighbors()
      * neighbors vector for later use when the forces and velocities are calculated.
      */
     
-    // ASSUMPTION: 3 dimensional data
+    // ASSUMPTION: 3-dimensional data
     // ASSMPTION: simulation box is a cube
     size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
     double cellSize = (tfr - lbb)[0] / numCellsPerDim;
@@ -199,14 +207,14 @@ void Integrator::updateNearestNeighbors()
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
 	tentativeNearestNeighbors.emplace_back();
-	vec<double, 3> position = {bubbleData[i], bubbleData[i + 1], bubbleData[i + 2]};
+	dvec position = {bubbleData[i], bubbleData[i + 1], bubbleData[i + 2]};
 	size_t cellIndex = getCellIndexFromPos(position, numCellsPerDim);
 	cellIndices[cellIndex].push_back(i);
 
-	vec<int, 3> cellIndexVec = getCellIndexVecFromCellIndex(cellIndex,
+	ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex,
 								    numCellsPerDim);
-	vec<double, 3> cellLbb = cellIndexVec * cellSize;
-	vec<double, 3> cellTfr = (cellIndexVec + 1) * cellSize;
+	dvec cellLbb = cellIndexVec * cellSize;
+	dvec cellTfr = (cellIndexVec + 1) * cellSize;
 
 	bool intersectNegX = std::abs(cellLbb[0] - position[0]) > diam;
 	bool intersectNegY = std::abs(cellLbb[1] - position[1]) > diam;
@@ -219,7 +227,7 @@ void Integrator::updateNearestNeighbors()
 	
 	if (intersectNegX)
 	{
-	    vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, 0, 0});
+	    ivec temp = cellIndexVec + ivec({-1, 0, 0});
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 
@@ -227,13 +235,13 @@ void Integrator::updateNearestNeighbors()
 	    // since the cell size is larger than the maximum diameter of all bubbles.
 	    if (intersectNegY)
 	    {
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, -1, 0});
+		ivec temp = cellIndexVec + ivec({-1, -1, 0});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	    }
 	    else if (intersectPosY)
 	    {
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, 1, 0});
+		ivec temp = cellIndexVec + ivec({-1, 1, 0});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));	
 	    }
@@ -241,63 +249,63 @@ void Integrator::updateNearestNeighbors()
 
 	if (intersectNegY)
 	{
-	    vec<int, 3> temp = cellIndexVec + vec<int, 3>({0, -1, 0});
+	    ivec temp = cellIndexVec + ivec({0, -1, 0});
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	}
 	
 	if (intersectNegZ)
 	{
-	    vec<int, 3> temp = cellIndexVec + vec<int, 3>({0, 0, -1});
+	    ivec temp = cellIndexVec + ivec({0, 0, -1});
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 
 	    if (intersectNegX)
 	    {	
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, 0, -1});
+		ivec temp = cellIndexVec + ivec({-1, 0, -1});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		
 		if (intersectNegY)
 		{
-		    vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, -1, -1});
+		    ivec temp = cellIndexVec + ivec({-1, -1, -1});
 		    cellsToSearchNeighborsFrom.push_back(
 			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		}
 		else if (intersectPosY)
 		{
-		    vec<int, 3> temp = cellIndexVec + vec<int, 3>({-1, 1, -1});
+		    ivec temp = cellIndexVec + ivec({-1, 1, -1});
 		    cellsToSearchNeighborsFrom.push_back(
 			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		}
 	    }
 	    else if (intersectPosX)
 	    {
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({1, 0, -1});
+		ivec temp = cellIndexVec + ivec({1, 0, -1});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		if (intersectNegY)
 		{
-		    vec<int, 3> temp = cellIndexVec + vec<int, 3>({1, -1, -1});
+		    ivec temp = cellIndexVec + ivec({1, -1, -1});
 		    cellsToSearchNeighborsFrom.push_back(
 			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		}
 		else if (intersectPosY)
 		{
-		    vec<int, 3> temp = cellIndexVec + vec<int, 3>({1, 1, -1});
+		    ivec temp = cellIndexVec + ivec({1, 1, -1});
 		    cellsToSearchNeighborsFrom.push_back(
 			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 		}
 	    }
 	    else if (intersectNegY)
 	    {
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({0, -1, -1});
+		ivec temp = cellIndexVec + ivec({0, -1, -1});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	    }
 	    else if (intersectPosY)
 	    {
-		vec<int, 3> temp = cellIndexVec + vec<int, 3>({0, 1, -1});
+		ivec temp = cellIndexVec + ivec({0, 1, -1});
 	        cellsToSearchNeighborsFrom.push_back(
 		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 	    }
@@ -329,17 +337,17 @@ void Integrator::updateNearestNeighbors()
 
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	vec<double, 3> pos1 = {bubbleData[i * dataStride],
-			       bubbleData[i * dataStride + 1],
-			       bubbleData[i * dataStride + 2]};
-	double radius = bubbleData[i * dataStride + 3];
+	dvec pos1 = {bubbleData[i * dataStride],
+		     bubbleData[i * dataStride + 1],
+		     bubbleData[i * dataStride + 2]};
+	double radius = bubbleData[(i + 1) * dataStride - 1];
 	
 	for (const size_t &j : tentativeNearestNeighbors[i])
 	{
-	    vec<double, 3> pos2 = {bubbleData[j * dataStride],
-				   bubbleData[j * dataStride + 1],
-				   bubbleData[j * dataStride + 2]};
-	    double radii = bubbleData[j * dataStride + 3] + radius;
+	    dvec pos2 = {bubbleData[j * dataStride],
+			 bubbleData[j * dataStride + 1],
+			 bubbleData[j * dataStride + 2]};
+	    double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
 
 	    if ((pos1-pos2).getSquaredLength() < radii * radii)
 		nearestNeighbors[i].push_back(j);
@@ -360,13 +368,15 @@ void Integrator::removeIntersectingBubbles()
 	}
     }
 
-    // Remove data from the data vector, from the last item to delete
+    // Remove data from the data vector, from the last item
     // to the first so the indices aren't invalidated.
     for (auto it = toBeDeleted.end(); it != toBeDeleted.begin(); --it)
     {
 	auto b = bubbleData.begin() + *it;
 	auto e = bubbleData.begin() + *it + dataStride;
+	
 	assert(e < bubbleData.end());
+	
 	bubbleData.erase(b, e);
     }
 }
@@ -386,18 +396,18 @@ void Integrator::readWriteParameters(bool read)
 
     // When adding new parameters, be sure to add them to the input .json as well
     // and with the exact same name as here.
-    _PARAMETER(read, params, phiTarget);
-    _PARAMETER(read, params, muZero);
-    _PARAMETER(read, params, sigmaZero);
-    _PARAMETER(read, params, avgRad);
-    _PARAMETER(read, params, stdDevRad);
-    _PARAMETER(read, params, minRad);
-    _PARAMETER(read, params, numBubbles);
-    _PARAMETER(read, params, lbb);
-    _PARAMETER(read, params, tfr);
-    _PARAMETER(read, params, errorTolerance);
-    _PARAMETER(read, params, timeStep);
-
+    CUBBLE_PARAMETER(read, params, phiTarget);
+    CUBBLE_PARAMETER(read, params, muZero);
+    CUBBLE_PARAMETER(read, params, sigmaZero);
+    CUBBLE_PARAMETER(read, params, avgRad);
+    CUBBLE_PARAMETER(read, params, stdDevRad);
+    CUBBLE_PARAMETER(read, params, minRad);
+    CUBBLE_PARAMETER(read, params, numBubbles);
+    CUBBLE_PARAMETER(read, params, lbb);
+    CUBBLE_PARAMETER(read, params, tfr);
+    CUBBLE_PARAMETER(read, params, errorTolerance);
+    CUBBLE_PARAMETER(read, params, timeStep);
+    
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
 }

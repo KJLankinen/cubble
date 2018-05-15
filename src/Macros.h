@@ -1,8 +1,8 @@
 //-*- C++ -*-
 
-#define _XSTRINGIFY(s) _STRINGIFY(s)
-#define _STRINGIFY(s) #s
-#define _PARAMETER(read, j, param)		\
+#define CUBBLE_XSTRINGIFY(s) CUBBLE_STRINGIFY(s)
+#define CUBBLE_STRINGIFY(s) #s
+#define CUBBLE_PARAMETER(read, j, param)	\
     do						\
     {						\
 	if (read)				\
