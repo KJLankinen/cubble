@@ -8,7 +8,7 @@
 
 #include "include/json.hpp"
 
-#include "Vector3.h"
+#include "Vec.h"
 
 typedef std::uniform_real_distribution<double> urdd;
 typedef std::normal_distribution<double> ndd;
@@ -36,11 +36,12 @@ namespace cubble
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
-	size_t getCellIndexFromPos(const Vector3<double> &pos, size_t numCellsPerDim);
-	Vector3<size_t> getCellIndexVecFromCellIndex(size_t cellIndex,
-						     size_t numCellsPerDim);
-	size_t getCellIndexFromCellIndexVec(Vector3<size_t> cellIndexVec,
-					    size_t numCellsPerDim);
+	size_t getCellIndexFromPos(const vec<double, 3> &pos, size_t numCellsPerDim);
+	vec<size_t, 3> getCellIndexVecFromCellIndex(size_t cellIndex,
+						    size_t numCellsPerDim);
+	
+	size_t getCellIndexFromCellIndexVec(vec<int, 3> cellIndexVec,
+					    int numCellsPerDim);
 	void updateNearestNeighbors();
 	void removeIntersectingBubbles();
 
@@ -77,8 +78,8 @@ namespace cubble
 	// Two vectors that define the volume of the simulation area:
 	// lbb = left bottom back corner
 	// tfr = top front right corner
-	Vector3<double> lbb;
-	Vector3<double> tfr;
+	vec<double, 3> lbb;
+	vec<double, 3> tfr;
 
 	std::vector<double> bubbleData;
 	std::vector<std::vector<size_t>> nearestNeighbors;

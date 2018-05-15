@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "Vector3.h"
+#include "Vec.h"
 
 #include <iostream>
 
@@ -15,7 +15,7 @@ namespace cubble
 	    : uid(newUID++)
 	{}
 	
-	Bubble(Vector3<double> pos, double r)
+	Bubble(vec<double, 3> pos, double r)
 	    : Bubble()
 	{
 	    position = pos;
@@ -24,15 +24,15 @@ namespace cubble
 	
 	~Bubble() {}
 
-	inline void updatePosition(const Vector3<double> &newPos)
+	inline void updatePosition(const vec<double, 3> &newPos)
 	{
 	    previousPosition = position;
 	    setPosition(newPos);
 	}   
-	inline void setPosition(const Vector3<double> &newPos) { position = newPos; }
-	inline void setPosition(const Vector3<double> &&newPos) { position = newPos; }
-	inline Vector3<double> getPosition() const { return position; }	
-	inline Vector3<double> getPreviousPosition() const { return previousPosition; }
+	inline void setPosition(const vec<double, 3> &newPos) { position = newPos; }
+	inline void setPosition(const vec<double, 3> &&newPos) { position = newPos; }
+	inline vec<double, 3> getPosition() const { return position; }	
+	inline vec<double, 3> getPreviousPosition() const { return previousPosition; }
 	
 	inline double getRadius() const { return radius; }
 	inline void setRadius(double newRad) { radius = newRad; }
@@ -42,32 +42,32 @@ namespace cubble
 	inline void setCellIndex(size_t i) { cellIndex = i; }
 	inline size_t getCellIndex() const { return cellIndex; }
 	
-	inline void updateVelocity(Vector3<double> &vel)
+	inline void updateVelocity(vec<double, 3> &vel)
 	{
 	    previousVelocity = velocity;
 	    setVelocity(vel);
 	}
-	inline void updateVelocity(Vector3<double> &&vel)
+	inline void updateVelocity(vec<double, 3> &&vel)
 	{
 	    previousVelocity = velocity;
 	    setVelocity(vel);
 	}
-	inline void setVelocity(const Vector3<double> &vel) { velocity = vel; }
-	inline void setVelocity(const Vector3<double> &&vel) { velocity = vel; }
-	inline Vector3<double> getVelocity() { return velocity; }
-	inline Vector3<double> getPreviousVelocity() { return previousVelocity; }
+	inline void setVelocity(const vec<double, 3> &vel) { velocity = vel; }
+	inline void setVelocity(const vec<double, 3> &&vel) { velocity = vel; }
+	inline vec<double, 3> getVelocity() { return velocity; }
+	inline vec<double, 3> getPreviousVelocity() { return previousVelocity; }
 	
-	inline void addForce(const Vector3<double> &dF) { force += dF; }
-	inline void addForce(const Vector3<double> &&dF){ force += dF; }
+	inline void addForce(const vec<double, 3> &dF) { force += dF; }
+	inline void addForce(const vec<double, 3> &&dF){ force += dF; }
 	inline void resetForce()
 	{
 	    previousForce = force;
-	    force.setX(0);
-	    force.setY(0);
-	    force.setZ(0);
+	    force.setComponent(0, 0);
+	    force.setComponent(0, 1);
+	    force.setComponent(0, 2);
 	}
-	inline Vector3<double> getForce() { return force; }
-	inline Vector3<double> getPreviousForce() { return previousForce; }
+	inline vec<double, 3> getForce() { return force; }
+	inline vec<double, 3> getPreviousForce() { return previousForce; }
 	
 	bool overlapsWith(const Bubble &b) const;
 	double getOverlapRadiusSquared(const Bubble &b) const;
@@ -87,11 +87,11 @@ namespace cubble
 	
         double radius = 0;
 	
-        Vector3<double> position = Vector3<double>(0, 0, 0);
-	Vector3<double> previousPosition = Vector3<double>(0, 0, 0);
-	Vector3<double> velocity = Vector3<double>(0, 0, 0);
-	Vector3<double> previousVelocity = Vector3<double>(0, 0, 0);
-	Vector3<double> force = Vector3<double>(0, 0, 0);
-	Vector3<double> previousForce = Vector3<double>(0, 0, 0);
+        vec<double, 3> position;
+	vec<double, 3> previousPosition;
+	vec<double, 3> velocity;
+	vec<double, 3> previousVelocity;
+	vec<double, 3> force;
+	vec<double, 3> previousForce;
     };
 }

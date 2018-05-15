@@ -4,7 +4,6 @@
 
 #include "Integrator.h"
 #include "Util.h"
-#include "Vector3.h"
 
 int main(int argc, char **argv)
 {
