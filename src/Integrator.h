@@ -32,6 +32,7 @@ namespace cubble
 	//----------
 	
 	// Setup functions
+	void setupBubbles();
 	void generateBubble();
 
 	// Auxiliary functions
@@ -50,6 +51,7 @@ namespace cubble
 
 	// Parameter & io functions
 	void readWriteParameters(bool read);
+	void writeBubbleDataToFile(const std::string &filename);
 
 	// ----------
 	// Parameters

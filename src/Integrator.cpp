@@ -37,13 +37,19 @@ Integrator::~Integrator()
 
 void Integrator::run()
 {
+    setupBubbles();
+}
+
+void Integrator::setupBubbles()
+{
     size_t n = 0;
     size_t numGenSweeps = 0;
     size_t numTotalGen = 0;
-    while (true)
-    {
-	if (n == numBubbles || numGenSweeps > 100)
-	    break;
+    
+    //while (true)
+    //{
+    //if (n == numBubbles || numGenSweeps > 100)
+//	    break;
 	
 	for (size_t i = n; i < numBubbles; ++i)
 	{
@@ -51,12 +57,16 @@ void Integrator::run()
 	    numTotalGen++;
 	}
 
+	writeBubbleDataToFile("data/bubble_data_2d_before.dat");
+
 	updateNearestNeighbors();
 	removeIntersectingBubbles();
 	n = bubbleData.size() / dataStride;
 	
+	writeBubbleDataToFile("data/bubble_data_2d_after.dat");
+	
 	numGenSweeps++;
-    }
+	//}
 
     std::cout << "Generated " << n
 	      << " bubbles over " << numGenSweeps
@@ -64,19 +74,6 @@ void Integrator::run()
 	      << "\nNumber of failed generations: " << numTotalGen - n
 	      << "\nVolume fraction: " << getBubbleVolume() / getSimulationBoxVolume()
 	      << std::endl;
-
-    std::vector<Bubble> temp;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
-    {
-	dvec pos;
-	for (size_t j = 0; j < NUM_DIM; ++j)
-	    pos.setComponent(bubbleData[i * dataStride + j], j);
-	
-	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
-	temp.push_back(b);
-    }
-    
-    fileio::writeVectorToFile("data/bubble_data.dat", temp);
 }
 
 void Integrator::generateBubble()
@@ -178,7 +175,7 @@ void Integrator::updateNearestNeighbors()
      * from which to search for the neighbors.
      *
      * First, the entire simulation box is divided into cells, the size of which
-     * is slightly larger than the maximum diameter of all the bubbles.
+     * is slightly larger than the diameter of the largest bubble.
      * Then each cell wall is checked for intersection: if a bubble is closer
      * to the cell wall than the maximum diameter, the intersected neighboring cell
      * is added to the cells that are loop over when looking for the intersecting bubbles.
@@ -192,7 +189,7 @@ void Integrator::updateNearestNeighbors()
      * Finally, only the bubbles that intersect this bubble are added to the nearerst
      * neighbors vector for later use when the forces and velocities are calculated.
      */
-    
+
     // ASSUMPTION: simulation box is a cube
     size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
     double cellSize = (tfr - lbb)[0] / numCellsPerDim;
@@ -225,15 +222,15 @@ void Integrator::updateNearestNeighbors()
 	cellIndices[cellIndex].push_back(i);
 
 	ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex, numCellsPerDim);
-	dvec cellLbb = cellIndexVec * cellSize;
-	dvec cellTfr = (cellIndexVec + 1) * cellSize;
+	dvec cellLbb = cellIndexVec.asType<double>() * cellSize;
+	dvec cellTfr = (cellIndexVec + 1).asType<double>() * cellSize;
 
-	bool intersectNegX = std::abs(cellLbb[0] - position[0]) > diam;
-	bool intersectNegY = std::abs(cellLbb[1] - position[1]) > diam;
-	bool intersectPosY = std::abs(cellTfr[1] - position[1]) > diam;
+	bool intersectNegX = std::abs(cellLbb[0] - position[0]) < diam;
+	bool intersectNegY = std::abs(cellLbb[1] - position[1]) < diam;
+	bool intersectPosY = std::abs(cellTfr[1] - position[1]) < diam;
 #if(NUM_DIM == 3)
-	bool intersectNegZ = std::abs(cellLbb[2] - position[2]) > diam;
-	bool intersectPosX = std::abs(cellTfr[0] - position[0]) > diam;
+	bool intersectNegZ = std::abs(cellLbb[2] - position[2]) < diam;
+	bool intersectPosX = std::abs(cellTfr[0] - position[0]) < diam;
 #endif
 	
 	std::vector<size_t> cellsToSearchNeighborsFrom;
@@ -252,8 +249,6 @@ void Integrator::updateNearestNeighbors()
 	    cellsToSearchNeighborsFrom.push_back(
 		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
 
-	    // No bubble can simultaneously intersect opposite walls of a cell,
-	    // since the cell size is larger than the maximum diameter of all bubbles.
 	    if (intersectNegY)
 	    {
 		ivec temp;
@@ -406,22 +401,24 @@ void Integrator::removeIntersectingBubbles()
     {
 	for (const size_t &j : nearestNeighbors[i])
 	{
-	    if (toBeDeleted.find(i) == toBeDeleted.end() &&
-		toBeDeleted.find(j) == toBeDeleted.end())
+	    if (toBeDeleted.find(i) == toBeDeleted.end())
 		toBeDeleted.insert(j);
 	}
     }
 
     // Remove data from the data vector, from the last item
     // to the first so the indices aren't invalidated.
-    for (auto it = toBeDeleted.end(); it != toBeDeleted.begin(); --it)
+    size_t previous = ~0U;
+    for (auto it = toBeDeleted.rbegin(); it != toBeDeleted.rend(); ++it)
     {
-	auto b = bubbleData.begin() + *it;
-	auto e = bubbleData.begin() + *it + dataStride;
+	assert(previous > *it);
+	auto b = bubbleData.begin() + *it * dataStride;
+	auto e = bubbleData.begin() + (*it + 1) * dataStride;
 	
-	assert(e < bubbleData.end());
+	assert(e <= bubbleData.end());
 	
 	bubbleData.erase(b, e);
+	previous = *it;
     }
 }
 
@@ -480,4 +477,20 @@ void Integrator::readWriteParameters(bool read)
     
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
+}
+
+void Integrator::writeBubbleDataToFile(const std::string &filename)
+{
+    std::vector<Bubble> temp;
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	dvec pos;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    pos.setComponent(bubbleData[i * dataStride + j], j);
+	
+	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
+	temp.push_back(b);
+    }
+
+    fileio::writeVectorToFile(filename, temp);
 }

@@ -12,7 +12,7 @@
     "minRadExpl" : "The minimum radius of a bubble, below which a bubble disappears.",
     "minRad" : 1e-8,
     "numBubblesExpl" : "How many bubbles to spawn at the start of the simulation.",
-    "numBubbles" : 1000,
+    "numBubbles" : 100000,
     "lbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "tfrExpl" : "The coordinates of the top front right corner of the simulation box.",

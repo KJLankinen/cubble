@@ -64,6 +64,16 @@ namespace cubble
 	    components[i] = val;
 	}
 
+	template <typename T2>
+	vec<T2, SIZE> asType()
+	{
+	    vec<T2, SIZE> v;
+	    for (size_t i = 0; i < SIZE; ++i)
+		v.setComponent((T2)components[i], i);
+
+	    return v;
+	}
+	
 	static const std::string& getComponentName(size_t i)
 	{   
 	    const static std::array<std::string, 4> names = {"x", "y", "z", "w"};

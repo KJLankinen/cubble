@@ -7,7 +7,7 @@ OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 EXEC = $(BIN_DIR)/cubble
 
-NUM_DIM := 2
+NUM_DIM := 3
 
 CC := g++
 COMMON_FLAGS := -Wall -std=c++14 -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
