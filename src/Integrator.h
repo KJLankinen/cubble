@@ -36,7 +36,7 @@ namespace cubble
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
-	size_t getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim);
+	size_t getCellIndexFromNormalizedPosition(const dvec &pos, size_t numCellsPerDim);
 	uvec getCellIndexVecFromCellIndex(size_t cellIndex,
 					  size_t numCellsPerDim);
 	
@@ -45,6 +45,8 @@ namespace cubble
 	void updateNearestNeighbors();
 	void removeIntersectingBubbles();
 	double getBubbleVolume();
+	dvec getScaledPosition(const dvec &position);
+	void compressSimulationBox();
 
 	// Integration functions
 
@@ -64,6 +66,7 @@ namespace cubble
 
 	size_t numBubblesPerSweep = 0;
 	size_t numMaxSweeps = 0;
+	size_t numMaxBubbles = 0;
 	size_t dataStride = NUM_DIM + 1;
 
 	int rngSeed = 0;
@@ -78,6 +81,7 @@ namespace cubble
 	double minRad = 0.0;
 	double errorTolerance = 0.0;
 	double timeStep = 0.0;
+	double compressionAmount = 0.0;
 
 	// Two vectors that define the volume of the simulation area:
 	// lbb = left bottom back corner

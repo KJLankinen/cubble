@@ -1,21 +1,23 @@
 {
     "avgRad": 0.06,
+    "compressionAmount": 1e-05,
     "errorTolerance": 1e-07,
     "lbb": {
-        "x": 0.0,
-        "y": 0.0
+        "x": 0.09111500000002073,
+        "y": 0.09111500000002073
     },
     "minRad": 1e-08,
     "muZero": 1.0,
-    "numBubblesPerSweep": 5000,
+    "numBubblesPerSweep": 1000,
+    "numMaxBubbles": 5000,
     "numMaxSweeps": 1000,
     "phiTarget": 0.7,
     "rngSeed": 15658324,
     "sigmaZero": 1.0,
     "stdDevRad": 0.0126,
     "tfr": {
-        "x": 10.0,
-        "y": 10.0
+        "x": 2.9088850000034494,
+        "y": 2.9088850000034494
     },
     "timeStep": 0.01
 }

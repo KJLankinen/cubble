@@ -1,18 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from pylab import *
 
 def drawSphere(xCenter, yCenter, zCenter, r):
-    #draw sphere
-    u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
-    x=np.cos(u)*np.sin(v)
-    y=np.sin(u)*np.sin(v)
-    z=np.cos(v)
-
-    # shift and scale sphere
-    x = r*x + xCenter
-    y = r*y + yCenter
-    z = r*z + zCenter
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+    x = r * np.outer(np.cos(u), np.sin(v)) + xCenter
+    y = r * np.outer(np.sin(u), np.sin(v)) + yCenter
+    z = r * np.outer(np.ones(np.size(u)), np.cos(v)) + zCenter
     
     return (x,y,z)
 
@@ -84,19 +80,43 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
         plt.sci(collection)
     return collection
 
-def main():
+def plot_2d():
     data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]
     r = data[:,2]
-
+    
     figure()
     subplot(aspect='equal')
 
     out = circles(x, y, r, c='green', alpha=0.3)
     
     plt.show()
+
+def plot_3d():
+    data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
+
+    x = data[:,0]
+    y = data[:,1]
+    z = data[:,2]
+    r = data[:,3]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    for (xi, yi, zi, ri) in zip(x, y, z, r):
+        (xs, ys, zs) = drawSphere(xi, yi, zi, ri)
+        ax.plot_surface(xs, ys, zs)
+
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+
+    plt.show()
+    
+def main():
+    plot_2d()
 
 if __name__ == "__main__":
     main()

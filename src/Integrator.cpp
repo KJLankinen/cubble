@@ -62,12 +62,34 @@ void Integrator::setupBubbles()
 	    << "\nTarget volume fraction: " << phiTarget
 	    << std::endl;	    
 	};
-    
+
+    bool targetVolumeFractionReached = false;
     while (true)
     {
-	if ((phi - epsilon < phiTarget && phi + epsilon > phiTarget)
-	    || numGenSweeps >= numMaxSweeps)
+	if (phi >= phiTarget)
+	{
+	    std::cout << "Target volume fraction reached."
+		      << " Stopping bubble generation."
+		      << std::endl;
+	    
+	    targetVolumeFractionReached = true;
+	    
 	    break;
+	}
+	else if (numGenSweeps >= numMaxSweeps)
+	{
+	    std::cout << "Maximum number of generation sweeps reached."
+		      << " Stopping bubble generation."
+		      << std::endl;
+	    break;   
+	}
+	else if (n >= numMaxBubbles)
+	{
+	    std::cout << "Maximum number of bubbles reached."
+		      << " Stopping bubble generation."
+		      << std::endl;
+	    break;   
+	}
 	
 	for (size_t i = 0; i < numBubblesPerSweep; ++i)
 	{
@@ -79,14 +101,31 @@ void Integrator::setupBubbles()
 	removeIntersectingBubbles();
 	n = bubbleData.size() / dataStride;
 	phi = getBubbleVolume() / getSimulationBoxVolume();
-
-	if (numGenSweeps % (numMaxSweeps / 100) == 0)
-	    printInfo();
 	
 	numGenSweeps++;
     }
 
     printInfo();
+
+    if (!targetVolumeFractionReached)
+    {
+	std::cout << "Couldn't reach the target volume fraction by generating bubbles."
+		  << "\nStarting compression of simulation box."
+		  << std::endl;
+
+	while (!targetVolumeFractionReached)
+	{
+	    phi = getBubbleVolume() / getSimulationBoxVolume();
+	    targetVolumeFractionReached = phi >= phiTarget;
+
+	    compressSimulationBox();
+	}
+
+	std::cout << "Compression done."
+		  << "\nTarget volume fraction: " << phiTarget
+		  << "\nVolume fraction: " << phi
+		  << std::endl;
+    }
 
     std::string filename = "data/bubble_data_2d.dat";
     std::vector<Bubble> temp;
@@ -95,7 +134,8 @@ void Integrator::setupBubbles()
 	dvec pos;
 	for (size_t j = 0; j < NUM_DIM; ++j)
 	    pos.setComponent(bubbleData[i * dataStride + j], j);
-	
+
+	pos = getScaledPosition(pos);
 	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
 	temp.push_back(b);
     }
@@ -106,10 +146,10 @@ void Integrator::setupBubbles()
 void Integrator::generateBubble()
 {
     dvec interval = tfr - lbb;
-    double x = uniDist(generator) * interval[0] + lbb[0];
-    double y = uniDist(generator) * interval[1] + lbb[1];
+    double x = uniDist(generator);
+    double y = uniDist(generator);
 #if(NUM_DIM == 3)
-    double z = uniDist(generator) * interval[2] + lbb[2];
+    double z = uniDist(generator);
 #endif
 
     double r = normDist(generator);
@@ -136,10 +176,10 @@ double Integrator::getSimulationBoxVolume()
     return volume;
 }
 
-size_t Integrator::getCellIndexFromPos(const dvec &pos, size_t numCellsPerDim)
+size_t Integrator::getCellIndexFromNormalizedPosition(const dvec &pos,
+						      size_t numCellsPerDim)
 {
-    dvec normedPosVec = (pos - lbb) / (tfr - lbb);
-    uvec iv = normedPosVec * numCellsPerDim;
+    uvec iv = pos * numCellsPerDim;
 
     return getCellIndexFromCellIndexVec(iv, numCellsPerDim);
 }
@@ -218,7 +258,9 @@ of the largest bubble.");
 	for (size_t j = 0; j < NUM_DIM; ++j)
 	    position.setComponent(bubbleData[i * dataStride + j], j);
 
-	size_t cellIndex = getCellIndexFromPos(position, numCellsPerDim);
+	size_t cellIndex = getCellIndexFromNormalizedPosition(position, numCellsPerDim);
+	position = getScaledPosition(position);
+	
 	cellToBubblesMap[cellIndex].push_back(i);
 	bubbleToCellMap[i] = cellIndex;
 	bubbleToPositionMap[i] = position;
@@ -375,6 +417,7 @@ of the largest bubble.");
 		for (size_t k = 0; k < NUM_DIM; ++k)
 		    pos2.setComponent(bubbleData[j * dataStride + k], k);
 		
+		pos2 = getScaledPosition(pos2);
 		if ((position-pos2).getSquaredLength() < radii * radii)
 		    nearestNeighbors[i].push_back(j);
 	    }
@@ -433,13 +476,25 @@ double Integrator::getBubbleVolume()
     return bubbleVolume;
 }
 
+dvec Integrator::getScaledPosition(const dvec &position)
+{
+    return position * (tfr - lbb) + lbb;
+}
+
+void Integrator::compressSimulationBox()
+{
+    double halfCompr = 0.5 * compressionAmount;
+    lbb += halfCompr;
+    tfr -= halfCompr;
+}
+
 void Integrator::readWriteParameters(bool read)
 {
     std::string msg = read
 	? "Reading parameters from file " + inputFile
 	: "Saving parameters to file " + saveFile;
     
-    std::cout << msg << std::endl;
+    std::cout << msg << "\n" << std::endl;
 
     nlohmann::json params;
 
@@ -462,9 +517,11 @@ void Integrator::readWriteParameters(bool read)
     CUBBLE_PARAMETER(read, params, timeStep);
     CUBBLE_PARAMETER(read, params, numMaxSweeps);
     CUBBLE_PARAMETER(read, params, rngSeed);
+    CUBBLE_PARAMETER(read, params, numMaxBubbles);
+    CUBBLE_PARAMETER(read, params, compressionAmount);
     
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
 
-    std::cout << "Parameter IO done." << std::endl;
+    std::cout << "\nParameter IO done." << std::endl;
 }
