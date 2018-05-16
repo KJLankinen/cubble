@@ -21,8 +21,7 @@ namespace cubble
     public:
 	Integrator(const std::string &inputFile,
 		   const std::string &outputFile,
-		   const std::string &saveFile,
-		   const int rngSeed = 0);
+		   const std::string &saveFile);
 	~Integrator();
 	void run();
 	
@@ -51,7 +50,6 @@ namespace cubble
 
 	// Parameter & io functions
 	void readWriteParameters(bool read);
-	void writeBubbleDataToFile(const std::string &filename);
 
 	// ----------
 	// Parameters
@@ -64,8 +62,11 @@ namespace cubble
 	std::string outputFile;
 	std::string saveFile;
 
-	size_t numBubbles = 0;
+	size_t numBubblesPerSweep = 0;
+	size_t numMaxSweeps = 0;
 	size_t dataStride = NUM_DIM + 1;
+
+	int rngSeed = 0;
 
 	double maxRadius = -1;
 	double phiTarget = 0.0;
@@ -86,6 +87,5 @@ namespace cubble
 
 	std::vector<double> bubbleData;
 	std::vector<std::vector<size_t>> nearestNeighbors;
-	std::vector<std::vector<size_t>> tentativeNearestNeighbors;
     };
 }

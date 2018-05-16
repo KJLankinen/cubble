@@ -85,22 +85,16 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def main():
-    data_before = np.loadtxt("data/bubble_data_2d_before.dat", delimiter=',')
-    data_after = np.loadtxt("data/bubble_data_2d_after.dat", delimiter=',')
+    data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
 
-    xb = data_before[:,0]
-    yb = data_before[:,1]
-    rb = data_before[:,3]
-
-    xa = data_after[:,0]
-    ya = data_after[:,1]
-    ra = data_after[:,3]
+    x = data[:,0]
+    y = data[:,1]
+    r = data[:,2]
 
     figure()
     subplot(aspect='equal')
 
-    #out = circles(xb, yb, rb, c='red', alpha=0.5)
-    out = circles(xa, ya, ra, c='green', alpha=0.3)
+    out = circles(x, y, r, c='green', alpha=0.3)
     
     plt.show()
 

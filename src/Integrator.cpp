@@ -11,8 +11,7 @@ using namespace cubble;
 
 Integrator::Integrator(const std::string &inF,
 		       const std::string &outF,
-		       const std::string &saveF,
-		       const int rngSeed)
+		       const std::string &saveF)
 {
     inputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + inF);
     outputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + outF);
@@ -20,14 +19,19 @@ Integrator::Integrator(const std::string &inF,
     
     readWriteParameters(true);
 
+    dvec interval = tfr - lbb;
+    assert(interval[0] == interval[1] && "Simulation box must be a square or a cube!");
+#if(NUM_DIM == 3)
+    assert(interval[0] == interval[2] && "Simulation box must be a square or a cube!");
+#endif
+    
     fZeroPerMuZero = sigmaZero * avgRad / muZero;
     generator = std::mt19937(rngSeed);
     uniDist = urdd(0, 1);
     normDist = ndd(avgRad, stdDevRad);
 
-    bubbleData.reserve(numBubbles * dataStride);
-    nearestNeighbors.reserve(numBubbles);
-    tentativeNearestNeighbors.reserve(numBubbles);
+    bubbleData.reserve(numBubblesPerSweep * dataStride);
+    nearestNeighbors.reserve(numBubblesPerSweep);
 }
 
 Integrator::~Integrator()
@@ -37,7 +41,9 @@ Integrator::~Integrator()
 
 void Integrator::run()
 {
+    std::cout << "Starting setup." << std::endl;
     setupBubbles();
+    std::cout << "Setup done." << std::endl;
 }
 
 void Integrator::setupBubbles()
@@ -45,35 +51,56 @@ void Integrator::setupBubbles()
     size_t n = 0;
     size_t numGenSweeps = 0;
     size_t numTotalGen = 0;
+    double phi = 0;
+
+    auto printInfo = [&]() -> void
+	{
+	    std::cout << n << " bubbles generated over "
+	    << numGenSweeps << " sweeps."
+	    << "\nNumber of failed generations: " << numTotalGen - n
+	    << "\nVolume fraction: " << phi
+	    << "\nTarget volume fraction: " << phiTarget
+	    << std::endl;	    
+	};
     
-    //while (true)
-    //{
-    //if (n == numBubbles || numGenSweeps > 100)
-//	    break;
+    while (true)
+    {
+	if ((phi - epsilon < phiTarget && phi + epsilon > phiTarget)
+	    || numGenSweeps >= numMaxSweeps)
+	    break;
 	
-	for (size_t i = n; i < numBubbles; ++i)
+	for (size_t i = 0; i < numBubblesPerSweep; ++i)
 	{
 	    generateBubble();
 	    numTotalGen++;
 	}
-
-	writeBubbleDataToFile("data/bubble_data_2d_before.dat");
-
+	
 	updateNearestNeighbors();
 	removeIntersectingBubbles();
 	n = bubbleData.size() / dataStride;
-	
-	writeBubbleDataToFile("data/bubble_data_2d_after.dat");
+	phi = getBubbleVolume() / getSimulationBoxVolume();
+
+	if (numGenSweeps % (numMaxSweeps / 100) == 0)
+	    printInfo();
 	
 	numGenSweeps++;
-	//}
+    }
 
-    std::cout << "Generated " << n
-	      << " bubbles over " << numGenSweeps
-	      << " sweeps."
-	      << "\nNumber of failed generations: " << numTotalGen - n
-	      << "\nVolume fraction: " << getBubbleVolume() / getSimulationBoxVolume()
-	      << std::endl;
+    printInfo();
+
+    std::string filename = "data/bubble_data_2d.dat";
+    std::vector<Bubble> temp;
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	dvec pos;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    pos.setComponent(bubbleData[i * dataStride + j], j);
+	
+	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
+	temp.push_back(b);
+    }
+
+    fileio::writeVectorToFile(filename, temp);
 }
 
 void Integrator::generateBubble()
@@ -124,7 +151,9 @@ uvec Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
     size_t totalNumCells = 1;
     for (size_t i = 0; i < NUM_DIM; ++i)
 	totalNumCells *= numCellsPerDim;
-    assert(cellIndex < totalNumCells);
+    
+    assert(cellIndex < totalNumCells && "Given cellIndex is larger \
+than the number of cells per dimension.");
 #endif
 
     uvec temp;
@@ -167,61 +196,45 @@ size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
 
 void Integrator::updateNearestNeighbors()
 {
-    /*
-     * This function finds all the neighbors for each bubble that are
-     * closer than the maximum diameter.
-     *
-     * The search is done in steps, each step refining and decreasing the domain
-     * from which to search for the neighbors.
-     *
-     * First, the entire simulation box is divided into cells, the size of which
-     * is slightly larger than the diameter of the largest bubble.
-     * Then each cell wall is checked for intersection: if a bubble is closer
-     * to the cell wall than the maximum diameter, the intersected neighboring cell
-     * is added to the cells that are loop over when looking for the intersecting bubbles.
-     *
-     * Note that this is done s.t. each cell only looks for neighbors in all the 9 cells
-     * directly below, the 3 cells directly to the left and the one cell directly behind.
-     * This way every possible bubble interaction is only taken into account once:
-     * the bubbles above this bubble's cell handle the intersection with this bubble
-     * when they're the current bubble.
-     *
-     * Finally, only the bubbles that intersect this bubble are added to the nearerst
-     * neighbors vector for later use when the forces and velocities are calculated.
-     */
-
-    // ASSUMPTION: simulation box is a cube
     size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
     double cellSize = (tfr - lbb)[0] / numCellsPerDim;
     double diam = 2.0 * maxRadius;
 
-    assert(cellSize > diam);
+    // Reset maxRadius. It's updated later in this function.
+    maxRadius = -1.0;
+
+    assert(cellSize > diam && "cellSize is smaller than the diameter \
+of the largest bubble.");
 
     nearestNeighbors.clear();
-    tentativeNearestNeighbors.clear();
 
-    std::vector<std::vector<size_t>> cellIndices;
-    size_t maxNumCellIndices = numCellsPerDim * numCellsPerDim;
-#if(NUM_DIM == 3)
-    maxNumCellIndices *= numCellsPerDim;
-#endif
-    cellIndices.reserve(maxNumCellIndices);
-
-    for (size_t i = 0; i < maxNumCellIndices; ++i)
-	cellIndices.emplace_back();
+    std::map<size_t, std::vector<size_t>> cellToBubblesMap;
+    std::map<size_t, size_t> bubbleToCellMap;
+    std::map<size_t, dvec> bubbleToPositionMap;
     
-    assert(bubbleData.size() % dataStride == 0);
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	tentativeNearestNeighbors.emplace_back();
 	dvec position;
 	for (size_t j = 0; j < NUM_DIM; ++j)
 	    position.setComponent(bubbleData[i * dataStride + j], j);
 
 	size_t cellIndex = getCellIndexFromPos(position, numCellsPerDim);
-	cellIndices[cellIndex].push_back(i);
+	cellToBubblesMap[cellIndex].push_back(i);
+	bubbleToCellMap[i] = cellIndex;
+	bubbleToPositionMap[i] = position;
+    }
+    
+    assert(bubbleData.size() % dataStride == 0 && "bubbleData has incorrect stride.");
+    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    {
+	nearestNeighbors.emplace_back();
 
-	ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex, numCellsPerDim);
+	double radius = bubbleData[(i + 1) * dataStride - 1];
+	maxRadius = maxRadius < radius ? radius : maxRadius;
+	dvec position = bubbleToPositionMap[i];
+	
+	ivec cellIndexVec = getCellIndexVecFromCellIndex(bubbleToCellMap[i],
+							 numCellsPerDim);
 	dvec cellLbb = cellIndexVec.asType<double>() * cellSize;
 	dvec cellTfr = (cellIndexVec + 1).asType<double>() * cellSize;
 
@@ -234,7 +247,7 @@ void Integrator::updateNearestNeighbors()
 #endif
 	
 	std::vector<size_t> cellsToSearchNeighborsFrom;
-        cellsToSearchNeighborsFrom.push_back(cellIndex);
+        cellsToSearchNeighborsFrom.push_back(bubbleToCellMap[i]);
 	
 	if (intersectNegX)
 	{
@@ -349,47 +362,22 @@ void Integrator::updateNearestNeighbors()
 	    }
 	}
 #endif
-	
-	// Temporarily add the cell indices, not the bubble indices.
-	nearestNeighbors.push_back(cellsToSearchNeighborsFrom);
-    }
-
-    // Add all the bubbles from all the cells that were closer
-    // than the maximum diameter.
-    for (size_t i = 0; i < nearestNeighbors.size(); ++i)
-    {
-	const auto &cells = nearestNeighbors[i];
-	for (const size_t &cellIndex : cells)
+        
+	for (const size_t &ci : cellsToSearchNeighborsFrom)
 	{
-	    for (const size_t &bubbleIndex : cellIndices[cellIndex])
+	    for (const size_t &j : cellToBubblesMap[ci])
 	    {
-		if (bubbleIndex == i)
+		if (j == i)
 		    continue;
+	        
+		double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
+		dvec pos2;
+		for (size_t k = 0; k < NUM_DIM; ++k)
+		    pos2.setComponent(bubbleData[j * dataStride + k], k);
 		
-		tentativeNearestNeighbors[i].push_back(bubbleIndex);
+		if ((position-pos2).getSquaredLength() < radii * radii)
+		    nearestNeighbors[i].push_back(j);
 	    }
-	}
-
-	// Remove the temporary cell indices, they aren't needed anymore.
-	nearestNeighbors[i].clear();
-    }
-
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
-    {
-	double radius = bubbleData[(i + 1) * dataStride - 1];
-	dvec pos1;
-	for (size_t k = 0; k < NUM_DIM; ++k)
-	    pos1.setComponent(bubbleData[i * dataStride + k], k);
-	
-	for (const size_t &j : tentativeNearestNeighbors[i])
-	{
-	    double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
-	    dvec pos2;
-	    for (size_t k = 0; k < NUM_DIM; ++k)
-		pos2.setComponent(bubbleData[j * dataStride + k], k);
-
-	    if ((pos1-pos2).getSquaredLength() < radii * radii)
-		nearestNeighbors[i].push_back(j);
 	}
     }
 }
@@ -408,17 +396,14 @@ void Integrator::removeIntersectingBubbles()
 
     // Remove data from the data vector, from the last item
     // to the first so the indices aren't invalidated.
-    size_t previous = ~0U;
     for (auto it = toBeDeleted.rbegin(); it != toBeDeleted.rend(); ++it)
     {
-	assert(previous > *it);
 	auto b = bubbleData.begin() + *it * dataStride;
 	auto e = bubbleData.begin() + (*it + 1) * dataStride;
 	
-	assert(e <= bubbleData.end());
+	assert(e <= bubbleData.end() && "Iterator is beyond the end of the vector.");
 	
 	bubbleData.erase(b, e);
-	previous = *it;
     }
 }
 
@@ -463,34 +448,23 @@ void Integrator::readWriteParameters(bool read)
 
     // When adding new parameters, be sure to add them to the input .json as well
     // and with the exact same name as here.
+    
     CUBBLE_PARAMETER(read, params, phiTarget);
     CUBBLE_PARAMETER(read, params, muZero);
     CUBBLE_PARAMETER(read, params, sigmaZero);
     CUBBLE_PARAMETER(read, params, avgRad);
     CUBBLE_PARAMETER(read, params, stdDevRad);
     CUBBLE_PARAMETER(read, params, minRad);
-    CUBBLE_PARAMETER(read, params, numBubbles);
+    CUBBLE_PARAMETER(read, params, numBubblesPerSweep);
     CUBBLE_PARAMETER(read, params, lbb);
     CUBBLE_PARAMETER(read, params, tfr);
     CUBBLE_PARAMETER(read, params, errorTolerance);
     CUBBLE_PARAMETER(read, params, timeStep);
+    CUBBLE_PARAMETER(read, params, numMaxSweeps);
+    CUBBLE_PARAMETER(read, params, rngSeed);
     
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
-}
 
-void Integrator::writeBubbleDataToFile(const std::string &filename)
-{
-    std::vector<Bubble> temp;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
-    {
-	dvec pos;
-	for (size_t j = 0; j < NUM_DIM; ++j)
-	    pos.setComponent(bubbleData[i * dataStride + j], j);
-	
-	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
-	temp.push_back(b);
-    }
-
-    fileio::writeVectorToFile(filename, temp);
+    std::cout << "Parameter IO done." << std::endl;
 }

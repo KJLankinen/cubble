@@ -7,7 +7,7 @@ OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 EXEC = $(BIN_DIR)/cubble
 
-NUM_DIM := 3
+NUM_DIM := 2
 
 CC := g++
 COMMON_FLAGS := -Wall -std=c++14 -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
@@ -19,7 +19,7 @@ all : $(EXEC)
 
 .PHONY : set_debug_flags
 set_debug_flags :
-	$(eval OPTIM_FLAGS = -O0 -g3)
+	$(eval OPTIM_FLAGS = -O0 -g3 -p)
 	$(eval FLAGS = $(COMMON_FLAGS) $(OPTIM_FLAGS))
 
 .PHONY : set_final_flags

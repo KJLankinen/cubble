@@ -3,19 +3,19 @@
     "errorTolerance": 1e-07,
     "lbb": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "y": 0.0
     },
     "minRad": 1e-08,
     "muZero": 1.0,
-    "numBubbles": 100000,
-    "phiTarget": 0.1,
+    "numBubblesPerSweep": 5000,
+    "numMaxSweeps": 1000,
+    "phiTarget": 0.7,
+    "rngSeed": 15658324,
     "sigmaZero": 1.0,
     "stdDevRad": 0.0126,
     "tfr": {
         "x": 10.0,
-        "y": 10.0,
-        "z": 10.0
+        "y": 10.0
     },
     "timeStep": 0.01
 }
