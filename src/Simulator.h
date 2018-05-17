@@ -28,12 +28,15 @@ namespace cubble
 	// Functions
 	//----------
 
-	// Integration functions
-	
 	// Setup functions
-	void setupBubbles();
+	void setupSimulation();
+	
+	// Integration functions
+	void integrate();
+	void computeAcceleration();
 
 	// Auxiliary functions
+	dvec wrapAroundBoundaries(dvec position);
 	double getSimulationBoxVolume();
 	size_t getCellIndexFromNormalizedPosition(const dvec &pos, size_t numCellsPerDim);
 	uvec getCellIndexVecFromCellIndex(size_t cellIndex,

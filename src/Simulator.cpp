@@ -41,11 +41,11 @@ Simulator::~Simulator()
 void Simulator::run()
 {
     std::cout << "Starting setup." << std::endl;
-    setupBubbles();
+    setupSimulation();
     std::cout << "Setup done." << std::endl;
 }
 
-void Simulator::setupBubbles()
+void Simulator::setupSimulation()
 {
     size_t n = 0;
     size_t numGenSweeps = 0;
@@ -105,6 +105,8 @@ void Simulator::setupBubbles()
 	numGenSweeps++;
     }
 
+    bubbleManager->updateTemporary();
+    
     printInfo();
 
     if (!targetVolumeFractionReached)
@@ -141,6 +143,81 @@ void Simulator::setupBubbles()
     }
 
     fileio::writeVectorToFile(filename, temp);
+}
+
+void Simulator::integrate()
+{
+    auto predict = [](dvec a, dvec b, dvec c, double dt) -> dvec
+	{
+	    return a + 0.5 * dt * (3.0 * b - c);
+	};
+
+    auto correct = [](dvec a, dvec b, dvec c, double dt) -> dvec
+	{
+	    return a + 0.5 * dt * (b + c);
+	};
+
+    double error = 0.0;
+    
+    do
+    {
+	computeAcceleration();
+	
+	for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+	{
+	    bubbleManager->updatePosition(i, wrapAroundBoundaries(
+					      predict(bubbleManager->getPosition(i),
+						      bubbleManager->getVelocity(i),
+						      bubbleManager->getPrevVelocity(i),
+						      timeStep)));
+	    
+	    bubbleManager->updateVelocity(i, predict(bubbleManager->getVelocity(i),
+						     bubbleManager->getAcceleration(i),
+						     bubbleManager->getPrevAcceleration(i),
+						     timeStep));
+	}
+
+	computeAcceleration();
+
+	for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+	{
+	    bubbleManager->updatePosition(i, wrapAroundBoundaries(
+					      correct(bubbleManager->getPosition(i),
+						      bubbleManager->getVelocity(i, true),
+						      bubbleManager->getVelocity(i),
+						      timeStep)));
+	    
+	    bubbleManager->updateVelocity(i, correct(bubbleManager->getVelocity(i),
+						  bubbleManager->getAcceleration(i, true),
+						  bubbleManager->getAcceleration(i),
+						  timeStep));
+	}
+
+	if (error < errorTolerance / 10 && timeStep < 0.1)
+	    timeStep *= 1.9;
+	else if (error > errorTolerance)
+	    timeStep *= 0.5;
+    }
+    while(error > errorTolerance);
+
+    bubbleManager->swapData();
+}
+
+void Simulator::computeAcceleration()
+{
+    
+}
+
+dvec Simulator::wrapAroundBoundaries(dvec position)
+{
+    for (size_t i = 0; i < NUM_DIM; ++i)
+    {
+	double val = position[i];
+	double interval = tfr[i] - lbb[i];
+        position[i] = val >= lbb[i] ? (val <= tfr[i] ? val : val - interval) : val + interval;
+    }
+
+    return position;
 }
 
 double Simulator::getSimulationBoxVolume()
