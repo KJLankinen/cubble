@@ -5,7 +5,6 @@
 #include "Integrator.h"
 #include "Fileio.h"
 #include "Macros.h"
-#include "Bubble.h"
 
 using namespace cubble;
 
@@ -44,6 +43,41 @@ void Integrator::run()
     std::cout << "Starting setup." << std::endl;
     setupBubbles();
     std::cout << "Setup done." << std::endl;
+}
+
+void Integrator::integrate()
+{
+    // Adams-Bashfroth integrator with prediction-correction step
+    double error = 0.0;
+
+    std::vector<double> updatedData;
+    std::vector<dvec> forces;
+    std::vector<dvec> velocities;
+
+    auto predict = [](dvec a, dvec b, dvec c, double dt) -> dvec
+	{
+	    return a + 0.5 * dt * (3.0 * b - c);
+	};
+
+    auto correct = [](dvec a, dvec b, dvec c, double dt) -> dvec
+	{
+	    return a + 0.5 * dt * (b + c);
+	};
+    
+    do
+    {
+	for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+	{
+	    dvec position;
+	    for (size_t k = 0; k < NUM_DIM; ++k)
+		position[k] = bubbleData[i * dataStride + k];
+	    
+	    //velocities[i] = predict();
+	}
+    }
+    while (error >= errorTolerance);
+
+    bubbleData = std::move(updatedData);
 }
 
 void Integrator::setupBubbles()
@@ -128,16 +162,21 @@ void Integrator::setupBubbles()
     }
 
     std::string filename = "data/bubble_data_2d.dat";
-    std::vector<Bubble> temp;
+    std::vector<vec<double, NUM_DIM + 1>> temp;
     for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
     {
-	dvec pos;
+        dvec pos;
 	for (size_t j = 0; j < NUM_DIM; ++j)
-	    pos.setComponent(bubbleData[i * dataStride + j], j);
+	    pos[j] = bubbleData[i * dataStride + j];
 
 	pos = getScaledPosition(pos);
-	Bubble b(pos, bubbleData[(i + 1) * dataStride - 1]);
-	temp.push_back(b);
+	
+	vec<double, NUM_DIM + 1> bubble;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    bubble[j] = pos[j];
+	
+        bubble[NUM_DIM] = bubbleData[(i + 1) * dataStride - 1];
+	temp.push_back(bubble);
     }
 
     fileio::writeVectorToFile(filename, temp);
@@ -197,10 +236,10 @@ than the number of cells per dimension.");
 #endif
 
     uvec temp;
-    temp.setComponent(cellIndex % numCellsPerDim, 0);
-    temp.setComponent((cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim, 1);
+    temp[0] = cellIndex % numCellsPerDim;
+    temp[1] = (cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim;
 #if(NUM_DIM == 3)
-    temp.setComponent(cellIndex / (numCellsPerDim * numCellsPerDim), 2);
+    temp[2] = cellIndex / (numCellsPerDim * numCellsPerDim);
 #endif
     
     return temp;
@@ -256,7 +295,7 @@ of the largest bubble.");
     {
 	dvec position;
 	for (size_t j = 0; j < NUM_DIM; ++j)
-	    position.setComponent(bubbleData[i * dataStride + j], j);
+	    position[j] = bubbleData[i * dataStride + j];
 
 	size_t cellIndex = getCellIndexFromNormalizedPosition(position, numCellsPerDim);
 	position = getScaledPosition(position);
@@ -415,7 +454,7 @@ of the largest bubble.");
 		double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
 		dvec pos2;
 		for (size_t k = 0; k < NUM_DIM; ++k)
-		    pos2.setComponent(bubbleData[j * dataStride + k], k);
+		    pos2[k] = bubbleData[j * dataStride + k];
 		
 		pos2 = getScaledPosition(pos2);
 		if ((position-pos2).getSquaredLength() < radii * radii)

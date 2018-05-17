@@ -58,18 +58,12 @@ namespace cubble
 	
 	T getLength() const { return std::sqrt(getSquaredLength()); }
 
-	void setComponent(T val, size_t i)
-	{
-	    assert(i < components.size());
-	    components[i] = val;
-	}
-
 	template <typename T2>
-	vec<T2, SIZE> asType()
+	vec<T2, SIZE> asType() const
 	{
 	    vec<T2, SIZE> v;
 	    for (size_t i = 0; i < SIZE; ++i)
-		v.setComponent((T2)components[i], i);
+		v[i] = (T2)this->operator[](i);
 
 	    return v;
 	}
@@ -325,6 +319,18 @@ namespace cubble
 	}
 	
 	T operator[](int i) const
+	{
+	    assert(i >= 0);
+	    return this->operator[]((size_t)i);
+	}
+
+	T& operator[](size_t i)
+	{
+	    assert(i < components.size());
+	    return components[i];
+	}
+	
+	T& operator[](int i)
 	{
 	    assert(i >= 0);
 	    return this->operator[]((size_t)i);

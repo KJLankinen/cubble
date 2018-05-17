@@ -29,6 +29,9 @@ namespace cubble
 	//----------
 	// Functions
 	//----------
+
+	// Integration functions
+	void integrate();
 	
 	// Setup functions
 	void setupBubbles();
@@ -47,8 +50,6 @@ namespace cubble
 	double getBubbleVolume();
 	dvec getScaledPosition(const dvec &position);
 	void compressSimulationBox();
-
-	// Integration functions
 
 	// Parameter & io functions
 	void readWriteParameters(bool read);
