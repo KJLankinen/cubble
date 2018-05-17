@@ -2,15 +2,15 @@
 #include <sstream>
 #include <set>
 
-#include "Integrator.h"
+#include "Simulator.h"
 #include "Fileio.h"
 #include "Macros.h"
 
 using namespace cubble;
 
-Integrator::Integrator(const std::string &inF,
-		       const std::string &outF,
-		       const std::string &saveF)
+Simulator::Simulator(const std::string &inF,
+		     const std::string &outF,
+		     const std::string &saveF)
 {
     inputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + inF);
     outputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + outF);
@@ -25,62 +25,27 @@ Integrator::Integrator(const std::string &inF,
 #endif
     
     fZeroPerMuZero = sigmaZero * avgRad / muZero;
-    generator = std::mt19937(rngSeed);
-    uniDist = urdd(0, 1);
-    normDist = ndd(avgRad, stdDevRad);
-
-    bubbleData.reserve(numBubblesPerSweep * dataStride);
     nearestNeighbors.reserve(numBubblesPerSweep);
+    bubbleManager = std::make_shared<BubbleManager>(numMaxBubbles,
+						    rngSeed,
+						    avgRad,
+						    stdDevRad,
+						    minRad);
 }
 
-Integrator::~Integrator()
+Simulator::~Simulator()
 {
     readWriteParameters(false);
 }
 
-void Integrator::run()
+void Simulator::run()
 {
     std::cout << "Starting setup." << std::endl;
     setupBubbles();
     std::cout << "Setup done." << std::endl;
 }
 
-void Integrator::integrate()
-{
-    // Adams-Bashfroth integrator with prediction-correction step
-    double error = 0.0;
-
-    std::vector<double> updatedData;
-    std::vector<dvec> forces;
-    std::vector<dvec> velocities;
-
-    auto predict = [](dvec a, dvec b, dvec c, double dt) -> dvec
-	{
-	    return a + 0.5 * dt * (3.0 * b - c);
-	};
-
-    auto correct = [](dvec a, dvec b, dvec c, double dt) -> dvec
-	{
-	    return a + 0.5 * dt * (b + c);
-	};
-    
-    do
-    {
-	for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
-	{
-	    dvec position;
-	    for (size_t k = 0; k < NUM_DIM; ++k)
-		position[k] = bubbleData[i * dataStride + k];
-	    
-	    //velocities[i] = predict();
-	}
-    }
-    while (error >= errorTolerance);
-
-    bubbleData = std::move(updatedData);
-}
-
-void Integrator::setupBubbles()
+void Simulator::setupBubbles()
 {
     size_t n = 0;
     size_t numGenSweeps = 0;
@@ -127,14 +92,15 @@ void Integrator::setupBubbles()
 	
 	for (size_t i = 0; i < numBubblesPerSweep; ++i)
 	{
-	    generateBubble();
+	    double newRad = bubbleManager->generateBubble();
+	    maxRadius = newRad > maxRadius ? newRad : maxRadius;
 	    numTotalGen++;
 	}
 	
 	updateNearestNeighbors();
 	removeIntersectingBubbles();
-	n = bubbleData.size() / dataStride;
 	phi = getBubbleVolume() / getSimulationBoxVolume();
+        n = bubbleManager->getNumBubbles();
 	
 	numGenSweeps++;
     }
@@ -163,49 +129,21 @@ void Integrator::setupBubbles()
 
     std::string filename = "data/bubble_data_2d.dat";
     std::vector<vec<double, NUM_DIM + 1>> temp;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
-        dvec pos;
-	for (size_t j = 0; j < NUM_DIM; ++j)
-	    pos[j] = bubbleData[i * dataStride + j];
-
-	pos = getScaledPosition(pos);
-	
+	dvec pos = getScaledPosition(bubbleManager->getPosition(i));
 	vec<double, NUM_DIM + 1> bubble;
 	for (size_t j = 0; j < NUM_DIM; ++j)
 	    bubble[j] = pos[j];
 	
-        bubble[NUM_DIM] = bubbleData[(i + 1) * dataStride - 1];
+        bubble[NUM_DIM] = bubbleManager->getRadius(i);
 	temp.push_back(bubble);
     }
 
     fileio::writeVectorToFile(filename, temp);
 }
 
-void Integrator::generateBubble()
-{
-    dvec interval = tfr - lbb;
-    double x = uniDist(generator);
-    double y = uniDist(generator);
-#if(NUM_DIM == 3)
-    double z = uniDist(generator);
-#endif
-
-    double r = normDist(generator);
-    while (r < minRad)
-	r = normDist(generator);
-
-    maxRadius = maxRadius < r ? r : maxRadius;
-    
-    bubbleData.push_back(x);
-    bubbleData.push_back(y);
-#if(NUM_DIM == 3)
-    bubbleData.push_back(z);
-#endif
-    bubbleData.push_back(r);
-}
-
-double Integrator::getSimulationBoxVolume()
+double Simulator::getSimulationBoxVolume()
 {
     dvec temp(tfr - lbb);
     double volume = temp[0] * temp[1];
@@ -215,16 +153,16 @@ double Integrator::getSimulationBoxVolume()
     return volume;
 }
 
-size_t Integrator::getCellIndexFromNormalizedPosition(const dvec &pos,
-						      size_t numCellsPerDim)
+size_t Simulator::getCellIndexFromNormalizedPosition(const dvec &pos,
+						     size_t numCellsPerDim)
 {
     uvec iv = pos * numCellsPerDim;
 
     return getCellIndexFromCellIndexVec(iv, numCellsPerDim);
 }
 
-uvec Integrator::getCellIndexVecFromCellIndex(size_t cellIndex,
-					      size_t numCellsPerDim)
+uvec Simulator::getCellIndexVecFromCellIndex(size_t cellIndex,
+					     size_t numCellsPerDim)
 {
 #ifndef NDEBUG
     size_t totalNumCells = 1;
@@ -245,8 +183,8 @@ than the number of cells per dimension.");
     return temp;
 }
 
-size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
-						int numCellsPerDim)
+size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
+					       int numCellsPerDim)
 {
     // Periodic boundary conditions:
     int x = cellIndexVec[0];
@@ -273,7 +211,7 @@ size_t Integrator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
     return index;
 }
 
-void Integrator::updateNearestNeighbors()
+void Simulator::updateNearestNeighbors()
 {
     size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
     double cellSize = (tfr - lbb)[0] / numCellsPerDim;
@@ -289,30 +227,23 @@ of the largest bubble.");
 
     std::map<size_t, std::vector<size_t>> cellToBubblesMap;
     std::map<size_t, size_t> bubbleToCellMap;
-    std::map<size_t, dvec> bubbleToPositionMap;
     
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
-	dvec position;
-	for (size_t j = 0; j < NUM_DIM; ++j)
-	    position[j] = bubbleData[i * dataStride + j];
-
-	size_t cellIndex = getCellIndexFromNormalizedPosition(position, numCellsPerDim);
-	position = getScaledPosition(position);
+	size_t cellIndex = getCellIndexFromNormalizedPosition(bubbleManager->getPosition(i),
+							      numCellsPerDim);
 	
 	cellToBubblesMap[cellIndex].push_back(i);
 	bubbleToCellMap[i] = cellIndex;
-	bubbleToPositionMap[i] = position;
     }
     
-    assert(bubbleData.size() % dataStride == 0 && "bubbleData has incorrect stride.");
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
 	nearestNeighbors.emplace_back();
 
-	double radius = bubbleData[(i + 1) * dataStride - 1];
+	dvec position = getScaledPosition(bubbleManager->getPosition(i));
+	double radius = bubbleManager->getRadius(i);
 	maxRadius = maxRadius < radius ? radius : maxRadius;
-	dvec position = bubbleToPositionMap[i];
 	
 	ivec cellIndexVec = getCellIndexVecFromCellIndex(bubbleToCellMap[i],
 							 numCellsPerDim);
@@ -451,12 +382,9 @@ of the largest bubble.");
 		if (j == i)
 		    continue;
 	        
-		double radii = bubbleData[(j + 1) * dataStride - 1] + radius;
-		dvec pos2;
-		for (size_t k = 0; k < NUM_DIM; ++k)
-		    pos2[k] = bubbleData[j * dataStride + k];
+		double radii = bubbleManager->getRadius(j) + radius;
+		dvec pos2 = getScaledPosition(bubbleManager->getPosition(j));
 		
-		pos2 = getScaledPosition(pos2);
 		if ((position-pos2).getSquaredLength() < radii * radii)
 		    nearestNeighbors[i].push_back(j);
 	    }
@@ -464,10 +392,10 @@ of the largest bubble.");
     }
 }
 
-void Integrator::removeIntersectingBubbles()
+void Simulator::removeIntersectingBubbles()
 {
     std::set<size_t> toBeDeleted;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
 	for (const size_t &j : nearestNeighbors[i])
 	{
@@ -479,22 +407,15 @@ void Integrator::removeIntersectingBubbles()
     // Remove data from the data vector, from the last item
     // to the first so the indices aren't invalidated.
     for (auto it = toBeDeleted.rbegin(); it != toBeDeleted.rend(); ++it)
-    {
-	auto b = bubbleData.begin() + *it * dataStride;
-	auto e = bubbleData.begin() + (*it + 1) * dataStride;
-	
-	assert(e <= bubbleData.end() && "Iterator is beyond the end of the vector.");
-	
-	bubbleData.erase(b, e);
-    }
+	bubbleManager->removeData(*it);
 }
 
-double Integrator::getBubbleVolume()
+double Simulator::getBubbleVolume()
 {
     double bubbleVolume = 0;
-    for (size_t i = 0; i < bubbleData.size() / dataStride; ++i)
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
-	double rad = bubbleData[(i + 1) * dataStride - 1];
+	double rad = bubbleManager->getRadius(i);
 	
 #if(NUM_DIM == 3)
 	rad *= rad * rad;
@@ -515,19 +436,19 @@ double Integrator::getBubbleVolume()
     return bubbleVolume;
 }
 
-dvec Integrator::getScaledPosition(const dvec &position)
+dvec Simulator::getScaledPosition(const dvec &position)
 {
     return position * (tfr - lbb) + lbb;
 }
 
-void Integrator::compressSimulationBox()
+void Simulator::compressSimulationBox()
 {
     double halfCompr = 0.5 * compressionAmount;
     lbb += halfCompr;
     tfr -= halfCompr;
 }
 
-void Integrator::readWriteParameters(bool read)
+void Simulator::readWriteParameters(bool read)
 {
     std::string msg = read
 	? "Reading parameters from file " + inputFile

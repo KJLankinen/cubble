@@ -2,7 +2,7 @@
 #include <exception>
 #include <stdexcept>
 
-#include "Integrator.h"
+#include "Simulator.h"
 #include "Util.h"
 
 int main(int argc, char **argv)
@@ -25,8 +25,8 @@ int main(int argc, char **argv)
     
     try
     {
-	cubble::Integrator integrator(argv[1], argv[2], argv[3]);
-	integrator.run();
+	cubble::Simulator simulator(argv[1], argv[2], argv[3]);
+        simulator.run();
     }
     catch (const std::exception &e)
     {

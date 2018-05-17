@@ -5,24 +5,22 @@
 #include <string>
 #include <vector>
 #include <random>
+#include <memory>
 
 #include "include/json.hpp"
 
 #include "Vec.h"
-
-typedef std::uniform_real_distribution<double> urdd;
-typedef std::normal_distribution<double> ndd;
+#include "BubbleManager.h"
 
 namespace cubble
 {
-    // This class is the workhorse of the simulation.
-    class Integrator
+    class Simulator
     {
     public:
-	Integrator(const std::string &inputFile,
-		   const std::string &outputFile,
-		   const std::string &saveFile);
-	~Integrator();
+        Simulator(const std::string &inputFile,
+		  const std::string &outputFile,
+		  const std::string &saveFile);
+	~Simulator();
 	void run();
 	
     private:
@@ -31,11 +29,9 @@ namespace cubble
 	//----------
 
 	// Integration functions
-	void integrate();
 	
 	// Setup functions
 	void setupBubbles();
-	void generateBubble();
 
 	// Auxiliary functions
 	double getSimulationBoxVolume();
@@ -57,10 +53,6 @@ namespace cubble
 	// ----------
 	// Parameters
 	//-----------
-	urdd uniDist;
-	ndd normDist;
-	std::mt19937 generator;
-	
 	std::string inputFile;
 	std::string outputFile;
 	std::string saveFile;
@@ -68,18 +60,17 @@ namespace cubble
 	size_t numBubblesPerSweep = 0;
 	size_t numMaxSweeps = 0;
 	size_t numMaxBubbles = 0;
-	size_t dataStride = NUM_DIM + 1;
 
 	int rngSeed = 0;
-
-	double maxRadius = -1;
+	
+	double avgRad = 0.0;
+	double stdDevRad = 0.0;
+        double minRad = 0.0;
+	double maxRadius = -1.0;
 	double phiTarget = 0.0;
 	double muZero = 0.0;
 	double sigmaZero = 0.0;
 	double fZeroPerMuZero = 0.0;
-	double avgRad = 0.0;
-	double stdDevRad = 0.0;
-	double minRad = 0.0;
 	double errorTolerance = 0.0;
 	double timeStep = 0.0;
 	double compressionAmount = 0.0;
@@ -90,7 +81,8 @@ namespace cubble
 	dvec lbb;
 	dvec tfr;
 
-	std::vector<double> bubbleData;
+	std::shared_ptr<BubbleManager> bubbleManager;
+
 	std::vector<std::vector<size_t>> nearestNeighbors;
     };
 }
