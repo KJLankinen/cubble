@@ -1,21 +1,17 @@
 #include "BubbleManager.h"
 
-#include <algorithm>
-
 using namespace cubble;
 
 // Amount of data per bubble:
-// 5 vectors of dimension NUM_DIM (position, velocity, acceleration),
+// 5 vectors of dimension NUM_DIM (position, prev & new velocity),
 // 1 scalar (radius)
-const size_t BubbleManager::dataStride = 5 * NUM_DIM + 1;
+const size_t BubbleManager::dataStride = 3 * NUM_DIM + 1;
 
 // Relative locations of data
 const size_t BubbleManager::rLoc = 0;
 const size_t BubbleManager::pLoc = BubbleManager::rLoc + 1;
 const size_t BubbleManager::vLoc = BubbleManager::pLoc + NUM_DIM;
 const size_t BubbleManager::vPrevLoc = BubbleManager::vLoc + NUM_DIM;
-const size_t BubbleManager::aLoc = BubbleManager::vPrevLoc + NUM_DIM;
-const size_t BubbleManager::aPrevLoc = BubbleManager::aLoc + NUM_DIM;
     
 BubbleManager::BubbleManager(size_t numMaxBubbles,
 			     int rngSeed,
@@ -68,7 +64,6 @@ double BubbleManager::generateBubble()
     {
 	b.p[i] = uniDist(generator);
         b.v[i] = 0;
-        b.a[i] = 0;
     }
 
     b.r = normDist(generator);
@@ -131,7 +126,6 @@ void BubbleManager::updatePosition(size_t i, dvec position)
     size_t index = i * dataStride + pLoc;
     assert(index < data.size() && "Given index is out of bounds.");
 
-    dvec retVec;
     for (size_t j = 0; j < NUM_DIM; ++j)
         temporaryData[index + j] = position[j];
 }
@@ -173,54 +167,9 @@ void BubbleManager::updateVelocity(size_t i, dvec velocity)
 
     for (size_t j = 0; j < NUM_DIM; ++j)
     {
-	// Put the new data to the old, then swap old and current
-	// so current contains new and old contains current.
-	temporaryData[prevIndex + j] = velocity[j];
-	std::swap(temporaryData[prevIndex + j], temporaryData[index + j]);
-    }
-}
-
-dvec BubbleManager::getAcceleration(size_t i, bool useTemporary) const
-{
-    assert(i < getNumBubbles() && "Given index is out of bounds.");
-    size_t index = i * dataStride + aLoc;
-    assert(index < data.size() && "Given index is out of bounds.");
-
-    const std::vector<double> dataRef = useTemporary ? temporaryData : data;
-    dvec retVec;
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        retVec[j] = dataRef[index + j];
-    
-    return retVec;
-}
-
-dvec BubbleManager::getPrevAcceleration(size_t i) const
-{
-    assert(i < getNumBubbles() && "Given index is out of bounds.");
-    size_t index = i * dataStride + aPrevLoc;
-    assert(index < data.size() && "Given index is out of bounds.");
-
-    dvec retVec;
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        retVec[j] = data[index + j];
-    
-    return retVec;
-}
-
-void BubbleManager::updateAcceleration(size_t i, dvec acceleration)
-{
-    assert(i < getNumBubbles() && "Given index is out of bounds.");
-    size_t index = i * dataStride + aLoc;
-    size_t prevIndex = i * dataStride + aPrevLoc;
-    assert(index < data.size() && "Given index is out of bounds.");
-    assert(prevIndex < data.size() && "Given index is out of bounds.");
-
-    for (size_t j = 0; j < NUM_DIM; ++j)
-    {
-	// Put the new data to the old, then swap old and current
-	// so current contains new and old contains current.
-	temporaryData[prevIndex + j] = acceleration[j];
-	std::swap(temporaryData[prevIndex + j], temporaryData[index + j]);
+	// Put new value to current and current (from 'real' data) to old.
+	temporaryData[index + j] = velocity[j];
+	temporaryData[prevIndex + j] = data[index + j];
     }
 }
 

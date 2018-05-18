@@ -81,16 +81,22 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
+    data = np.loadtxt("data/bubble_data_2d_setup.dat", delimiter=',')
+    data2 = np.loadtxt("data/bubble_data_2d_integrated.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]
     r = data[:,2]
     
+    x2 = data2[:,0]
+    y2 = data2[:,1]
+    r2 = data2[:,2]
+    
     figure()
     subplot(aspect='equal')
 
     out = circles(x, y, r, c='green', alpha=0.3)
+    out = circles(x2, y2, r2, c='blue', alpha=0.3)
     
     plt.show()
 

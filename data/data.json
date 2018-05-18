@@ -1,6 +1,6 @@
 {
     "phiTargetExpl" : "The target volume fraction.", 
-    "phiTarget" : 0.7,
+    "phiTarget" : 0.85,
     "muZeroExpl" : "The viscosity of the fluid",
     "muZero" : 1.0,
     "sigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
@@ -14,11 +14,11 @@
     "lbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "tfrExpl" : "The coordinates of the top front right corner of the simulation box.",
-    "tfr" : {"x" : 3, "y" : 3, "z" : 3},
+    "tfr" : {"x" : 1.5, "y" : 1.5, "z" : 3},
     "errorToleranceExpl" : "The error tolerance level for the integration.",
-    "errorTolerance" : 1e-7,
+    "errorTolerance" : 1e-4,
     "timeStepExpl" : "The initial time step with which to increment the simulation time.",
-    "timeStep" : 0.01,
+    "timeStep" : 0.00001,
     "numBubblesPerSweepExpl" : "How many bubbles to spawn per sweep at the start of the simulation.",
     "numBubblesPerSweep" : 1000,
     "numMaxSweepsExpl" : "The maximum number of bubble populate sweeps to do.",
@@ -28,5 +28,7 @@
     "numMaxBubblesExpl" : "Maximum amount of bubbles to generate. If this value is reached before the target volume fraction, the simulation box is compressed until the desired volume fraction is reached.",
     "numMaxBubbles" : 5000,
     "compressionAmountExpl" : "How much to compress the side length(s) of the simulation box per compression iteration.",
-    "compressionAmount" : 1e-5
+    "compressionAmount" : 1e-5,
+    "numIntegrationStepsExpl" : "How many integration steps to do.",
+    "numIntegrationSteps" : 50000
 }

@@ -41,17 +41,11 @@ namespace cubble
 	dvec getPrevVelocity(size_t i) const;
 	void updateVelocity(size_t i, dvec velocity);
 
-	dvec getAcceleration(size_t i, bool useTemporary = false) const;
-	dvec getPrevAcceleration(size_t i) const;
-	void updateAcceleration(size_t i, dvec acceleration);
-
 	const static size_t dataStride;
 	const static size_t rLoc;
 	const static size_t pLoc;
 	const static size_t vLoc;
 	const static size_t vPrevLoc;
-	const static size_t aLoc;
-	const static size_t aPrevLoc;
 	
     private:
 	struct BubbleData
@@ -60,8 +54,6 @@ namespace cubble
 	    dvec p;
 	    dvec v;
 	    dvec vp;
-	    dvec a;
-	    dvec ap;
 
 	    const std::vector<double> getValues() const
 	    {
@@ -76,12 +68,6 @@ namespace cubble
 		
 		for (size_t i = 0; i < NUM_DIM; ++i)
 		    retVec.push_back(vp[i]);
-		
-		for (size_t i = 0; i < NUM_DIM; ++i)
-		    retVec.push_back(a[i]);
-		
-		for (size_t i = 0; i < NUM_DIM; ++i)
-		    retVec.push_back(ap[i]);
 
 		return retVec;
 	    }

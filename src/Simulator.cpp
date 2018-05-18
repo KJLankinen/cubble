@@ -25,7 +25,9 @@ Simulator::Simulator(const std::string &inF,
 #endif
     
     fZeroPerMuZero = sigmaZero * avgRad / muZero;
-    nearestNeighbors.reserve(numBubblesPerSweep);
+    
+    accelerations.reserve(numMaxBubbles);
+    
     bubbleManager = std::make_shared<BubbleManager>(numMaxBubbles,
 						    rngSeed,
 						    avgRad,
@@ -43,6 +45,41 @@ void Simulator::run()
     std::cout << "Starting setup." << std::endl;
     setupSimulation();
     std::cout << "Setup done." << std::endl;
+    
+    std::string filename = "data/bubble_data_2d_setup.dat";
+    std::vector<vec<double, NUM_DIM + 1>> temp;
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+    {
+	dvec pos = getScaledPosition(bubbleManager->getPosition(i));
+	vec<double, NUM_DIM + 1> bubble;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    bubble[j] = pos[j];
+	
+        bubble[NUM_DIM] = bubbleManager->getRadius(i);
+	temp.push_back(bubble);
+    }
+
+    fileio::writeVectorToFile(filename, temp);
+
+    std::cout << "Starting integration." << std::endl;
+    for (size_t i = 0; i < numIntegrationSteps; ++i)
+	integrate();
+    std::cout << "Integration finished." << std::endl;
+
+    filename = "data/bubble_data_2d_integrated.dat";
+    temp.clear();
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+    {
+	dvec pos = getScaledPosition(bubbleManager->getPosition(i));
+	vec<double, NUM_DIM + 1> bubble;
+	for (size_t j = 0; j < NUM_DIM; ++j)
+	    bubble[j] = pos[j];
+	
+        bubble[NUM_DIM] = bubbleManager->getRadius(i);
+	temp.push_back(bubble);
+    }
+
+    fileio::writeVectorToFile(filename, temp);
 }
 
 void Simulator::setupSimulation()
@@ -93,11 +130,10 @@ void Simulator::setupSimulation()
 	for (size_t i = 0; i < numBubblesPerSweep; ++i)
 	{
 	    double newRad = bubbleManager->generateBubble();
-	    maxRadius = newRad > maxRadius ? newRad : maxRadius;
+	    maxDiameter = 2.0 * newRad > maxDiameter ? 2.0 * newRad : maxDiameter;
 	    numTotalGen++;
 	}
-	
-	updateNearestNeighbors();
+        
 	removeIntersectingBubbles();
 	phi = getBubbleVolume() / getSimulationBoxVolume();
         n = bubbleManager->getNumBubbles();
@@ -128,25 +164,10 @@ void Simulator::setupSimulation()
 		  << "\nVolume fraction: " << phi
 		  << std::endl;
     }
-
-    std::string filename = "data/bubble_data_2d.dat";
-    std::vector<vec<double, NUM_DIM + 1>> temp;
-    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
-    {
-	dvec pos = getScaledPosition(bubbleManager->getPosition(i));
-	vec<double, NUM_DIM + 1> bubble;
-	for (size_t j = 0; j < NUM_DIM; ++j)
-	    bubble[j] = pos[j];
-	
-        bubble[NUM_DIM] = bubbleManager->getRadius(i);
-	temp.push_back(bubble);
-    }
-
-    fileio::writeVectorToFile(filename, temp);
 }
 
 void Simulator::integrate()
-{
+{   
     auto predict = [](dvec a, dvec b, dvec c, double dt) -> dvec
 	{
 	    return a + 0.5 * dt * (3.0 * b - c);
@@ -157,40 +178,92 @@ void Simulator::integrate()
 	    return a + 0.5 * dt * (b + c);
 	};
 
-    double error = 0.0;
-    
+    double error = -1.0;
+    resetCellData();
+    accelerations.resize(bubbleManager->getNumBubbles());
     do
     {
-	computeAcceleration();
+	maxDiameter = -1.0;
+	error = -1.0;
 	
+	// Predict new position based on current velocities
 	for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
 	{
-	    bubbleManager->updatePosition(i, wrapAroundBoundaries(
-					      predict(bubbleManager->getPosition(i),
-						      bubbleManager->getVelocity(i),
-						      bubbleManager->getPrevVelocity(i),
-						      timeStep)));
+	    dvec position = getNormalizedPosition(
+		wrapAroundBoundaries(
+		    predict(getScaledPosition(bubbleManager->getPosition(i)),
+			    bubbleManager->getVelocity(i),
+			    bubbleManager->getPrevVelocity(i),
+			    timeStep)));
 	    
-	    bubbleManager->updateVelocity(i, predict(bubbleManager->getVelocity(i),
-						     bubbleManager->getAcceleration(i),
-						     bubbleManager->getPrevAcceleration(i),
-						     timeStep));
+	    bubbleManager->updatePosition(i, position);
+	    updateCellDataForBubble(i, position);
+	    
+	    // Update maximum diameter
+	    maxDiameter = maxDiameter < 2.0 * bubbleManager->getRadius(i)
+		? 2.0 * bubbleManager->getRadius(i)
+		: maxDiameter;
 	}
 
-	computeAcceleration();
-
+	// Update the accelerations
+	dvec zeroVec;
+	std::fill(accelerations.begin(), accelerations.end(), zeroVec);
 	for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
 	{
-	    bubbleManager->updatePosition(i, wrapAroundBoundaries(
-					      correct(bubbleManager->getPosition(i),
-						      bubbleManager->getVelocity(i, true),
-						      bubbleManager->getVelocity(i),
-						      timeStep)));
+	    dvec position = getScaledPosition(bubbleManager->getPosition(i, true));
+	    double radius = bubbleManager->getRadius(i, true);
+
+	    // For every neighboring cell (own cell included), 13 in 3D, 4 in 2D
+	    // See 'addNeighboringCellsToVec()' for details.
+	    for (size_t ci : bubbleToCells[i])
+	    {
+		// For every bubble in a cell, on average numBubbles/numCells
+		for (size_t j : cellToBubbles[ci])
+		{
+		    // Skip self
+		    if (j == i)
+			continue;
+		    
+		    dvec position2 = getScaledPosition(bubbleManager->getPosition(j, true));
+		    double radii = bubbleManager->getRadius(j, true) + radius;
+
+		    dvec acceleration = position2 - position;
+		    // Skip bubbles that don't overlap
+		    if (acceleration.getSquaredLength() > radii * radii)
+			continue;
+		    
+		    double magnitude = acceleration.getLength();
+		    acceleration *= (radii - magnitude) / (radii * magnitude);
+		    accelerations[i] += acceleration;
+		    accelerations[j] += acceleration;
+		}
+	    }
+	}
+
+	// Take the correction step, using the original position,
+	// velocity based on the predicted position and current velocity.
+	for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+	{
+	    // Calculate velocity based on new accelerations.
+	    dvec velocity = fZeroPerMuZero * accelerations[i];
+	    bubbleManager->updateVelocity(i, velocity);
+	
+	    dvec position = wrapAroundBoundaries(
+		correct(getScaledPosition(bubbleManager->getPosition(i)),
+			bubbleManager->getVelocity(i, true),
+			bubbleManager->getVelocity(i),
+			timeStep));
 	    
-	    bubbleManager->updateVelocity(i, correct(bubbleManager->getVelocity(i),
-						  bubbleManager->getAcceleration(i, true),
-						  bubbleManager->getAcceleration(i),
-						  timeStep));
+	    dvec predictedPos = getScaledPosition(bubbleManager->getPosition(i, true));
+
+	    // Compute error
+	    for (size_t j = 0; j < NUM_DIM; ++j)
+	    {
+		double diff = std::abs(predictedPos[j] - position[j]);
+		error = diff > error ? diff : error;
+	    }
+	    
+	    bubbleManager->updatePosition(i, getNormalizedPosition(position));
 	}
 
 	if (error < errorTolerance / 10 && timeStep < 0.1)
@@ -201,20 +274,24 @@ void Simulator::integrate()
     while(error > errorTolerance);
 
     bubbleManager->swapData();
-}
 
-void Simulator::computeAcceleration()
-{
+    integrationTime += timeStep;
     
+    // Handle the rest of the integration related things,
+    // e.g. redistributing gas from small bubbles,
+    // adding timeStep to simulation time, etc.
 }
 
 dvec Simulator::wrapAroundBoundaries(dvec position)
 {
+    // Using scaled position
     for (size_t i = 0; i < NUM_DIM; ++i)
     {
 	double val = position[i];
 	double interval = tfr[i] - lbb[i];
-        position[i] = val >= lbb[i] ? (val <= tfr[i] ? val : val - interval) : val + interval;
+        position[i] = val >= lbb[i]
+	    ? (val <= tfr[i] ? val : val - interval)
+	    : val + interval;
     }
 
     return position;
@@ -230,16 +307,14 @@ double Simulator::getSimulationBoxVolume()
     return volume;
 }
 
-size_t Simulator::getCellIndexFromNormalizedPosition(const dvec &pos,
-						     size_t numCellsPerDim)
+size_t Simulator::getCellIndexFromNormalizedPosition(const dvec &pos)
 {
     uvec iv = pos * numCellsPerDim;
 
-    return getCellIndexFromCellIndexVec(iv, numCellsPerDim);
+    return getCellIndexFromCellIndexVec(iv);
 }
 
-uvec Simulator::getCellIndexVecFromCellIndex(size_t cellIndex,
-					     size_t numCellsPerDim)
+uvec Simulator::getCellIndexVecFromCellIndex(size_t cellIndex)
 {
 #ifndef NDEBUG
     size_t totalNumCells = 1;
@@ -260,27 +335,27 @@ than the number of cells per dimension.");
     return temp;
 }
 
-size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
-					       int numCellsPerDim)
+size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec)
 {
+    int ncpd = (int)numCellsPerDim;
     // Periodic boundary conditions:
     int x = cellIndexVec[0];
     x = x > 0
-	? (x < numCellsPerDim ? x : x % numCellsPerDim)
-	: (x + numCellsPerDim) % numCellsPerDim;
+	? (x < ncpd ? x : x % ncpd)
+	: (x + ncpd) % ncpd;
     
     int y = cellIndexVec[1];
     y = y > 0
-	? (y < numCellsPerDim ? y : y % numCellsPerDim)
-	: (y + numCellsPerDim) % numCellsPerDim;
+	? (y < ncpd ? y : y % ncpd)
+	: (y + ncpd) % ncpd;
 
-    size_t index = y * numCellsPerDim + x;
+    size_t index = y * ncpd + x;
     
 #if(NUM_DIM == 3)
     int z = cellIndexVec[2];
     z = z > 0
-	? (z < numCellsPerDim ? z : z % numCellsPerDim)
-	: (z + numCellsPerDim) % numCellsPerDim;
+	? (z < ncpd ? z : z % ncpd)
+	: (z + ncpd) % ncpd;
 
     index += (size_t)(z * numCellsPerDim * numCellsPerDim);
 #endif
@@ -288,196 +363,39 @@ size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec,
     return index;
 }
 
-void Simulator::updateNearestNeighbors()
-{
-    size_t numCellsPerDim = std::floor(1.0 / (3.0 * maxRadius / (tfr - lbb)[0]));
-    double cellSize = (tfr - lbb)[0] / numCellsPerDim;
-    double diam = 2.0 * maxRadius;
-
-    // Reset maxRadius. It's updated later in this function.
-    maxRadius = -1.0;
-
-    assert(cellSize > diam && "cellSize is smaller than the diameter \
-of the largest bubble.");
-
-    nearestNeighbors.clear();
-
-    std::map<size_t, std::vector<size_t>> cellToBubblesMap;
-    std::map<size_t, size_t> bubbleToCellMap;
-    
-    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
-    {
-	size_t cellIndex = getCellIndexFromNormalizedPosition(bubbleManager->getPosition(i),
-							      numCellsPerDim);
-	
-	cellToBubblesMap[cellIndex].push_back(i);
-	bubbleToCellMap[i] = cellIndex;
-    }
-    
-    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
-    {
-	nearestNeighbors.emplace_back();
-
-	dvec position = getScaledPosition(bubbleManager->getPosition(i));
-	double radius = bubbleManager->getRadius(i);
-	maxRadius = maxRadius < radius ? radius : maxRadius;
-	
-	ivec cellIndexVec = getCellIndexVecFromCellIndex(bubbleToCellMap[i],
-							 numCellsPerDim);
-	dvec cellLbb = cellIndexVec.asType<double>() * cellSize;
-	dvec cellTfr = (cellIndexVec + 1).asType<double>() * cellSize;
-
-	bool intersectNegX = std::abs(cellLbb[0] - position[0]) < diam;
-	bool intersectNegY = std::abs(cellLbb[1] - position[1]) < diam;
-	bool intersectPosY = std::abs(cellTfr[1] - position[1]) < diam;
-#if(NUM_DIM == 3)
-	bool intersectNegZ = std::abs(cellLbb[2] - position[2]) < diam;
-	bool intersectPosX = std::abs(cellTfr[0] - position[0]) < diam;
-#endif
-	
-	std::vector<size_t> cellsToSearchNeighborsFrom;
-        cellsToSearchNeighborsFrom.push_back(bubbleToCellMap[i]);
-	
-	if (intersectNegX)
-	{
-	    ivec temp;
-#if(NUM_DIM == 3)
-	    temp = cellIndexVec + ivec({-1, 0, 0});
-#elif(NUM_DIM == 2)
-	    temp = cellIndexVec + ivec({-1, 0});
-#else
-	    std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
-#endif
-	    cellsToSearchNeighborsFrom.push_back(
-		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-
-	    if (intersectNegY)
-	    {
-		ivec temp;
-#if(NUM_DIM == 3)
-		temp = cellIndexVec + ivec({-1, -1, 0});
-#elif(NUM_DIM == 2)
-		temp = cellIndexVec + ivec({-1, -1});
-#else
-		std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
-#endif
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-	    }
-	    else if (intersectPosY)
-	    {
-		ivec temp;
-#if(NUM_DIM == 3)
-		temp = cellIndexVec + ivec({-1, 1, 0});
-#elif(NUM_DIM == 2)
-		temp = cellIndexVec + ivec({-1, 1});
-#else
-		std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
-#endif
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));	
-	    }
-	}
-
-	if (intersectNegY)
-	{
-	    ivec temp;
-#if(NUM_DIM == 3)
-	    temp = cellIndexVec + ivec({0, -1, 0});
-#elif(NUM_DIM == 2)
-	    temp = cellIndexVec + ivec({0, -1});
-#else
-	    std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
-#endif
-	    cellsToSearchNeighborsFrom.push_back(
-		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-	}
-
-#if(NUM_DIM == 3)
-	if (intersectNegZ)
-	{
-	    ivec temp = cellIndexVec + ivec({0, 0, -1});
-	    cellsToSearchNeighborsFrom.push_back(
-		getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-
-	    if (intersectNegX)
-	    {	
-		ivec temp = cellIndexVec + ivec({-1, 0, -1});
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		
-		if (intersectNegY)
-		{
-		    ivec temp = cellIndexVec + ivec({-1, -1, -1});
-		    cellsToSearchNeighborsFrom.push_back(
-			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		}
-		else if (intersectPosY)
-		{
-		    ivec temp = cellIndexVec + ivec({-1, 1, -1});
-		    cellsToSearchNeighborsFrom.push_back(
-			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		}
-	    }
-	    else if (intersectPosX)
-	    {
-		ivec temp = cellIndexVec + ivec({1, 0, -1});
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		if (intersectNegY)
-		{
-		    ivec temp = cellIndexVec + ivec({1, -1, -1});
-		    cellsToSearchNeighborsFrom.push_back(
-			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		}
-		else if (intersectPosY)
-		{
-		    ivec temp = cellIndexVec + ivec({1, 1, -1});
-		    cellsToSearchNeighborsFrom.push_back(
-			getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-		}
-	    }
-	    else if (intersectNegY)
-	    {
-		ivec temp = cellIndexVec + ivec({0, -1, -1});
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-	    }
-	    else if (intersectPosY)
-	    {
-		ivec temp = cellIndexVec + ivec({0, 1, -1});
-	        cellsToSearchNeighborsFrom.push_back(
-		    getCellIndexFromCellIndexVec(temp, (int)numCellsPerDim));
-	    }
-	}
-#endif
-        
-	for (const size_t &ci : cellsToSearchNeighborsFrom)
-	{
-	    for (const size_t &j : cellToBubblesMap[ci])
-	    {
-		if (j == i)
-		    continue;
-	        
-		double radii = bubbleManager->getRadius(j) + radius;
-		dvec pos2 = getScaledPosition(bubbleManager->getPosition(j));
-		
-		if ((position-pos2).getSquaredLength() < radii * radii)
-		    nearestNeighbors[i].push_back(j);
-	    }
-	}
-    }
-}
-
 void Simulator::removeIntersectingBubbles()
 {
+    // This function is only used at the stat of the simulation.
+    
+    resetCellData();
+
+    for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
+	updateCellDataForBubble(i, bubbleManager->getPosition(i));
+    
     std::set<size_t> toBeDeleted;
     for (size_t i = 0; i < bubbleManager->getNumBubbles(); ++i)
     {
-	for (const size_t &j : nearestNeighbors[i])
+	dvec position = getScaledPosition(bubbleManager->getPosition(i));
+	double radius = bubbleManager->getRadius(i);
+	
+	for (size_t ci : bubbleToCells[i])
 	{
-	    if (toBeDeleted.find(i) == toBeDeleted.end())
-		toBeDeleted.insert(j);
+	    for (size_t j : cellToBubbles[ci])
+	    {
+		// Skip self
+		if (j == i)
+		    continue;
+		
+		dvec position2 = getScaledPosition(bubbleManager->getPosition(j));
+		double radii = bubbleManager->getRadius(j) + radius;
+		
+		dvec diff = position - position2;
+		if (diff.getSquaredLength() > radii * radii)
+		    continue;
+		
+		if (toBeDeleted.find(i) == toBeDeleted.end())
+		    toBeDeleted.insert(j);
+	    }
 	}
     }
 
@@ -518,11 +436,68 @@ dvec Simulator::getScaledPosition(const dvec &position)
     return position * (tfr - lbb) + lbb;
 }
 
+dvec Simulator::getNormalizedPosition(const dvec &position)
+{
+    return (position - lbb) / (tfr - lbb);
+}
+
 void Simulator::compressSimulationBox()
 {
     double halfCompr = 0.5 * compressionAmount;
     lbb += halfCompr;
     tfr -= halfCompr;
+}
+
+void Simulator::addNeighborCellsToVec(std::vector<size_t> &v, size_t cellIndex)
+{
+    ivec cellIndexVec = getCellIndexVecFromCellIndex(cellIndex);
+#if(NUM_DIM == 3)
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  0,  0})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1, -1,  0})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  1,  0})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 0, -1,  0})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 0,  0, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  0, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1, -1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 1,  0, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 1, -1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 1,  1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 0, -1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 0,  1, -1})));
+#elif(NUM_DIM == 2)
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  0})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1, -1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({-1,  1})));
+    v.push_back(getCellIndexFromCellIndexVec(cellIndexVec + ivec({ 0, -1})));
+#else
+    std::cout << "Dimensionality is neither 2D nor 3D..." << std::endl;
+#endif
+}
+
+void Simulator::resetCellData()
+{
+    numCellsPerDim = std::floor(1.0 / (1.5 * maxDiameter / (tfr - lbb)[0]));
+    size_t numTotalCells = 1;
+    for (size_t i = 0; i < NUM_DIM; ++i)
+	numTotalCells *= numCellsPerDim;
+    
+    cellToBubbles.clear();
+    cellToBubbles.resize(numTotalCells);
+    
+    bubbleToCells.clear();
+    bubbleToCells.resize(bubbleManager->getNumBubbles());   
+}
+
+void Simulator::updateCellDataForBubble(size_t i, dvec position)
+{
+    // Update cell's bubbles
+    size_t cellIndex = getCellIndexFromNormalizedPosition(position);
+    cellToBubbles[cellIndex].push_back(i);
+    
+    // Update bubble's neighboring cells
+    bubbleToCells[i].push_back(cellIndex);
+    addNeighborCellsToVec(bubbleToCells[i], cellIndex);
 }
 
 void Simulator::readWriteParameters(bool read)
@@ -556,6 +531,7 @@ void Simulator::readWriteParameters(bool read)
     CUBBLE_PARAMETER(read, params, rngSeed);
     CUBBLE_PARAMETER(read, params, numMaxBubbles);
     CUBBLE_PARAMETER(read, params, compressionAmount);
+    CUBBLE_PARAMETER(read, params, numIntegrationSteps);
     
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
