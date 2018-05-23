@@ -49,6 +49,7 @@ namespace cubble
 				   size_t cellIndex);
 	void resetCellData();
 	void updateCellDataForBubble(size_t i, dvec position);
+        dvec getShortestVecBetween(dvec position1, dvec position2);
 	
 	// Parameter & io functions
 	void readWriteParameters(bool read);

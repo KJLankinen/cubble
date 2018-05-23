@@ -1,6 +1,6 @@
 {
     "phiTargetExpl" : "The target volume fraction.", 
-    "phiTarget" : 0.85,
+    "phiTarget" : 0.8,
     "muZeroExpl" : "The viscosity of the fluid",
     "muZero" : 1.0,
     "sigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
@@ -24,11 +24,11 @@
     "numMaxSweepsExpl" : "The maximum number of bubble populate sweeps to do.",
     "numMaxSweeps" : 1000,
     "rngSeedExpl" : "The seed for the RNG.",
-    "rngSeed" : 15658324,
+    "rngSeed" : 15424,
     "numMaxBubblesExpl" : "Maximum amount of bubbles to generate. If this value is reached before the target volume fraction, the simulation box is compressed until the desired volume fraction is reached.",
     "numMaxBubbles" : 5000,
     "compressionAmountExpl" : "How much to compress the side length(s) of the simulation box per compression iteration.",
-    "compressionAmount" : 1e-5,
+    "compressionAmount" : 1e-6,
     "numIntegrationStepsExpl" : "How many integration steps to do.",
-    "numIntegrationSteps" : 50000
+    "numIntegrationSteps" : 1000000
 }

@@ -335,6 +335,7 @@ namespace cubble
 	    assert(i >= 0);
 	    return this->operator[]((size_t)i);
 	}
+
 	
 	// << << << << << << << << << << << << << << << << << << << << << << 
 	friend std::ostream& operator<<(std::ostream &os, const vec<T, SIZE> &v)
@@ -347,6 +348,30 @@ namespace cubble
 	    return os;
 	}
 
+	
+	// min min min min min min min min min min min min min min min min min min
+	friend vec<T, SIZE> min(const vec<T, SIZE> &v1, const vec<T, SIZE> &v2)
+	{
+	    vec<T, SIZE> retVec;
+	    for (size_t i = 0; i < SIZE; ++i)
+		retVec[i] = v1[i] < v2[i] ? v1[i] : v2[i];
+	    
+	    return retVec;
+	}
+
+	
+	// max max max max max max max max max max max max max max max max max max
+	friend vec<T, SIZE> max(const vec<T, SIZE> &v1, const vec<T, SIZE> &v2)
+	{
+	    vec<T, SIZE> retVec;
+	    for (size_t i = 0; i < SIZE; ++i)
+		retVec[i] = v1[i] > v2[i] ? v1[i] : v2[i];
+	    
+	    return retVec;
+	}
+	
+	
+	// .json .json .json .json .json .json .json .json .json .json .json
 	friend void to_json(nlohmann::json &j, const vec<T, SIZE> &v)
 	{
 	    for (size_t i = 0; i < v.components.size(); ++i)

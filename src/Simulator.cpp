@@ -25,9 +25,7 @@ Simulator::Simulator(const std::string &inF,
 #endif
     
     fZeroPerMuZero = sigmaZero * avgRad / muZero;
-    
     accelerations.reserve(numMaxBubbles);
-    
     bubbleManager = std::make_shared<BubbleManager>(numMaxBubbles,
 						    rngSeed,
 						    avgRad,
@@ -80,6 +78,8 @@ void Simulator::run()
     }
 
     fileio::writeVectorToFile(filename, temp);
+    filename = "data/acc.dat";
+    fileio::writeVectorToFile(filename, accelerations);
 }
 
 void Simulator::setupSimulation()
@@ -157,6 +157,7 @@ void Simulator::setupSimulation()
 	    targetVolumeFractionReached = phi >= phiTarget;
 
 	    compressSimulationBox();
+	    integrate();
 	}
 
 	std::cout << "Compression done."
@@ -179,10 +180,10 @@ void Simulator::integrate()
 	};
 
     double error = -1.0;
-    resetCellData();
     accelerations.resize(bubbleManager->getNumBubbles());
     do
     {
+	resetCellData();
 	maxDiameter = -1.0;
 	error = -1.0;
 	
@@ -213,10 +214,12 @@ void Simulator::integrate()
 	    dvec position = getScaledPosition(bubbleManager->getPosition(i, true));
 	    double radius = bubbleManager->getRadius(i, true);
 
-	    // For every neighboring cell (own cell included), 13 in 3D, 4 in 2D
+	    // For every neighboring cell (own cell included), 14 in 3D, 5 in 2D
 	    // See 'addNeighboringCellsToVec()' for details.
+	    bool ownCell = true;
 	    for (size_t ci : bubbleToCells[i])
 	    {
+		double multiplier = ownCell ? 0.5 : 1.0;
 		// For every bubble in a cell, on average numBubbles/numCells
 		for (size_t j : cellToBubbles[ci])
 		{
@@ -227,16 +230,18 @@ void Simulator::integrate()
 		    dvec position2 = getScaledPosition(bubbleManager->getPosition(j, true));
 		    double radii = bubbleManager->getRadius(j, true) + radius;
 
-		    dvec acceleration = position2 - position;
+		    dvec acceleration = getShortestVecBetween(position, position2);
 		    // Skip bubbles that don't overlap
 		    if (acceleration.getSquaredLength() > radii * radii)
 			continue;
 		    
 		    double magnitude = acceleration.getLength();
 		    acceleration *= (radii - magnitude) / (radii * magnitude);
-		    accelerations[i] += acceleration;
-		    accelerations[j] += acceleration;
+		    accelerations[i] += multiplier * acceleration;
+		    accelerations[j] -= multiplier * acceleration;
 		}
+	    
+		ownCell = false;
 	    }
 	}
 
@@ -389,7 +394,7 @@ void Simulator::removeIntersectingBubbles()
 		dvec position2 = getScaledPosition(bubbleManager->getPosition(j));
 		double radii = bubbleManager->getRadius(j) + radius;
 		
-		dvec diff = position - position2;
+		dvec diff = getShortestVecBetween(position, position2);
 		if (diff.getSquaredLength() > radii * radii)
 		    continue;
 		
@@ -498,6 +503,23 @@ void Simulator::updateCellDataForBubble(size_t i, dvec position)
     // Update bubble's neighboring cells
     bubbleToCells[i].push_back(cellIndex);
     addNeighborCellsToVec(bubbleToCells[i], cellIndex);
+}
+
+dvec Simulator::getShortestVecBetween(dvec position1, dvec position2)
+{
+    // This function calculates returns the shortest 'path' (= vector) between
+    // two positions while taking into account periodic boundary conditions.
+
+    dvec interval = tfr - lbb;
+    dvec temp = position1 - position2;
+
+    for (size_t i = 0; i < NUM_DIM; ++i)
+    {
+        if (std::abs(temp[i]) > 0.5 * interval[i])
+	    position2[i] = temp[i] < 0 ? temp[i] + interval[i] : temp[i] - interval[i];
+    }
+
+    return position1 - position2;
 }
 
 void Simulator::readWriteParameters(bool read)

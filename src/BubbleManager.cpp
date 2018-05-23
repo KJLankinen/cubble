@@ -36,9 +36,7 @@ BubbleManager::~BubbleManager()
 void BubbleManager::swapData()
 {
     // Make sure temporary is up to date.
-    if (data.size() != temporaryData.size())
-	updateTemporary();
-    
+    assert(temporaryData.size() == data.size());
     std::swap(temporaryData, data);
 }
 
