@@ -31,7 +31,7 @@ int main(int argc, char **argv)
     catch (const std::exception &e)
     {
 	pExc = std::current_exception();
-	cubble::exception::handleException(pExc);
+	cubble::handleException(pExc);
 	
 	return EXIT_FAILURE;
     }
