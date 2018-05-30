@@ -1,23 +1,12 @@
 // -*- C++ -*-
 
 #include "CudaKernelsWrapper.h"
+#include "Macros.h"
+#include "CudaContainer.h"
 
 #include <vector>
 #include <numeric>
 #include <iostream>
-
-#define CUDA_CALL(x)							\
-    do									\
-    {									\
-	cudaError_t result = x;						\
-	if (result != cudaSuccess)					\
-	{								\
-	    std::cerr << "Error at " << __FILE__ << ":" << __LINE__;	\
-	    std::cerr << cudaGetErrorName(result) << "\n"		\
-		      << cudaGetErrorString(result) << std::endl;	\
-	}								\
-    }									\
-    while(0)
 
 __global__
 void cubble::testFunction(float *a, float *b)
@@ -29,31 +18,23 @@ void cubble::testFunction(float *a, float *b)
 void cubble::CudaKernelsWrapper::testFunctionWrapper()
 {
     const size_t n = 1024;
-    std::vector<float> a(n);
-    std::vector<float> b;
-    b.resize(a.size());
-    std::iota(a.begin(), a.end(), 0);
-    
-    for (auto it : a)
-	std::cout << it << " ";
-    
+    cubble::CudaContainer<float, n> a;
+    cubble::CudaContainer<float, n> b;
+
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+	a[i] = i;
+	std::cout << a[i] << " ";
+    }
     std::cout << std::endl;
     
-    float *d_a, *d_b;
-    CUDA_CALL(cudaMalloc((void**)&d_a, n * sizeof(float)));
-    CUDA_CALL(cudaMalloc((void**)&d_b, n * sizeof(float)));
+    a.toDevice();
 
-    CUDA_CALL(cudaMemcpy((void*)d_a, (void*)a.data(), n * sizeof(float), cudaMemcpyHostToDevice));
-
-    cubble::testFunction<<<1, n>>>(d_a, d_b);
-
-    CUDA_CALL(cudaMemcpy((void*)b.data(), (void*)d_b, n * sizeof(float), cudaMemcpyDeviceToHost));
-
-    for (auto it : b)
-	std::cout << it << " ";
+    cubble::testFunction<<<1, n>>>(a.data(), b.data());
     
+    b.toHost();
+
+    for (size_t i = 0; i < b.size(); ++i)
+	std::cout << b[i] << " ";
     std::cout << std::endl;
-    
-    CUDA_CALL(cudaFree(d_a));
-    CUDA_CALL(cudaFree(d_b));
 }

@@ -19,7 +19,7 @@ DATA_PATH = data/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Simulator.o BubbleManager.o CudaKernelsWrapper.o
+OBJ_NAMES := Main.o Simulator.o BubbleManager.o CudaKernelsWrapper.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
@@ -31,7 +31,7 @@ GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 
 # Name of the linked GPU code.
-GPU_CODE = $(BIN_PATH)gpuCode.o
+GPU_CODE = $(BIN_PATH)GPUCode.o
 
 # Name of the final executable.
 EXEC = $(BIN_PATH)cubble
@@ -116,9 +116,9 @@ set_final_flags :
 # -----------------------------------------------------
 
 # By default has some safety nets at place but also uses some optimizations.
-$(EXEC) : $(SRC_PATH)Main.cpp $(OBJS) $(GPU_CODE) $(HEADERS)
-	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(LIBS))
-	$(C_CPU) $< $(OBJS) $(GPU_CODE) $(OPTIONS) -o $@
+$(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
+	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
+	rm -f $(BIN_PATH)*.o
 
 
 # -----------------------------------------------------

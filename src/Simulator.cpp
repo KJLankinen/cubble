@@ -5,6 +5,7 @@
 #include "Simulator.h"
 #include "Fileio.h"
 #include "Macros.h"
+#include "CudaContainer.h"
 #include "CudaKernelsWrapper.h"
 
 using namespace cubble;
@@ -41,6 +42,7 @@ Simulator::~Simulator()
 
 void Simulator::run()
 {
+    CudaContainer<float, 3> testContainer;
     CudaKernelsWrapper cudaKernelsWrapper;
     cudaKernelsWrapper.testFunctionWrapper();
     /*
