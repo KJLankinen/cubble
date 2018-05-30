@@ -8,9 +8,15 @@ DATA_PATH = data/
 # -----------------------------------------------------
 # Object files, headers and the main executable
 # -----------------------------------------------------
-OBJ_NAMES := Simulator.o BubbleManager.o
+OBJ_NAMES := Simulator.o BubbleManager.o Test.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
+
+GPU_OBJ_NAMES := Test.o
+GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_DIR)/$(OBJ))
+
 HEADERS := $(wildcard $(SRC_PATH)*.h)
+
+GPU_CODE = $(BIN_DIR)/gpuCode.o
 EXEC = $(BIN_DIR)/cubble
 
 # -----------------------------------------------------
@@ -23,13 +29,13 @@ NUM_DIM := 2
 # -----------------------------------------------------
 # Compiler to use
 # -----------------------------------------------------
-CCPU := g++
-CGPU := nvcc
+C_CPU := g++
+C_GPU := nvcc
 
 # -----------------------------------------------------
 # External libraries to link to
 # -----------------------------------------------------
-LIB := #-lcudart -lcurand
+LIBS := -lcudart -lcurand
 
 # -----------------------------------------------------
 # Preprocessor defines
@@ -40,7 +46,7 @@ DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
 # Flags
 # -----------------------------------------------------
 CPU_FLAGS := -Wall
-GPU_FLAGS := -arch=sm_20 -dlink
+GPU_FLAGS := -arch=sm_20
 COMMON_FLAGS := -std=c++11
 OPTIM_FLAGS := -O2
 
@@ -74,15 +80,26 @@ set_final_flags :
 # -----------------------------------------------------
 # Rule for main executable
 # -----------------------------------------------------
-$(EXEC) : $(SRC_PATH)Main.cpp $(OBJS) $(HEADERS)
-	$(CCPU) $< $(OBJS) $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(LIB) -o $@
+$(EXEC) : $(SRC_PATH)Main.cpp $(OBJS) $(GPU_CODE) $(HEADERS)
+	$(C_CPU) $< $(OBJS) $(GPU_CODE) $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(LIBS) -o $@
+
+# -----------------------------------------------------
+# Rule for the gpu code
+# -----------------------------------------------------
+$(GPU_CODE) : $(GPU_OBJS)
+	@mkdir -p $(BIN_DIR)
+	$(C_GPU) -arch=sm_20 -dlink $^ -o $@
 
 # -----------------------------------------------------
 # Rule for the intermediate objects
 # -----------------------------------------------------
 $(BIN_DIR)/%.o : $(SRC_PATH)%.cpp
 	@mkdir -p $(BIN_DIR)
-	$(CCPU) $< $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(LIB) -c -o $@
+	$(C_CPU) $< $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) -c -o $@
+
+$(BIN_DIR)/%.o : $(SRC_PATH)%.cu
+	@mkdir -p $(BIN_DIR)
+	$(C_GPU) $< $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) -D_FORCE_INLINES -dc -o $@
 
 # -----------------------------------------------------
 # Clean up

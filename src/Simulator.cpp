@@ -5,6 +5,7 @@
 #include "Simulator.h"
 #include "Fileio.h"
 #include "Macros.h"
+#include "Test.h"
 
 using namespace cubble;
 
@@ -40,6 +41,9 @@ Simulator::~Simulator()
 
 void Simulator::run()
 {
+    Test test;
+    test.testFunctionWrapper();
+    /*
     std::cout << "Starting setup." << std::endl;
     setupSimulation();
     std::cout << "Setup done." << std::endl;
@@ -80,6 +84,7 @@ void Simulator::run()
     fileio::writeVectorToFile(filename, temp);
     filename = "data/acc.dat";
     fileio::writeVectorToFile(filename, accelerations);
+    */
 }
 
 void Simulator::setupSimulation()
