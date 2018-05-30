@@ -19,12 +19,12 @@ DATA_PATH = data/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Simulator.o BubbleManager.o Test.o
+OBJ_NAMES := Simulator.o BubbleManager.o CudaKernelsWrapper.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
-GPU_OBJ_NAMES := Test.o
+GPU_OBJ_NAMES := CudaKernelsWrapper.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.

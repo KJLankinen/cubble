@@ -4,15 +4,11 @@
 
 namespace cubble
 {
-    class Test
+    class CudaKernelsWrapper
     {
     public:
-	double x = 0;
-	double y = 0;
-	double z = 0;
-	
-	Test() {}
-	~Test() {}
+        CudaKernelsWrapper() {}
+	~CudaKernelsWrapper() {}
 	
 	void testFunctionWrapper();
     };

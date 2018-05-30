@@ -5,7 +5,7 @@
 #include "Simulator.h"
 #include "Fileio.h"
 #include "Macros.h"
-#include "Test.h"
+#include "CudaKernelsWrapper.h"
 
 using namespace cubble;
 
@@ -41,8 +41,8 @@ Simulator::~Simulator()
 
 void Simulator::run()
 {
-    Test test;
-    test.testFunctionWrapper();
+    CudaKernelsWrapper cudaKernelsWrapper;
+    cudaKernelsWrapper.testFunctionWrapper();
     /*
     std::cout << "Starting setup." << std::endl;
     setupSimulation();
