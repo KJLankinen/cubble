@@ -1,23 +1,28 @@
 # -----------------------------------------------------
 # Directories
 # -----------------------------------------------------
-BIN_DIR = bin
+BIN_PATH = bin/
 SRC_PATH = src/
 DATA_PATH = data/
 
 # -----------------------------------------------------
 # Object files, headers and the main executable
 # -----------------------------------------------------
+# List all objects that contain CPU code.
 OBJ_NAMES := Simulator.o BubbleManager.o Test.o
-OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_DIR)/$(OBJ))
+OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
+# List all the objects that contain GPU code.
+# Overlap with the objects above is totally fine.
 GPU_OBJ_NAMES := Test.o
-GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_DIR)/$(OBJ))
+GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
+# Find all headers in source dir
 HEADERS := $(wildcard $(SRC_PATH)*.h)
 
-GPU_CODE = $(BIN_DIR)/gpuCode.o
-EXEC = $(BIN_DIR)/cubble
+# Names of the linked GPU code and the final executable
+GPU_CODE = $(BIN_PATH)gpuCode.o
+EXEC = $(BIN_PATH)cubble
 
 # -----------------------------------------------------
 # How many dimensions to simulate.
@@ -87,18 +92,18 @@ $(EXEC) : $(SRC_PATH)Main.cpp $(OBJS) $(GPU_CODE) $(HEADERS)
 # Rule for the gpu code
 # -----------------------------------------------------
 $(GPU_CODE) : $(GPU_OBJS)
-	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(BIN_PATH)
 	$(C_GPU) -arch=sm_20 -dlink $^ -o $@
 
 # -----------------------------------------------------
 # Rule for the intermediate objects
 # -----------------------------------------------------
-$(BIN_DIR)/%.o : $(SRC_PATH)%.cpp
-	@mkdir -p $(BIN_DIR)
+$(BIN_PATH)%.o : $(SRC_PATH)%.cpp
+	@mkdir -p $(BIN_PATH)
 	$(C_CPU) $< $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) -c -o $@
 
-$(BIN_DIR)/%.o : $(SRC_PATH)%.cu
-	@mkdir -p $(BIN_DIR)
+$(BIN_PATH)%.o : $(SRC_PATH)%.cu
+	@mkdir -p $(BIN_PATH)
 	$(C_GPU) $< $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) -D_FORCE_INLINES -dc -o $@
 
 # -----------------------------------------------------
@@ -106,5 +111,5 @@ $(BIN_DIR)/%.o : $(SRC_PATH)%.cu
 # -----------------------------------------------------
 .PHONY : clean
 clean :
-	rm -fr $(BIN_DIR)
+	rm -fr $(BIN_PATH)
 	rm -f $(SRC_PATH)*~
