@@ -5,8 +5,11 @@
 #include <math.h>
 #include <iostream>
 #include <assert.h>
+#include <cuda_runtime.h>
 
-#include "include/json.hpp"
+#ifndef __CUDACC__
+  #include "include/json.hpp"
+#endif
 
 #include "Util.h"
 
@@ -16,10 +19,12 @@ namespace cubble
     class vec
     {
     public:
+	__host__ __device__
 	vec()
 	{}
 	
 	template <typename T2>
+	__host__ __device__
 	vec(const vec<T2> &o)
 	{
 	    x = (T)o.x;
@@ -28,14 +33,16 @@ namespace cubble
 	    z = (T)o.z;
 #endif
 	}
-	
+
 #if (NUM_DIM == 3)
+	__host__ __device__
 	vec(T x, T y, T z)
 	    : x(x)
 	    , y(y)
 	    , z(z)
 	{}
 #else
+	__host__ __device__
 	vec(T x, T y)
 	    : x(x)
 	    , y(y)
@@ -44,6 +51,7 @@ namespace cubble
 	
 	~vec() {}
 
+	__host__ __device__
 	T getSquaredLength() const
 	{
 	    T temp = 0;
@@ -71,6 +79,7 @@ namespace cubble
 	    return v;
 	}
 
+	__host__ __device__
 	T getMaxComponent() const
 	{
 #if (NUM_DIM == 3)
@@ -79,7 +88,8 @@ namespace cubble
 	    return x > y ? x : y;
 #endif
 	}
-	
+
+	__host__ __device__
 	T getMinComponent() const
 	{
 #if (NUM_DIM == 3)
@@ -88,54 +98,62 @@ namespace cubble
 	    return x < y ? x : y;
 #endif
 	}
-	
+
 	template <typename T2>
+	__host__ __device__
 	vec<T2> asType() const
 	{
 	    vec<T2> v(*this);
 
 	    return v;
 	}
-	
+
 	// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + 
+	__host__ __device__
 	friend vec<T> operator+(vec<T> copy, const vec<T> &o)
 	{
 	    copy += o;
 	    return copy;
 	}
-	
+
+	__host__ __device__
 	friend vec<T> operator+(vec<T> copy, const vec<T> &&o)
 	{
 	    copy += o;
 	    return copy;
 	}
-	
+
+	__host__ __device__
 	friend vec<T> operator+(vec<T> copy, T s)
 	{
 	    copy += s;
 	    return copy;
 	}
 
-	
+
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+	__host__ __device__
 	friend vec<T> operator-(vec<T> copy, const vec<T> &o)
 	{
 	    copy -= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator-(vec<T> copy, const vec<T> &&o)
 	{
 	    copy -= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator-(vec<T> copy, T s)
 	{
 	    copy -= s;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator-(vec<T> copy)
 	{
 	    copy -= (T)2 * copy;
@@ -144,24 +162,28 @@ namespace cubble
 
 	
 	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+	__host__ __device__
 	friend vec<T> operator*(vec<T> copy, const vec<T> &o)
 	{
 	    copy *= o;
 	    return copy;
 	}
 	
+	__host__ __device__
 	friend vec<T> operator*(vec<T> copy, const vec<T> &&o)
 	{
 	    copy *= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator*(vec<T> copy, T s)
 	{
 	    copy *= s;
 	    return copy;
 	}
 	
+	__host__ __device__
 	friend vec<T> operator*(T s, vec<T> copy)
 	{
 	    copy *= s;
@@ -170,18 +192,21 @@ namespace cubble
 
 	
 	// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
+	__host__ __device__
 	friend vec<T> operator/(vec<T> copy, const vec<T> &o)
 	{
 	    copy /= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator/(vec<T> copy, const vec<T> &&o)
 	{
 	    copy /= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator/(vec<T> copy, T s)
 	{
 	    copy /= s;
@@ -190,18 +215,21 @@ namespace cubble
 
 	
 	// % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
+	__host__ __device__
 	friend vec<T> operator%(vec<T> copy, const vec<T> &o)
 	{
 	    copy %= o;
 	    return copy;
 	}
 	
+	__host__ __device__
 	friend vec<T> operator%(vec<T> copy, const vec<T> &&o)
 	{
 	    copy %= o;
 	    return copy;
 	}
 
+	__host__ __device__
 	friend vec<T> operator%(vec<T> copy, T s)
 	{
 	    copy %= s;
@@ -210,6 +238,7 @@ namespace cubble
 
 	
 	// += += += += += += += += += += += += += += += += += += += += += +=
+	__host__ __device__
 	friend void operator+=(vec<T> &t, const vec<T> &o)
 	{
 	    t.x += o.x;
@@ -219,6 +248,7 @@ namespace cubble
 #endif
 	}
 	
+	__host__ __device__
 	friend void operator+=(vec<T> &t, const vec<T> &&o)
 	{
 	    t.x += o.x;
@@ -228,6 +258,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator+=(vec<T> &t, T s)
 	{
 	    t.x += s;
@@ -239,6 +270,7 @@ namespace cubble
 
 
 	// -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= 
+	__host__ __device__
 	friend void operator-=(vec<T> &t, const vec<T> &o)
 	{
 	    t.x -= o.x;
@@ -248,6 +280,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator-=(vec<T> &t, const vec<T> &&o)
 	{
 	    t.x -= o.x;
@@ -257,6 +290,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator-=(vec<T> &t, T s)
 	{
 	    t.x -= s;
@@ -268,6 +302,7 @@ namespace cubble
 
 
 	// *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= 
+	__host__ __device__
 	friend void operator*=(vec<T> &t, const vec<T> &o)
 	{
 	    t.x *= o.x;
@@ -277,6 +312,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator*=(vec<T> &t, const vec<T> &&o)
 	{
 	    t.x *= o.x;
@@ -286,6 +322,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator*=(vec<T> &t, T s)
 	{
 	    t.x *= s;
@@ -297,6 +334,7 @@ namespace cubble
 
 
 	// /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= 
+	__host__ __device__
 	friend void operator/=(vec<T> &t, const vec<T> &o)
 	{
 	    t.x /= o.x;
@@ -306,6 +344,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator/=(vec<T> &t, const vec<T> &&o)
 	{
 	    t.x /= o.x;
@@ -315,6 +354,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator/=(vec<T> &t, T s)
 	{
 	    t.x /= s;
@@ -326,6 +366,7 @@ namespace cubble
 
 
 	// %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= 
+	__host__ __device__
 	friend void operator%=(vec<T> &t, vec<T> &o)
 	{
 	    t.x %= o.x;
@@ -335,6 +376,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator%=(vec<T> &t, vec<T> &&o)
 	{
 	    t.x %= o.x;
@@ -344,6 +386,7 @@ namespace cubble
 #endif
 	}
 
+	__host__ __device__
 	friend void operator%=(vec<T> &t, T s)
 	{
 	    t.x %= s;
@@ -355,6 +398,7 @@ namespace cubble
 
 	
 	// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+	__host__ __device__
 	void operator=(vec<T> copy)
 	{
 	    x = copy.x;
@@ -366,6 +410,7 @@ namespace cubble
 
 	
 	// == == == == == == == == == == == == == == == == == == == == == == 
+	__host__ __device__
 	friend bool operator==(const vec<T> &t, const vec<T> &o)
 	{
 	    bool equal = true;
@@ -379,6 +424,7 @@ namespace cubble
 
 	
 	// != != != != != != != != != != != != != != != != != != != != != != 
+	__host__ __device__
 	friend bool operator!=(const vec<T> &t, const vec<T> &o)
 	{
 	    return !(t == o);
@@ -397,6 +443,7 @@ namespace cubble
 
 	
 	// min min min min min min min min min min min min min min min min min min
+	__host__ __device__
 	friend vec<T> min(const vec<T> &v1, const vec<T> &v2)
 	{
 	    vec<T> retVec;
@@ -411,6 +458,7 @@ namespace cubble
 
 	
 	// max max max max max max max max max max max max max max max max max max
+	__host__ __device__
 	friend vec<T> max(const vec<T> &v1, const vec<T> &v2)
 	{
 	    vec<T> retVec;
@@ -423,7 +471,7 @@ namespace cubble
 	    return retVec;
 	}
 	
-	
+#ifndef __CUDACC__
 	// .json .json .json .json .json .json .json .json .json .json .json
 	friend void to_json(nlohmann::json &j, const vec<T> &v)
 	{
@@ -442,6 +490,7 @@ namespace cubble
 	    v.z = j["z"];
 #endif
 	}
+#endif
         
         T x = 0;
 	T y = 0;

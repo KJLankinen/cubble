@@ -81,36 +81,21 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    data = np.loadtxt("bubble_data.dat", delimiter=',')
-    #data2 = np.loadtxt("data/bubble_data_2d_integrated.dat", delimiter=',')
-    #acc = np.loadtxt("data/acc.dat", delimiter=',')
+    data = np.loadtxt("data/out.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]
-    r = data[:,3]
-    
-    #x2 = data2[:,0]
-    #y2 = data2[:,1]
-    #r2 = data2[:,2]
-
-    #accx = acc[:,0]
-    #accy = acc[:,1]
+    r = data[:,2]
     
     figure()
     subplot(aspect='equal')
 
-    out = circles(x[:100], y[:100], r[:100], c='green', alpha=0.3)
-    #out = circles(x2, y2, r2, c='blue', alpha=0.3)
-
-    #for i in range(len(accx)):
-    #    xx = np.array([x[i], x[i] + accx[i]])
-    #    yy = np.array([y[i], y[i] + accy[i]])
-    #    plt.plot(xx, yy)
+    out = circles(x, y, r, alpha=0.3)
     
     plt.show()
 
 def plot_3d():
-    data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
+    data = np.loadtxt("data/out.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]
@@ -131,7 +116,7 @@ def plot_3d():
     plt.show()
     
 def main():
-    plot_2d()
+    plot_3d()
 
 if __name__ == "__main__":
     main()

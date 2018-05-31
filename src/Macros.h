@@ -31,7 +31,7 @@
 	if (result != cudaSuccess)					\
 	{								\
 	    std::cerr << "Error at " << __FILE__ << ":" << __LINE__;	\
-	    std::cerr << cudaGetErrorName(result) << "\n"		\
+	    std::cerr << ": " << cudaGetErrorName(result) << "\n"	\
 		      << cudaGetErrorString(result) << std::endl;	\
 	}								\
     }									\

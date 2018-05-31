@@ -19,12 +19,12 @@ DATA_PATH = data/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o Simulator.o BubbleManager.o CudaKernelsWrapper.o
+OBJ_NAMES := Main.o Simulator.o BubbleManager.o CudaKernelWrapper.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
-GPU_OBJ_NAMES := CudaKernelsWrapper.o
+GPU_OBJ_NAMES := CudaKernelWrapper.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.
@@ -43,7 +43,7 @@ EXEC = $(BIN_PATH)cubble
 
 # The compiled code is different for different dimensions,
 # so this can't be given as a normal program parameter.
-NUM_DIM := 2
+NUM_DIM := 3
 
 
 # -----------------------------------------------------
@@ -143,8 +143,9 @@ $(BIN_PATH)%.o : $(SRC_PATH)%.cpp
 # GPU code
 $(BIN_PATH)%.o : $(SRC_PATH)%.cu
 	@mkdir -p $(BIN_PATH)
+	$(eval DEFINES += -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__)
 	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES))
-	$(C_GPU) $< $(OPTIONS) -D_FORCE_INLINES -dc -o $@
+	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 
 # -----------------------------------------------------

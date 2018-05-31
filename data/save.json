@@ -4,21 +4,21 @@
     "errorTolerance": 0.0001,
     "lbb": {
         "x": 0.0,
-        "y": 0.0
+        "y": 0.0,
+        "z": 0.0
     },
     "minRad": 1e-08,
     "muZero": 1.0,
-    "numBubblesPerSweep": 1000,
+    "numBubbles": 1024,
     "numIntegrationSteps": 1000000,
-    "numMaxBubbles": 5000,
-    "numMaxSweeps": 1000,
     "phiTarget": 0.8,
     "rngSeed": 15424,
     "sigmaZero": 1.0,
     "stdDevRad": 0.0126,
     "tfr": {
-        "x": 1.5,
-        "y": 1.5
+        "x": 3.0,
+        "y": 3.0,
+        "z": 3.0
     },
     "timeStep": 1e-05
 }

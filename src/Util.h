@@ -5,18 +5,23 @@
 #include <iostream>
 #include <exception>
 
-#include "include/json.hpp"
+#ifndef __CUDACC__
+  #include "include/json.hpp"
+#endif
 
 namespace cubble
 {
     inline void handleException(const std::exception_ptr pExc)
     {
-	using json = nlohmann::json; 
+#ifndef __CUDACC__
+	using json = nlohmann::json;
+#endif
 	try
 	{
 	    if (pExc)
 		std::rethrow_exception(pExc);
 	}
+#ifndef __CUDACC__
 	catch (const json::exception &e)
 	{
 	    std::cout << "Encountered a json parse error."
@@ -24,6 +29,7 @@ namespace cubble
 		      << e.what()
 		      << std::endl;
 	}
+#endif
 	catch (const std::exception &e)
 	{
 	    std::cout << "Unhandled exception!\n" << e.what() << std::endl;

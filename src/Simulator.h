@@ -7,11 +7,13 @@
 #include <random>
 #include <memory>
 
-#include "include/json.hpp"
+#ifndef __CUDACC__
+  #include "include/json.hpp"
+#endif
 
 #include "Vec.h"
 #include "BubbleManager.h"
-#include "CudaKernelsWrapper.h"
+#include "CudaKernelWrapper.h"
 
 namespace cubble
 {
@@ -28,29 +30,6 @@ namespace cubble
 	//----------
 	// Functions
 	//----------
-
-	// Setup functions
-	void setupSimulation();
-	
-	// Integration functions
-	void integrate();
-
-	// Auxiliary functions
-	dvec wrapAroundBoundaries(dvec position);
-	double getSimulationBoxVolume();
-	size_t getCellIndexFromNormalizedPosition(const dvec &pos);
-	uvec getCellIndexVecFromCellIndex(size_t cellIndex);
-	size_t getCellIndexFromCellIndexVec(ivec cellIndexVec);
-	void removeIntersectingBubbles();
-	double getBubbleVolume();
-	dvec getScaledPosition(const dvec &position);
-	dvec getNormalizedPosition(const dvec &position);
-	void compressSimulationBox();
-	void addNeighborCellsToVec(std::vector<size_t> &v,
-				   size_t cellIndex);
-	void resetCellData();
-	void updateCellDataForBubble(size_t i, dvec position);
-        dvec getShortestVecBetween(dvec position1, dvec position2);
 	
 	// Parameter & io functions
 	void readWriteParameters(bool read);
@@ -63,10 +42,8 @@ namespace cubble
 	std::string saveFile;
 
 	// Parameters read from input file
-	size_t numBubblesPerSweep = 0;
-	size_t numMaxSweeps = 0;
-	size_t numMaxBubbles = 0;
 	size_t numIntegrationSteps = 0;
+	size_t numBubbles = 0;
 
 	int rngSeed = 0;
 	
@@ -82,22 +59,13 @@ namespace cubble
 	double compressionAmount = 0.0;
 	double integrationTime = 0.0;
 
-	// Internal variables.
-	size_t numCellsPerDim = 1;
-	double maxDiameter = -1.0;
-
 	// Two vectors that define the volume of the simulation area:
 	// lbb = left bottom back corner
 	// tfr = top front right corner
 	dvec lbb;
 	dvec tfr;
 
-	std::shared_ptr<CudaKernelsWrapper> cudaKernelsWrapper;
-	
 	std::shared_ptr<BubbleManager> bubbleManager;
-
-	std::vector<dvec> accelerations;
-	std::vector<std::vector<size_t>> cellToBubbles;
-	std::vector<std::vector<size_t>> bubbleToCells;
+	std::shared_ptr<CudaKernelWrapper> cudaKernelWrapper;
     };
 }

@@ -8,7 +8,9 @@
 #include <fstream>
 #include <assert.h>
 
-#include "include/json.hpp"
+#ifndef __CUDACC__
+  #include "include/json.hpp"
+#endif
 
 namespace cubble
 {

@@ -5,21 +5,23 @@
 #include "Macros.h"
 
 #include <memory>
-#include <array>
+#include <vector>
 #include <iostream>
 #include <assert.h>
+#include <algorithm>
 
 namespace cubble
 {
-    template <typename T, size_t N>
+    template <typename T>
     class CudaContainer
     {
     public:
-	CudaContainer()
-	    : rawPtr(create(), destroy)
+	CudaContainer(size_t n)
+	    : rawPtr(create(n), destroy)
+	    , numElements(n)
 	{
 	    T t;
-	    hostData.fill(t);
+	    hostData.resize(n, t);
 	}
 	
 	~CudaContainer() {}
@@ -36,14 +38,15 @@ namespace cubble
 	
 	size_t size()
 	{
-	    return N;
+	    return numElements;
 	}
 	
 	void toHost()
 	{
+	    hostData.clear();
 	    CUDA_CALL(cudaMemcpy((void*)hostData.data(),
 				 (void*)rawPtr.get(),
-				 N * sizeof(T),
+				 numElements * sizeof(T),
 				 cudaMemcpyDeviceToHost));
 	}
 	
@@ -51,8 +54,26 @@ namespace cubble
 	{
 	    CUDA_CALL(cudaMemcpy((void*)rawPtr.get(),
 				 (void*)hostData.data(),
-				 N * sizeof(T),
+				 numElements * sizeof(T),
 				 cudaMemcpyHostToDevice));
+	}
+
+        void copyHostDataToVec(std::vector<T> &v)
+	{
+	    v.clear();
+	    v = std::vector<T>(hostData.begin(), hostData.begin() + numElements);
+	}
+
+	void copyDeviceDataToVec(std::vector<T> &v)
+	{
+	    // Need to use resize instead of reserve because copying straigth
+	    // to internal memory doesn't update size.
+	    v.clear();
+	    v.resize(numElements);
+	    CUDA_CALL(cudaMemcpy((void*)v.data(),
+				 (void*)rawPtr.get(),
+				 numElements * sizeof(T),
+				 cudaMemcpyDeviceToHost));
 	}
 	
 	T operator[](size_t i) const
@@ -68,10 +89,10 @@ namespace cubble
 	}
 	
     private:
-	T* create()
+	T* create(size_t numElements)
 	{
 	    T *t;
-	    CUDA_CALL(cudaMalloc((void**)&t, N * sizeof(T)));
+	    CUDA_CALL(cudaMalloc((void**)&t, numElements * sizeof(T)));
 	    return t;
 	}
 
@@ -79,8 +100,9 @@ namespace cubble
 	{
 	    CUDA_CALL(cudaFree(t));
 	}
-	
-	std::array<T, N> hostData;
+
+	size_t numElements = 0;
+	std::vector<T> hostData;
 	std::unique_ptr<T[], decltype(&destroy)> rawPtr;
     };
 };
