@@ -17,6 +17,7 @@ namespace cubble
 	~CudaKernelWrapper();
         
 	void generateBubblesOnGPU(size_t n,
+				  size_t numBlocksPerDim,
 				  int rngSeed,
 				  double avgRad,
 				  double stdDevRad,

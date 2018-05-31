@@ -16,14 +16,43 @@ cubble::CudaKernelWrapper::~CudaKernelWrapper()
 {}
 
 void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
+						     size_t numBlocksPerDim,
 						     int rngSeed,
 						     double avgRad,
 						     double stdDevRad,
 						     dvec lbb,
 						     dvec tfr)
 {
-    size_t blockSize = n > 1024 ? 1024 : n;
-    size_t numBlocks = n > 1024 ? (n % 1024 != 0 ? n / 1024 + 1 : n / 1024) : 1;
+#if (NUM_DIM == 3)
+    size_t blockSize = std::ceil(n / (float)(numBlocksPerDim
+					     * numBlocksPerDim
+					     * numBlocksPerDim));
+    dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim, numBlocksPerDim);
+    size_t recommendedNumCells = (size_t)(std::ceil(std::cbrt(n / 1024.0f) / 8)) * 8;
+#else
+    size_t blockSize = std::ceil(n / (float)(numBlocksPerDim * numBlocksPerDim));
+    dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim);
+    size_t recommendedNumCells = (size_t)(std::ceil(std::sqrt(n / 1024.0f) / 8)) * 8;
+#endif
+
+    if (blockSize > 1024)
+    {
+	std::cerr << "Too many bubbles to simulate w.r.t. the number of blocks."
+		  << "\nAmount of threads per block " << blockSize
+		  << " exceeds the maximum, which is 1024."
+		  << "\nIncrease the number of blocks (cells) per dimension."
+		  << "\nRecommended number of cells with given number of bubbles: "
+		  << recommendedNumCells
+		  << std::endl;
+	
+	std::exit(EXIT_FAILURE);
+    }
+
+    std::cout << "Grid size: " << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
+	      << ", block size: " << blockSize
+	      << "\nRecommended number of cells with given number of bubbles: "
+	      << recommendedNumCells
+	      << std::endl;
     
     CudaContainer<float> x(n);
     CudaContainer<float> y(n);
@@ -38,22 +67,23 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
     
-    CURAND_CALL(curandGenerateUniform(generator, x.data(), n));
-    CURAND_CALL(curandGenerateUniform(generator, y.data(), n));
+    CURAND_CALL(curandGenerateUniform(generator, x.getDevicePtr(), n));
+    CURAND_CALL(curandGenerateUniform(generator, y.getDevicePtr(), n));
 #if (NUM_DIM == 3)
-    CURAND_CALL(curandGenerateUniform(generator, z.data(), n));
+    CURAND_CALL(curandGenerateUniform(generator, z.getDevicePtr(), n));
 #endif
-    CURAND_CALL(curandGenerateNormal(generator, r.data(), n, avgRad, stdDevRad));
+    CURAND_CALL(curandGenerateNormal(generator, r.getDevicePtr(), n, avgRad, stdDevRad));
 
-    assignDataToBubbles<<<numBlocks, blockSize>>>(x.data(),
-						  y.data(),
+    assignDataToBubbles<<<gridSize, blockSize>>>(x.getDevicePtr(),
+						  y.getDevicePtr(),
 #if (NUM_DIM == 3)
-						  z.data(),
+						  z.getDevicePtr(),
 #endif
-						  r.data(),
-						  b.data(),
+						  r.getDevicePtr(),
+						  b.getDevicePtr(),
 						  lbb,
 						  tfr);
+
     
     b.copyDeviceDataToVec(bubbleManager->bubbles);
 }
@@ -73,7 +103,15 @@ void cubble::assignDataToBubbles(float *x,
 				 dvec lbb,
 				 dvec tfr)
 {
-    size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+#if (NUM_DIM == 3)
+    // 3D grid of blocks with 1D blocks of threads.
+    size_t tid = (blockIdx.z * (gridDim.y * gridDim.x)
+		  + blockIdx.y * gridDim.x + blockIdx.x)
+	* blockDim.x + threadIdx.x;
+#else
+    // 2D grid of blocks with 1D blocks of threads.
+    size_t tid = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x + threadIdx.x;
+#endif
     b[tid].pos.x = lbb.x + (double)x[tid] * tfr.x;
     b[tid].pos.y = lbb.y + (double)y[tid] * tfr.y;
 #if (NUM_DIM == 3)

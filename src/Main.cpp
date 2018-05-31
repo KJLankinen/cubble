@@ -25,6 +25,21 @@ int main(int argc, char **argv)
     
     try
     {
+	std::string str;
+#if (NUM_DIM == 3)
+	str = "------------------------------------------------------------------------\n";
+	str += "The current program simulates the bubbles in 3D.\n";
+	str += "If you want a 2D simulation, change the number of dimensions 'NUM_DIM'";
+	str += "\nin Makefile and rebuild the program.\n";
+	str += "------------------------------------------------------------------------\n";
+#else
+	str = "------------------------------------------------------------------------\n";
+	str += "The current program simulates the bubbles in 2D.\n";
+	str += "If you want a 3D simulation, change the number of dimensions 'NUM_DIM'";
+	str += "\nin Makefile and rebuild the program.\n";
+	str += "------------------------------------------------------------------------\n";
+#endif
+	std::cout << str << std::endl;
 	cubble::Simulator simulator(argv[1], argv[2], argv[3]);
         simulator.run();
     }

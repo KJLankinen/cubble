@@ -23,6 +23,12 @@ namespace cubble
 	    T t;
 	    hostData.resize(n, t);
 	}
+
+	CudaContainer(const std::vector<T> &v)
+	    : CudaContainer(v.size())
+	{
+	    hostData = v;
+	}
 	
 	~CudaContainer() {}
 	
@@ -31,7 +37,7 @@ namespace cubble
 	    hostData.fill(val);
 	}
 	
-	T* data()
+	T* getDevicePtr()
 	{
 	    return rawPtr.get();
 	}
