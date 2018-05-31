@@ -6,7 +6,6 @@
 #include "Fileio.h"
 #include "Macros.h"
 #include "CudaContainer.h"
-#include "CudaKernelsWrapper.h"
 
 using namespace cubble;
 
@@ -21,9 +20,9 @@ Simulator::Simulator(const std::string &inF,
     readWriteParameters(true);
 
     dvec interval = tfr - lbb;
-    assert(interval[0] == interval[1] && "Simulation box must be a square or a cube!");
+    assert(interval.x == interval.y && "Simulation box must be a square or a cube!");
 #if(NUM_DIM == 3)
-    assert(interval[0] == interval[2] && "Simulation box must be a square or a cube!");
+    assert(interval.x == interval.z && "Simulation box must be a square or a cube!");
 #endif
     
     fZeroPerMuZero = sigmaZero * avgRad / muZero;
@@ -33,6 +32,7 @@ Simulator::Simulator(const std::string &inF,
 						    avgRad,
 						    stdDevRad,
 						    minRad);
+    cudaKernelsWrapper = std::make_shared<CudaKernelsWrapper>();
 }
 
 Simulator::~Simulator()
@@ -42,9 +42,7 @@ Simulator::~Simulator()
 
 void Simulator::run()
 {
-    CudaContainer<float, 3> testContainer;
-    CudaKernelsWrapper cudaKernelsWrapper;
-    cudaKernelsWrapper.testFunctionWrapper();
+    cudaKernelsWrapper->testFunctionWrapper();
     /*
     std::cout << "Starting setup." << std::endl;
     setupSimulation();
@@ -269,12 +267,8 @@ void Simulator::integrate()
 	    dvec predictedPos = getScaledPosition(bubbleManager->getPosition(i, true));
 
 	    // Compute error
-	    for (size_t j = 0; j < NUM_DIM; ++j)
-	    {
-		double diff = std::abs(predictedPos[j] - position[j]);
-		error = diff > error ? diff : error;
-	    }
-	    
+	    double diff = (predictedPos - position).getAbsolute().getMaxComponent();
+	    error = diff > error ? diff : error;
 	    bubbleManager->updatePosition(i, getNormalizedPosition(position));
 	}
 
@@ -294,27 +288,25 @@ void Simulator::integrate()
     // adding timeStep to simulation time, etc.
 }
 
-dvec Simulator::wrapAroundBoundaries(dvec position)
+dvec Simulator::wrapAroundBoundaries(dvec v)
 {
     // Using scaled position
-    for (size_t i = 0; i < NUM_DIM; ++i)
-    {
-	double val = position[i];
-	double interval = tfr[i] - lbb[i];
-        position[i] = val >= lbb[i]
-	    ? (val <= tfr[i] ? val : val - interval)
-	    : val + interval;
-    }
+    dvec interval = tfr - lbb;
+    v.x = v.x >= lbb.x ? (v.x <= tfr.x ? v.x : v.x - interval.x) : v.x + interval.x;
+    v.y = v.y >= lbb.y ? (v.y <= tfr.y ? v.y : v.y - interval.y) : v.y + interval.y;
+#if (NUM_DIM == 3)
+    v.z = v.z >= lbb.z ? (v.z <= tfr.z ? v.z : v.z - interval.z) : v.z + interval.z;
+#endif
 
-    return position;
+    return v;
 }
 
 double Simulator::getSimulationBoxVolume()
 {
-    dvec temp(tfr - lbb);
-    double volume = temp[0] * temp[1];
+    dvec temp = tfr - lbb;
+    double volume = temp.x * temp.y;
 #if(NUM_DIM == 3)
-    volume *= temp[2];
+    volume *= temp.z;
 #endif
     return volume;
 }
@@ -329,19 +321,19 @@ size_t Simulator::getCellIndexFromNormalizedPosition(const dvec &pos)
 uvec Simulator::getCellIndexVecFromCellIndex(size_t cellIndex)
 {
 #ifndef NDEBUG
-    size_t totalNumCells = 1;
-    for (size_t i = 0; i < NUM_DIM; ++i)
-	totalNumCells *= numCellsPerDim;
-    
+    size_t totalNumCells = numCellsPerDim * numCellsPerDim;
+  #if (NUM_DIM == 3)
+    totalNumCells *= numCellsPerDim;
+  #endif  
     assert(cellIndex < totalNumCells && "Given cellIndex is larger \
 than the number of cells per dimension.");
 #endif
 
     uvec temp;
-    temp[0] = cellIndex % numCellsPerDim;
-    temp[1] = (cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim;
+    temp.x = cellIndex % numCellsPerDim;
+    temp.y = (cellIndex % (numCellsPerDim * numCellsPerDim)) / numCellsPerDim;
 #if(NUM_DIM == 3)
-    temp[2] = cellIndex / (numCellsPerDim * numCellsPerDim);
+    temp.z = cellIndex / (numCellsPerDim * numCellsPerDim);
 #endif
     
     return temp;
@@ -351,12 +343,12 @@ size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec)
 {
     int ncpd = (int)numCellsPerDim;
     // Periodic boundary conditions:
-    int x = cellIndexVec[0];
+    int x = cellIndexVec.x;
     x = x > 0
 	? (x < ncpd ? x : x % ncpd)
 	: (x + ncpd) % ncpd;
     
-    int y = cellIndexVec[1];
+    int y = cellIndexVec.y;
     y = y > 0
 	? (y < ncpd ? y : y % ncpd)
 	: (y + ncpd) % ncpd;
@@ -364,7 +356,7 @@ size_t Simulator::getCellIndexFromCellIndexVec(ivec cellIndexVec)
     size_t index = y * ncpd + x;
     
 #if(NUM_DIM == 3)
-    int z = cellIndexVec[2];
+    int z = cellIndexVecy.z;
     z = z > 0
 	? (z < ncpd ? z : z % ncpd)
 	: (z + ncpd) % ncpd;
@@ -489,10 +481,11 @@ void Simulator::addNeighborCellsToVec(std::vector<size_t> &v, size_t cellIndex)
 
 void Simulator::resetCellData()
 {
-    numCellsPerDim = std::floor(1.0 / (1.5 * maxDiameter / (tfr - lbb)[0]));
-    size_t numTotalCells = 1;
-    for (size_t i = 0; i < NUM_DIM; ++i)
-	numTotalCells *= numCellsPerDim;
+    numCellsPerDim = std::floor(1.0 / (1.5 * maxDiameter / (tfr - lbb).x));
+    size_t numTotalCells = numCellsPerDim * numCellsPerDim;
+#if (NUM_DIM == 3)
+    numTotalCells *= numCellsPerDim;
+#endif
     
     cellToBubbles.clear();
     cellToBubbles.resize(numTotalCells);
@@ -519,13 +512,18 @@ dvec Simulator::getShortestVecBetween(dvec position1, dvec position2)
 
     dvec interval = tfr - lbb;
     dvec temp = position1 - position2;
+    
+    if (std::abs(temp.x) > 0.5 * interval.x)
+	position2.x = temp.x < 0 ? temp.x + interval.x : temp.x - interval.x;
 
-    for (size_t i = 0; i < NUM_DIM; ++i)
-    {
-        if (std::abs(temp[i]) > 0.5 * interval[i])
-	    position2[i] = temp[i] < 0 ? temp[i] + interval[i] : temp[i] - interval[i];
-    }
+    if (std::abs(temp.y) > 0.5 * interval.y)
+	position2.y = temp.y < 0 ? temp.y + interval.y : temp.y - interval.y;
 
+#if (NUM_DIM == 3)
+    if (std::abs(temp.z) > 0.5 * interval.z)
+	position2.z = temp.z < 0 ? temp.z + interval.z : temp.z - interval.z;
+#endif
+    
     return position1 - position2;
 }
 

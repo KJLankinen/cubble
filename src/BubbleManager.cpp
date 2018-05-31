@@ -58,11 +58,15 @@ size_t BubbleManager::getNumBubbles() const
 double BubbleManager::generateBubble()
 {
     BubbleData b;
-    for (size_t i = 0; i < NUM_DIM; ++i)
-    {
-	b.p[i] = uniDist(generator);
-        b.v[i] = 0;
-    }
+    b.p.x = uniDist(generator);
+    b.p.y = uniDist(generator);
+    
+    b.v.x = 0;
+    b.v.y = 0;
+#if (NUM_DIM == 3)
+    b.p.z = uniDist(generator);
+    b.v.z = 0;
+#endif
 
     b.r = normDist(generator);
     while (b.r < minRad)
@@ -112,8 +116,11 @@ dvec BubbleManager::getPosition(size_t i, bool useTemporary) const
 
     const std::vector<double> &dataRef = useTemporary ? temporaryData : data;
     dvec retVec;
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        retVec[j] = dataRef[index + j];
+    retVec.x = dataRef[index];
+    retVec.y = dataRef[index + 1];
+#if (NUM_DIM == 3)
+    retVec.z = dataRef[index + 2];
+#endif
     
     return retVec;
 }
@@ -123,9 +130,12 @@ void BubbleManager::updatePosition(size_t i, dvec position)
     assert(i < getNumBubbles() && "Given index is out of bounds.");
     size_t index = i * dataStride + pLoc;
     assert(index < data.size() && "Given index is out of bounds.");
-
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        temporaryData[index + j] = position[j];
+    
+    temporaryData[index] = position.x;
+    temporaryData[index + 1] = position.y;
+#if (NUM_DIM == 3)
+    temporaryData[index + 2] = position.z;
+#endif
 }
 
 dvec BubbleManager::getVelocity(size_t i, bool useTemporary) const
@@ -136,8 +146,11 @@ dvec BubbleManager::getVelocity(size_t i, bool useTemporary) const
 
     const std::vector<double> &dataRef = useTemporary ? temporaryData : data;
     dvec retVec;
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        retVec[j] = dataRef[index + j];
+    retVec.x = dataRef[index];
+    retVec.y = dataRef[index + 1];
+#if (NUM_DIM == 3)
+    retVec.z = dataRef[index + 2];
+#endif
     
     return retVec;
 }
@@ -149,8 +162,11 @@ dvec BubbleManager::getPrevVelocity(size_t i) const
     assert(index < data.size() && "Given index is out of bounds.");
 
     dvec retVec;
-    for (size_t j = 0; j < NUM_DIM; ++j)
-        retVec[j] = data[index + j];
+    retVec.x = data[index];
+    retVec.y = data[index + 1];
+#if (NUM_DIM == 3)
+    retVec.z = data[index + 2];
+#endif
     
     return retVec;
 }
@@ -163,12 +179,15 @@ void BubbleManager::updateVelocity(size_t i, dvec velocity)
     assert(index < data.size() && "Given index is out of bounds.");
     assert(prevIndex < data.size() && "Given index is out of bounds.");
 
-    for (size_t j = 0; j < NUM_DIM; ++j)
-    {
-	// Put new value to current and current (from 'real' data) to old.
-	temporaryData[index + j] = velocity[j];
-	temporaryData[prevIndex + j] = data[index + j];
-    }
+    // Put new value to current and current (from 'real' data) to old.
+    temporaryData[index] = velocity.x;
+    temporaryData[prevIndex] = data[index];
+    temporaryData[index + 1] = velocity.y;
+    temporaryData[prevIndex + 1] = data[index + 1];
+#if (NUM_DIM == 3)
+    temporaryData[index + 2] = velocity.z;
+    temporaryData[prevIndex + 2] = data[index + 2];
+#endif
 }
 
 void BubbleManager::addData(const BubbleData &bubbleData)

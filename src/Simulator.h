@@ -11,6 +11,7 @@
 
 #include "Vec.h"
 #include "BubbleManager.h"
+#include "CudaKernelsWrapper.h"
 
 namespace cubble
 {
@@ -91,6 +92,8 @@ namespace cubble
 	dvec lbb;
 	dvec tfr;
 
+	std::shared_ptr<CudaKernelsWrapper> cudaKernelsWrapper;
+	
 	std::shared_ptr<BubbleManager> bubbleManager;
 
 	std::vector<dvec> accelerations;
