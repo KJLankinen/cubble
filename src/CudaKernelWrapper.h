@@ -37,6 +37,15 @@ namespace cubble
 #endif
 			     float *r,
 			     Bubble *b,
+			     int *bubblesPerCell,
 			     dvec lbb,
-			     dvec tfr);
+			     dvec tfr,
+			     int numBubbles);
+    
+    __global__
+    void assignBubblesToCells(Bubble *b,
+			      int *bubbleIndices,
+			      int *memoryOffsets,
+			      int *currendIndices,
+			      int numBubbles);
 };

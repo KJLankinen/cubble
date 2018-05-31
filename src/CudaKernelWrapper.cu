@@ -62,6 +62,10 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
     
     CudaContainer<float> r(n);
     CudaContainer<Bubble> b(n);
+    CudaContainer<int> bubbleIndices(n);
+
+    CudaContainer<int> bubblesPerCell(gridSize.x * gridSize.y * gridSize.z);
+    CudaContainer<int> offsets(gridSize.x * gridSize.y * gridSize.z);
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -74,18 +78,55 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
 #endif
     CURAND_CALL(curandGenerateNormal(generator, r.getDevicePtr(), n, avgRad, stdDevRad));
 
+    // Assign generated data to bubbles
     assignDataToBubbles<<<gridSize, blockSize>>>(x.getDevicePtr(),
-						  y.getDevicePtr(),
+						 y.getDevicePtr(),
 #if (NUM_DIM == 3)
-						  z.getDevicePtr(),
+						 z.getDevicePtr(),
 #endif
-						  r.getDevicePtr(),
-						  b.getDevicePtr(),
-						  lbb,
-						  tfr);
+						 r.getDevicePtr(),
+						 b.getDevicePtr(),
+						 bubblesPerCell.getDevicePtr(),
+						 lbb,
+						 tfr,
+						 n);
 
+    // Assign bubbles to cells
+    // For this, compute offsets to memory based on how many bubbles are in each cell.
+    // Then reset bubblesPerCell back to zero so it can be used to index the bubbleIndices
+    // mem loc again.
+    bubblesPerCell.toHost();
+    size_t offset = 0;
+    for (size_t i = 0; i < gridSize.x * gridSize.y * gridSize.z; ++i)
+    {
+	offsets[i] = offset;
+	offset += bubblesPerCell[i];
+    }
+    offsets.toDevice();
+    bubblesPerCell.fillHostWith(0);
+    bubblesPerCell.toDevice();
+
+    assignBubblesToCells<<<gridSize, blockSize>>>(b.getDevicePtr(),
+						  bubbleIndices.getDevicePtr(),
+						  offsets.getDevicePtr(),
+						  bubblesPerCell.getDevicePtr(),
+						  n);
+    bubbleIndices.toHost();
+    b.toHost();
+
+    std::vector<Bubble> bubbles;
+    bubbles.resize(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+	// Add the bubbles to a new vector, ordered by cell
+	bubbles[i] = b[bubbleIndices[i]];
+	
+	// Update the index of the bubble
+	bubbleIndices[i] = i;
+    }
     
-    b.copyDeviceDataToVec(bubbleManager->bubbles);
+    bubbleManager->bubbles = bubbles;
+    bubbleIndices.copyHostDataToVec(bubbleManager->indices);
 }
 
 // ----------------------
@@ -100,22 +141,88 @@ void cubble::assignDataToBubbles(float *x,
 #endif
 				 float *r,
 				 Bubble *b,
+				 int *bubblesPerCell,
 				 dvec lbb,
-				 dvec tfr)
+				 dvec tfr,
+				 int numBubbles)
 {
+    int bbi = 0;
+    
 #if (NUM_DIM == 3)
+    
     // 3D grid of blocks with 1D blocks of threads.
     size_t tid = (blockIdx.z * (gridDim.y * gridDim.x)
 		  + blockIdx.y * gridDim.x + blockIdx.x)
 	* blockDim.x + threadIdx.x;
+    
+    // Block index of bubble changed to 1D.
+    if (tid < numBubbles)
+	bbi = ((int)(z[tid] * gridDim.z) * gridDim.y * gridDim.x)
+	    + ((int)(y[tid] * gridDim.y) * gridDim.x)
+	    + (int)(x[tid] * gridDim.x);
+#else
+    
+    // 2D grid of blocks with 1D blocks of threads.
+    size_t tid = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x + threadIdx.x;
+    
+    // Block index of bubble changed to 1D.
+    if (tid < numBubbles)
+	bbi = ((int)(y[tid] * gridDim.y) * gridDim.x) + (int)(x[tid] * gridDim.x);
+    
+#endif
+    
+    if (tid < numBubbles)
+    {
+        int indexToCellContainer = atomicAdd(&bubblesPerCell[bbi], 1);
+	
+	b[tid].pos.x = lbb.x + (double)x[tid] * tfr.x;
+	b[tid].pos.y = lbb.y + (double)y[tid] * tfr.y;
+#if (NUM_DIM == 3)
+	b[tid].pos.z = lbb.z + (double)z[tid] * tfr.z;	
+#endif
+	b[tid].radius = (double)r[tid];
+    }
+}
+
+__global__
+void cubble::assignBubblesToCells(Bubble *b,
+				  int *bubbleIndices,
+				  int *offsets,
+				  int *currentIndices,
+				  int numBubbles)
+{
+    int bbi = 0;
+    
+#if (NUM_DIM == 3)
+    
+    // 3D grid of blocks with 1D blocks of threads.
+    size_t tid = (blockIdx.z * (gridDim.y * gridDim.x)
+		  + blockIdx.y * gridDim.x + blockIdx.x)
+	* blockDim.x + threadIdx.x;
+    
+    // Block index of bubble changed to 1D.
+    if (tid < numBubbles)
+	bbi = ((int)(b[tid].pos.z * gridDim.z) * gridDim.y * gridDim.x)
+	    + ((int)(b[tid].pos.y * gridDim.y) * gridDim.x)
+	    + (int)(b[tid].pos.x * gridDim.x);
 #else
     // 2D grid of blocks with 1D blocks of threads.
     size_t tid = (blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x + threadIdx.x;
+    
+    // Block index of bubble changed to 1D.
+    if (tid < numBubbles)
+	bbi = ((int)(b[tid].pos.y * gridDim.y) * gridDim.x)
+	    + (int)(b[tid].pos.x * gridDim.x);
 #endif
-    b[tid].pos.x = lbb.x + (double)x[tid] * tfr.x;
-    b[tid].pos.y = lbb.y + (double)y[tid] * tfr.y;
-#if (NUM_DIM == 3)
-    b[tid].pos.z = lbb.z + (double)z[tid] * tfr.z;
-#endif
-    b[tid].radius = (double)r[tid];
+
+    if (tid < numBubbles)
+    {
+	// Save the index of the bubble to the array.
+	// Offsets array stores an offset to the continuous array,
+	// where the indices of the bubbles belonging to this cell start from.
+	// atomicAdd is used to get the next unused index of the cell bbi.
+	
+	int offset = atomicAdd(&currentIndices[bbi], 1) + offsets[bbi];
+	bubbleIndices[offset] = tid;
+    }
 }

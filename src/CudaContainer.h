@@ -34,7 +34,7 @@ namespace cubble
 	
 	void fillHostWith(T val)
 	{
-	    hostData.fill(val);
+	    std::fill(hostData.begin(), hostData.begin() + numElements, val);
 	}
 	
 	T* getDevicePtr()
@@ -50,6 +50,7 @@ namespace cubble
 	void toHost()
 	{
 	    hostData.clear();
+	    hostData.resize(numElements);
 	    CUDA_CALL(cudaMemcpy((void*)hostData.data(),
 				 (void*)rawPtr.get(),
 				 numElements * sizeof(T),

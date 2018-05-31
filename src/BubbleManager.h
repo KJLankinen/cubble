@@ -15,5 +15,6 @@ namespace cubble
 	~BubbleManager();
 
 	std::vector<Bubble> bubbles;
+	std::vector<int> indices;
     };
 }

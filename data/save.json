@@ -4,12 +4,11 @@
     "errorTolerance": 0.0001,
     "lbb": {
         "x": 0.0,
-        "y": 0.0,
-        "z": 0.0
+        "y": 0.0
     },
     "minRad": 1e-08,
     "muZero": 1.0,
-    "numBubbles": 163843,
+    "numBubbles": 1024,
     "numCells": 8,
     "numIntegrationSteps": 1000000,
     "phiTarget": 0.8,
@@ -18,8 +17,7 @@
     "stdDevRad": 0.0126,
     "tfr": {
         "x": 3.0,
-        "y": 3.0,
-        "z": 3.0
+        "y": 3.0
     },
     "timeStep": 1e-05
 }

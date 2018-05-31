@@ -43,7 +43,7 @@ EXEC = $(BIN_PATH)cubble
 
 # The compiled code is different for different dimensions,
 # so this can't be given as a normal program parameter.
-NUM_DIM := 3
+NUM_DIM := 2
 
 
 # -----------------------------------------------------
