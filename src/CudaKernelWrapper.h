@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "Env.h"
 #include "Bubble.h"
 #include "BubbleManager.h"
 #include "Vec.h"
@@ -14,22 +15,17 @@ namespace cubble
     class CudaKernelWrapper
     {
     public:
-        CudaKernelWrapper(std::shared_ptr<BubbleManager> bm);
+        CudaKernelWrapper(std::shared_ptr<BubbleManager> bm, std::shared_ptr<Env> e);
 	~CudaKernelWrapper();
-        
-	void generateBubblesOnGPU(size_t n,
-				  size_t numBlocksPerDim,
-				  int rngSeed,
-				  double avgRad,
-				  double stdDevRad,
-				  dvec lbb,
-				  dvec tfr);
+
+	void generateBubblesOnGPU();
 	
     private:
 	__device__
 	int getTid();
 	
 	std::shared_ptr<BubbleManager> bubbleManager;
+	std::shared_ptr<Env> env;
     };
 
     // Kernels have to be defined outside class

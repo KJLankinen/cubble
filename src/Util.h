@@ -1,8 +1,8 @@
 // -*- C++ -*-
 #pragma once
 
-#include <stdexcept>
 #include <iostream>
+#include <stdexcept>
 #include <exception>
 
 #ifndef __CUDACC__
@@ -11,6 +11,8 @@
 
 namespace cubble
 {
+    const double epsilon = 1.0e-10;
+    
     inline void handleException(const std::exception_ptr pExc)
     {
 #ifndef __CUDACC__
@@ -36,6 +38,4 @@ namespace cubble
 	    throw e;
 	}
     }
-    
-    const double epsilon = 1.0e-10;
 }

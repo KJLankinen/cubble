@@ -3,27 +3,31 @@
 #include "CudaKernelWrapper.h"
 #include "Macros.h"
 #include "CudaContainer.h"
-#include "Fileio.h"
 
 #include <iostream>
 #include <curand.h>
 
-cubble::CudaKernelWrapper::CudaKernelWrapper(std::shared_ptr<BubbleManager> bm)
+cubble::CudaKernelWrapper::CudaKernelWrapper(std::shared_ptr<BubbleManager> bm,
+					     std::shared_ptr<Env> e)
 {
     bubbleManager = bm;
+    env = e;
 }
 
 cubble::CudaKernelWrapper::~CudaKernelWrapper()
 {}
 
-void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
-						     size_t numBlocksPerDim,
-						     int rngSeed,
-						     double avgRad,
-						     double stdDevRad,
-						     dvec lbb,
-						     dvec tfr)
+void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 {
+    // Get necessary parameters
+    int n = env->getNumBubbles();
+    int numBlocksPerDim = env->getNumCellsPerDim();
+    int rngSeed = env->getRngSeed();
+    double avgRad = env->getAvgRad();
+    double stdDevRad = env->getStdDevRad();
+    dvec lbb = env->getLbb();
+    dvec tfr = env->getTfr();
+	
     int totalNumBlocks = numBlocksPerDim * numBlocksPerDim;
 #if (NUM_DIM == 3)
     totalNumBlocks *= numBlocksPerDim;

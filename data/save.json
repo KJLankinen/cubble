@@ -1,23 +1,23 @@
 {
-    "avgRad": 0.06,
-    "compressionAmount": 1e-06,
-    "errorTolerance": 0.0001,
-    "lbb": {
+    "AvgRad": 0.06,
+    "CompressionAmount": 1e-06,
+    "ErrorTolerance": 0.0001,
+    "Lbb": {
         "x": 0.0,
         "y": 0.0
     },
-    "minRad": 1e-08,
-    "muZero": 1.0,
-    "numBubbles": 4096,
-    "numCellsPerDim": 8,
-    "numIntegrationSteps": 1000000,
-    "phiTarget": 0.8,
-    "rngSeed": 1514,
-    "sigmaZero": 1.0,
-    "stdDevRad": 0.0126,
-    "tfr": {
+    "MinRad": 1e-08,
+    "MuZero": 1.0,
+    "NumBubbles": 123,
+    "NumCellsPerDim": 2,
+    "NumIntegrationSteps": 1000000,
+    "PhiTarget": 0.8,
+    "RngSeed": 1514,
+    "SigmaZero": 1.0,
+    "StdDevRad": 0.0126,
+    "Tfr": {
         "x": 3.0,
         "y": 3.0
     },
-    "timeStep": 1e-05
+    "TimeStep": 1e-05
 }
