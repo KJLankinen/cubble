@@ -100,7 +100,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
 
     // Bubbles are stored in a 1D array, even if the domain is 2D or 3D.
     // Here we calculate the offsets (begin and end indices) to the memory
-    // location where the bubbles of the current cell start.
+    // location where the bubbles of the current cell start (and end).
     int offset = 0;
     for (size_t i = 0; i < numCells; ++i)
     {
@@ -141,6 +141,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
 __forceinline__ __device__
 int getTid()
 {
+    // Simple helper function for calculating a 1D coordinate
+    // from 1, 2 or 3 dimensional coordinates.
     int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
     int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x)
 	+ blockIdx.y * gridDim.x
@@ -168,15 +170,21 @@ void cubble::assignDataToBubbles(float *x,
     
     if (tid < numBubbles)
     {
-	b[tid].pos.x = lbb.x + (double)x[tid] * tfr.x;
-	b[tid].pos.y = lbb.y + (double)y[tid] * tfr.y;
-	b[tid].radius = (double)r[tid];
+	dvec pos;
+        pos.x = (double)x[tid];
+	pos.y = (double)y[tid];
 	
-	int bbi = ((int)(y[tid] * gridDim.y) * gridDim.x) + (int)(x[tid] * gridDim.x);
+	int bbi = ((int)(pos.y * gridDim.y) * gridDim.x) + (int)(pos.x * gridDim.x);
 #if (NUM_DIM == 3)
-	b[tid].pos.z = lbb.z + (double)z[tid] * tfr.z;
-	bbi += ((int)(z[tid] * gridDim.z) * gridDim.y * gridDim.x);
+	pos.z = (double)z[tid];
+	bbi += ((int)(pos.z * gridDim.z) * gridDim.y * gridDim.x);
 #endif
+	// Scale position
+	pos = pos * tfr + lbb;
+
+	b[tid].setPos(pos);
+	b[tid].setRadius((double)r[tid]);
+	
         int indexToCellContainer = atomicAdd(&bubblesPerCell[bbi], 1);
     }
 }
@@ -192,7 +200,7 @@ void cubble::assignBubblesToCells(Bubble *b,
 {
     int tid = getTid();
     dvec interval = tfr - lbb;
-    dvec normPos = (b[tid].pos - lbb) / interval;
+    dvec normPos = (b[tid].getPos() - lbb) / interval;
 
     if (tid < numBubbles)
     {
