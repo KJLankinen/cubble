@@ -44,7 +44,7 @@ namespace cubble
 	// Parameters read from input file
 	size_t numIntegrationSteps = 0;
 	size_t numBubbles = 0;
-	size_t numCells = 0;
+	size_t numCellsPerDim = 0;
 
 	int rngSeed = 0;
 	

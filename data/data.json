@@ -26,7 +26,7 @@
     "numIntegrationStepsExpl" : "How many integration steps to do.",
     "numIntegrationSteps" : 1000000,
     "numBubblesExpl" : "How many bubbles to generate.",
-    "numBubbles" : 4194304,
-    "numCellsExpl" : "How many cells per dimension to divide the simulation box into.",
-    "numCells" : 64
+    "numBubbles" : 4096,
+    "numCellsPerDimExpl" : "How many cells per dimension to divide the simulation box into.",
+    "numCellsPerDim" : 8
 }

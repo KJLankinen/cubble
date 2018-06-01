@@ -30,13 +30,12 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
     int numThreadsPerDim = (int)std::ceil(std::cbrt(n / (float)totalNumBlocks));
     dim3 blockSize = dim3(numThreadsPerDim * numThreadsPerDim * numThreadsPerDim, 1, 1);
     dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim, numBlocksPerDim);
-    int recommendedNumCells = (int)(std::ceil(std::cbrt(n / 1024.0f) * 0.125f)) * 8;
 #else
     int numThreadsPerDim = (int)std::ceil(std::sqrt(n / (float)totalNumBlocks));
     dim3 blockSize = dim3(numThreadsPerDim * numThreadsPerDim, 1, 1);
     dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim, 1);
-    int recommendedNumCells = (int)(std::ceil(std::sqrt(n / 1024.0f) * 0.125f)) * 8;
 #endif
+    int minNumCells = (int)std::ceil(n / 1024.0f);
     int numCells = gridSize.x * gridSize.y * gridSize.z;
     int numThreads = blockSize.x * blockSize.y * blockSize.z;
     if (numThreads > 1024)
@@ -45,8 +44,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
 		  << "\nAmount of threads per block " << numThreads
 		  << " exceeds the maximum, which is 1024."
 		  << "\nIncrease the number of blocks (cells) per dimension."
-		  << "\nRecommended number of cells with given number of bubbles: "
-		  << recommendedNumCells
+		  << "\nMinimum (total) number of cells with given number of bubbles: "
+		  << minNumCells
 		  << std::endl;
 	
 	std::exit(EXIT_FAILURE);
@@ -58,8 +57,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU(size_t n,
 	      << "), block size: (" << blockSize.x
 	      << ", " << blockSize.y
 	      << ", " << blockSize.z
-	      << ")\nRecommended number of cells with given number of bubbles: "
-	      << recommendedNumCells
+	      << ")\nMinimum (total) number of cells with given number of bubbles: "
+	      << minNumCells
 	      << std::endl;
     
     CudaContainer<float> x(n);

@@ -38,7 +38,7 @@ Simulator::~Simulator()
 void Simulator::run()
 {
     cudaKernelWrapper->generateBubblesOnGPU(numBubbles,
-					    numCells,
+					    numCellsPerDim,
 					    rngSeed,
 					    avgRad,
 					    stdDevRad,
@@ -80,7 +80,7 @@ void Simulator::readWriteParameters(bool read)
     CUBBLE_PARAMETER(read, params, compressionAmount);
     CUBBLE_PARAMETER(read, params, numIntegrationSteps);
     CUBBLE_PARAMETER(read, params, numBubbles);
-    CUBBLE_PARAMETER(read, params, numCells);
+    CUBBLE_PARAMETER(read, params, numCellsPerDim);
     
     if (!read)
 	fileio::writeJSONToFile(saveFile, params);
