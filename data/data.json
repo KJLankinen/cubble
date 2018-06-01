@@ -20,13 +20,13 @@
     "timeStepExpl" : "The initial time step with which to increment the simulation time.",
     "timeStep" : 0.00001,
     "rngSeedExpl" : "The seed for the RNG.",
-    "rngSeed" : 15424,
+    "rngSeed" : 1514,
     "compressionAmountExpl" : "How much to compress the side length(s) of the simulation box per compression iteration.",
     "compressionAmount" : 1e-6,
     "numIntegrationStepsExpl" : "How many integration steps to do.",
     "numIntegrationSteps" : 1000000,
     "numBubblesExpl" : "How many bubbles to generate.",
-    "numBubbles" : 1024,
+    "numBubbles" : 4194304,
     "numCellsExpl" : "How many cells per dimension to divide the simulation box into.",
-    "numCells" : 8
+    "numCells" : 64
 }

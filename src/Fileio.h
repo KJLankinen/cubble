@@ -45,7 +45,7 @@ namespace cubble
 		    throw std::runtime_error("");
 		}	
 	    }
-	    
+#ifndef __CUDACC__
 	    void operator>>(nlohmann::json &j)
 	    {
 		file >> j;
@@ -55,7 +55,7 @@ namespace cubble
 	    {
 		file << std::setw(4) << j;
 	    }
-
+#endif
 	    template <typename T>
 	    void operator<<(const T &val)
 	    {
@@ -66,14 +66,16 @@ namespace cubble
 	    std::fstream file;
 	    
 	    // Only friend functions listed here are allowed to use this implementation.
+#ifndef __CUDACC__
 	    friend void readFileToJSON(const std::string&, nlohmann::json&);
 	    friend void writeJSONToFile(const std::string&, const nlohmann::json&);
+#endif
 	    template <typename T>
 	    friend void writeVectorToFile(const std::string&, const std::vector<T>&);
 	    template <typename T>
 	    friend void writeVectorToFile(const std::string&, const std::vector<T*>&);
 	};
-	
+#ifndef __CUDACC__	
 	void readFileToJSON(const std::string &filename, nlohmann::json &j)
 	{
 	    FileWrapper file(filename, true);
@@ -85,7 +87,7 @@ namespace cubble
 	    FileWrapper file(filename, false);
 	    file << j;
 	}
-
+#endif
 	template <typename T>
 	void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
 	{

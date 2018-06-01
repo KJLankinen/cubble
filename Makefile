@@ -85,6 +85,12 @@ OPTIM_FLAGS := -O2
 .PHONY : all
 all : $(EXEC)
 
+#-----------------------------------------------------
+# Execute the program with default input files
+#-----------------------------------------------------
+.PHONY : run
+run : $(EXEC)
+	$(EXEC) data.json out.dat save.json
 
 # -----------------------------------------------------
 # Debug build, slow with all safety nets at place.

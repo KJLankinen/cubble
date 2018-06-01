@@ -4,6 +4,7 @@
 
 #include "Bubble.h"
 #include "BubbleManager.h"
+#include "Vec.h"
 
 #include <cuda_runtime.h>
 #include <memory>
@@ -25,6 +26,9 @@ namespace cubble
 				  dvec tfr);
 	
     private:
+	__device__
+	int getTid();
+	
 	std::shared_ptr<BubbleManager> bubbleManager;
     };
 
@@ -47,5 +51,7 @@ namespace cubble
 			      int *bubbleIndices,
 			      int *memoryOffsets,
 			      int *currendIndices,
+			      dvec lbb,
+			      dvec tfr,
 			      int numBubbles);
 };

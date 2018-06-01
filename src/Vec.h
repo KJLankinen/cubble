@@ -48,7 +48,8 @@ namespace cubble
 	    , y(y)
 	{}
 #endif
-	
+
+	__host__ __device__
 	~vec() {}
 
 	__host__ __device__

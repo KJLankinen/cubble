@@ -44,8 +44,10 @@ void Simulator::run()
 					    stdDevRad,
 					    lbb,
 					    tfr);
-    
-    fileio::writeVectorToFile(outputFile, bubbleManager->bubbles);
+
+    std::vector<Bubble> b;
+    bubbleManager->getBubbles(b);
+    fileio::writeVectorToFile(outputFile, b);
 }
 
 void Simulator::readWriteParameters(bool read)
