@@ -85,12 +85,13 @@ def plot_2d():
 
     x = data[:,0]
     y = data[:,1]
-    r = data[:,2]
+    r = data[:,3]
+    c = data[:,4:]
     
     figure()
     subplot(aspect='equal')
 
-    out = circles(x, y, r, alpha=0.3)
+    out = circles(x, y, r, alpha=0.3, facecolor=c)
     
     plt.show()
 

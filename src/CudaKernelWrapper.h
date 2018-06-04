@@ -44,7 +44,7 @@ namespace cubble
     
     __global__
     void assignBubblesToCells(Bubble *b,
-			      int *bubbleIndices,
+			      Bubble *reorganizedBubbles,
 			      int *memoryOffsets,
 			      int *currendIndices,
 			      dvec lbb,

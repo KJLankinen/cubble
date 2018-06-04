@@ -52,10 +52,14 @@ namespace cubble
 
 	__host__ __device__
 	dvec getAcc() { return acc; }
+
+	fvec getColor() const { return color; }
+	__host__ __device__
+	void setColor(const fvec &c) { color = c; }
 	
 	friend std::ostream& operator<<(std::ostream &os, const Bubble &b)
 	{
-	    os << b.getPos() << ", " << b.getRadius();
+	    os << b.getPos() << ", " << b.getRadius() << ", " << b.getColor();
 	    
 	    return os;
 	}
@@ -72,5 +76,7 @@ namespace cubble
 	dvec velPred;
 
 	dvec acc;
+
+	fvec color;
     };
 }

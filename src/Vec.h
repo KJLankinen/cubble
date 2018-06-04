@@ -29,25 +29,15 @@ namespace cubble
 	{
 	    x = (T)o.x;
 	    y = (T)o.y;
-#if (NUM_DIM == 3)
 	    z = (T)o.z;
-#endif
 	}
 
-#if (NUM_DIM == 3)
 	__host__ __device__
 	vec(T x, T y, T z)
 	    : x(x)
 	    , y(y)
 	    , z(z)
 	{}
-#else
-	__host__ __device__
-	vec(T x, T y)
-	    : x(x)
-	    , y(y)
-	{}
-#endif
 
 	__host__ __device__
 	~vec() {}
@@ -59,9 +49,7 @@ namespace cubble
 
 	    temp += x * x;
 	    temp += y * y;
-#if (NUM_DIM == 3)
 	    temp += z * z;
-#endif
 	    
 	    return temp;
 	}
@@ -73,9 +61,7 @@ namespace cubble
 	    vec<T> v;
 	    v.x = std::abs(x);
 	    v.y = std::abs(y);
-#if (NUM_DIM == 3)
 	    v.z = std::abs(z);
-#endif
 
 	    return v;
 	}
@@ -83,21 +69,13 @@ namespace cubble
 	__host__ __device__
 	T getMaxComponent() const
 	{
-#if (NUM_DIM == 3)
 	    return x > y ? (x > z ? x : z) : (y > z ? y : z);
-#else
-	    return x > y ? x : y;
-#endif
 	}
 
 	__host__ __device__
 	T getMinComponent() const
 	{
-#if (NUM_DIM == 3)
 	    return x < y ? (x < z ? x : z) : (y < z ? y : z);
-#else
-	    return x < y ? x : y;
-#endif
 	}
 
 	template <typename T2>
@@ -244,9 +222,7 @@ namespace cubble
 	{
 	    t.x += o.x;
 	    t.y += o.y;
-#if (NUM_DIM == 3)
 	    t.z += o.z;
-#endif
 	}
 	
 	__host__ __device__
@@ -254,9 +230,7 @@ namespace cubble
 	{
 	    t.x += o.x;
 	    t.y += o.y;
-#if (NUM_DIM == 3)
 	    t.z += o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -264,9 +238,7 @@ namespace cubble
 	{
 	    t.x += s;
 	    t.y += s;
-#if (NUM_DIM == 3)
 	    t.z += s;
-#endif
 	}
 
 
@@ -276,9 +248,7 @@ namespace cubble
 	{
 	    t.x -= o.x;
 	    t.y -= o.y;
-#if (NUM_DIM == 3)
 	    t.z -= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -286,9 +256,7 @@ namespace cubble
 	{
 	    t.x -= o.x;
 	    t.y -= o.y;
-#if (NUM_DIM == 3)
 	    t.z -= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -296,9 +264,7 @@ namespace cubble
 	{
 	    t.x -= s;
 	    t.y -= s;
-#if (NUM_DIM == 3)
 	    t.z -= s;
-#endif
 	}
 
 
@@ -308,9 +274,7 @@ namespace cubble
 	{
 	    t.x *= o.x;
 	    t.y *= o.y;
-#if (NUM_DIM == 3)
 	    t.z *= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -318,9 +282,7 @@ namespace cubble
 	{
 	    t.x *= o.x;
 	    t.y *= o.y;
-#if (NUM_DIM == 3)
 	    t.z *= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -328,9 +290,7 @@ namespace cubble
 	{
 	    t.x *= s;
 	    t.y *= s;
-#if (NUM_DIM == 3)
 	    t.z *= s;
-#endif
 	}
 
 
@@ -340,9 +300,7 @@ namespace cubble
 	{
 	    t.x /= o.x;
 	    t.y /= o.y;
-#if (NUM_DIM == 3)
 	    t.z /= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -360,9 +318,7 @@ namespace cubble
 	{
 	    t.x /= s;
 	    t.y /= s;
-#if (NUM_DIM == 3)
 	    t.z /= s;
-#endif
 	}
 
 
@@ -372,9 +328,7 @@ namespace cubble
 	{
 	    t.x %= o.x;
 	    t.y %= o.y;
-#if (NUM_DIM == 3)
 	    t.z %= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -382,9 +336,7 @@ namespace cubble
 	{
 	    t.x %= o.x;
 	    t.y %= o.y;
-#if (NUM_DIM == 3)
 	    t.z %= o.z;
-#endif
 	}
 
 	__host__ __device__
@@ -392,9 +344,7 @@ namespace cubble
 	{
 	    t.x %= s;
 	    t.y %= s;
-#if (NUM_DIM == 3)
 	    t.z %= s;
-#endif
 	}
 
 	
@@ -404,9 +354,7 @@ namespace cubble
 	{
 	    x = copy.x;
 	    y = copy.y;
-#if (NUM_DIM == 3)
 	    z = copy.z;
-#endif
 	}
 
 	
@@ -417,9 +365,8 @@ namespace cubble
 	    bool equal = true;
 	    equal &= t.x - (T)epsilon <= o.x && t.x + (T)epsilon >= o.x;
 	    equal &= t.y - (T)epsilon <= o.y && t.y + (T)epsilon >= o.y;
-#if (NUM_DIM == 3)
 	    equal &= t.z - (T)epsilon <= o.z && t.z + (T)epsilon >= o.z;
-#endif
+	    
 	    return equal;
 	}
 
@@ -435,10 +382,8 @@ namespace cubble
 	// << << << << << << << << << << << << << << << << << << << << << << 
 	friend std::ostream& operator<<(std::ostream &os, const vec<T> &v)
 	{
-	    os << v.x << ", " << v.y;
-#if (NUM_DIM == 3)
-	    os << ", " << v.z;
-#endif
+	    os << v.x << ", " << v.y << ", " << v.z;
+	    
 	    return os;
 	}
 
@@ -450,9 +395,7 @@ namespace cubble
 	    vec<T> retVec;
 	    retVec.x = v1.x < v2.x ? v1.x : v2.x;
 	    retVec.y = v1.y < v2.y ? v1.y : v2.y;
-#if (NUM_DIM == 3)
 	    retVec.z = v1.z < v2.z ? v1.z : v2.z;
-#endif
 	    
 	    return retVec;
 	}
@@ -465,9 +408,7 @@ namespace cubble
 	    vec<T> retVec;
 	    retVec.x = v1.x > v2.x ? v1.x : v2.x;
 	    retVec.y = v1.y > v2.y ? v1.y : v2.y;
-#if (NUM_DIM == 3)
 	    retVec.z = v1.z > v2.z ? v1.z : v2.z;
-#endif
 	    
 	    return retVec;
 	}
@@ -478,28 +419,23 @@ namespace cubble
 	{
 	    j["x"] = v.x;
 	    j["y"] = v.y;
-#if (NUM_DIM == 3)
 	    j["z"] = v.z;
-#endif
 	}
         
 	friend void from_json(const nlohmann::json &j, vec<T> &v)
 	{
 	    v.x = j["x"];
 	    v.y = j["y"];
-#if (NUM_DIM == 3)
 	    v.z = j["z"];
-#endif
 	}
 #endif
         
         T x = 0;
 	T y = 0;
-#if (NUM_DIM == 3)
 	T z = 0;
-#endif
     };
 
+    typedef vec<float> fvec;
     typedef vec<double> dvec;
     typedef vec<int> ivec;
     typedef vec<size_t> uvec;

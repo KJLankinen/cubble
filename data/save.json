@@ -4,7 +4,8 @@
     "ErrorTolerance": 0.0001,
     "Lbb": {
         "x": 0.0,
-        "y": 0.0
+        "y": 0.0,
+        "z": 0.0
     },
     "MinRad": 1e-08,
     "MuZero": 1.0,
@@ -16,8 +17,9 @@
     "SigmaZero": 1.0,
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 3.0,
-        "y": 3.0
+        "x": 20.0,
+        "y": 20.0,
+        "z": 3.0
     },
     "TimeStep": 1e-05
 }

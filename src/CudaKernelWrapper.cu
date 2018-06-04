@@ -22,26 +22,32 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     // Get necessary parameters
     int n = env->getNumBubbles();
     int numBlocksPerDim = env->getNumCellsPerDim();
+    int totalNumBlocks = numBlocksPerDim * numBlocksPerDim;
     int rngSeed = env->getRngSeed();
     double avgRad = env->getAvgRad();
     double stdDevRad = env->getStdDevRad();
     dvec lbb = env->getLbb();
-    dvec tfr = env->getTfr();
-	
-    int totalNumBlocks = numBlocksPerDim * numBlocksPerDim;
+    dvec tfr = env->getTfr();	
+    
 #if (NUM_DIM == 3)
+
     totalNumBlocks *= numBlocksPerDim;
     int numThreadsPerDim = (int)std::ceil(std::cbrt(n / (float)totalNumBlocks));
     dim3 blockSize = dim3(numThreadsPerDim * numThreadsPerDim * numThreadsPerDim, 1, 1);
     dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim, numBlocksPerDim);
+    
 #else
+
     int numThreadsPerDim = (int)std::ceil(std::sqrt(n / (float)totalNumBlocks));
     dim3 blockSize = dim3(numThreadsPerDim * numThreadsPerDim, 1, 1);
     dim3 gridSize = dim3(numBlocksPerDim, numBlocksPerDim, 1);
+    
 #endif
+    
     int minNumCells = (int)std::ceil(n / 1024.0f);
     int numCells = gridSize.x * gridSize.y * gridSize.z;
     int numThreads = blockSize.x * blockSize.y * blockSize.z;
+
     if (numThreads > 1024)
     {
 	std::cerr << "Too many bubbles to simulate w.r.t. the number of blocks."
@@ -67,12 +73,11 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     
     CudaContainer<float> x(n);
     CudaContainer<float> y(n);
-#if (NUM_DIM == 3)
-    CudaContainer<float> z(n);
-#endif
     CudaContainer<float> r(n);
+    
     CudaContainer<Bubble> b(n);
-    CudaContainer<int> bubbleIndices(n);
+    CudaContainer<Bubble> reorganizedBubbles(n);
+    
     CudaContainer<int> bubblesPerCell(numCells);
     CudaContainer<int> offsets(numCells);
 
@@ -82,7 +87,9 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     CURAND_CALL(curandGenerateUniform(generator, x.getDevicePtr(), n));
     CURAND_CALL(curandGenerateUniform(generator, y.getDevicePtr(), n));
     CURAND_CALL(curandGenerateNormal(generator, r.getDevicePtr(), n, avgRad, stdDevRad));
+    
 #if (NUM_DIM == 3)
+    CudaContainer<float> z(n);
     CURAND_CALL(curandGenerateUniform(generator, z.getDevicePtr(), n));
 #endif
 
@@ -120,26 +127,15 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     bubblesPerCell.toDevice();
 
     assignBubblesToCells<<<gridSize, blockSize>>>(b.getDevicePtr(),
-						  bubbleIndices.getDevicePtr(),
+						  reorganizedBubbles.getDevicePtr(),
 						  offsets.getDevicePtr(),
 						  bubblesPerCell.getDevicePtr(),
 						  lbb,
 						  tfr,
 						  n);
-    bubbleIndices.toHost();
-    b.toHost();
-
-    // Create a new host vector and add the bubbles in to it
-    // s.t. the bubbles of any one cell are continuously stored.
-    // Note that the memory locality could probably be improved
-    // for nearby cells by saving the cells as a Hilbert curve,
-    // instead of left to right, bottom to top, back to front.
-    std::vector<Bubble> bubbles;
-    bubbles.resize(n);
-    for (size_t i = 0; i < n; ++i)
-	bubbles[i] = b[bubbleIndices[i]];
-
-    bubbleManager->setBubbles(bubbles);
+    std::vector<Bubble> temp;
+    reorganizedBubbles.copyDeviceDataToVec(temp);
+    bubbleManager->setBubbles(temp);
 }
 
 __forceinline__ __device__
@@ -195,7 +191,7 @@ void cubble::assignDataToBubbles(float *x,
 
 __global__
 void cubble::assignBubblesToCells(Bubble *b,
-				  int *bubbleIndices,
+				  Bubble *reorganizedBubbles,
 				  int *offsets,
 				  int *currentIndices,
 				  dvec lbb,
@@ -208,11 +204,17 @@ void cubble::assignBubblesToCells(Bubble *b,
 
     if (tid < numBubbles)
     {
-	int bbi = ((int)(normPos.y * gridDim.y) * gridDim.x) + (int)(normPos.x * gridDim.x);
-#if (NUM_DIM == 3)
-	bbi += (int)(normPos.z * gridDim.z) * gridDim.y * gridDim.x;
-#endif
+        int gridX = (int)(normPos.x * gridDim.x);
+	int gridY = (int)(normPos.y * gridDim.y);
+	int gridZ = (int)(normPos.z * gridDim.z);
+	
+	int bbi = gridZ * gridDim.y * gridDim.x + gridY * gridDim.x + gridX;
 	int offset = atomicAdd(&currentIndices[bbi], 1) + offsets[bbi];
-	bubbleIndices[offset] = tid;
+        reorganizedBubbles[offset] = b[tid];
+	
+	fvec color((float)gridX / gridDim.x,
+		   (float)gridY / gridDim.y,
+		   (float)gridZ / gridDim.z);
+	reorganizedBubbles[offset].setColor(color);
     }
 }
