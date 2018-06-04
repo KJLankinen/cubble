@@ -17,7 +17,8 @@
 namespace cubble
 {
     class Env
-    {   
+    {
+	// See Macros.h for details of this macro
 	CUBBLE_PROP(int, NumIntegrationSteps)
 	CUBBLE_PROP(int, NumBubbles)
 	CUBBLE_PROP(int, NumCellsPerDim)

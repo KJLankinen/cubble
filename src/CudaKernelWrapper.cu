@@ -171,7 +171,6 @@ void cubble::assignDataToBubbles(float *x,
 				 int numBubbles)
 {
     int tid = getTid();
-    
     if (tid < numBubbles)
     {
 	dvec pos;
@@ -179,6 +178,7 @@ void cubble::assignDataToBubbles(float *x,
 	pos.y = (double)y[tid];
 	
 	int bbi = ((int)(pos.y * gridDim.y) * gridDim.x) + (int)(pos.x * gridDim.x);
+	
 #if (NUM_DIM == 3)
 	pos.z = (double)z[tid];
 	bbi += ((int)(pos.z * gridDim.z) * gridDim.y * gridDim.x);
@@ -189,7 +189,7 @@ void cubble::assignDataToBubbles(float *x,
 	b[tid].setPos(pos);
 	b[tid].setRadius((double)r[tid]);
 	
-        int indexToCellContainer = atomicAdd(&bubblesPerCell[bbi], 1);
+        atomicAdd(&bubblesPerCell[bbi], 1);
     }
 }
 

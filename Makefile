@@ -124,7 +124,6 @@ set_final_flags :
 # By default has some safety nets at place but also uses some optimizations.
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
-	rm -f $(BIN_PATH)*.o
 
 
 # -----------------------------------------------------
