@@ -30,7 +30,7 @@ namespace cubble
     int getGlobalTid();
     
     __device__
-    int getBbi(dvec pos);
+    int getBubbleBlockIndex(dvec pos);
 
     __global__
     void assignDataToBubbles(float *x,

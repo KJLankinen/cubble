@@ -161,3 +161,4 @@ $(BIN_PATH)%.o : $(SRC_PATH)%.cu
 clean :
 	rm -fr $(BIN_PATH)
 	rm -f $(SRC_PATH)*~
+	rm -f scripts/*~

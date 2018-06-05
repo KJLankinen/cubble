@@ -21,7 +21,6 @@ cubble::CudaKernelWrapper::~CudaKernelWrapper()
 
 void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 {
-    CUDA_CALL(cudaPeekAtLastError());
     // Get necessary parameters
     int n = env->getNumBubbles();
     int numBlocksPerDim = env->getNumCellsPerDim();
@@ -31,7 +30,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     double stdDevRad = env->getStdDevRad();
     dvec lbb = env->getLbb();
     dvec tfr = env->getTfr();	
-    
+
+    // Calculate the block & grid sizes based on amount of data & dimensionality
 #if (NUM_DIM == 3)
 
     totalNumBlocks *= numBlocksPerDim;
@@ -64,7 +64,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 	std::exit(EXIT_FAILURE);
     }
 
-    std::cout << "Grid size: (" << gridSize.x
+    std::cout << "\nAutomatically computed block & grid sizes"
+	      << "\nGrid size: (" << gridSize.x
 	      << ", " << gridSize.y
 	      << ", " << gridSize.z
 	      << "), block size: (" << blockSize.x
@@ -72,6 +73,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 	      << ", " << blockSize.z
 	      << ")\nMinimum (total) number of cells with given number of bubbles: "
 	      << minNumCells
+	      << "\n"
 	      << std::endl;
     
     CudaContainer<float> x(n);
@@ -84,6 +86,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     CudaContainer<int> bubblesPerCell(numCells);
     CudaContainer<int> offsets(numCells);
 
+    // Generate random positions & radii
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
@@ -116,8 +119,8 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     bubbleManager->cellBegins.resize(numCells);
 
     // Bubbles are stored in a 1D array, even if the domain is 2D or 3D.
-    // Here we calculate the offsets (begin and end indices) to the memory
-    // location where the bubbles of the current cell start (and end).
+    // The offsets to the memory location where the bubbles
+    // of the current cell start (and end) are calculated.
     int offset = 0;
     int sharedMemSize = 0;
     for (size_t i = 0; i < numCells; ++i)
@@ -129,9 +132,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 	    
 	offsets[i] = offset;
 	bubbleManager->cellBegins[i] = offset;
-	
 	offset += bubblesInCell;
-	
 	bubbleManager->cellEnds[i] = offset;
     }
     offsets.toDevice();
@@ -139,7 +140,9 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     // Reset bubblesPerCell to 0, and reuse it.
     bubblesPerCell.fillHostWith(0);
     bubblesPerCell.toDevice();
-	
+
+    // Reorder the bubbles so the bubbles of one cell are stored
+    // concurrently in memory.
     assignBubblesToCells<<<gridSize,
 	blockSize>>>(b.getDevicePtr(),
 		     reorganizedBubbles.getDevicePtr(),
@@ -184,7 +187,7 @@ int cubble::getGlobalTid()
 }
 
 __forceinline__ __device__
-int cubble::getBbi(dvec pos)
+int cubble::getBubbleBlockIndex(dvec pos)
 {
     int gridX = (int)(pos.x * gridDim.x);
     int gridY = (int)(pos.y * gridDim.y);
@@ -215,7 +218,7 @@ void cubble::assignDataToBubbles(float *x,
 #if (NUM_DIM == 3)
 	pos.z = (double)z[tid];
 #endif
-	int bbi = getBbi(pos);
+	int bbi = getBubbleBlockIndex(pos);
 	
 	// Scale position
 	pos = pos * tfr + lbb;
@@ -242,10 +245,12 @@ void cubble::assignBubblesToCells(Bubble *b,
 
     if (tid < numBubbles)
     {
-	int bbi = getBbi(normPos);
+	int bbi = getBubbleBlockIndex(normPos);
 	int offset = atomicAdd(&currentIndices[bbi], 1) + offsets[bbi];
         reorganizedBubbles[offset] = b[tid];
-	
+
+	// Color is used only for debug plot purposes.
+	// Can be removed later.
 	fvec color((int)(normPos.x * gridDim.x) / (float)gridDim.x,
 		   (int)(normPos.y * gridDim.y) / (float)gridDim.y,
 		   (int)(normPos.z * gridDim.z) / (float)gridDim.z);
@@ -264,8 +269,6 @@ void cubble::findIntersections(int *offsets, Bubble *bubbles, int numBubbles)
 	+ threadIdx.y * blockDim.x
 	+ threadIdx.z * blockDim.x * blockDim.y;
 
-    if (tid == 0)
-	    printf("This far?");
     int numCells = gridDim.x * gridDim.y * gridDim.z;
     int cid = blockIdx.x
 	+ blockIdx.y * gridDim.x
@@ -290,8 +293,6 @@ void cubble::findIntersections(int *offsets, Bubble *bubbles, int numBubbles)
     
     __syncthreads();
 
-    if (tid == 0)
-	printf("Do we even reach this far?");
     for (int round = 0; round <= numRounds; ++round)
     {
 	int i = tid + round * numThreads;
@@ -319,5 +320,5 @@ void cubble::findIntersections(int *offsets, Bubble *bubbles, int numBubbles)
 	}
     }
 
-    printf("yup: %d ", numOverlapsPerBlock[0]);
+    printf("Overlaps per block: %d\n", numOverlapsPerBlock[0]);
 }

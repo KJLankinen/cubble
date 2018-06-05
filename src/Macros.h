@@ -11,7 +11,7 @@
 	if (read)					\
 	{						\
 	    param = j[#param];				\
-	    std::string	s(#param);	\
+	    std::string	s(#param);			\
 	    s += "Expl";				\
 	    std::cout << j[s] << ": " << param;		\
 	    std::cout << std::endl;			\
@@ -41,8 +41,8 @@
 
 // Macro for (arbitrary) class member variable with getter and setter
 #define CUBBLE_PROP(type, var)						\
-    private:								\
+private:								\
     type var;								\
-public:								\
-type get##var() { return var; }					\
-void set##var(type val) { var = val; }
+public:									\
+    type get##var() { return var; }						\
+    void set##var(type val) { var = val; }
