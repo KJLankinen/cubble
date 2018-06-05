@@ -12,6 +12,8 @@ cubble::CudaKernelWrapper::CudaKernelWrapper(std::shared_ptr<BubbleManager> bm,
 {
     bubbleManager = bm;
     env = e;
+
+    printRelevantInfoOfCurrentDevice();
 }
 
 cubble::CudaKernelWrapper::~CudaKernelWrapper()
@@ -151,7 +153,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     CUDA_CALL(cudaDeviceSynchronize());
 
     sharedMemSize *= sizeof(Bubble);
-    compareSizeOfDynamicSharedMemoryToDeviceLimit(sharedMemSize);
+    assertMemBelowLimit(sharedMemSize);
     
     findIntersections<<<gridSize, blockSize, sharedMemSize>>>(
 	offsets.getDevicePtr(),
