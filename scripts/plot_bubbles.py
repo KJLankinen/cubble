@@ -91,7 +91,7 @@ def plot_2d():
     figure()
     subplot(aspect='equal')
 
-    out = circles(x, y, r, alpha=0.3, facecolor=c)
+    out = circles(x, y, r, alpha=0.3, facecolor=c, edgecolor=c)
     
     plt.show()
 

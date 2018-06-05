@@ -21,14 +21,17 @@ namespace cubble
 	void generateBubblesOnGPU();
 	
     private:
-	__device__
-	int getTid();
 	
 	std::shared_ptr<BubbleManager> bubbleManager;
 	std::shared_ptr<Env> env;
     };
 
-    // Kernels have to be defined outside class
+    __device__
+    int getGlobalTid();
+    
+    __device__
+    int getBbi(dvec pos);
+
     __global__
     void assignDataToBubbles(float *x,
 			     float *y,
@@ -50,4 +53,7 @@ namespace cubble
 			      dvec lbb,
 			      dvec tfr,
 			      int numBubbles);
+
+    __global__
+    void findIntersections(int *offsets, Bubble *bubbles, int numBubbles);
 };

@@ -19,6 +19,7 @@ cubble::CudaKernelWrapper::~CudaKernelWrapper()
 
 void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 {
+    CUDA_CALL(cudaPeekAtLastError());
     // Get necessary parameters
     int n = env->getNumBubbles();
     int numBlocksPerDim = env->getNumCellsPerDim();
@@ -92,7 +93,7 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     CudaContainer<float> z(n);
     CURAND_CALL(curandGenerateUniform(generator, z.getDevicePtr(), n));
 #endif
-
+    
     // Assign generated data to bubbles
     assignDataToBubbles<<<gridSize, blockSize>>>(x.getDevicePtr(),
 						 y.getDevicePtr(),
@@ -105,6 +106,9 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
 						 lbb,
 						 tfr,
 						 n);
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
     bubblesPerCell.toHost();
     bubbleManager->cellEnds.resize(numCells);
     bubbleManager->cellBegins.resize(numCells);
@@ -113,11 +117,19 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     // Here we calculate the offsets (begin and end indices) to the memory
     // location where the bubbles of the current cell start (and end).
     int offset = 0;
+    int sharedMemSize = 0;
     for (size_t i = 0; i < numCells; ++i)
     {
+	int bubblesInCell = bubblesPerCell[i];
+        sharedMemSize = sharedMemSize < bubblesInCell
+					? bubblesInCell
+					: sharedMemSize;
+	    
 	offsets[i] = offset;
 	bubbleManager->cellBegins[i] = offset;
-	offset += bubblesPerCell[i];
+	
+	offset += bubblesInCell;
+	
 	bubbleManager->cellEnds[i] = offset;
     }
     offsets.toDevice();
@@ -125,21 +137,37 @@ void cubble::CudaKernelWrapper::generateBubblesOnGPU()
     // Reset bubblesPerCell to 0, and reuse it.
     bubblesPerCell.fillHostWith(0);
     bubblesPerCell.toDevice();
+	
+    assignBubblesToCells<<<gridSize,
+	blockSize>>>(b.getDevicePtr(),
+		     reorganizedBubbles.getDevicePtr(),
+		     offsets.getDevicePtr(),
+		     bubblesPerCell.getDevicePtr(),
+		     lbb,
+		     tfr,
+		     n);
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
 
-    assignBubblesToCells<<<gridSize, blockSize>>>(b.getDevicePtr(),
-						  reorganizedBubbles.getDevicePtr(),
-						  offsets.getDevicePtr(),
-						  bubblesPerCell.getDevicePtr(),
-						  lbb,
-						  tfr,
-						  n);
+    sharedMemSize *= sizeof(Bubble);
+    compareSizeOfDynamicSharedMemoryToDeviceLimit(sharedMemSize);
+    
+    findIntersections<<<gridSize, blockSize, sharedMemSize>>>(
+	offsets.getDevicePtr(),
+	reorganizedBubbles.getDevicePtr(),
+	n);
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
     std::vector<Bubble> temp;
     reorganizedBubbles.copyDeviceDataToVec(temp);
     bubbleManager->setBubbles(temp);
 }
 
 __forceinline__ __device__
-int getTid()
+int cubble::getGlobalTid()
 {
     // Simple helper function for calculating a 1D coordinate
     // from 1, 2 or 3 dimensional coordinates.
@@ -151,6 +179,16 @@ int getTid()
     int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
 
     return tid;
+}
+
+__forceinline__ __device__
+int cubble::getBbi(dvec pos)
+{
+    int gridX = (int)(pos.x * gridDim.x);
+    int gridY = (int)(pos.y * gridDim.y);
+    int gridZ = (int)(pos.z * gridDim.z);
+    
+    return gridZ * gridDim.y * gridDim.x + gridY * gridDim.x + gridX;
 }
 
 __global__
@@ -166,22 +204,20 @@ void cubble::assignDataToBubbles(float *x,
 				 dvec tfr,
 				 int numBubbles)
 {
-    int tid = getTid();
+    int tid = getGlobalTid();
     if (tid < numBubbles)
     {
 	dvec pos;
         pos.x = (double)x[tid];
 	pos.y = (double)y[tid];
-	
-	int bbi = ((int)(pos.y * gridDim.y) * gridDim.x) + (int)(pos.x * gridDim.x);
-	
 #if (NUM_DIM == 3)
 	pos.z = (double)z[tid];
-	bbi += ((int)(pos.z * gridDim.z) * gridDim.y * gridDim.x);
 #endif
+	int bbi = getBbi(pos);
+	
 	// Scale position
 	pos = pos * tfr + lbb;
-
+	
 	b[tid].setPos(pos);
 	b[tid].setRadius((double)r[tid]);
 	
@@ -198,23 +234,88 @@ void cubble::assignBubblesToCells(Bubble *b,
 				  dvec tfr,
 				  int numBubbles)
 {
-    int tid = getTid();
+    int tid = getGlobalTid();
     dvec interval = tfr - lbb;
     dvec normPos = (b[tid].getPos() - lbb) / interval;
 
     if (tid < numBubbles)
     {
-        int gridX = (int)(normPos.x * gridDim.x);
-	int gridY = (int)(normPos.y * gridDim.y);
-	int gridZ = (int)(normPos.z * gridDim.z);
-	
-	int bbi = gridZ * gridDim.y * gridDim.x + gridY * gridDim.x + gridX;
+	int bbi = getBbi(normPos);
 	int offset = atomicAdd(&currentIndices[bbi], 1) + offsets[bbi];
         reorganizedBubbles[offset] = b[tid];
 	
-	fvec color((float)gridX / gridDim.x,
-		   (float)gridY / gridDim.y,
-		   (float)gridZ / gridDim.z);
+	fvec color((int)(normPos.x * gridDim.x) / (float)gridDim.x,
+		   (int)(normPos.y * gridDim.y) / (float)gridDim.y,
+		   (int)(normPos.z * gridDim.z) / (float)gridDim.z);
 	reorganizedBubbles[offset].setColor(color);
     }
+}
+
+__global__
+void cubble::findIntersections(int *offsets, Bubble *bubbles, int numBubbles)
+{
+    extern __shared__ Bubble localBubbles[];
+    __shared__ int numOverlapsPerBlock[1];
+    
+    int numThreads = blockDim.x * blockDim.y * blockDim.z;
+    int tid = threadIdx.x
+	+ threadIdx.y * blockDim.x
+	+ threadIdx.z * blockDim.x * blockDim.y;
+
+    if (tid == 0)
+	    printf("This far?");
+    int numCells = gridDim.x * gridDim.y * gridDim.z;
+    int cid = blockIdx.x
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.z * gridDim.x * gridDim.y;
+    
+    int numBubblesInCell = cid < numCells - 1
+				 ? offsets[cid + 1] - offsets[cid]
+				 : numBubbles - offsets[cid];
+    int numRounds = numBubblesInCell / numThreads;
+    
+    for (int round = 0; round <= numRounds; ++round)
+    {
+	int i = tid + round * numThreads;
+	int bid = offsets[cid] + i;
+	
+	if (i < numBubblesInCell && bid < numBubbles)
+	    localBubbles[i] = bubbles[bid];
+    }
+
+    if (tid == 0)
+	*numOverlapsPerBlock = 0;
+    
+    __syncthreads();
+
+    if (tid == 0)
+	printf("Do we even reach this far?");
+    for (int round = 0; round <= numRounds; ++round)
+    {
+	int i = tid + round * numThreads;
+	if (i < numBubblesInCell)
+	{
+	    Bubble *b = &localBubbles[i];
+	    double radius1 = b->getRadius();
+	    dvec position1 = b->getPos();
+	    int numOverlaps = 0;
+	    for (int j = 0; j < numBubblesInCell; ++j)
+	    {
+		if (j == i)
+		    continue;
+		
+		Bubble *b2 = &localBubbles[j];
+		double radius2 = b2->getRadius();
+		dvec position2 = b2->getPos();
+
+		if ((radius1 + radius2) * (radius1 + radius2)
+		    <= (position1 - position2).getSquaredLength())
+		    ++numOverlaps;
+	    }
+
+	    atomicAdd(&numOverlapsPerBlock[0], numOverlaps);
+	}
+    }
+
+    printf("yup: %d ", numOverlapsPerBlock[0]);
 }

@@ -1,11 +1,10 @@
 //-*- C++ -*-
 #pragma once
 
-#include <cuda.h>
-#include <curand.h>
-
 #define CUBBLE_XSTRINGIFY(s) CUBBLE_STRINGIFY(s)
 #define CUBBLE_STRINGIFY(s) #s
+
+// Macro for reading and writing parameters from/to .json file
 #define CUBBLE_IO_PARAMETER(read, j, param)		\
     do							\
     {							\
@@ -24,31 +23,23 @@
     }							\
     while(0)
 
-#define CUDA_CALL(x)							\
-    do									\
-    {									\
-	cudaError_t result = x;						\
-	if (result != cudaSuccess)					\
-	{								\
-	    std::cerr << "Error at " << __FILE__ << ":" << __LINE__;	\
-	    std::cerr << ": " << cudaGetErrorName(result) << "\n"	\
-		      << cudaGetErrorString(result) << std::endl;	\
-	}								\
-    }									\
-    while(0)
+// Cuda error checking
+// See Util.h for actual implementation
+#ifndef NDEBUG
+  #define CUDA_CALL(result) {cubble::cudaAssert((result), __FILE__, __LINE__);}
+#else
+  #define CUDA_CALL(result) {(result);}
+#endif
 
-#define CURAND_CALL(x)							\
-    do									\
-    {									\
-        curandStatus_t result = x;					\
-	if (result != CURAND_STATUS_SUCCESS)				\
-	{								\
-	    std::cerr << "Error at " << __FILE__ << ":" << __LINE__;	\
-	    std::cerr << result << std::endl;				\
-	}								\
-    }									\
-    while(0)
+// Curand error checking
+// See Util.h for actual implementation
+#ifndef NDEBUG
+  #define CURAND_CALL(result) {cubble::curandAssert((result), __FILE__, __LINE__);}
+#else
+  #define CURAND_CALL(result) {(result);}
+#endif
 
+// Macro for (arbitrary) class member variable with getter and setter
 #define CUBBLE_PROP(type, var)						\
     private:								\
     type var;								\
