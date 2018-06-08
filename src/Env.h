@@ -21,7 +21,7 @@ namespace cubble
 	// See Macros.h for details of this macro
 	CUBBLE_PROP(int, NumIntegrationSteps)
 	CUBBLE_PROP(int, NumBubbles)
-	CUBBLE_PROP(int, NumCellsPerDim)
+	CUBBLE_PROP(int, NumBubblesPerCell)
 	CUBBLE_PROP(int, RngSeed)
 	
 	CUBBLE_PROP(double, AvgRad)
@@ -105,7 +105,7 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, CompressionAmount);
 	    CUBBLE_IO_PARAMETER(read, params, NumIntegrationSteps);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
-	    CUBBLE_IO_PARAMETER(read, params, NumCellsPerDim);
+	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);

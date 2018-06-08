@@ -37,7 +37,7 @@ namespace cubble
 	    std::fill(hostData.begin(), hostData.begin() + numElements, val);
 	}
 	
-	T* getDevicePtr()
+	T* getDevPtr()
 	{
 	    return rawPtr.get();
 	}

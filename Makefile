@@ -101,7 +101,8 @@ debug : set_debug_flags $(EXEC)
 
 .PHONY : set_debug_flags
 set_debug_flags :
-	$(eval OPTIM_FLAGS = -O0 -g3 -p)
+	$(eval OPTIM_FLAGS = -O0)
+	$(eval CPU_FLAGS += -g3 -p)
 
 
 # -----------------------------------------------------

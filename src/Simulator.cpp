@@ -2,6 +2,7 @@
 
 #include "Simulator.h"
 #include "Fileio.h"
+#include "Bubble.h"
 
 using namespace cubble;
 
@@ -12,7 +13,7 @@ Simulator::Simulator(const std::string &inF,
     env = std::make_shared<Env>(inF, outF, saveF);
     env->readParameters();
     
-    bubbleManager = std::make_shared<BubbleManager>();
+    bubbleManager = std::make_shared<BubbleManager>(env);
     cudaKernelWrapper = std::make_shared<CudaKernelWrapper>(bubbleManager, env);
 }
 
@@ -22,8 +23,10 @@ Simulator::~Simulator()
 }
 
 void Simulator::run()
-{   
-    cudaKernelWrapper->generateBubblesOnGPU();
+{
+    std::vector<Bubble> temp;
+    cudaKernelWrapper->generateBubbles(temp);
+    cudaKernelWrapper->assignBubblesToCells(temp);
 
     std::string outputFile;
     env->getOutputFile(outputFile);

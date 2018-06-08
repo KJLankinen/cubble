@@ -56,6 +56,13 @@ namespace cubble
 	fvec getColor() const { return color; }
 	__host__ __device__
 	void setColor(const fvec &c) { color = c; }
+	__host__ __device__
+	void setColor(fvec &&c) { color = c; }
+
+	__host__ __device__
+	int getCellIndex() { return cellIndex; }
+	__host__ __device__
+	void setCellIndex(int i) { cellIndex = i; }
 	
 	friend std::ostream& operator<<(std::ostream &os, const Bubble &b)
 	{
@@ -65,6 +72,8 @@ namespace cubble
 	}
 
     private:
+	int cellIndex = 0;
+	
         double radius = 0;
 
 	dvec pos;

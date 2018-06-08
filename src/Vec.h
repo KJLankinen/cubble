@@ -192,6 +192,13 @@ namespace cubble
 	    return copy;
 	}
 
+	__host__ __device__
+	friend vec<T> operator/(T s, vec<T> copy)
+	{
+	    copy = vec<T>(s / copy.x, s / copy.y, s / copy.z);
+	    return copy;
+	}
+
 	
 	// % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
 	__host__ __device__

@@ -146,7 +146,7 @@ namespace cubble
 		  << "\n\t------"
 		  << "\n\tTotal global memory (bytes): " << prop.totalGlobalMem
 		  << "\n\tShared memory per block (bytes): " << prop.sharedMemPerBlock
-		  << "\n\tTotal constant memory (bytes):" << prop.totalConstMem
+		  << "\n\tTotal constant memory (bytes): " << prop.totalConstMem
 		  << "\n\n\tWarp, threads, blocks, grid"
 		  << "\n\t---------------------------"
 		  << "\n\tWarp size: " << prop.warpSize

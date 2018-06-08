@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    n = 16
+    n = 96
     values = np.zeros((n, n))
     
     # First domain
@@ -116,7 +116,6 @@ def main():
     print("Number of elements in domain 4: " + str(d4) + ", number of unique indices: " + str(len(s4)))
     print("Total: " + str(d1 + d2 + d3 + d4))
     print("Total num: " + str(n * (n - 1) / 2))
-    
     
     plt.imshow(values, interpolation="none", extent=(0, n, n, 0))
     plt.grid(1)

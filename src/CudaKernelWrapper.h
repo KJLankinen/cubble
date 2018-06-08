@@ -18,19 +18,17 @@ namespace cubble
         CudaKernelWrapper(std::shared_ptr<BubbleManager> bm, std::shared_ptr<Env> e);
 	~CudaKernelWrapper();
 
-	void generateBubblesOnGPU();
+	void generateBubbles(std::vector<Bubble> &outBubbles);
+	void assignBubblesToCells(const std::vector<Bubble> &b);
 	
     private:
 	
 	std::shared_ptr<BubbleManager> bubbleManager;
 	std::shared_ptr<Env> env;
     };
-
-    __device__
-    int getGlobalTid();
     
     __device__
-    int getBubbleBlockIndex(dvec pos);
+    int getGlobalTid();
 
     __global__
     void assignDataToBubbles(float *x,
@@ -40,20 +38,21 @@ namespace cubble
 #endif
 			     float *r,
 			     Bubble *b,
-			     int *bubblesPerCell,
 			     dvec lbb,
 			     dvec tfr,
 			     int numBubbles);
-    
-    __global__
-    void assignBubblesToCells(Bubble *b,
-			      Bubble *reorganizedBubbles,
-			      int *memoryOffsets,
-			      int *currendIndices,
-			      dvec lbb,
-			      dvec tfr,
-			      int numBubbles);
 
     __global__
-    void findIntersections(int *offsets, Bubble *bubbles, int numBubbles);
+    void calculateOffsets(Bubble *bubbles,
+			  int *offsets,
+			  dvec lbb,
+			  dvec tfr,
+			  int numBubbles);
+
+    __global__
+    void reorganizeBubbles(Bubble *bubbles,
+			   Bubble *reorganizedBubbles,
+			   int *offsets,
+			   int *currentIndex,
+			   int numBubbles);
 };
