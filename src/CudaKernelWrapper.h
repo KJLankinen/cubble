@@ -20,8 +20,11 @@ namespace cubble
 
 	void generateBubbles(std::vector<Bubble> &outBubbles);
 	void assignBubblesToCells(const std::vector<Bubble> &b);
+	void removeIntersectingBubbles(const std::vector<Bubble> &b);
 	
     private:
+
+	dim3 getGridSize(int numBubbles);
 	
 	std::shared_ptr<BubbleManager> bubbleManager;
 	std::shared_ptr<Env> env;
@@ -44,15 +47,14 @@ namespace cubble
 
     __global__
     void calculateOffsets(Bubble *bubbles,
-			  int *offsets,
+			  Cell *cells,
 			  dvec lbb,
 			  dvec tfr,
 			  int numBubbles);
 
     __global__
-    void reorganizeBubbles(Bubble *bubbles,
-			   Bubble *reorganizedBubbles,
-			   int *offsets,
-			   int *currentIndex,
-			   int numBubbles);
+    void assignBubblesToCells(Bubble *bubbles,
+			      int *indices,
+			      Cell *cells,
+			      int numBubbles);
 };

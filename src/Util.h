@@ -129,6 +129,40 @@ namespace cubble
 #endif
     }
 
+    inline void assertGridSizeBelowLimit(dim3 gridSize, bool abort = true)
+    {
+#ifndef NDEBUG
+	dim3 temp;
+        temp.x = getCurrentDeviceAttrVal(cudaDevAttrMaxGridDimX);
+	temp.y = getCurrentDeviceAttrVal(cudaDevAttrMaxGridDimY);
+	temp.z = getCurrentDeviceAttrVal(cudaDevAttrMaxGridDimZ);
+	
+	if (temp.x < gridSize.x ||
+	    temp.y < gridSize.y ||
+	    temp.z < gridSize.z)
+	{
+	    std::stringstream ss;
+	    ss << "Grid size exceeds the limitation of the current device"
+	       << " in at least one dimension."
+	       << "\nGrid size: (" << gridSize.x
+	       << ", " << gridSize.y
+	       << ", " << gridSize.z << ")"
+	       << "\nDevice limit: (" << temp.x
+	       << ", " << temp.y
+	       << ", " << temp.z
+	       << ")";
+
+	    if (abort)
+	    {
+		ss << "\nThrowing...";
+		throw std::runtime_error(ss.str());
+	    }
+	    else
+		std::cerr << ss.str() << std::endl;
+	}
+#endif
+    }
+    
     inline void printRelevantInfoOfCurrentDevice()
     {
 	cudaDeviceProp prop;

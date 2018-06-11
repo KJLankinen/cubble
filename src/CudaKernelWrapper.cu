@@ -3,6 +3,7 @@
 #include "CudaKernelWrapper.h"
 #include "Macros.h"
 #include "CudaContainer.h"
+#include "Cell.h"
 
 #include <iostream>
 #include <curand.h>
@@ -21,6 +22,8 @@ cubble::CudaKernelWrapper::~CudaKernelWrapper()
 
 void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 {
+    std::cout << "Generating bubbles..." << std::endl;
+    
     // Get necessary parameters
     int n = env->getNumBubbles();
     int rngSeed = env->getRngSeed();
@@ -70,65 +73,103 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 
 void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &b)
 {
+    std::cout << "Assigning bubbles to cells..." << std::endl;
+    
     int numBubblesPerCell = env->getNumBubblesPerCell();
     dvec tfr = env->getTfr();
     dvec lbb = env->getLbb();
-
-#if NUM_DIM == 3
-    int numCellsPerDim = (int)std::ceil(std::cbrt(b.size() / numBubblesPerCell));
-    dim3 gridSize(numCellsPerDim, numCellsPerDim, numCellsPerDim);
-#else
-    int numCellsPerDim = (int)std::ceil(std::sqrt(b.size() / numBubblesPerCell));
-    dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
-#endif
-
+    dim3 gridSize = getGridSize(b.size());
     int numCells = gridSize.x * gridSize.y * gridSize.z;
 
     std::cout << "Grid size: (" << gridSize.x
 	      << ", " << gridSize.y
 	      << ", " << gridSize.z
 	      << "), numCells: " << numCells
-	      << ", size of bubbles: " << sizeof(Bubble) * b.size()
 	      << std::endl;
     
     CudaContainer<Bubble> bubbles(b);
-    CudaContainer<int> offsets(numCells);
+    CudaContainer<Cell> cells(numCells);
+    CudaContainer<int> indices(bubbles.size());
 
-    offsets.fillHostWith(0);
-    offsets.toDevice();
     bubbles.toDevice();
-
+    cells.toDevice();
+    
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
-						      offsets.getDevPtr(),
+						      cells.getDevPtr(),
 						      lbb,
 						      tfr,
 						      bubbles.size());
 
-    offsets.toHost();
+    cells.toHost();
 
     int cumulativeSum = 0;
-    for (size_t i = 0; i < offsets.size(); ++i)
+    for (size_t i = 0; i < cells.size(); ++i)
     {
-	int numBubbles = offsets[i];
-	offsets[i] = cumulativeSum;
+	int numBubbles = cells[i].offset;
+        cells[i].offset = cumulativeSum;
 	cumulativeSum += numBubbles;
     }
-    offsets.toDevice();
-
-    CudaContainer<int> currentIndex(offsets.size());
-    CudaContainer<Bubble> reorganizedBubbles(bubbles.size());
+    cells.toDevice();
     
-    currentIndex.fillHostWith(0);
-    currentIndex.toDevice();
+    cubble::assignBubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
+								 indices.getDevPtr(),
+								 cells.getDevPtr(),
+								 bubbles.size());
+    
+    bubbleManager->setBubblesFromDevice(bubbles);
+    bubbleManager->setIndicesFromDevice(indices);
+    bubbleManager->setCellsFromDevice(cells);
+}
 
-    reorganizeBubbles<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
-						      reorganizedBubbles.getDevPtr(),
-						      offsets.getDevPtr(),
-						      currentIndex.getDevPtr(),
-						      bubbles.size());
+void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubble> &b)
+{
+    std::cout << "Removing intersecing bubbles..." << std::endl;
+    
+    CudaContainer<Bubble> bubbles(b);
+    CudaContainer<int> indices(bubbles.size());
+    
+    CudaContainer<Cell> cells(bubbleManager->getCellsSize());
+    bubbleManager->getCells(cells);
+    
+    std::vector<int> indexList;
+    std::vector<int> indexListOffsets;
+    std::vector<int> indexListSizes;
+    indexListOffsets.resize(cells.size());
+    indexListSizes.resize(cells.size());
 
-    bubbleManager->setBubblesFromDevice(reorganizedBubbles);
-    bubbleManager->setOffsetsFromDevice(offsets);
+    int offset = 0;
+    for (size_t i = 0; i < cells.size(); ++i)
+    {
+	std::vector<int> temp;
+	bubbleManager->getIndicesFromNeighborCells(temp, i);
+	indexList.insert(indexList.end(), temp.begin(), temp.end());
+	indexListOffsets[i] = offset;
+	indexListSizes[i] = temp.size();
+	offset += temp.size();
+    }
+
+    int numDomains = 4 + bubbleManager->getNumNeighbors() * 8;
+    dim3 gridSize = getGridSize(bubbles.size());
+    int gridZ = gridSize.z;
+    gridSize.z *= numDomains;
+
+    assertGridSizeBelowLimit(gridSize);
+
+    
+}
+
+dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
+{
+    int numBubblesPerCell = env->getNumBubblesPerCell();
+#if NUM_DIM == 3
+    int numCellsPerDim = (int)std::ceil(std::cbrt(numBubbles / numBubblesPerCell));
+    dim3 gridSize(numCellsPerDim, numCellsPerDim, numCellsPerDim);
+#else
+    int numCellsPerDim = (int)std::ceil(std::sqrt(numBubbles / numBubblesPerCell));
+    dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
+#endif
+
+    return gridSize;
 }
 
 __forceinline__ __device__
@@ -177,7 +218,7 @@ void cubble::assignDataToBubbles(float *x,
 
 __global__
 void cubble::calculateOffsets(Bubble *bubbles,
-			      int *offsets,
+			      Cell *cells,
 			      dvec lbb,
 			      dvec tfr,
 			      int numBubbles)
@@ -199,24 +240,23 @@ void cubble::calculateOffsets(Bubble *bubbles,
 	bubbles[tid].setCellIndex(index);
         bubbles[tid].setColor(color);
 	
-	atomicAdd(&offsets[index], 1);
+	atomicAdd(&cells[index].offset, 1);
     }
 }
 
 
 __global__
-void cubble::reorganizeBubbles(Bubble *bubbles,
-			       Bubble *reorganizedBubbles,
-			       int *offsets,
-			       int *currentIndex,
-			       int numBubbles)
+void cubble::assignBubblesToCells(Bubble *bubbles,
+				  int *indices,
+				  Cell *cells,
+				  int numBubbles)
 {
     int tid = getGlobalTid();
 
     if (tid < numBubbles)
     {
 	int index = bubbles[tid].getCellIndex();
-	int offset = offsets[index] + atomicAdd(&currentIndex[index], 1);
-	reorganizedBubbles[offset] = bubbles[tid];
+	int offset = cells[index].offset + atomicAdd(&cells[index].size, 1);
+        indices[offset] = bubbles[tid].getCellIndex();
     }
 }

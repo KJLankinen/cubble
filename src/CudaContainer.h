@@ -65,6 +65,11 @@ namespace cubble
 				 cudaMemcpyHostToDevice));
 	}
 
+	void copyVecToHost(const std::vector<T> &v)
+	{
+	    hostData = v;
+	}
+
         void copyHostDataToVec(std::vector<T> &v)
 	{
 	    v.clear();

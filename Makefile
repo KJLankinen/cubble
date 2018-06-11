@@ -1,4 +1,13 @@
 # -----------------------------------------------------
+# How many dimensions to simulate.
+# -----------------------------------------------------
+
+# The compiled code is different for different dimensions,
+# so this can't be given as a normal program parameter.
+NUM_DIM := 3
+
+
+# -----------------------------------------------------
 # Directories
 # -----------------------------------------------------
 
@@ -35,16 +44,6 @@ GPU_CODE = $(BIN_PATH)GPUCode.o
 
 # Name of the final executable.
 EXEC = $(BIN_PATH)cubble
-
-
-# -----------------------------------------------------
-# How many dimensions to simulate.
-# -----------------------------------------------------
-
-# The compiled code is different for different dimensions,
-# so this can't be given as a normal program parameter.
-NUM_DIM := 2
-
 
 # -----------------------------------------------------
 # Compilers to use

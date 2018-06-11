@@ -14,7 +14,7 @@
     "LbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "Lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "TfrExpl" : "The coordinates of the top front right corner of the simulation box.",
-    "Tfr" : {"x" : 10.0, "y" : 10.0, "z" : 3},
+    "Tfr" : {"x" : 10.0, "y" : 10.0, "z" : 10.0},
     "ErrorToleranceExpl" : "The error tolerance level for the integration.",
     "ErrorTolerance" : 1e-4,
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
