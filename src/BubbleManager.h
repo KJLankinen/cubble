@@ -36,21 +36,8 @@ namespace cubble
 	int getCellsSize() const { return cells.size(); }
 	
 	Bubble getBubble(size_t i) const;
-
-	void getIndicesFromNeighborCells(std::vector<int> &indVec,
-					 int index,
-					 bool firstCall = true) const;
-
-	static int getNumNeighbors() { return numNeighbors; }
 	
     private:
-	int getNthNeighborOfIndex(int index, int n) const;
-        
-#if NUM_DIM == 3
-	const static int numNeighbors = 13;
-#else
-	const static int numNeighbors = 4;
-#endif
 	
 	std::shared_ptr<Env> env;
 	

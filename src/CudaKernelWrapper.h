@@ -29,6 +29,9 @@ namespace cubble
 	std::shared_ptr<BubbleManager> bubbleManager;
 	std::shared_ptr<Env> env;
     };
+
+    __device__
+    int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
     
     __device__
     int getGlobalTid();
@@ -57,4 +60,12 @@ namespace cubble
 			      int *indices,
 			      Cell *cells,
 			      int numBubbles);
+
+    __global__
+    void findIntersections(Bubble *bubbles,
+			   int *indices,
+			   Cell *cells,
+			   int *intesectingIndices,
+			   int numBubbles,
+			   int numDomains);
 };

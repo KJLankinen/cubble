@@ -370,9 +370,9 @@ namespace cubble
 	friend bool operator==(const vec<T> &t, const vec<T> &o)
 	{
 	    bool equal = true;
-	    equal &= t.x - (T)epsilon <= o.x && t.x + (T)epsilon >= o.x;
-	    equal &= t.y - (T)epsilon <= o.y && t.y + (T)epsilon >= o.y;
-	    equal &= t.z - (T)epsilon <= o.z && t.z + (T)epsilon >= o.z;
+	    equal &= t.x - (T)CUBBLE_EPSILON <= o.x && t.x + (T)CUBBLE_EPSILON >= o.x;
+	    equal &= t.y - (T)CUBBLE_EPSILON <= o.y && t.y + (T)CUBBLE_EPSILON >= o.y;
+	    equal &= t.z - (T)CUBBLE_EPSILON <= o.z && t.z + (T)CUBBLE_EPSILON >= o.z;
 	    
 	    return equal;
 	}

@@ -127,35 +127,42 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubb
     
     CudaContainer<Bubble> bubbles(b);
     CudaContainer<int> indices(bubbles.size());
-    
+    CudaContainer<int> intersections(bubbles.size() + 1); // <-- First value gives count
     CudaContainer<Cell> cells(bubbleManager->getCellsSize());
     bubbleManager->getCells(cells);
-    
-    std::vector<int> indexList;
-    std::vector<int> indexListOffsets;
-    std::vector<int> indexListSizes;
-    indexListOffsets.resize(cells.size());
-    indexListSizes.resize(cells.size());
+    bubbleManager->getIndices(indices);
+    intersections.fillHostWith(0);
 
-    int offset = 0;
-    for (size_t i = 0; i < cells.size(); ++i)
-    {
-	std::vector<int> temp;
-	bubbleManager->getIndicesFromNeighborCells(temp, i);
-	indexList.insert(indexList.end(), temp.begin(), temp.end());
-	indexListOffsets[i] = offset;
-	indexListSizes[i] = temp.size();
-	offset += temp.size();
-    }
-
-    int numDomains = 4 + bubbleManager->getNumNeighbors() * 8;
+    int numThreads = 1024;
+    int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
     dim3 gridSize = getGridSize(bubbles.size());
-    int gridZ = gridSize.z;
+    int originalGridZ = gridSize.z;
     gridSize.z *= numDomains;
 
     assertGridSizeBelowLimit(gridSize);
 
+    bubbles.toDevice();
+    indices.toDevice();
+    intersections.toDevice();
+    cells.toDevice();
+
+    int sharedMemSize = 0;
+    for (size_t i = 0; i < cells.size(); ++i)
+    {
+	int temp = cells[i].size;
+	sharedMemSize = sharedMemSize < temp ? temp : sharedMemSize;
+    }
+    sharedMemSize = (int)(sharedMemSize * 0.5f) + 1;
+    sharedMemSize *= sizeof(Bubble);
+
+    assertMemBelowLimit(sharedMemSize);
     
+    findIntersections<<<numThreads, gridSize, sharedMemSize>>>(bubbles.getDevPtr(),
+							       indices.getDevPtr(),
+							       cells.getDevPtr(),
+							       intersections.getDevPtr(),
+							       bubbles.size(),
+							       numDomains);
 }
 
 dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
@@ -170,6 +177,71 @@ dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
 #endif
 
     return gridSize;
+}
+
+__forceinline__ __device__
+int cubble::geNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
+{
+    // Switch statements and ifs that diverge inside one warp/block are
+    // detrimental for performance. However, this should never diverge,
+    // as all the threads of one block should always be in the same cell
+    // going for the same neighbor.
+    ivec idxVec = cellIdx;
+    switch(neighborNum)
+    {
+    case 0:
+	// self
+	break;
+    case 1:
+	idxVec += ivec(-1, 1, 0);
+	break;
+    case 2:
+	idxVec += ivec(-1, 0, 0);
+	break;
+    case 3:
+	idxVec += ivec(-1, -1, 0);
+	break;
+    case 4:
+	idxVec += ivec(0, -1, 0);
+	break;
+#if NUM_DIM == 3
+    case 5:
+	idxVec += ivec(-1, 1, -1);
+	break;
+    case 6:
+	idxVec += ivec(-1, 0, -1);
+	break;
+    case 7:
+	idxVec += ivec(-1, -1, -1);
+	break;
+    case 8:
+	idxVec += ivec(0, 1, -1);
+	break;
+    case 9:
+	idxVec += ivec(0, 0, -1);
+	break;
+    case 10:
+	idxVec += ivec(0, -1, -1);
+	break;
+    case 11:
+	idxVec += ivec(1, 1, -1);
+	break;
+    case 12:
+	idxVec += ivec(1, 0, -1);
+	break;
+    case 13:
+	idxVec += ivec(1, -1, -1);
+	break;
+#endif
+    default:
+	printf("Should never end up here!");
+	break;
+    }
+
+    idxVec += dim;
+    idxVec %= dim;
+
+    return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
 }
 
 __forceinline__ __device__
@@ -258,5 +330,83 @@ void cubble::assignBubblesToCells(Bubble *bubbles,
 	int index = bubbles[tid].getCellIndex();
 	int offset = cells[index].offset + atomicAdd(&cells[index].size, 1);
         indices[offset] = bubbles[tid].getCellIndex();
+    }
+}
+
+__global__
+void cubble::findIntersections(Bubble *bubbles,
+			       int *indices,
+			       Cell *cells,
+			       int *intersectingIndices,
+			       int numBubbles,
+			       int numDomains)
+{
+    extern __shared__ Bubble localBubbles[];
+    ivec cellIdx(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
+    ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+    int domain = blockIdx.z % numDomains;
+    int halfNumDomains = numDomains / 2;
+    int di = domain / halfNumDomains;
+    int dj = domain % halfNumDomains;
+    int djMod2 = dj % 2;
+
+    __shared__ Cell neighbor;
+    __shared__ Cell self;
+    if (threadIdx.x == 0)
+    {
+	int temp = cellIdx.z * boxDim.x * boxDim.y + cellIdx.y * boxDim.x + cellIdx.x;
+	self = cells[temp];
+	neighbor = cells[getNeighborCell(cellIdx, boxDim, dj / 2)];
+    }
+    __syncthreads();
+
+    int xBegin = neighbor.offset;
+    xBegin += djMod2 * neighbor.size * 0.5f;
+    int xEnd = xBegin + neighbor.size * (0.5f + 0.5f * djMod2);
+    int xInterval = xEnd - xBegin;
+
+    int yBegin = self.offset;
+    yBegin += di * self.size * 0.5f;
+    int yEnd = YBegin + self.size * (0.5f + 0.5f * di);
+    int yInterval = yEnd - yBegin;
+
+    if (threadIdx.x < xInterval && xBegin + threadIdx.x < numBubbles)
+	localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
+    else if (threadIdx.x < xInterval + yInterval && yBegin + threadIdx.x < numBubbles)
+	localBubbles[threadIdx.x] = bubbles[indices[yBegin + threadIdx.x]];
+
+    __syncthreads();
+
+    int numPairs = xInterval * yInterval;
+    int numRounds = numPairs / blockDim.x + 1;
+
+    for (int round = 0; round < numRounds; ++round)
+    {
+        int tempIdx = round * blockDim.x + threadIdx.x;
+	if (tempIdx < numPairs)
+	{
+	    int x = tempIdx % xInterval;
+	    int y = tempIdx / xInterval;
+
+	    if (x > xInterval)
+		printf("", );
+	    
+	    if (y > yInterval)
+		printf("", );
+	    
+	    Bubble *b1 = &localBubbles[x];
+	    Bubble *b2 = &localBubbles[xInterval + y];
+
+	    // Skip self-intersections
+	    if (b1 == b2)
+	    {
+		THIS DOES NOT DETECT SAME BUBBLE CORRECTLY, SINCE THERE ARE DUPLICATES.
+		continue;
+	    }
+	    
+	    double radii = b1->getRadius() + b2->getRadius();
+	    if (radii * radii < (b1->getPos() - b2->getPos).getSquaredLength())
+		intersectingIndices[indices[xBegin + x]] = 1;
+	}
     }
 }
