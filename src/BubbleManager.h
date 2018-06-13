@@ -29,6 +29,8 @@ namespace cubble
 	void setIndicesFromDevice(CudaContainer<int> &i);
 	void getIndices(std::vector<int> &i) const;
 	void getIndices(CudaContainer<int> &i) const;
+	int getIndicesSize() const { return indices.size(); }
+	void printIndices() const;
 	
 	void setCellsFromDevice(CudaContainer<Cell> &c);
 	void getCells(std::vector<Cell> &c) const;

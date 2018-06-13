@@ -67,7 +67,8 @@ namespace cubble
 
 	void copyVecToHost(const std::vector<T> &v)
 	{
-	    hostData = v;
+	    assert(v.size() >= numElements);
+	    hostData = std::vector<T>(v.begin(), v.begin() + numElements);
 	}
 
         void copyHostDataToVec(std::vector<T> &v)

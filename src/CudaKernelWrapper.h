@@ -20,7 +20,7 @@ namespace cubble
 
 	void generateBubbles(std::vector<Bubble> &outBubbles);
 	void assignBubblesToCells(const std::vector<Bubble> &b);
-	void removeIntersectingBubbles(const std::vector<Bubble> &b);
+	void removeIntersectingBubbles();
 	
     private:
 
@@ -67,5 +67,7 @@ namespace cubble
 			   Cell *cells,
 			   int *intesectingIndices,
 			   int numBubbles,
-			   int numDomains);
+			   int numDomains,
+			   int numCells,
+			   int numLocalBubbles);
 };

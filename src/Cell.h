@@ -9,7 +9,9 @@ namespace cubble
     class Cell
     {
     public:
+	__host__ __device__
 	Cell() {}
+	__host__ __device__
 	~Cell() {}
 	
 	int offset = 0;

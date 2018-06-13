@@ -27,7 +27,7 @@ void Simulator::run()
     std::vector<Bubble> temp;
     cudaKernelWrapper->generateBubbles(temp);
     cudaKernelWrapper->assignBubblesToCells(temp);
-    cudaKernelWrapper->removeIntersectingBubbles(temp);
+    cudaKernelWrapper->removeIntersectingBubbles();
 
     std::string outputFile;
     env->getOutputFile(outputFile);

@@ -1,5 +1,7 @@
 #include "BubbleManager.h"
 
+#include <iostream>
+
 using namespace cubble;
 
 BubbleManager::BubbleManager(std::shared_ptr<Env> e)
@@ -43,6 +45,12 @@ void BubbleManager::getIndices(std::vector<int> &i) const
 void BubbleManager::getIndices(CudaContainer<int> &i) const
 {
     i.copyVecToHost(indices);
+}
+
+void BubbleManager::printIndices() const
+{
+    for (const auto &it : indices)
+	std::cout << it << std::endl;
 }
 
 void BubbleManager::setCellsFromDevice(CudaContainer<Cell> &c)

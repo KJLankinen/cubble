@@ -4,6 +4,7 @@
 #include "Macros.h"
 #include "CudaContainer.h"
 #include "Cell.h"
+#include "Vec.h"
 
 #include <iostream>
 #include <curand.h>
@@ -22,6 +23,9 @@ cubble::CudaKernelWrapper::~CudaKernelWrapper()
 
 void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 {
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
     std::cout << "Generating bubbles..." << std::endl;
     
     // Get necessary parameters
@@ -65,6 +69,7 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 						 lbb,
 						 tfr,
 						 n);
+    
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -73,6 +78,9 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 
 void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &b)
 {
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
     std::cout << "Assigning bubbles to cells..." << std::endl;
     
     int numBubblesPerCell = env->getNumBubblesPerCell();
@@ -100,6 +108,9 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
 						      tfr,
 						      bubbles.size());
 
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
     cells.toHost();
 
     int cumulativeSum = 0;
@@ -116,19 +127,26 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
 								 cells.getDevPtr(),
 								 bubbles.size());
     
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
     bubbleManager->setBubblesFromDevice(bubbles);
     bubbleManager->setIndicesFromDevice(indices);
     bubbleManager->setCellsFromDevice(cells);
 }
 
-void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubble> &b)
+void cubble::CudaKernelWrapper::removeIntersectingBubbles()
 {
-    std::cout << "Removing intersecing bubbles..." << std::endl;
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
     
-    CudaContainer<Bubble> bubbles(b);
+    std::cout << "Removing intersecting bubbles..." << std::endl;
+    
+    CudaContainer<Bubble> bubbles(bubbleManager->getBubblesSize());
     CudaContainer<int> indices(bubbles.size());
-    CudaContainer<int> intersections(bubbles.size() + 1); // <-- First value gives count
+    CudaContainer<int> intersections(bubbles.size());
     CudaContainer<Cell> cells(bubbleManager->getCellsSize());
+    bubbleManager->getBubbles(bubbles);
     bubbleManager->getCells(cells);
     bubbleManager->getIndices(indices);
     intersections.fillHostWith(0);
@@ -136,7 +154,6 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubb
     int numThreads = 1024;
     int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
     dim3 gridSize = getGridSize(bubbles.size());
-    int originalGridZ = gridSize.z;
     gridSize.z *= numDomains;
 
     assertGridSizeBelowLimit(gridSize);
@@ -145,6 +162,9 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubb
     indices.toDevice();
     intersections.toDevice();
     cells.toDevice();
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
 
     int sharedMemSize = 0;
     for (size_t i = 0; i < cells.size(); ++i)
@@ -152,17 +172,34 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles(const std::vector<Bubb
 	int temp = cells[i].size;
 	sharedMemSize = sharedMemSize < temp ? temp : sharedMemSize;
     }
-    sharedMemSize = (int)(sharedMemSize * 0.5f) + 1;
-    sharedMemSize *= sizeof(Bubble);
+    sharedMemSize = 2 * (int)std::ceil(sharedMemSize * 0.5f);
 
     assertMemBelowLimit(sharedMemSize);
     
-    findIntersections<<<numThreads, gridSize, sharedMemSize>>>(bubbles.getDevPtr(),
-							       indices.getDevPtr(),
-							       cells.getDevPtr(),
-							       intersections.getDevPtr(),
-							       bubbles.size(),
-							       numDomains);
+    findIntersections<<<gridSize,
+	numThreads,
+	sharedMemSize * sizeof(Bubble)>>>(bubbles.getDevPtr(),
+					  indices.getDevPtr(),
+					  cells.getDevPtr(),
+					  intersections.getDevPtr(),
+					  bubbles.size(),
+					  numDomains,
+					  cells.size(),
+					  sharedMemSize);
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    std::vector<Bubble> culledBubbles;
+    bubbles.copyHostDataToVec(culledBubbles);
+    intersections.toHost();
+    for (int i = intersections.size() - 1; i >= 0; --i)
+    {
+	if (intersections[i] > 0)
+	    culledBubbles.erase(culledBubbles.begin() + i);
+    }
+
+    bubbleManager->setBubbles(culledBubbles);
 }
 
 dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
@@ -180,7 +217,7 @@ dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
 }
 
 __forceinline__ __device__
-int cubble::geNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
+int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
     // Switch statements and ifs that diverge inside one warp/block are
     // detrimental for performance. However, this should never diverge,
@@ -329,7 +366,7 @@ void cubble::assignBubblesToCells(Bubble *bubbles,
     {
 	int index = bubbles[tid].getCellIndex();
 	int offset = cells[index].offset + atomicAdd(&cells[index].size, 1);
-        indices[offset] = bubbles[tid].getCellIndex();
+        indices[offset] = tid;
     }
 }
 
@@ -339,36 +376,45 @@ void cubble::findIntersections(Bubble *bubbles,
 			       Cell *cells,
 			       int *intersectingIndices,
 			       int numBubbles,
-			       int numDomains)
+			       int numDomains,
+			       int numCells,
+			       int numLocalBubbles)
 {
     extern __shared__ Bubble localBubbles[];
-    ivec cellIdx(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
+    
+    ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+    
     int domain = blockIdx.z % numDomains;
     int halfNumDomains = numDomains / 2;
     int di = domain / halfNumDomains;
     int dj = domain % halfNumDomains;
     int djMod2 = dj % 2;
+    
+    int tempCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
+	+ cellIdxVec.y * boxDim.x
+	+ cellIdxVec.x;
+    assert(tempCellIndex < numCells);
+    Cell self = cells[tempCellIndex];
+    
+    tempCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
+    assert(tempCellIndex < numCells);
+    Cell neighbor = cells[tempCellIndex];
 
-    __shared__ Cell neighbor;
-    __shared__ Cell self;
-    if (threadIdx.x == 0)
-    {
-	int temp = cellIdx.z * boxDim.x * boxDim.y + cellIdx.y * boxDim.x + cellIdx.x;
-	self = cells[temp];
-	neighbor = cells[getNeighborCell(cellIdx, boxDim, dj / 2)];
-    }
-    __syncthreads();
+    int xBegin = neighbor.offset + djMod2 * neighbor.size * 0.5f;
+    int xInterval = djMod2 * (neighbor.offset + neighbor.size)
+	+ (1 - djMod2) * (neighbor.offset + 0.5f * neighbor.size)
+	- xBegin;
+    assert(xInterval > 0);
+    assert(xInterval < numLocalBubbles);
 
-    int xBegin = neighbor.offset;
-    xBegin += djMod2 * neighbor.size * 0.5f;
-    int xEnd = xBegin + neighbor.size * (0.5f + 0.5f * djMod2);
-    int xInterval = xEnd - xBegin;
-
-    int yBegin = self.offset;
-    yBegin += di * self.size * 0.5f;
-    int yEnd = YBegin + self.size * (0.5f + 0.5f * di);
-    int yInterval = yEnd - yBegin;
+    int yBegin = self.offset + di * self.size * 0.5f;
+    int yInterval = di * (self.offset + self.size)
+	+ (1 - di) * (self.offset + 0.5f * self.size)
+	- yBegin;
+    assert(yInterval > 0);
+    assert(yInterval < numLocalBubbles);    
+    assert(xInterval + yInterval <= numLocalBubbles);
 
     if (threadIdx.x < xInterval && xBegin + threadIdx.x < numBubbles)
 	localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
@@ -376,9 +422,9 @@ void cubble::findIntersections(Bubble *bubbles,
 	localBubbles[threadIdx.x] = bubbles[indices[yBegin + threadIdx.x]];
 
     __syncthreads();
-
+      
     int numPairs = xInterval * yInterval;
-    int numRounds = numPairs / blockDim.x + 1;
+    int numRounds = 1 + (numPairs / blockDim.x);
 
     for (int round = 0; round < numRounds; ++round)
     {
@@ -387,26 +433,28 @@ void cubble::findIntersections(Bubble *bubbles,
 	{
 	    int x = tempIdx % xInterval;
 	    int y = tempIdx / xInterval;
-
-	    if (x > xInterval)
-		printf("", );
-	    
-	    if (y > yInterval)
-		printf("", );
+	    assert(y < yInterval);
 	    
 	    Bubble *b1 = &localBubbles[x];
 	    Bubble *b2 = &localBubbles[xInterval + y];
-
-	    // Skip self-intersections
-	    if (b1 == b2)
-	    {
-		THIS DOES NOT DETECT SAME BUBBLE CORRECTLY, SINCE THERE ARE DUPLICATES.
-		continue;
-	    }
 	    
 	    double radii = b1->getRadius() + b2->getRadius();
-	    if (radii * radii < (b1->getPos() - b2->getPos).getSquaredLength())
-		intersectingIndices[indices[xBegin + x]] = 1;
+	    double length = (b1->getPos() - b2->getPos()).getSquaredLength();
+
+	    // Skip self-intersection
+	    if (radii == b1->getRadius() + b1->getRadius())
+		continue;
+	    
+	    if (radii * radii > length)
+	    {
+		int gid1 = xBegin + x;
+		int gid2 = yBegin + y + xInterval;
+		int gid = gid1 < gid2 ? gid1 : gid2;
+		assert(gid < numBubbles);
+		int globalIndex = indices[gid];
+		
+		atomicAdd(&intersectingIndices[globalIndex], 1);
+	    }
 	}
     }
 }
