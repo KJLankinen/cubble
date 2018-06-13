@@ -82,7 +82,7 @@ namespace cubble
 		? "Reading parameters from file " + inputFile
 		: "Saving parameters to file " + saveFile;
 	    
-	    std::cout << msg << "\n" << std::endl;
+	    std::cout << msg << std::endl;
 	    nlohmann::json params;
 	    
 	    if (read)
@@ -109,8 +109,6 @@ namespace cubble
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
-	    
-	    std::cout << "\nParameter IO done." << std::endl;
 	}
 #endif
 	

@@ -26,7 +26,7 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
     
-    std::cout << "Generating bubbles..." << std::endl;
+    std::cout << "Starting to generate data for bubbles." << std::flush;
     
     // Get necessary parameters
     int n = env->getNumBubbles();
@@ -46,6 +46,8 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
     CudaContainer<Bubble> b(n);
 
     // Generate random positions & radii
+    std::cout << " Done.\n\tGenerating data..." << std::flush;
+    
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
@@ -57,6 +59,8 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
     CudaContainer<float> z(n);
     CURAND_CALL(curandGenerateUniform(generator, z.getDevPtr(), n));
 #endif
+
+    std::cout << " Done.\n\tAssigning data to bubbles..." << std::flush;;
     
     // Assign generated data to bubbles
     assignDataToBubbles<<<numBlocks, numThreads>>>(x.getDevPtr(),
@@ -73,7 +77,11 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
+    std::cout << " Done.\n\tCopying data from device to host..." << std::flush;
+
     b.copyDeviceDataToVec(outBubbles);
+
+    std::cout << " Done." << std::endl;;
 }
 
 void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &b)
@@ -81,7 +89,7 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
     
-    std::cout << "Assigning bubbles to cells..." << std::endl;
+    std::cout << "Starting to assign bubbles to cells." << std::flush;
     
     int numBubblesPerCell = env->getNumBubblesPerCell();
     dvec tfr = env->getTfr();
@@ -89,11 +97,10 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
     dim3 gridSize = getGridSize(b.size());
     int numCells = gridSize.x * gridSize.y * gridSize.z;
 
-    std::cout << "Grid size: (" << gridSize.x
+    std::cout << "\n\tUsing grid size (" << gridSize.x
 	      << ", " << gridSize.y
 	      << ", " << gridSize.z
-	      << "), numCells: " << numCells
-	      << std::endl;
+	      << ") with total of " << numCells << " cells." << std::flush;
     
     CudaContainer<Bubble> bubbles(b);
     CudaContainer<Cell> cells(numCells);
@@ -101,6 +108,8 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
 
     bubbles.toDevice();
     cells.toDevice();
+
+    std::cout << " Done.\n\tCalculating offsets..." << std::flush;
     
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
 						      cells.getDevPtr(),
@@ -121,6 +130,8 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
 	cumulativeSum += numBubbles;
     }
     cells.toDevice();
+
+    std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
     
     cubble::assignBubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
 								 indices.getDevPtr(),
@@ -129,10 +140,14 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
+
+    std::cout << " Done.\n\tCopying data from device to host..." << std::flush;
     
     bubbleManager->setBubblesFromDevice(bubbles);
     bubbleManager->setIndicesFromDevice(indices);
     bubbleManager->setCellsFromDevice(cells);
+
+    std::cout << " Done." << std::endl;
 }
 
 void cubble::CudaKernelWrapper::removeIntersectingBubbles()
@@ -140,7 +155,8 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
     
-    std::cout << "Removing intersecting bubbles..." << std::endl;
+    std::cout << "Starting the removal of intersecting bubbles."
+	      << "\n\tAllocating memory and copying input data..." << std::flush;
     
     CudaContainer<Bubble> bubbles(bubbleManager->getBubblesSize());
     CudaContainer<int> indices(bubbles.size());
@@ -158,14 +174,16 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
 
     assertGridSizeBelowLimit(gridSize);
 
+    std::cout << " Done.\n\tCopying data from host to device..." << std::flush;
+    
     bubbles.toDevice();
     indices.toDevice();
     intersections.toDevice();
     cells.toDevice();
-    
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
 
+    std::cout << " Done.\n\tCalculating the size of dynamically allocated shared memory..."
+	      << std::flush;
+    
     int sharedMemSize = 0;
     for (size_t i = 0; i < cells.size(); ++i)
     {
@@ -175,6 +193,8 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     sharedMemSize = 2 * (int)std::ceil(sharedMemSize * 0.5f);
 
     assertMemBelowLimit(sharedMemSize);
+
+    std::cout << " Done.\n\tStarting kernel for finding intersections..." << std::flush;
     
     findIntersections<<<gridSize,
 	numThreads,
@@ -190,14 +210,21 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
+    std::cout << " Done.\n\tCopying values from device to host..." << std::flush;
+
     std::vector<Bubble> culledBubbles;
-    bubbles.copyHostDataToVec(culledBubbles);
+    bubbles.toHost();
     intersections.toHost();
-    for (int i = intersections.size() - 1; i >= 0; --i)
+    
+    std::cout << " Done.\n\tRemoving intersecting elements from host vector..." << std::flush;
+	
+    for (size_t i = 0; i < intersections.size(); ++i)
     {
-	if (intersections[i] > 0)
-	    culledBubbles.erase(culledBubbles.begin() + i);
+	if (!intersections[i])
+	    culledBubbles.push_back(bubbles[i]);
     }
+    
+    std::cout << " Done." << std::endl;
 
     bubbleManager->setBubbles(culledBubbles);
 }
