@@ -24,16 +24,19 @@ Simulator::~Simulator()
 
 void Simulator::run()
 {
+    std::string outputFile;
+    env->getOutputFile(outputFile);    
+
     std::vector<Bubble> temp;
     cudaKernelWrapper->generateBubbles(temp);
     cudaKernelWrapper->assignBubblesToCells(temp);
-    cudaKernelWrapper->removeIntersectingBubbles();
 
-    std::string outputFile;
-    env->getOutputFile(outputFile);
+    bubbleManager->getBubbles(temp);
+    fileio::writeVectorToFile("data/test.data", temp);    
     
-    std::vector<Bubble> b;
-    bubbleManager->getBubbles(b);
+    cudaKernelWrapper->removeIntersectingBubbles();
     
-    fileio::writeVectorToFile(outputFile, b);
+    bubbleManager->getBubbles(temp);
+
+    fileio::writeVectorToFile(outputFile, temp);
 }

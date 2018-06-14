@@ -408,45 +408,63 @@ void cubble::findIntersections(Bubble *bubbles,
 			       int numLocalBubbles)
 {
     extern __shared__ Bubble localBubbles[];
+
+    assert(numBubbles > 0);
+    assert(numDomains > 0);
+    assert(numCells > 0);
+    assert(numLocalBubbles > 0);
+    assert(!(numDomains & 1));
     
     ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
     
     int domain = blockIdx.z % numDomains;
-    int halfNumDomains = numDomains / 2;
-    int di = domain / halfNumDomains;
-    int dj = domain % halfNumDomains;
-    int djMod2 = dj % 2;
+    int di = 2 * domain / numDomains;
     
-    int tempCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
+    assert((di == 0 && domain < (int)(0.5f * numDomains))
+	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
+    
+    int dj = domain % (int)(0.5f * numDomains);
+    int djMod2 = dj % 2;
+
+    // Find this cell
+    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
 	+ cellIdxVec.y * boxDim.x
 	+ cellIdxVec.x;
-    assert(tempCellIndex < numCells);
-    Cell self = cells[tempCellIndex];
+    assert(selfCellIndex < numCells);
+    Cell self = cells[selfCellIndex];
+
+    // Find the neighbor of this cell
+    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
+    assert(neighborCellIndex < numCells);
+    Cell neighbor = cells[neighborCellIndex];
+
+    // Find the interval of values to use:
+    // x-axis uses the right or the left half of the neighbor cell
+    int halfSize = 0.5f * neighbor.size;
+    int xBegin = neighbor.offset + djMod2 * halfSize;
+    int xInterval = halfSize + djMod2 * (neighbor.size % 2);
     
-    tempCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    assert(tempCellIndex < numCells);
-    Cell neighbor = cells[tempCellIndex];
+    assert(xBegin + xInterval <= numBubbles);
+    assert(xInterval == halfSize || xInterval == halfSize + 1);
 
-    int xBegin = neighbor.offset + djMod2 * neighbor.size * 0.5f;
-    int xInterval = djMod2 * (neighbor.offset + neighbor.size)
-	+ (1 - djMod2) * (neighbor.offset + 0.5f * neighbor.size)
-	- xBegin;
-    assert(xInterval > 0);
-    assert(xInterval < numLocalBubbles);
+    // y-axis uses the top or bottom half of this cell
+    halfSize = 0.5f * self.size;
+    int yBegin = self.offset + di * halfSize;
+    int yInterval = halfSize + di * (self.size % 2);
 
-    int yBegin = self.offset + di * self.size * 0.5f;
-    int yInterval = di * (self.offset + self.size)
-	+ (1 - di) * (self.offset + 0.5f * self.size)
-	- yBegin;
-    assert(yInterval > 0);
-    assert(yInterval < numLocalBubbles);    
+    assert(yBegin + yInterval <= numBubbles);
+    assert(yInterval == halfSize || yInterval == halfSize + 1);
     assert(xInterval + yInterval <= numLocalBubbles);
 
-    if (threadIdx.x < xInterval && xBegin + threadIdx.x < numBubbles)
-	localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
-    else if (threadIdx.x < xInterval + yInterval && yBegin + threadIdx.x < numBubbles)
-	localBubbles[threadIdx.x] = bubbles[indices[yBegin + threadIdx.x]];
+    // Get the bubbles to shared memory
+    if (threadIdx.x < xInterval + yInterval)
+    {
+	if (threadIdx.x < xInterval)
+	    localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
+	else
+	    localBubbles[threadIdx.x] = bubbles[indices[yBegin - xInterval + threadIdx.x]];
+    }
 
     __syncthreads();
       
@@ -455,32 +473,36 @@ void cubble::findIntersections(Bubble *bubbles,
 
     for (int round = 0; round < numRounds; ++round)
     {
-        int tempIdx = round * blockDim.x + threadIdx.x;
-	if (tempIdx < numPairs)
+        int pairIdx = round * blockDim.x + threadIdx.x;
+	if (pairIdx < numPairs)
 	{
-	    int x = tempIdx % xInterval;
-	    int y = tempIdx / xInterval;
+	    int x = pairIdx % xInterval;
+	    int y = pairIdx / xInterval;
 	    assert(y < yInterval);
+
+	    // Skip self-intersection
+	    if (xBegin + x == yBegin + y)
+		continue;
 	    
 	    Bubble *b1 = &localBubbles[x];
 	    Bubble *b2 = &localBubbles[xInterval + y];
 	    
 	    double radii = b1->getRadius() + b2->getRadius();
 	    double length = (b1->getPos() - b2->getPos()).getSquaredLength();
-
-	    // Skip self-intersection
-	    if (radii == b1->getRadius() + b1->getRadius())
-		continue;
 	    
 	    if (radii * radii > length)
 	    {
 		int gid1 = xBegin + x;
-		int gid2 = yBegin + y + xInterval;
-		int gid = gid1 < gid2 ? gid1 : gid2;
-		assert(gid < numBubbles);
-		int globalIndex = indices[gid];
+		int gid2 = yBegin + y;
+
+		assert(gid1 < numBubbles);
+		assert(gid2 < numBubbles);
 		
-		atomicAdd(&intersectingIndices[globalIndex], 1);
+		gid1 = indices[gid1];
+		gid2 = indices[gid2];
+		int gid = gid1 < gid2 ? gid1 : gid2;
+		
+		atomicAdd(&intersectingIndices[gid], 1);
 	    }
 	}
     }

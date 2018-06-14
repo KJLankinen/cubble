@@ -9,7 +9,7 @@
     },
     "MinRad": 1e-08,
     "MuZero": 1.0,
-    "NumBubbles": 1024,
+    "NumBubbles": 16384000,
     "NumBubblesPerCell": 96,
     "NumIntegrationSteps": 1000000,
     "PhiTarget": 0.8,
@@ -17,8 +17,8 @@
     "SigmaZero": 1.0,
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 2.0,
-        "y": 2.0,
+        "x": 20.0,
+        "y": 20.0,
         "z": 20.0
     },
     "TimeStep": 1e-05
