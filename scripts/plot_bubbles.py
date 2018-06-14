@@ -81,25 +81,15 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    data1 = np.loadtxt("data/out.dat", delimiter=',')
-    data2 = np.loadtxt("data/test.data", delimiter=',')
+    data = np.loadtxt("data/out.dat", delimiter=',')
 
-    x = data1[:,0]
-    y = data1[:,1]
-    r = data1[:,3]
-    c = data1[:,4:]
+    x = data[:,0]
+    y = data[:,1]
+    r = data[:,3]
+    c = data[:,4:]
     
     fig = plt.figure()
-    ax1 = fig.add_subplot(121, aspect='equal')
-
-    out = circles(x, y, r, alpha=0.3, facecolor=c, edgecolor=c)
-    
-    x = data2[:,0]
-    y = data2[:,1]
-    r = data2[:,3]
-    c = data2[:,4:]
-
-    ax2 = fig.add_subplot(122, aspect='equal')
+    ax1 = fig.add_subplot(111, aspect='equal')
 
     out = circles(x, y, r, alpha=0.3, facecolor=c, edgecolor=c)
     

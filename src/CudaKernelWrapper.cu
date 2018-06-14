@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <curand.h>
+#include <math.h>
 
 cubble::CudaKernelWrapper::CudaKernelWrapper(std::shared_ptr<BubbleManager> bm,
 					     std::shared_ptr<Env> e)
@@ -64,15 +65,15 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
     
     // Assign generated data to bubbles
     assignDataToBubbles<<<numBlocks, numThreads>>>(x.getDevPtr(),
-						 y.getDevPtr(),
+						   y.getDevPtr(),
 #if (NUM_DIM == 3)
-						 z.getDevPtr(),
+						   z.getDevPtr(),
 #endif
-						 r.getDevPtr(),
-						 b.getDevPtr(),
-						 lbb,
-						 tfr,
-						 n);
+						   r.getDevPtr(),
+						   b.getDevPtr(),
+						   lbb,
+						   tfr,
+						   n);
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
@@ -165,14 +166,6 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     bubbleManager->getBubbles(bubbles);
     bubbleManager->getCells(cells);
     bubbleManager->getIndices(indices);
-    intersections.fillHostWith(0);
-
-    int numThreads = 1024;
-    int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
-    dim3 gridSize = getGridSize(bubbles.size());
-    gridSize.z *= numDomains;
-
-    assertGridSizeBelowLimit(gridSize);
 
     std::cout << " Done.\n\tCopying data from host to device..." << std::flush;
     
@@ -180,6 +173,13 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     indices.toDevice();
     intersections.toDevice();
     cells.toDevice();
+
+    int numThreads = 1024;
+    int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
+    dim3 gridSize = getGridSize(bubbles.size());
+    gridSize.z *= numDomains;
+
+    assertGridSizeBelowLimit(gridSize);
 
     std::cout << " Done.\n\tCalculating the size of dynamically allocated shared memory..."
 	      << std::flush;
@@ -217,7 +217,8 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     intersections.toHost();
     
     std::cout << " Done.\n\tRemoving intersecting elements from host vector..." << std::flush;
-	
+
+    assert(intersections.size() == bubbles.size());
     for (size_t i = 0; i < intersections.size(); ++i)
     {
 	if (!intersections[i])
@@ -233,10 +234,10 @@ dim3 cubble::CudaKernelWrapper::getGridSize(int numBubbles)
 {
     int numBubblesPerCell = env->getNumBubblesPerCell();
 #if NUM_DIM == 3
-    int numCellsPerDim = (int)std::ceil(std::cbrt(numBubbles / numBubblesPerCell));
+    int numCellsPerDim = std::ceil(std::cbrt((float)numBubbles / numBubblesPerCell));
     dim3 gridSize(numCellsPerDim, numCellsPerDim, numCellsPerDim);
 #else
-    int numCellsPerDim = (int)std::ceil(std::sqrt(numBubbles / numBubblesPerCell));
+    int numCellsPerDim = std::ceil(std::sqrt((float)numBubbles / numBubblesPerCell));
     dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
 #endif
 
@@ -309,6 +310,59 @@ int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 }
 
 __forceinline__ __device__
+void cubble::getDomainOffsetsAndIntervals(int numBubbles,
+					  int numDomains,
+					  int numCells,
+					  int numLocalBubbles,
+					  ivec cellIdxVec,
+					  ivec boxDim,
+					  Cell *cells,
+					  int &outXBegin,
+					  int &outXInterval,
+					  int &outYBegin,
+					  int &outYInterval)
+{
+    int domain = blockIdx.z % numDomains;
+    int di = 2 * domain / numDomains;
+    
+    assert((di == 0 && domain < (int)(0.5f * numDomains))
+	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
+    
+    int dj = domain % (int)(0.5f * numDomains);
+    int djMod2 = dj % 2;
+
+    // Find this cell
+    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
+	+ cellIdxVec.y * boxDim.x
+	+ cellIdxVec.x;
+    assert(selfCellIndex < numCells);
+    Cell self = cells[selfCellIndex];
+
+    // Find the neighbor of this cell
+    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
+    assert(neighborCellIndex < numCells);
+    Cell neighbor = cells[neighborCellIndex];
+
+    // Find the interval of values to use:
+    // x-axis uses the right or the left half of the neighbor cell
+    int halfSize = 0.5f * neighbor.size;
+    outXBegin = neighbor.offset + djMod2 * halfSize;
+    outXInterval = halfSize + djMod2 * (neighbor.size % 2);
+    
+    assert(outXBegin + outXInterval <= numBubbles);
+    assert(outXInterval == halfSize || outXInterval == halfSize + 1);
+
+    // y-axis uses the top or bottom half of this cell
+    halfSize = 0.5f * self.size;
+    outYBegin = self.offset + di * halfSize;
+    outYInterval = halfSize + di * (self.size % 2);
+
+    assert(outYBegin + outYInterval <= numBubbles);
+    assert(outYInterval == halfSize || outYInterval == halfSize + 1);
+    assert(outXInterval + outYInterval <= numLocalBubbles);
+}
+
+__forceinline__ __device__
 int cubble::getGlobalTid()
 {
     // Simple helper function for calculating a 1D coordinate
@@ -369,10 +423,11 @@ void cubble::calculateOffsets(Bubble *bubbles,
 	int index = gridDim.x * gridDim.y * indexVec.z
 	    + gridDim.x * indexVec.y
 	    + indexVec.x;
-
+	
 	fvec color = fvec(indexVec.x / (float)gridDim.x,
 			  indexVec.y / (float)gridDim.y,
 			  indexVec.z / (float)gridDim.z);
+
 	bubbles[tid].setCellIndex(index);
         bubbles[tid].setColor(color);
 	
@@ -417,46 +472,26 @@ void cubble::findIntersections(Bubble *bubbles,
     
     ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+
+    int xBegin = -1;
+    int xInterval = -1;
+    int yBegin = -1;
+    int yInterval = -1;
     
-    int domain = blockIdx.z % numDomains;
-    int di = 2 * domain / numDomains;
+    getDomainOffsetsAndIntervals(numBubbles,
+				 numDomains,
+				 numCells,
+				 numLocalBubbles,
+				 cellIdxVec,
+				 boxDim,
+				 cells,
+				 xBegin,
+				 xInterval,
+				 yBegin,
+				 yInterval);
+
+    assert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
     
-    assert((di == 0 && domain < (int)(0.5f * numDomains))
-	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
-    
-    int dj = domain % (int)(0.5f * numDomains);
-    int djMod2 = dj % 2;
-
-    // Find this cell
-    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
-	+ cellIdxVec.y * boxDim.x
-	+ cellIdxVec.x;
-    assert(selfCellIndex < numCells);
-    Cell self = cells[selfCellIndex];
-
-    // Find the neighbor of this cell
-    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    assert(neighborCellIndex < numCells);
-    Cell neighbor = cells[neighborCellIndex];
-
-    // Find the interval of values to use:
-    // x-axis uses the right or the left half of the neighbor cell
-    int halfSize = 0.5f * neighbor.size;
-    int xBegin = neighbor.offset + djMod2 * halfSize;
-    int xInterval = halfSize + djMod2 * (neighbor.size % 2);
-    
-    assert(xBegin + xInterval <= numBubbles);
-    assert(xInterval == halfSize || xInterval == halfSize + 1);
-
-    // y-axis uses the top or bottom half of this cell
-    halfSize = 0.5f * self.size;
-    int yBegin = self.offset + di * halfSize;
-    int yInterval = halfSize + di * (self.size % 2);
-
-    assert(yBegin + yInterval <= numBubbles);
-    assert(yInterval == halfSize || yInterval == halfSize + 1);
-    assert(xInterval + yInterval <= numLocalBubbles);
-
     // Get the bubbles to shared memory
     if (threadIdx.x < xInterval + yInterval)
     {

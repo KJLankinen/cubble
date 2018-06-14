@@ -30,12 +30,13 @@ void Simulator::run()
     std::vector<Bubble> temp;
     cudaKernelWrapper->generateBubbles(temp);
     cudaKernelWrapper->assignBubblesToCells(temp);
-
-    bubbleManager->getBubbles(temp);
-    fileio::writeVectorToFile("data/test.data", temp);    
-    
     cudaKernelWrapper->removeIntersectingBubbles();
     
+    bubbleManager->getBubbles(temp);
+
+    fileio::writeVectorToFile("data/asd.dat", temp);
+    
+    cudaKernelWrapper->assignBubblesToCells(temp);
     bubbleManager->getBubbles(temp);
 
     fileio::writeVectorToFile(outputFile, temp);

@@ -13,8 +13,10 @@ namespace cubble
     {
     public:
 	__host__ __device__
-	Bubble()
-	{}
+	Bubble() {}
+
+	__host__ __device__
+	Bubble(int i) {}
 	
 	__host__ __device__
 	Bubble(double r, dvec pos)
@@ -76,16 +78,16 @@ namespace cubble
 	
         double radius = 0;
 
-	dvec pos;
-	dvec posPrev;
-	dvec posPred;
+	dvec pos = dvec(0, 0, 0);
+	dvec posPrev = dvec(0, 0, 0);
+	dvec posPred = dvec(0, 0, 0);
 	
-	dvec vel;
-	dvec velPrev;
-	dvec velPred;
+	dvec vel = dvec(0, 0, 0);
+	dvec velPrev = dvec(0, 0, 0);
+	dvec velPred = dvec(0, 0, 0);
 
-	dvec acc;
+	dvec acc = dvec(0, 0, 0);
 
-	fvec color;
+	fvec color = fvec(0, 0, 0);
     };
 }

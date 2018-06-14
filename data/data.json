@@ -14,7 +14,7 @@
     "LbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "Lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "TfrExpl" : "The coordinates of the top front right corner of the simulation box.",
-    "Tfr" : {"x" : 20.0, "y" : 20.0, "z" : 20.0},
+    "Tfr" : {"x" : 5.0, "y" : 5.0, "z" : 5.0},
     "ErrorToleranceExpl" : "The error tolerance level for the integration.",
     "ErrorTolerance" : 1e-4,
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
@@ -26,7 +26,7 @@
     "NumIntegrationStepsExpl" : "How many integration steps to do.",
     "NumIntegrationSteps" : 1000000,
     "NumBubblesExpl" : "How many bubbles to generate.",
-    "NumBubbles" : 16384000,
+    "NumBubbles" : 1024,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 96
 }

@@ -11,6 +11,10 @@ namespace cubble
     public:
 	__host__ __device__
 	Cell() {}
+
+	__host__ __device__
+	Cell(int i) {}
+	
 	__host__ __device__
 	~Cell() {}
 	

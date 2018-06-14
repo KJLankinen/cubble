@@ -32,6 +32,19 @@ namespace cubble
 
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
+
+    __device__
+    void getDomainOffsetsAndIntervals(int numBubbles,
+				      int numDomains,
+				      int numCells,
+				      int numLocalBubbles,
+				      ivec cellIdxVec,
+				      ivec boxDim,
+				      Cell *cells,
+				      int &outXBegin,
+				      int &outXInterval,
+				      int &outYBegin,
+				      int &outYInterval);
     
     __device__
     int getGlobalTid();

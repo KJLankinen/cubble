@@ -8,7 +8,7 @@
 #include <vector>
 #include <iostream>
 #include <assert.h>
-#include <algorithm>
+#include <cstring>
 
 namespace cubble
 {
@@ -17,29 +17,34 @@ namespace cubble
     {
     public:
 	CudaContainer(size_t n)
-	    : rawPtr(create(n), destroy)
+	    : devPtr(createDevPtr(n), destroyDevPtr)
+	    , hostPtr(createHostPtr(n), destroyHostPtr)
 	    , numElements(n)
 	{
-	    T t;
-	    hostData.resize(n, t);
+	    T t(0);
+	    for (size_t i = 0; i < numElements; ++i)
+		hostPtr[i] = t;
+	    
+	    this->toDevice();
 	}
 
 	CudaContainer(const std::vector<T> &v)
 	    : CudaContainer(v.size())
 	{
-	    hostData = v;
+	    for (size_t i = 0; i < v.size(); ++i)
+		hostPtr[i] = v[i];
 	}
 	
 	~CudaContainer() {}
 	
-	void fillHostWith(T val)
-	{
-	    std::fill(hostData.begin(), hostData.begin() + numElements, val);
-	}
-	
 	T* getDevPtr()
 	{
-	    return rawPtr.get();
+	    return devPtr.get();
+	}
+
+	T* getHostPtr()
+	{
+	    return hostPtr.get();
 	}
 	
 	size_t size()
@@ -49,73 +54,83 @@ namespace cubble
 	
 	void toHost()
 	{
-	    hostData.clear();
-	    hostData.resize(numElements);
-	    CUDA_CALL(cudaMemcpy((void*)hostData.data(),
-				 (void*)rawPtr.get(),
+	    CUDA_CALL(cudaMemcpy((void*)hostPtr.get(),
+				 (void*)devPtr.get(),
 				 numElements * sizeof(T),
 				 cudaMemcpyDeviceToHost));
 	}
 	
 	void toDevice()
 	{
-	    CUDA_CALL(cudaMemcpy((void*)rawPtr.get(),
-				 (void*)hostData.data(),
+	    CUDA_CALL(cudaMemcpy((void*)devPtr.get(),
+				 (void*)hostPtr.get(),
 				 numElements * sizeof(T),
 				 cudaMemcpyHostToDevice));
 	}
 
 	void copyVecToHost(const std::vector<T> &v)
 	{
-	    assert(v.size() >= numElements);
-	    hostData = std::vector<T>(v.begin(), v.begin() + numElements);
+	    assert(v.size() == numElements);
+	    std::memcpy((void*)hostPtr.get(), (void*)v.data(), numElements * sizeof(T));
 	}
 
         void copyHostDataToVec(std::vector<T> &v)
 	{
 	    v.clear();
-	    v = std::vector<T>(hostData.begin(), hostData.begin() + numElements);
+	    v.resize(numElements);
+	    std::memcpy((void*)v.data(), (void*)hostPtr.get(), numElements * sizeof(T));
 	}
 
 	void copyDeviceDataToVec(std::vector<T> &v)
 	{
-	    // Need to use resize instead of reserve because copying straigth
-	    // to internal memory doesn't update size.
 	    v.clear();
 	    v.resize(numElements);
 	    CUDA_CALL(cudaMemcpy((void*)v.data(),
-				 (void*)rawPtr.get(),
+				 (void*)devPtr.get(),
 				 numElements * sizeof(T),
 				 cudaMemcpyDeviceToHost));
 	}
 	
 	T operator[](size_t i) const
 	{
-	    assert(i < hostData.size());
-	    return hostData[i];
+	    assert(i < numElements);
+	    return hostPtr[i];
 	}
 	
 	T& operator[](size_t i)
 	{
-	    assert(i < hostData.size());
-	    return hostData[i];
+	    assert(i < numElements);
+	    return hostPtr[i];
 	}
 	
     private:
-	T* create(size_t numElements)
+	T* createDevPtr(size_t numElements)
 	{
 	    T *t;
 	    CUDA_CALL(cudaMalloc((void**)&t, numElements * sizeof(T)));
 	    return t;
 	}
 
-	static void destroy(T *t)
+	static void destroyDevPtr(T *t)
 	{
 	    CUDA_CALL(cudaFree(t));
 	}
 
+	
+	T* createHostPtr(size_t numElements)
+	{
+	    T *t = new T[numElements];
+	    return t;
+	}
+
+	static void destroyHostPtr(T *t)
+	{
+	    delete[] t;
+	}
+
 	size_t numElements = 0;
-	std::vector<T> hostData;
-	std::unique_ptr<T[], decltype(&destroy)> rawPtr;
+        
+	std::unique_ptr<T[], decltype(&destroyHostPtr)> hostPtr;
+	std::unique_ptr<T[], decltype(&destroyDevPtr)> devPtr;
     };
 };
