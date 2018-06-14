@@ -9,16 +9,17 @@
     },
     "MinRad": 1e-08,
     "MuZero": 1.0,
-    "NumBubbles": 1024,
+    "NumBubbles": 16384,
     "NumBubblesPerCell": 96,
     "NumIntegrationSteps": 1000000,
     "PhiTarget": 0.8,
-    "RngSeed": 13458,
+    "RngSeed": 142558,
     "SigmaZero": 1.0,
+    "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 5.0,
-        "y": 5.0,
+        "x": 10.0,
+        "y": 10.0,
         "z": 5.0
     },
     "TimeStep": 1e-05

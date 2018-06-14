@@ -17,22 +17,26 @@ namespace cubble
     {
     public:
 	CudaContainer(size_t n)
-	    : devPtr(createDevPtr(n), destroyDevPtr)
+	    : numElements(n)
 	    , hostPtr(createHostPtr(n), destroyHostPtr)
-	    , numElements(n)
+	    , devPtr(createDevPtr(n), destroyDevPtr)
 	{
 	    T t(0);
 	    for (size_t i = 0; i < numElements; ++i)
 		hostPtr[i] = t;
 	    
-	    this->toDevice();
+	    hostToDevice();
 	}
 
 	CudaContainer(const std::vector<T> &v)
-	    : CudaContainer(v.size())
+	    : numElements(v.size())
+	    , hostPtr(createHostPtr(v.size()), destroyHostPtr)
+	    , devPtr(createDevPtr(v.size()), destroyDevPtr)
 	{
 	    for (size_t i = 0; i < v.size(); ++i)
 		hostPtr[i] = v[i];
+
+	    hostToDevice();
 	}
 	
 	~CudaContainer() {}
@@ -41,18 +45,13 @@ namespace cubble
 	{
 	    return devPtr.get();
 	}
-
-	T* getHostPtr()
-	{
-	    return hostPtr.get();
-	}
 	
 	size_t size()
 	{
 	    return numElements;
 	}
 	
-	void toHost()
+	void deviceToHost()
 	{
 	    CUDA_CALL(cudaMemcpy((void*)hostPtr.get(),
 				 (void*)devPtr.get(),
@@ -60,7 +59,7 @@ namespace cubble
 				 cudaMemcpyDeviceToHost));
 	}
 	
-	void toDevice()
+	void hostToDevice()
 	{
 	    CUDA_CALL(cudaMemcpy((void*)devPtr.get(),
 				 (void*)hostPtr.get(),
@@ -68,20 +67,14 @@ namespace cubble
 				 cudaMemcpyHostToDevice));
 	}
 
-	void copyVecToHost(const std::vector<T> &v)
-	{
-	    assert(v.size() == numElements);
-	    std::memcpy((void*)hostPtr.get(), (void*)v.data(), numElements * sizeof(T));
-	}
-
-        void copyHostDataToVec(std::vector<T> &v)
+        void hostToVec(std::vector<T> &v)
 	{
 	    v.clear();
 	    v.resize(numElements);
 	    std::memcpy((void*)v.data(), (void*)hostPtr.get(), numElements * sizeof(T));
 	}
 
-	void copyDeviceDataToVec(std::vector<T> &v)
+	void deviceToVec(std::vector<T> &v)
 	{
 	    v.clear();
 	    v.resize(numElements);
@@ -101,6 +94,20 @@ namespace cubble
 	{
 	    assert(i < numElements);
 	    return hostPtr[i];
+	}
+
+	void operator=(CudaContainer<T> &&o)
+	{
+	    numElements = o.numElements;
+	    hostPtr = std::move(o.hostPtr);
+	    devPtr = std::move(o.devPtr);
+	}
+
+	void operator=(const CudaContainer<T> &&o)
+	{
+	    numElements = o.numElements;
+	    hostPtr = std::move(o.hostPtr);
+	    devPtr = std::move(o.devPtr);
 	}
 	
     private:

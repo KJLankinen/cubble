@@ -9,13 +9,12 @@ int main(int argc, char **argv)
 {
     std::exception_ptr pExc = nullptr;
 
-    if (argc != 4)
+    if (argc != 3)
     {
-	std::cerr << "Three arguments are required."
-		  << "\nUsage: " << argv[0] << " inputFile outputFile saveFile"
+	std::cerr << "Two arguments are required."
+		  << "\nUsage: " << argv[0] << " inputFile saveFile"
 		  << "\ninputFile = the name of the (.json) file that contains"
 		  << " the necessary inputs."
-		  << "\noutputFile = file where the program output is written to"
 		  << "\nsaveFile = file that can be used as a input file"
 		  << " to continue from an earlier run"
 		  << std::endl;
@@ -40,7 +39,7 @@ int main(int argc, char **argv)
 	str += "------------------------------------------------------------------------\n";
 #endif
 	std::cout << str << std::endl;
-	cubble::Simulator simulator(argv[1], argv[2], argv[3]);
+	cubble::Simulator simulator(argv[1], argv[2]);
         simulator.run();
     }
     catch (const std::exception &e)

@@ -19,6 +19,8 @@ namespace cubble
     public:
 	BubbleManager(std::shared_ptr<Env> e);
 	~BubbleManager();
+
+	double getVolumeOfBubbles() const;
 	
 	void setBubbles(const std::vector<Bubble> &b);
 	void setBubblesFromDevice(CudaContainer<Bubble> &b);
@@ -30,7 +32,6 @@ namespace cubble
 	void getIndices(std::vector<int> &i) const;
 	void getIndices(CudaContainer<int> &i) const;
 	int getIndicesSize() const { return indices.size(); }
-	void printIndices() const;
 	
 	void setCellsFromDevice(CudaContainer<Cell> &c);
 	void getCells(std::vector<Cell> &c) const;

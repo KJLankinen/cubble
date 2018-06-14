@@ -8,7 +8,6 @@
 
 #include <iostream>
 #include <curand.h>
-#include <math.h>
 
 cubble::CudaKernelWrapper::CudaKernelWrapper(std::shared_ptr<BubbleManager> bm,
 					     std::shared_ptr<Env> e)
@@ -80,7 +79,7 @@ void cubble::CudaKernelWrapper::generateBubbles(std::vector<Bubble> &outBubbles)
 
     std::cout << " Done.\n\tCopying data from device to host..." << std::flush;
 
-    b.copyDeviceDataToVec(outBubbles);
+    b.deviceToVec(outBubbles);
 
     std::cout << " Done." << std::endl;;
 }
@@ -107,8 +106,8 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
     CudaContainer<Cell> cells(numCells);
     CudaContainer<int> indices(bubbles.size());
 
-    bubbles.toDevice();
-    cells.toDevice();
+    bubbles.hostToDevice();
+    cells.hostToDevice();
 
     std::cout << " Done.\n\tCalculating offsets..." << std::flush;
     
@@ -121,7 +120,7 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
-    cells.toHost();
+    cells.deviceToHost();
 
     int cumulativeSum = 0;
     for (size_t i = 0; i < cells.size(); ++i)
@@ -130,7 +129,7 @@ void cubble::CudaKernelWrapper::assignBubblesToCells(const std::vector<Bubble> &
         cells[i].offset = cumulativeSum;
 	cumulativeSum += numBubbles;
     }
-    cells.toDevice();
+    cells.hostToDevice();
 
     std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
     
@@ -169,10 +168,10 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
 
     std::cout << " Done.\n\tCopying data from host to device..." << std::flush;
     
-    bubbles.toDevice();
-    indices.toDevice();
-    intersections.toDevice();
-    cells.toDevice();
+    bubbles.hostToDevice();
+    indices.hostToDevice();
+    intersections.hostToDevice();
+    cells.hostToDevice();
 
     int numThreads = 1024;
     int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
@@ -190,7 +189,9 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
 	int temp = cells[i].size;
 	sharedMemSize = sharedMemSize < temp ? temp : sharedMemSize;
     }
-    sharedMemSize = 2 * (int)std::ceil(sharedMemSize * 0.5f);
+    
+    // Nearest even size
+    sharedMemSize += sharedMemSize % 2;
 
     assertMemBelowLimit(sharedMemSize);
 
@@ -213,8 +214,8 @@ void cubble::CudaKernelWrapper::removeIntersectingBubbles()
     std::cout << " Done.\n\tCopying values from device to host..." << std::flush;
 
     std::vector<Bubble> culledBubbles;
-    bubbles.toHost();
-    intersections.toHost();
+    bubbles.deviceToHost();
+    intersections.deviceToHost();
     
     std::cout << " Done.\n\tRemoving intersecting elements from host vector..." << std::flush;
 

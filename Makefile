@@ -89,7 +89,7 @@ all : $(EXEC)
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) data.json out.dat save.json
+	$(EXEC) data.json save.json
 
 # -----------------------------------------------------
 # Debug build, slow with all safety nets at place.

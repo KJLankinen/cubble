@@ -81,7 +81,7 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    data = np.loadtxt("data/out.dat", delimiter=',')
+    data = np.loadtxt("data/snapshot0.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]
@@ -96,7 +96,7 @@ def plot_2d():
     plt.show()
 
 def plot_3d():
-    data = np.loadtxt("data/out.dat", delimiter=',')
+    data = np.loadtxt("data/snapshot0.dat", delimiter=',')
 
     x = data[:,0]
     y = data[:,1]

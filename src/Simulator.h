@@ -14,12 +14,13 @@ namespace cubble
     {
     public:
         Simulator(const std::string &inputFile,
-		  const std::string &outputFile,
 		  const std::string &saveFile);
 	~Simulator();
 	void run();
+	void saveSnapshotToFile();
 	
     private:
+	static int numSnapshots;
 	std::shared_ptr<BubbleManager> bubbleManager;
 	std::shared_ptr<CudaKernelWrapper> cudaKernelWrapper;
 	std::shared_ptr<Env> env;

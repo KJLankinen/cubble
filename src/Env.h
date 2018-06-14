@@ -34,18 +34,19 @@ namespace cubble
 	CUBBLE_PROP(double, ErrorTolerance)
 	CUBBLE_PROP(double, TimeStep)
 	CUBBLE_PROP(double, CompressionAmount)
+	CUBBLE_PROP(std::string, DataPath)
+	CUBBLE_PROP(std::string, SnapshotFilename)
 
 	CUBBLE_PROP(dvec, Lbb)
 	CUBBLE_PROP(dvec, Tfr)
 	
     public:
 	Env(const std::string &inF,
-	    const std::string &outF,
 	    const std::string &saveF)
 	{
-	    inputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + inF);
-	    outputFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + outF);
-	    saveFile = std::string(CUBBLE_XSTRINGIFY(DATA_PATH) + saveF);
+	    DataPath = CUBBLE_XSTRINGIFY(DATA_PATH);
+	    inputFile = std::string(DataPath + inF);
+	    saveFile = std::string(DataPath + saveF);
 	}
 	
 	~Env() {}
@@ -70,8 +71,16 @@ namespace cubble
 	
 	void writeParameters() {readWriteParameters(false); }
 #endif
-	
-	void getOutputFile(std::string &f) { f = outputFile; }
+
+	double getSimulationBoxVolume()
+	{
+	    dvec temp = Tfr - Lbb;
+#if NUM_DIM == 3
+	    return temp.x * temp.y * temp.z;
+#else
+	    return temp.x * temp.y;
+#endif
+	}
 	
     private:
 	
@@ -106,13 +115,13 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, NumIntegrationSteps);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
+	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
 	}
 #endif
-	
-	std::string outputFile;
+        
 	std::string inputFile;
 	std::string saveFile;
 	

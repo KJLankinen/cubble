@@ -1,6 +1,7 @@
 #include "BubbleManager.h"
 
 #include <iostream>
+#include <math.h>
 
 using namespace cubble;
 
@@ -12,6 +13,29 @@ BubbleManager::BubbleManager(std::shared_ptr<Env> e)
 BubbleManager::~BubbleManager()
 {}
 
+double BubbleManager::getVolumeOfBubbles() const
+{
+    double volume = 0;
+    
+    for (const auto &bubble : bubbles)
+    {
+	double radius = bubble.getRadius();
+	
+#if NUM_DIM == 3
+	volume += radius * radius * radius;
+#else
+	volume += radius * radius;
+#endif
+    }
+    volume *= M_PI;
+    
+#if NUM_DIM == 3
+    volume *=  1.3333333333333333333333333;
+#endif
+
+    return volume;
+}
+
 void BubbleManager::setBubbles(const std::vector<Bubble> &b)
 {
     bubbles = b;
@@ -19,7 +43,7 @@ void BubbleManager::setBubbles(const std::vector<Bubble> &b)
 
 void BubbleManager::setBubblesFromDevice(CudaContainer<Bubble> &b)
 {
-    b.copyDeviceDataToVec(bubbles);
+    b.deviceToVec(bubbles);
 }
 
 void BubbleManager::getBubbles(std::vector<Bubble> &b) const
@@ -29,12 +53,12 @@ void BubbleManager::getBubbles(std::vector<Bubble> &b) const
 
 void BubbleManager::getBubbles(CudaContainer<Bubble> &b) const
 {
-    b.copyVecToHost(bubbles);
+    b = CudaContainer<Bubble>(bubbles);
 }
 
 void BubbleManager::setIndicesFromDevice(CudaContainer<int> &i)
 {
-    i.copyDeviceDataToVec(indices);
+    i.deviceToVec(indices);
 }
 
 void BubbleManager::getIndices(std::vector<int> &i) const
@@ -44,18 +68,12 @@ void BubbleManager::getIndices(std::vector<int> &i) const
 
 void BubbleManager::getIndices(CudaContainer<int> &i) const
 {
-    i.copyVecToHost(indices);
-}
-
-void BubbleManager::printIndices() const
-{
-    for (const auto &it : indices)
-	std::cout << it << std::endl;
+    i = CudaContainer<int>(indices);
 }
 
 void BubbleManager::setCellsFromDevice(CudaContainer<Cell> &c)
 {
-    c.copyDeviceDataToVec(cells);
+    c.deviceToVec(cells);
 }
 
 void BubbleManager::getCells(std::vector<Cell> &c) const
@@ -65,7 +83,7 @@ void BubbleManager::getCells(std::vector<Cell> &c) const
 
 void BubbleManager::getCells(CudaContainer<Cell> &c) const
 {
-    c.copyVecToHost(cells);
+    c = CudaContainer<Cell>(cells);
 }
 
 Bubble BubbleManager::getBubble(size_t i) const
