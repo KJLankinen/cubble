@@ -2,27 +2,90 @@
 
 #pragma once
 
-#include <memory>
-
-#include "BubbleManager.h"
-#include "CudaKernelWrapper.h"
 #include "Env.h"
+#include "Bubble.h"
+#include "Vec.h"
+#include "CudaContainer.h"
+#include "Cell.h"
+
+#include <cuda_runtime.h>
+#include <memory>
 
 namespace cubble
 {
     class Simulator
     {
     public:
-        Simulator(const std::string &inputFile,
-		  const std::string &saveFile);
+        Simulator(std::shared_ptr<Env> e);
 	~Simulator();
-	void run();
-	void saveSnapshotToFile();
+
+	void setupSimulation();
+	double getVolumeOfBubbles() const;
+	void getBubbles(std::vector<Bubble> &b) const;
 	
     private:
-	static int numSnapshots;
-	std::shared_ptr<BubbleManager> bubbleManager;
-	std::shared_ptr<CudaKernelWrapper> cudaKernelWrapper;
+	dim3 getGridSize(int numBubbles);
+	void generateBubbles();
+	void assignBubblesToCells();
+	void removeIntersectingBubbles();
+        
 	std::shared_ptr<Env> env;
+	CudaContainer<Bubble> bubbles;
+	CudaContainer<int> indices;
+	CudaContainer<Cell> cells;
     };
-}
+
+    __device__
+    int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
+
+    __device__
+    void getDomainOffsetsAndIntervals(int numBubbles,
+				      int numDomains,
+				      int numCells,
+				      int numLocalBubbles,
+				      ivec cellIdxVec,
+				      ivec boxDim,
+				      Cell *cells,
+				      int &outXBegin,
+				      int &outXInterval,
+				      int &outYBegin,
+				      int &outYInterval);
+    
+    __device__
+    int getGlobalTid();
+
+    __global__
+    void assignDataToBubbles(float *x,
+			     float *y,
+#if (NUM_DIM == 3)
+			     float *z,
+#endif
+			     float *r,
+			     Bubble *b,
+			     dvec lbb,
+			     dvec tfr,
+			     int numBubbles);
+
+    __global__
+    void calculateOffsets(Bubble *bubbles,
+			  Cell *cells,
+			  dvec lbb,
+			  dvec tfr,
+			  int numBubbles);
+
+    __global__
+    void assignBubblesToCells(Bubble *bubbles,
+			      int *indices,
+			      Cell *cells,
+			      int numBubbles);
+
+    __global__
+    void findIntersections(Bubble *bubbles,
+			   int *indices,
+			   Cell *cells,
+			   int *intesectingIndices,
+			   int numBubbles,
+			   int numDomains,
+			   int numCells,
+			   int numLocalBubbles);
+};

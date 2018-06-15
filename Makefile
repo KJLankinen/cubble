@@ -28,12 +28,12 @@ DATA_PATH = data/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o Simulator.o BubbleManager.o CudaKernelWrapper.o
+OBJ_NAMES := Main.o CubbleApp.o Simulator.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
-GPU_OBJ_NAMES := CudaKernelWrapper.o
+GPU_OBJ_NAMES := Simulator.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.
@@ -71,9 +71,9 @@ DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
 # Flags
 # -----------------------------------------------------
 
-CPU_FLAGS := -Wall
-GPU_FLAGS := -arch=sm_20
-COMMON_FLAGS := -std=c++11
+CPU_FLAGS := -Wall -std=c++14
+GPU_FLAGS := -arch=sm_20 -std=c++11
+COMMON_FLAGS := 
 OPTIM_FLAGS := -O2
 
 
@@ -102,6 +102,7 @@ debug : set_debug_flags $(EXEC)
 set_debug_flags :
 	$(eval OPTIM_FLAGS = -O0)
 	$(eval CPU_FLAGS += -g3 -p)
+	$(eval GPU_FLAGS += -g -G)
 
 
 # -----------------------------------------------------

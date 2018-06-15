@@ -2,7 +2,7 @@
 #include <exception>
 #include <stdexcept>
 
-#include "Simulator.h"
+#include "CubbleApp.h"
 #include "Util.h"
 
 int main(int argc, char **argv)
@@ -39,8 +39,8 @@ int main(int argc, char **argv)
 	str += "------------------------------------------------------------------------\n";
 #endif
 	std::cout << str << std::endl;
-	cubble::Simulator simulator(argv[1], argv[2]);
-        simulator.run();
+	cubble::CubbleApp app(argv[1], argv[2]);
+        app.run();
     }
     catch (const std::exception &e)
     {
