@@ -27,6 +27,8 @@ void cubble::Simulator::setupSimulation()
     assignBubblesToCells();
     removeIntersectingBubbles();
     assignBubblesToCells();
+    
+    bubbles.deviceToHost();
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
