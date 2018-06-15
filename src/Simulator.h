@@ -54,6 +54,9 @@ namespace cubble
     __device__
     int getGlobalTid();
 
+    __device__
+    double getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2);
+
     __global__
     void assignDataToBubbles(float *x,
 			     float *y,
@@ -84,6 +87,8 @@ namespace cubble
 			   int *indices,
 			   Cell *cells,
 			   int *intesectingIndices,
+			   dvec tfr,
+			   dvec lbb,
 			   int numBubbles,
 			   int numDomains,
 			   int numCells,

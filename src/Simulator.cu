@@ -180,10 +180,13 @@ void cubble::Simulator::removeIntersectingBubbles()
     CUDA_CALL(cudaDeviceSynchronize());
     
     std::cout << "Starting the removal of intersecting bubbles." << std::endl;
+
+    dvec tfr = env->getTfr();
+    dvec lbb = env->getLbb();
     
     CudaContainer<int> intersections(bubbles.getSize());
 
-    int numThreads = 1024;
+    int numThreads = 512;
     int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
     dim3 gridSize = getGridSize(bubbles.getSize());
     gridSize.z *= numDomains;
@@ -213,6 +216,8 @@ void cubble::Simulator::removeIntersectingBubbles()
 					  indices.getDevPtr(),
 					  cells.getDevPtr(),
 					  intersections.getDevPtr(),
+					  tfr,
+					  lbb,
 					  bubbles.getSize(),
 					  numDomains,
 					  cells.getSize(),
@@ -232,8 +237,11 @@ void cubble::Simulator::removeIntersectingBubbles()
     assert(intersections.getSize() == bubbles.getSize());
     for (size_t i = 0; i < intersections.getSize(); ++i)
     {
+	//std::cout << intersections[i] << std::endl;
 	if (!intersections[i])
+	{
 	    culledBubbles.push_back(bubbles[i]);
+	}
     }
 
     std::cout << " Done.\n\tCopying data..." << std::flush;
@@ -319,6 +327,12 @@ int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
     idxVec += dim;
     idxVec %= dim;
 
+    if (threadIdx.x == 0 && blockIdx.x == 0)
+    {
+	printf("(%d, %d, %d) --> (%d, %d, %d)\n", cellIdx.x, cellIdx.y, cellIdx.z,
+	       idxVec.x, idxVec.y, idxVec.z);
+    }
+
     return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
 }
 
@@ -388,6 +402,25 @@ int cubble::getGlobalTid()
     int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
 
     return tid;
+}
+
+__forceinline__ __device__
+double cubble::getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2)
+{
+    dvec temp = pos1 - pos2;
+    double length = temp.getSquaredLength();
+    dvec interval = tfr - lbb;
+
+    pos2.x = temp.x < -0.5 * interval.x ? pos2.x - interval.x
+		      : (temp.x > 0.5 * interval.x ? pos2.x + interval.x  : pos2.x);
+    pos2.y = temp.y < -0.5 * interval.y ? pos2.y - interval.y
+		      : (temp.y > 0.5 * interval.y ? pos2.y + interval.y  : pos2.y);
+    pos2.z = temp.z < -0.5 * interval.z ? pos2.z - interval.z
+		      : (temp.z > 0.5 * interval.z ? pos2.z + interval.z  : pos2.z);
+
+    double length2 = (pos1 - pos2).getSquaredLength();
+    assert(length2 < length || length2 == length);
+    return length2;
 }
 
 __global__
@@ -470,6 +503,8 @@ void cubble::findIntersections(Bubble *bubbles,
 			       int *indices,
 			       Cell *cells,
 			       int *intersectingIndices,
+			       dvec tfr,
+			       dvec lbb,
 			       int numBubbles,
 			       int numDomains,
 			       int numCells,
@@ -528,24 +563,21 @@ void cubble::findIntersections(Bubble *bubbles,
 	    int y = pairIdx / xInterval;
 	    assert(y < yInterval);
 
+	    int gid1 = xBegin + x;
+	    int gid2 = yBegin + y;
+	    
 	    // Skip self-intersection
-	    if (xBegin + x == yBegin + y)
+	    if (gid1 == gid2)
 		continue;
 	    
 	    Bubble *b1 = &localBubbles[x];
 	    Bubble *b2 = &localBubbles[xInterval + y];
 	    
 	    double radii = b1->getRadius() + b2->getRadius();
-	    double length = (b1->getPos() - b2->getPos()).getSquaredLength();
+	    double length = getWrappedSquaredLength(tfr, lbb, b1->getPos(), b2->getPos());
 	    
 	    if (radii * radii > length)
 	    {
-		int gid1 = xBegin + x;
-		int gid2 = yBegin + y;
-
-		assert(gid1 < numBubbles);
-		assert(gid2 < numBubbles);
-		
 		gid1 = indices[gid1];
 		gid2 = indices[gid2];
 		int gid = gid1 < gid2 ? gid1 : gid2;
