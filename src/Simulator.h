@@ -77,10 +77,10 @@ namespace cubble
 			  int numBubbles);
 
     __global__
-    void assignBubblesToCells(Bubble *bubbles,
-			      int *indices,
-			      Cell *cells,
-			      int numBubbles);
+    void bubblesToCells(Bubble *bubbles,
+			int *indices,
+			Cell *cells,
+			int numBubbles);
 
     __global__
     void findIntersections(Bubble *bubbles,
@@ -89,6 +89,7 @@ namespace cubble
 			   int *intesectingIndices,
 			   dvec tfr,
 			   dvec lbb,
+			   double overlapTolerance,
 			   int numBubbles,
 			   int numDomains,
 			   int numCells,

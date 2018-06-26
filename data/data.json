@@ -30,5 +30,7 @@
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 96,
     "SnapshotFilenameExpl" : "The stem of the filename where to save the snap shots to.",
-    "SnapshotFilename" : "snapshot"
+    "SnapshotFilename" : "snapshot",
+    "InitialOverlapToleranceExpl" : "Maximum tolerated ratio of radii squared to distances squared when removing the intersecting bubbles at the simulation setup.",
+    "InitialOverlapTolerance" : 2.0
 }

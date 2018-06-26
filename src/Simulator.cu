@@ -177,10 +177,10 @@ void cubble::Simulator::assignBubblesToCells()
 
     std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
     
-    cubble::assignBubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
-								 indices.getDevPtr(),
-								 cells.getDevPtr(),
-								 bubbles.getSize());
+    bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
+						   indices.getDevPtr(),
+						   cells.getDevPtr(),
+						   bubbles.getSize());
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
@@ -234,6 +234,7 @@ void cubble::Simulator::removeIntersectingBubbles()
 					  intersections.getDevPtr(),
 					  tfr,
 					  lbb,
+					  env->getInitialOverlapTolerance(),
 					  bubbles.getSize(),
 					  numDomains,
 					  cells.getSize(),
@@ -251,12 +252,14 @@ void cubble::Simulator::removeIntersectingBubbles()
     std::cout << " Done.\n\tRemoving intersecting elements from host vector..." << std::flush;
 
     assert(intersections.getSize() == bubbles.getSize());
+    double minRadius = env->getMinRad();
     for (size_t i = 0; i < intersections.getSize(); ++i)
     {
-	//std::cout << intersections[i] << std::endl;
 	if (intersections[i] == 0)
 	{
-	    culledBubbles.push_back(bubbles[i]);
+	    Bubble tempBubble = bubbles[i];
+	    if (tempBubble.getRadius() >= minRadius)
+		culledBubbles.push_back(tempBubble);
 	}
     }
 
@@ -483,9 +486,7 @@ void cubble::calculateOffsets(Bubble *bubbles,
 	    + gridDim.x * indexVec.y
 	    + indexVec.x;
 	
-	fvec color = fvec(indexVec.x / (float)gridDim.x,
-			  indexVec.y / (float)gridDim.y,
-			  indexVec.z / (float)gridDim.z);
+	fvec color = indexVec.asType<float>() / fvec(gridDim.x, gridDim.y, gridDim.z);
 
 	bubbles[tid].setCellIndex(index);
         bubbles[tid].setColor(color);
@@ -494,12 +495,11 @@ void cubble::calculateOffsets(Bubble *bubbles,
     }
 }
 
-
 __global__
-void cubble::assignBubblesToCells(Bubble *bubbles,
-				  int *indices,
-				  Cell *cells,
-				  int numBubbles)
+void cubble::bubblesToCells(Bubble *bubbles,
+			    int *indices,
+			    Cell *cells,
+			    int numBubbles)
 {
     int tid = getGlobalTid();
 
@@ -518,6 +518,7 @@ void cubble::findIntersections(Bubble *bubbles,
 			       int *intersectingIndices,
 			       dvec tfr,
 			       dvec lbb,
+			       double overlapTolerance,
 			       int numBubbles,
 			       int numDomains,
 			       int numCells,
@@ -589,7 +590,7 @@ void cubble::findIntersections(Bubble *bubbles,
 	    double radii = b1->getRadius() + b2->getRadius();
 	    double length = getWrappedSquaredLength(tfr, lbb, b1->getPos(), b2->getPos());
 	    
-	    if (radii * radii > length)
+	    if (radii * radii > overlapTolerance * length)
 	    {
 		gid1 = indices[gid1];
 		gid2 = indices[gid2];

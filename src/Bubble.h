@@ -16,7 +16,7 @@ namespace cubble
 	Bubble() {}
 
 	__host__ __device__
-	Bubble(int i) {}
+	Bubble(int zero) {}
 	
 	__host__ __device__
 	Bubble(double r, dvec pos)
@@ -40,7 +40,12 @@ namespace cubble
 	__host__ __device__
 	dvec getPosPrev() const { return posPrev; }
 	__host__ __device__
+	void setPosPrev(const dvec &p) { posPrev = p; }
+	
+	__host__ __device__
 	dvec getPosPred() const { return posPred; }
+	__host__ __device__
+	void setPosPred(const dvec &p) { posPred = p; }
 	
 	__host__ __device__
 	dvec getVel() const { return vel; }
@@ -50,19 +55,26 @@ namespace cubble
 	__host__ __device__
 	dvec getVelPrev() const { return velPrev; }
 	__host__ __device__
+        void setVelPrev(const dvec &v) { velPrev = v; }
+	
+	__host__ __device__
 	dvec getVelPred() const { return velPred; }
+	__host__ __device__
+        void setVelPred(const dvec &v) { velPred = v; }
 
 	__host__ __device__
-	dvec getAcc() { return acc; }
+	dvec getAcc() const { return acc; }
+	__host__ __device__
+	void setAcc(const dvec &a) { acc = a; }
 
 	fvec getColor() const { return color; }
 	__host__ __device__
 	void setColor(const fvec &c) { color = c; }
 	__host__ __device__
-	void setColor(fvec &&c) { color = c; }
-
+	void setColor(const fvec &&c) { color = c; }
+	
 	__host__ __device__
-	int getCellIndex() { return cellIndex; }
+	int getCellIndex() const { return cellIndex; }
 	__host__ __device__
 	void setCellIndex(int i) { cellIndex = i; }
 	

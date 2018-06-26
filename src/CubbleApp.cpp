@@ -26,9 +26,11 @@ void CubbleApp::run()
 {
     simulator->setupSimulation();
 
-    double volRatio = simulator->getVolumeOfBubbles() / (env->getSimulationBoxVolume());
-    std::cout << "Current volume ratio: " << volRatio
-	      << ", target volume ratio: " << env->getPhiTarget()
+    double phi = simulator->getVolumeOfBubbles() / (env->getSimulationBoxVolume());
+    double phiTarget = env->getPhiTarget();
+    
+    std::cout << "Current volume ratio: " << phi
+	      << ", target volume ratio: " << phiTarget
 	      << std::endl;
     
     saveSnapshotToFile();

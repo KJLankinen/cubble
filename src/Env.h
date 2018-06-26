@@ -34,6 +34,8 @@ namespace cubble
 	CUBBLE_PROP(double, ErrorTolerance)
 	CUBBLE_PROP(double, TimeStep)
 	CUBBLE_PROP(double, CompressionAmount)
+	CUBBLE_PROP(double, InitialOverlapTolerance)
+	
 	CUBBLE_PROP(std::string, DataPath)
 	CUBBLE_PROP(std::string, SnapshotFilename)
 
@@ -116,6 +118,7 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
+	    CUBBLE_IO_PARAMETER(read, params, InitialOverlapTolerance);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
