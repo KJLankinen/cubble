@@ -7,6 +7,7 @@
 #include "Vec.h"
 
 #include <iostream>
+#include <sstream>
 #include <curand.h>
 
 cubble::Simulator::Simulator(std::shared_ptr<Env> e)
@@ -72,7 +73,7 @@ void cubble::Simulator::generateBubbles()
     double avgRad = env->getAvgRad();
     double stdDevRad = env->getStdDevRad();
     dvec lbb = env->getLbb();
-    dvec tfr = env->getTfr();	
+    dvec tfr = env->getTfr();
 
     int numThreads = 1024;
     int numBlocks = (int)std::ceil(n / (float)numThreads);
@@ -128,16 +129,31 @@ void cubble::Simulator::assignBubblesToCells()
     dvec lbb = env->getLbb();
     dim3 gridSize = getGridSize(bubbles.getSize());
     int numCells = gridSize.x * gridSize.y * gridSize.z;
+    dvec cellSize = (tfr - lbb) / dvec(gridSize.x, gridSize.y, gridSize.z);
+    double minCellSize = 3.0 * env->getAvgRad();
 
     std::cout << "\n\tUsing grid size (" << gridSize.x
 	      << ", " << gridSize.y
 	      << ", " << gridSize.z
 	      << ") with total of " << numCells << " cells." << std::flush;
     
+    if (cellSize.x < minCellSize || cellSize.y < minCellSize || cellSize.z < minCellSize)
+    {
+	std::stringstream ss;
+        ss << "Size of cell (" << cellSize
+	   << ") is smaller than the acceptable minimum cell size of "
+	   << minCellSize
+	   << " in at least one dimension."
+	   << "\nEither decrease the number of bubbles or increase the size"
+	   << " of the simulation box.";
+	
+	throw std::runtime_error(ss.str());
+    }
+    
     cells = CudaContainer<Cell>(numCells);
     indices = CudaContainer<int>(bubbles.getSize());
 
-    std::cout << " Done.\n\tCalculating offsets..." << std::flush;
+    std::cout << "\n\tCalculating offsets..." << std::flush;
     
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
 						      cells.getDevPtr(),
@@ -238,7 +254,7 @@ void cubble::Simulator::removeIntersectingBubbles()
     for (size_t i = 0; i < intersections.getSize(); ++i)
     {
 	//std::cout << intersections[i] << std::endl;
-	if (!intersections[i])
+	if (intersections[i] == 0)
 	{
 	    culledBubbles.push_back(bubbles[i]);
 	}
@@ -327,12 +343,6 @@ int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
     idxVec += dim;
     idxVec %= dim;
 
-    if (threadIdx.x == 0 && blockIdx.x == 0)
-    {
-	printf("(%d, %d, %d) --> (%d, %d, %d)\n", cellIdx.x, cellIdx.y, cellIdx.z,
-	       idxVec.x, idxVec.y, idxVec.z);
-    }
-
     return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
 }
 
@@ -350,7 +360,7 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
 					  int &outYInterval)
 {
     int domain = blockIdx.z % numDomains;
-    int di = 2 * domain / numDomains;
+    int di = (2 * domain) / numDomains;
     
     assert((di == 0 && domain < (int)(0.5f * numDomains))
 	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
@@ -377,6 +387,7 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     outXInterval = halfSize + djMod2 * (neighbor.size % 2);
     
     assert(outXBegin + outXInterval <= numBubbles);
+    assert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
     assert(outXInterval == halfSize || outXInterval == halfSize + 1);
 
     // y-axis uses the top or bottom half of this cell
@@ -386,6 +397,7 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
 
     assert(outYBegin + outYInterval <= numBubbles);
     assert(outYInterval == halfSize || outYInterval == halfSize + 1);
+    assert(outYBegin + outYInterval <= self.size + self.offset);
     assert(outXInterval + outYInterval <= numLocalBubbles);
 }
 
@@ -419,7 +431,8 @@ double cubble::getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2)
 		      : (temp.z > 0.5 * interval.z ? pos2.z + interval.z  : pos2.z);
 
     double length2 = (pos1 - pos2).getSquaredLength();
-    assert(length2 < length || length2 == length);
+    assert(length2 <= length);
+    
     return length2;
 }
 
@@ -546,7 +559,7 @@ void cubble::findIntersections(Bubble *bubbles,
 	if (threadIdx.x < xInterval)
 	    localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
 	else
-	    localBubbles[threadIdx.x] = bubbles[indices[yBegin - xInterval + threadIdx.x]];
+	    localBubbles[threadIdx.x] = bubbles[indices[yBegin + (threadIdx.x - xInterval)]];
     }
 
     __syncthreads();

@@ -9,7 +9,7 @@
     },
     "MinRad": 1e-08,
     "MuZero": 1.0,
-    "NumBubbles": 1000000,
+    "NumBubbles": 50000,
     "NumBubblesPerCell": 96,
     "NumIntegrationSteps": 1000000,
     "PhiTarget": 0.8,
@@ -18,8 +18,8 @@
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 2.0,
-        "y": 2.0,
+        "x": 4.2,
+        "y": 4.2,
         "z": 5.0
     },
     "TimeStep": 1e-05
