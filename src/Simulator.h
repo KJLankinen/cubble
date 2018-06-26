@@ -35,6 +35,9 @@ namespace cubble
 	CudaContainer<Cell> cells;
     };
 
+    __global__
+    void calculateVolumes(Bubble *b, double *volumes, int numBubbles);
+    
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 

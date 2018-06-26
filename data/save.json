@@ -2,7 +2,7 @@
     "AvgRad": 0.06,
     "CompressionAmount": 1e-06,
     "ErrorTolerance": 0.0001,
-    "InitialOverlapTolerance": 2.0,
+    "InitialOverlapTolerance": 1.0,
     "Lbb": {
         "x": 0.0,
         "y": 0.0,

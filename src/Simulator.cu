@@ -9,6 +9,8 @@
 #include <iostream>
 #include <sstream>
 #include <curand.h>
+#include <thrust/reduce.h>
+#include <thrust/execution_policy.h>
 
 cubble::Simulator::Simulator(std::shared_ptr<Env> e)
 {
@@ -35,22 +37,17 @@ void cubble::Simulator::setupSimulation()
 double cubble::Simulator::getVolumeOfBubbles() const
 {
     double volume = 0;
-    for (size_t i = 0; i < bubbles.getSize(); ++i)
-    {
-	double radius = bubbles[i].getRadius();
-#if NUM_DIM == 3
-	volume += radius * radius * radius;
-#else
-	volume += radius * radius;
-#endif
-    }
-
-    volume *= M_PI;
-
-#if NUM_DIM == 3
-    volume *= 1.33333333333333333333333333;
-#endif
-
+    CudaContainer<double> volumes(bubbles.getSize());
+    int numThreads = 1024;
+    int numBlocks = (int)std::ceil(bubbles.getSize() / (float)numThreads);
+    calculateVolumes<<<numBlocks, numThreads>>>(bubbles.getDevPtr(),
+						volumes.getDevPtr(),
+						bubbles.getSize());
+    volumes.deviceToHost();
+    volume = thrust::reduce(thrust::host,
+			    volumes.getHostPtr(),
+			    volumes.getHostPtr() + volumes.getSize());
+    
     return volume;
 }
 
@@ -282,6 +279,22 @@ dim3 cubble::Simulator::getGridSize(int numBubbles)
 #endif
 
     return gridSize;
+}
+
+__global__
+void cubble::calculateVolumes(Bubble *b, double *volumes, int numBubbles)
+{
+    int tid = getGlobalTid();
+    if (tid < numBubbles)
+    {
+	double radius = b[tid].getRadius();
+	double volume = radius * radius * 3.14159265359;
+#if (NUM_DIM == 3)
+	volume *= radius * 1.33333333333333333333333333;
+#endif
+	
+	volumes[tid] = volume;
+    }   
 }
 
 __forceinline__ __device__

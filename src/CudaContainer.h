@@ -56,6 +56,11 @@ namespace cubble
 	{
 	    return devPtr.get();
 	}
+
+	T* getHostPtr() const
+	{
+	    return hostPtr.get();
+	}
 	
 	size_t getSize() const
 	{
