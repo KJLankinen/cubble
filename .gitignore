@@ -1,3 +1,4 @@
 # List here project related files that should be ignore by git.
 *.[oa]
 *~
+data/snapshot*
