@@ -73,6 +73,14 @@ namespace cubble
 		std::cerr << ss.str() << std::endl;
 	}
     }
+
+    __device__ __forceinline__
+    void deviceAssert(bool statement)
+    {
+#ifndef NDEBUG
+	assert(statement);
+#endif
+    }
     
     inline void curandAssert(curandStatus_t result,
 			     const char *file,

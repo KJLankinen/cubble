@@ -35,9 +35,6 @@ namespace cubble
 	CudaContainer<int> indices;
 	CudaContainer<Cell> cells;
     };
-
-    __global__
-    void calculateVolumes(Bubble *b, double *volumes, int numBubbles);
     
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
@@ -46,21 +43,24 @@ namespace cubble
     void getDomainOffsetsAndIntervals(int numBubbles,
 				      int numDomains,
 				      int numCells,
-				      int numLocalBubbles,
 				      ivec cellIdxVec,
 				      ivec boxDim,
 				      Cell *cells,
 				      int &outXBegin,
 				      int &outXInterval,
 				      int &outYBegin,
-				      int &outYInterval);
+				      int &outYInterval,
+				      bool &outIsOwnCell);
     
     __device__
     int getGlobalTid();
 
     __device__
-    double getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2);
-
+    dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
+    
+    __global__
+    void calculateVolumes(Bubble *b, double *volumes, int numBubbles);
+    
     __global__
     void assignDataToBubbles(float *x,
 			     float *y,
@@ -72,15 +72,10 @@ namespace cubble
 			     int numBubbles);
 
     __global__
-    void calculateOffsets(Bubble *bubbles,
-			  Cell *cells,
-			  int numBubbles);
+    void calculateOffsets(Bubble *bubbles, Cell *cells, int numBubbles);
 
     __global__
-    void bubblesToCells(Bubble *bubbles,
-			int *indices,
-			Cell *cells,
-			int numBubbles);
+    void bubblesToCells(Bubble *bubbles, int *indices, Cell *cells, int numBubbles);
 
     __global__
     void findIntersections(Bubble *bubbles,
@@ -94,4 +89,37 @@ namespace cubble
 			   int numDomains,
 			   int numCells,
 			   int numLocalBubbles);
+
+    __global__
+    void predict(Bubble *bubbles,
+		 int *indices,
+		 Cell *cells,
+		 dvec tfr,
+		 dvec lbb,
+		 double timeStep,
+		 int numBubbles,
+		 int numCells);
+
+    __global__
+    void correct(Bubble *bubbles,
+		 int *indices,
+		 Cell *cells,
+		 double *errors,
+		 dvec tfr,
+		 dvec lbb,
+		 double fZeroPerMuZero,
+		 double timeStep,
+		 int numBubbles,
+		 int numCells);
+    
+    __global__
+    void accelerate(Bubble *bubbles,
+		    int *indices,
+		    Cell *cells,
+		    dvec tfr,
+		    dvec lbb,
+		    int numBubbles,
+		    int numDomains,
+		    int numCells,
+		    int numLocalBubbles);
 };

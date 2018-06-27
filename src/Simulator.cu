@@ -5,11 +5,13 @@
 #include "CudaContainer.h"
 #include "Cell.h"
 #include "Vec.h"
+#include "Util.h"
 
 #include <iostream>
 #include <sstream>
 #include <curand.h>
 #include <thrust/reduce.h>
+#include <thrust/extrema.h>
 #include <thrust/execution_policy.h>
 
 cubble::Simulator::Simulator(std::shared_ptr<Env> e)
@@ -36,7 +38,65 @@ void cubble::Simulator::setupSimulation()
 
 void cubble::Simulator::integrate()
 {
-    // Nop for now
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
+    dvec tfr = env->getTfr();
+    dvec lbb = env->getLbb();
+    dim3 gridSize = getGridSize(bubbles.getSize());
+    double timeStep = env->getTimeStep();
+    
+    int maxNumBubbles = 0;
+    for (size_t i = 0; i < cells.getSize(); ++i)
+    {
+	int temp = cells[i].size;
+	maxNumBubbles = maxNumBubbles < temp ? temp : maxNumBubbles;
+    }
+    
+    // Nearest even size
+    maxNumBubbles += maxNumBubbles % 2;
+    assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
+
+    // Calculate prediction
+    predict<<<gridSize,
+        maxNumBubbles,
+	sizeof(Bubble) * maxNumBubbles>>>(bubbles.getDevPtr(),
+					  indices.getDevPtr(),
+					  cells.getDevPtr(),
+					  tfr,
+					  lbb,
+					  timeStep,
+					  bubbles.getSize(),
+					  cells.getSize());
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    // Calculate accelerations
+    
+
+    // Calculate predicted velocity, correction & error
+    CudaContainer<double> errors(bubbles.getSize());
+    correct<<<gridSize,
+        maxNumBubbles,
+	sizeof(Bubble) * maxNumBubbles>>>(bubbles.getDevPtr(),
+					  indices.getDevPtr(),
+					  cells.getDevPtr(),
+					  errors.getDevPtr(),
+					  tfr,
+					  lbb,
+					  env->getFZeroPerMuZero(),
+					  timeStep,
+					  bubbles.getSize(),
+					  cells.getSize());
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    errors.deviceToHost();
+    double error = *thrust::max_element(thrust::host,
+					errors.getHostPtr(),
+					errors.getHostPtr() + errors.getSize());
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
@@ -207,23 +267,22 @@ void cubble::Simulator::removeIntersectingBubbles()
     std::cout << "\tCalculating the size of dynamically allocated shared memory..."
 	      << std::flush;
 
-    int sharedMemSize = 0;
+    int maxNumBubbles = 0;
     for (size_t i = 0; i < cells.getSize(); ++i)
     {
 	int temp = cells[i].size;
-	sharedMemSize = sharedMemSize < temp ? temp : sharedMemSize;
+	maxNumBubbles = maxNumBubbles < temp ? temp : maxNumBubbles;
     }
     
     // Nearest even size
-    sharedMemSize += sharedMemSize % 2;
-
-    assertMemBelowLimit(sharedMemSize);
+    maxNumBubbles += maxNumBubbles % 2;
+    assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
 
     std::cout << " Done.\n\tStarting kernel for finding intersections..." << std::flush;
     
     findIntersections<<<gridSize,
 	numThreads,
-	sharedMemSize * sizeof(Bubble)>>>(bubbles.getDevPtr(),
+	maxNumBubbles * sizeof(Bubble)>>>(bubbles.getDevPtr(),
 					  indices.getDevPtr(),
 					  cells.getDevPtr(),
 					  intersections.getDevPtr(),
@@ -233,7 +292,7 @@ void cubble::Simulator::removeIntersectingBubbles()
 					  bubbles.getSize(),
 					  numDomains,
 					  cells.getSize(),
-					  sharedMemSize);
+					  maxNumBubbles);
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
@@ -364,19 +423,19 @@ __forceinline__ __device__
 void cubble::getDomainOffsetsAndIntervals(int numBubbles,
 					  int numDomains,
 					  int numCells,
-					  int numLocalBubbles,
 					  ivec cellIdxVec,
 					  ivec boxDim,
 					  Cell *cells,
 					  int &outXBegin,
 					  int &outXInterval,
 					  int &outYBegin,
-					  int &outYInterval)
+					  int &outYInterval,
+					  bool &outIsOwnCell)
 {
     int domain = blockIdx.z % numDomains;
     int di = (2 * domain) / numDomains;
     
-    assert((di == 0 && domain < (int)(0.5f * numDomains))
+    deviceAssert((di == 0 && domain < (int)(0.5f * numDomains))
 	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
     
     int dj = domain % (int)(0.5f * numDomains);
@@ -386,13 +445,15 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
 	+ cellIdxVec.y * boxDim.x
 	+ cellIdxVec.x;
-    assert(selfCellIndex < numCells);
+    deviceAssert(selfCellIndex < numCells);
     Cell self = cells[selfCellIndex];
 
     // Find the neighbor of this cell
     int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    assert(neighborCellIndex < numCells);
+    deviceAssert(neighborCellIndex < numCells);
     Cell neighbor = cells[neighborCellIndex];
+    
+    outIsOwnCell = selfCellIndex == neighborCellIndex;
 
     // Find the interval of values to use:
     // x-axis uses the right or the left half of the neighbor cell
@@ -400,19 +461,18 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     outXBegin = neighbor.offset + djMod2 * halfSize;
     outXInterval = halfSize + djMod2 * (neighbor.size % 2);
     
-    assert(outXBegin + outXInterval <= numBubbles);
-    assert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
-    assert(outXInterval == halfSize || outXInterval == halfSize + 1);
+    deviceAssert(outXBegin + outXInterval <= numBubbles);
+    deviceAssert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
+    deviceAssert(outXInterval == halfSize || outXInterval == halfSize + 1);
 
     // y-axis uses the top or bottom half of this cell
     halfSize = 0.5f * self.size;
     outYBegin = self.offset + di * halfSize;
     outYInterval = halfSize + di * (self.size % 2);
 
-    assert(outYBegin + outYInterval <= numBubbles);
-    assert(outYInterval == halfSize || outYInterval == halfSize + 1);
-    assert(outYBegin + outYInterval <= self.size + self.offset);
-    assert(outXInterval + outYInterval <= numLocalBubbles);
+    deviceAssert(outYBegin + outYInterval <= numBubbles);
+    deviceAssert(outYInterval == halfSize || outYInterval == halfSize + 1);
+    deviceAssert(outYBegin + outYInterval <= self.size + self.offset);
 }
 
 __forceinline__ __device__
@@ -431,16 +491,14 @@ int cubble::getGlobalTid()
 }
 
 __forceinline__ __device__
-double cubble::getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2)
+cubble::dvec cubble::getShortestWrappedNormalizedVec(dvec pos1, dvec pos2)
 {
     dvec temp = pos1 - pos2;
     pos2.x = temp.x < -0.5 ? pos2.x - 1.0 : (temp.x > 0.5 ? pos2.x + 1.0 : pos2.x);
     pos2.y = temp.y < -0.5 ? pos2.y - 1.0 : (temp.y > 0.5 ? pos2.y + 1.0 : pos2.y);
     pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
-
-    temp = (tfr - lbb) * (pos1 - pos2);
     
-    return temp.getSquaredLength();
+    return pos1 - pos2;
 }
 
 __global__
@@ -522,11 +580,11 @@ void cubble::findIntersections(Bubble *bubbles,
 {
     extern __shared__ Bubble localBubbles[];
 
-    assert(numBubbles > 0);
-    assert(numDomains > 0);
-    assert(numCells > 0);
-    assert(numLocalBubbles > 0);
-    assert(!(numDomains & 1));
+    deviceAssert(numBubbles > 0);
+    deviceAssert(numDomains > 0);
+    deviceAssert(numCells > 0);
+    deviceAssert(numLocalBubbles > 0);
+    deviceAssert(!(numDomains & 1));
     
     ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
@@ -535,20 +593,22 @@ void cubble::findIntersections(Bubble *bubbles,
     int xInterval = -1;
     int yBegin = -1;
     int yInterval = -1;
+    bool isOwnCell = false;
     
     getDomainOffsetsAndIntervals(numBubbles,
 				 numDomains,
 				 numCells,
-				 numLocalBubbles,
 				 cellIdxVec,
 				 boxDim,
 				 cells,
 				 xBegin,
 				 xInterval,
 				 yBegin,
-				 yInterval);
+				 yInterval,
+				 isOwnCell);
 
-    assert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    deviceAssert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    deviceAssert(xInterval + yInterval <= numLocalBubbles);
     
     // Get the bubbles to shared memory
     if (threadIdx.x < xInterval + yInterval)
@@ -571,7 +631,7 @@ void cubble::findIntersections(Bubble *bubbles,
 	{
 	    int x = pairIdx % xInterval;
 	    int y = pairIdx / xInterval;
-	    assert(y < yInterval);
+	    deviceAssert(y < yInterval);
 
 	    int gid1 = xBegin + x;
 	    int gid2 = yBegin + y;
@@ -580,11 +640,12 @@ void cubble::findIntersections(Bubble *bubbles,
 	    if (gid1 == gid2)
 		continue;
 	    
-	    Bubble *b1 = &localBubbles[x];
-	    Bubble *b2 = &localBubbles[xInterval + y];
+	    const Bubble *b1 = &localBubbles[x];
+	    const Bubble *b2 = &localBubbles[xInterval + y];
 	    
 	    double radii = b1->getRadius() + b2->getRadius();
-	    double length = getWrappedSquaredLength(tfr, lbb, b1->getPos(), b2->getPos());
+	    dvec posVec = getShortestWrappedNormalizedVec(b1->getPos(), b2->getPos());
+	    double length = (posVec * (tfr - lbb)).getSquaredLength();
 	    
 	    if (radii * radii > overlapTolerance * length)
 	    {
@@ -593,6 +654,177 @@ void cubble::findIntersections(Bubble *bubbles,
 		int gid = gid1 < gid2 ? gid1 : gid2;
 		
 		atomicAdd(&intersectingIndices[gid], 1);
+	    }
+	}
+    }
+}
+
+__global__
+void cubble::predict(Bubble *bubbles,
+		     int *indices,
+		     Cell *cells,
+		     dvec tfr,
+		     dvec lbb,
+		     double timeStep,
+		     int numBubbles,
+		     int numCells)
+{
+    extern __shared__ Bubble localBubbles[];
+
+    int cid = blockIdx.z * gridDim.x * gridDim.y
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
+
+    deviceAssert(cid < numCells);
+    const Cell *self = &cells[cid];
+
+    if (threadIdx.x < self->size)
+    {
+	localBubbles[threadIdx.x] = bubbles[indices[self->offset + threadIdx.x]];
+        Bubble *bubble = &localBubbles[threadIdx.x];
+
+	// Scale, predict, normalize
+	dvec interval = (tfr - lbb);
+	dvec pos = lbb + bubble->getPos() * interval;
+	pos += 0.5 * timeStep * (3.0 * bubble->getVel() - bubble->getVelPrev());
+	pos = (pos - lbb) / interval;
+	bubble->setPosPred(pos);
+	
+	bubbles[indices[self->offset + threadIdx.x]] = localBubbles[threadIdx.x];
+    }
+}
+
+__global__
+void cubble::correct(Bubble *bubbles,
+		     int *indices,
+		     Cell *cells,
+		     double *errors,
+		     dvec tfr,
+		     dvec lbb,
+		     double fZeroPerMuZero,
+		     double timeStep,
+		     int numBubbles,
+		     int numCells)
+{
+    extern __shared__ Bubble localBubbles[];
+
+    int cid = blockIdx.z * gridDim.x * gridDim.y
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
+
+    deviceAssert(cid < numCells);
+    const Cell *self = &cells[cid];
+
+    if (threadIdx.x < self->size)
+    {
+	int gid = indices[self->offset + threadIdx.x];
+	localBubbles[threadIdx.x] = bubbles[gid];
+        Bubble *bubble = &localBubbles[threadIdx.x];
+
+	bubble->setVelPred(bubble->getAcc() * fZeroPerMuZero);
+	
+	// Scale, correct, normalize
+	dvec interval = (tfr - lbb);
+	dvec pos = lbb + bubble->getPos() * interval;
+	pos += 0.5 * timeStep * (bubble->getVel() + bubble->getVelPred());
+	pos = (pos - lbb) / interval;
+
+	double error = (pos - bubble->getPosPred()).getAbsolute().getMaxComponent();
+	errors[gid] = error;
+	bubble->setPosPred(pos);
+	bubbles[gid] = localBubbles[threadIdx.x];
+    }
+}
+
+__global__
+void cubble::accelerate(Bubble *bubbles,
+			int *indices,
+			Cell *cells,
+			dvec tfr,
+			dvec lbb,
+			int numBubbles,
+			int numDomains,
+			int numCells,
+			int numLocalBubbles)
+{
+    extern __shared__ Bubble localBubbles[];
+
+    deviceAssert(numBubbles > 0);
+    deviceAssert(numDomains > 0);
+    deviceAssert(numCells > 0);
+    deviceAssert(numLocalBubbles > 0);
+    deviceAssert(!(numDomains & 1));
+    
+    ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
+    ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+
+    int xBegin = -1;
+    int xInterval = -1;
+    int yBegin = -1;
+    int yInterval = -1;
+    bool isOwnCell = false;
+    
+    getDomainOffsetsAndIntervals(numBubbles,
+				 numDomains,
+				 numCells,
+				 cellIdxVec,
+				 boxDim,
+				 cells,
+				 xBegin,
+				 xInterval,
+				 yBegin,
+				 yInterval,
+				 isOwnCell);
+
+    deviceAssert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    deviceAssert(xInterval + yInterval <= numLocalBubbles);
+    
+    // Get the bubbles to shared memory
+    if (threadIdx.x < xInterval + yInterval)
+    {
+	if (threadIdx.x < xInterval)
+	    localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
+	else
+	    localBubbles[threadIdx.x] = bubbles[indices[yBegin + (threadIdx.x - xInterval)]];
+    }
+
+    __syncthreads();
+      
+    int numPairs = xInterval * yInterval;
+    int numRounds = 1 + (numPairs / blockDim.x);
+    double accelerationMultiplier = isOwnCell ? 0.5 : 1.0;
+
+    for (int round = 0; round < numRounds; ++round)
+    {
+        int pairIdx = round * blockDim.x + threadIdx.x;
+	if (pairIdx < numPairs)
+	{
+	    int x = pairIdx % xInterval;
+	    int y = pairIdx / xInterval;
+	    deviceAssert(y < yInterval);
+
+	    int gid1 = xBegin + x;
+	    int gid2 = yBegin + y;
+	    
+	    // Skip self-intersection
+	    if (gid1 == gid2)
+		continue;
+	    
+	    const Bubble *b1 = &localBubbles[x];
+	    const Bubble *b2 = &localBubbles[xInterval + y];
+	    
+	    double radii = b1->getRadius() + b2->getRadius();
+	    dvec acceleration = getShortestWrappedNormalizedVec(b1->getPos(), b2->getPos());
+	    
+	    if (radii * radii > acceleration.getSquaredLength())
+	    {
+		double magnitude = acceleration.getLength();
+		acceleration *= (radii - magnitude) / (radii * magnitude);
+		acceleration *= accelerationMultiplier;
+
+		// Need some block or fence or something to do this safely.
+		//bubbles[gid1].addAcc(-acceleration);
+		//bubbles[gid2].addAcc(acceleration);
 	    }
 	}
     }

@@ -42,10 +42,10 @@ void CubbleApp::run()
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
     
-
     // Shrink the box and integrate bubbles until at target phi
     if (phi < phiTarget)
     {
+        int shrinkCount = 0;
 	std::cout << "Starting the shrinking of the simulation box..."
 		  << std::flush;
 	
@@ -60,9 +60,11 @@ void CubbleApp::run()
 	    
 	    // Calculate new phi
 	    phi = bubbleVolume / env->getSimulationBoxVolume();
+	    
+	    ++shrinkCount;
 	}
 	
-	std::cout << " Done." << std::endl;
+	std::cout << " Done. Total of " << shrinkCount << " steps." << std::endl;
 	printPhi(phi, phiTarget);
 	saveSnapshotToFile();
     }

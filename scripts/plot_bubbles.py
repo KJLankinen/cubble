@@ -81,7 +81,7 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    filename = "data/snapshot1.dat"
+    filename = "data/snapshot0.dat"
 
     with open(filename) as file:
         head = [next(file) for x in xrange(11)]

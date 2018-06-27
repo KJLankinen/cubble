@@ -53,15 +53,17 @@ namespace cubble
 	    
 	    return temp;
 	}
-	
+
+	__host__ __device__
 	T getLength() const { return std::sqrt(getSquaredLength()); }
 
+	__host__ __device__
 	vec<T> getAbsolute() const
 	{
 	    vec<T> v;
-	    v.x = std::abs(x);
-	    v.y = std::abs(y);
-	    v.z = std::abs(z);
+	    v.x = x < 0 ? -x : x;
+	    v.y = y < 0 ? -y : y;
+	    v.z = z < 0 ? -z : z;
 
 	    return v;
 	}
