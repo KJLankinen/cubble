@@ -20,6 +20,7 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
+	void integrate();
 	double getVolumeOfBubbles() const;
 	void getBubbles(std::vector<Bubble> &b) const;
 	

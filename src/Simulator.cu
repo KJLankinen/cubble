@@ -34,6 +34,11 @@ void cubble::Simulator::setupSimulation()
     bubbles.deviceToHost();
 }
 
+void cubble::Simulator::integrate()
+{
+    // Nop for now
+}
+
 double cubble::Simulator::getVolumeOfBubbles() const
 {
     double volume = 0;
@@ -80,7 +85,7 @@ void cubble::Simulator::generateBubbles()
     CudaContainer<float> r(n);
 
     // Generate random positions & radii
-    std::cout << " Done.\n\tGenerating data..." << std::flush;
+    std::cout << "\n\tGenerating data..." << std::flush;
     
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -111,7 +116,7 @@ void cubble::Simulator::generateBubbles()
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
-    std::cout << " Done." << std::endl;
+    std::cout << " Done.\n" << std::endl;
 }
 
 void cubble::Simulator::assignBubblesToCells()
@@ -184,7 +189,7 @@ void cubble::Simulator::assignBubblesToCells()
     
     cells.deviceToHost();
 
-    std::cout << " Done." << std::endl;
+    std::cout << " Done.\n" << std::endl;
 }
 
 void cubble::Simulator::removeIntersectingBubbles()
@@ -206,7 +211,7 @@ void cubble::Simulator::removeIntersectingBubbles()
 
     assertGridSizeBelowLimit(gridSize);
 
-    std::cout << "Calculating the size of dynamically allocated shared memory..."
+    std::cout << "\tCalculating the size of dynamically allocated shared memory..."
 	      << std::flush;
 
     int sharedMemSize = 0;
@@ -264,7 +269,7 @@ void cubble::Simulator::removeIntersectingBubbles()
 
     bubbles = CudaContainer<Bubble>(culledBubbles);
     
-    std::cout << " Done." << std::endl;
+    std::cout << " Done.\n" << std::endl;
 }
 
 dim3 cubble::Simulator::getGridSize(int numBubbles)
