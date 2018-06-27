@@ -69,15 +69,11 @@ namespace cubble
 #endif
 			     float *r,
 			     Bubble *b,
-			     dvec lbb,
-			     dvec tfr,
 			     int numBubbles);
 
     __global__
     void calculateOffsets(Bubble *bubbles,
 			  Cell *cells,
-			  dvec lbb,
-			  dvec tfr,
 			  int numBubbles);
 
     __global__

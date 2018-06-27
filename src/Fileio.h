@@ -71,6 +71,8 @@ namespace cubble
 	    friend void readFileToJSON(const std::string&, nlohmann::json&);
 	    friend void writeJSONToFile(const std::string&, const nlohmann::json&);
 
+	    friend void writeStringToFile(const std::string&, const std::string&);
+	    
 	    template <typename T>
 	    friend void writeVectorToFile(const std::string&, const std::vector<T>&);
 	    template <typename T>
@@ -90,6 +92,13 @@ namespace cubble
 	    file << j;
 	}
 
+	inline void writeStringToFile(const std::string &filename,
+				      const std::string &str)
+	{
+	    FileWrapper file(filename, false);
+	    file << str;
+	}
+	
 	template <typename T>
 	void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
 	{

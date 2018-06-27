@@ -57,8 +57,8 @@ double cubble::Simulator::getVolumeOfBubbles() const
 }
 
 void cubble::Simulator::getBubbles(std::vector<Bubble> &b) const
-{
-    // Should have some way of knowing which is up to date, device or host memory...
+{ 
+    // TODO: Should have some way of knowing which is up to date, device or host memory...
     bubbles.hostToVec(b);
 }
 
@@ -74,8 +74,6 @@ void cubble::Simulator::generateBubbles()
     int rngSeed = env->getRngSeed();
     double avgRad = env->getAvgRad();
     double stdDevRad = env->getStdDevRad();
-    dvec lbb = env->getLbb();
-    dvec tfr = env->getTfr();
 
     int numThreads = 1024;
     int numBlocks = (int)std::ceil(n / (float)numThreads);
@@ -109,8 +107,6 @@ void cubble::Simulator::generateBubbles()
 #endif
 						   r.getDevPtr(),
 						   bubbles.getDevPtr(),
-						   lbb,
-						   tfr,
 						   n);
     
     CUDA_CALL(cudaPeekAtLastError());
@@ -127,11 +123,10 @@ void cubble::Simulator::assignBubblesToCells()
     std::cout << "Starting to assign bubbles to cells." << std::flush;
     
     int numBubblesPerCell = env->getNumBubblesPerCell();
-    dvec tfr = env->getTfr();
-    dvec lbb = env->getLbb();
     dim3 gridSize = getGridSize(bubbles.getSize());
     int numCells = gridSize.x * gridSize.y * gridSize.z;
-    dvec cellSize = (tfr - lbb) / dvec(gridSize.x, gridSize.y, gridSize.z);
+    dvec cellSize = (env->getTfr() - env->getLbb()) /
+	dvec(gridSize.x, gridSize.y, gridSize.z);
     double minCellSize = 3.0 * env->getAvgRad();
 
     std::cout << "\n\tUsing grid size (" << gridSize.x
@@ -159,8 +154,6 @@ void cubble::Simulator::assignBubblesToCells()
     
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
 						      cells.getDevPtr(),
-						      lbb,
-						      tfr,
 						      bubbles.getSize());
 
     CUDA_CALL(cudaPeekAtLastError());
@@ -441,20 +434,13 @@ __forceinline__ __device__
 double cubble::getWrappedSquaredLength(dvec tfr, dvec lbb, dvec pos1, dvec pos2)
 {
     dvec temp = pos1 - pos2;
-    double length = temp.getSquaredLength();
-    dvec interval = tfr - lbb;
+    pos2.x = temp.x < -0.5 ? pos2.x - 1.0 : (temp.x > 0.5 ? pos2.x + 1.0 : pos2.x);
+    pos2.y = temp.y < -0.5 ? pos2.y - 1.0 : (temp.y > 0.5 ? pos2.y + 1.0 : pos2.y);
+    pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
 
-    pos2.x = temp.x < -0.5 * interval.x ? pos2.x - interval.x
-		      : (temp.x > 0.5 * interval.x ? pos2.x + interval.x  : pos2.x);
-    pos2.y = temp.y < -0.5 * interval.y ? pos2.y - interval.y
-		      : (temp.y > 0.5 * interval.y ? pos2.y + interval.y  : pos2.y);
-    pos2.z = temp.z < -0.5 * interval.z ? pos2.z - interval.z
-		      : (temp.z > 0.5 * interval.z ? pos2.z + interval.z  : pos2.z);
-
-    double length2 = (pos1 - pos2).getSquaredLength();
-    assert(length2 <= length);
+    temp = (tfr - lbb) * (pos1 - pos2);
     
-    return length2;
+    return temp.getSquaredLength();
 }
 
 __global__
@@ -465,21 +451,16 @@ void cubble::assignDataToBubbles(float *x,
 #endif
 				 float *r,
 				 Bubble *b,
-				 dvec lbb,
-				 dvec tfr,
 				 int numBubbles)
 {
     int tid = getGlobalTid();
     if (tid < numBubbles)
     {
-	dvec pos;
-        pos.x = (double)x[tid];
-	pos.y = (double)y[tid];
 #if (NUM_DIM == 3)
-	pos.z = (double)z[tid];
-#endif	
-	// Scale position
-	pos = pos * tfr + lbb;
+	dvec pos(x[tid], y[tid], z[tid]);
+#else
+	dvec pos(x[tid], y[tid], 0.0);
+#endif  
 	
 	b[tid].setPos(pos);
 	b[tid].setRadius((double)r[tid]);
@@ -489,16 +470,13 @@ void cubble::assignDataToBubbles(float *x,
 __global__
 void cubble::calculateOffsets(Bubble *bubbles,
 			      Cell *cells,
-			      dvec lbb,
-			      dvec tfr,
 			      int numBubbles)
 {   
     int tid = getGlobalTid();
-    dvec invInterval = 1.0 / (tfr - lbb);
     
     if (tid < numBubbles)
     {
-	dvec pos = (bubbles[tid].getPos() - lbb) * invInterval;
+	dvec pos = bubbles[tid].getPos();
 	ivec indexVec(gridDim.x * pos.x, gridDim.y * pos.y, gridDim.z * pos.z);
 	int index = gridDim.x * gridDim.y * indexVec.z
 	    + gridDim.x * indexVec.y

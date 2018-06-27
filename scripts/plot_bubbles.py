@@ -81,10 +81,17 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
     return collection
 
 def plot_2d():
-    data = np.loadtxt("data/snapshot0.dat", delimiter=',')
+    filename = "data/snapshot1.dat"
 
-    x = data[:,0]
-    y = data[:,1]
+    with open(filename) as file:
+        head = [next(file) for x in xrange(11)]
+    lbb = np.fromstring(head[-2], count=3, sep=',')
+    tfr = np.fromstring(head[-1], count=3, sep=',')
+    
+    data = np.loadtxt(filename, delimiter=',', skiprows=11)
+
+    x = lbb[0] + data[:,0] * (tfr - lbb)[0]
+    y = lbb[1] + data[:,1] * (tfr - lbb)[1]
     r = data[:,3]
     c = data[:,4:]
     
@@ -96,11 +103,18 @@ def plot_2d():
     plt.show()
 
 def plot_3d():
-    data = np.loadtxt("data/snapshot0.dat", delimiter=',')
+    filename = "data/snapshot0.dat"
 
-    x = data[:,0]
-    y = data[:,1]
-    z = data[:,2]
+    with open(filename) as file:
+        head = [next(file) for x in xrange(11)]
+    lbb = np.fromstring(head[-2], count=3, sep=',')
+    tfr = np.fromstring(head[-1], count=3, sep=',')
+    
+    data = np.loadtxt(filename, delimiter=',', skiprows=11)
+
+    x = lbb[0] + data[:,0] * (tfr - lbb)[0]
+    y = lbb[1] + data[:,1] * (tfr - lbb)[1]
+    z = lbb[2] + data[:,2] * (tfr - lbb)[2]
     r = data[:,3]
 
     fig = plt.figure()

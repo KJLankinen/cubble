@@ -94,16 +94,39 @@ void CubbleApp::saveSnapshotToFile()
 {
     std::cout << "Writing a snap shot to a file..." << std::flush;
 
-    std::vector<Bubble> temp;
-    simulator->getBubbles(temp);
+    std::vector<Bubble> tempVec;
+    simulator->getBubbles(tempVec);
     
     std::stringstream ss;
     ss << env->getDataPath()
        << env->getSnapshotFilename()
        << numSnapshots
        << ".dat";
+
+    std::string filename(ss.str());
+    ss.clear();
+    ss.str("");
+
+    // Add descriptions here, when adding new things to the 'header' of the data file
+    ss << "#--------------------------------------------------"
+       << "\n# Lines starting with '#' are comment lines"
+       << "\n#"
+       << "\n# Format of data:"
+       << "\n# left bottom back"
+       << "\n# top front right"
+       << "\n#"
+       << "\n# bubble data: normalized position (x, y, z),"
+       << " unnormalized radius, color as (r, g, b)"
+       << "\n#--------------------------------------------------";
+
+    // Add the new things here.
+    ss << "\n" << env->getLbb()
+       << "\n" << env->getTfr();
     
-    fileio::writeVectorToFile(ss.str(), temp);
+    for (const auto &bubble : tempVec)
+	ss << "\n" << bubble;
+    
+    fileio::writeStringToFile(filename, ss.str());
     ++numSnapshots;
 
     std::cout << " Done." << std::endl;
