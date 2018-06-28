@@ -145,7 +145,6 @@ void cubble::Simulator::integrate()
 	bubbles.getDevPtr(),
 	indices.getDevPtr(),
 	cells.getDevPtr(),
-	accelerations.getDevPtr(),
         bubbles.getSize(),
         cells.getSize());
 }
@@ -451,12 +450,8 @@ void cubble::calculateOffsets(Bubble *bubbles,
 	int index = gridDim.x * gridDim.y * indexVec.z
 	    + gridDim.x * indexVec.y
 	    + indexVec.x;
-	
-	fvec color = indexVec.asType<float>() / fvec(gridDim.x, gridDim.y, gridDim.z);
 
 	bubbles[tid].setCellIndex(index);
-        bubbles[tid].setColor(color);
-	
 	atomicAdd(&cells[index].offset, 1);
     }
 }
@@ -757,7 +752,6 @@ __global__
 void cubble::updateData(Bubble *bubbles,
 			int *indices,
 			Cell *cells,
-			dvec *accelerations,
 			int numBubbles,
 			int numCells)
 {
@@ -780,7 +774,6 @@ void cubble::updateData(Bubble *bubbles,
 	bubble->setPos(bubble->getPosPred());
 	bubble->setVelPrev(bubble->getVel());
 	bubble->setVel(bubble->getVelPred());
-	bubble->setAcc(accelerations[gid]);
 	
 	bubbles[gid] = localBubbles[threadIdx.x];
     }

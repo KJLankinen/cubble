@@ -115,7 +115,6 @@ namespace cubble
     void updateData(Bubble* bubbles,
 		    int *indices,
 		    Cell *cells,
-		    dvec *accelerations,
 		    int numBubbles,
 		    int numCells);
 

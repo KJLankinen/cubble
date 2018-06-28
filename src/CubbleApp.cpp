@@ -43,7 +43,7 @@ void CubbleApp::run()
     saveSnapshotToFile();
     
     // Shrink the box and integrate bubbles until at target phi
-    if (false)//phi < phiTarget)
+    if (phi < phiTarget)
     {
         int shrinkCount = 0;
 	std::cout << "Starting the shrinking of the simulation box..."
@@ -123,8 +123,7 @@ void CubbleApp::saveSnapshotToFile()
        << "\n# left bottom back"
        << "\n# top front right"
        << "\n#"
-       << "\n# bubble data: normalized position (x, y, z),"
-       << " unnormalized radius, color as (r, g, b)"
+       << "\n# bubble data: normalized position (x, y, z), unnormalized radius"
        << "\n#--------------------------------------------------";
 
     // Add the new things here.
