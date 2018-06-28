@@ -96,11 +96,17 @@ def plot_2d(n):
             
         x = lbb[0] + data[:,0] * (tfr - lbb)[0]
         y = lbb[1] + data[:,1] * (tfr - lbb)[1]
-        r = data[:,3]
-        c = data[:,4:]
+        vx = data[:,3]
+        vy = data[:,4]
+        r = data[:,6]
+        c = data[:,7:]
             
         axes.append(fig.add_subplot(1, n, i + 1, aspect='equal'))
         out = circles(x, y, r, alpha=0.3, facecolor=c, edgecolor=c)
+        for j in range(len(x)):
+            xx = np.array([x[j], vx[j] + x[j]])
+            yy = np.array([y[j], vy[j] + y[j]])
+            axes[i].plot(xx, yy, 'k')
     
     plt.show()
 

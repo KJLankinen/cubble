@@ -1,6 +1,6 @@
 {
     "AvgRad": 0.06,
-    "CompressionAmount": 1e-06,
+    "CompressionAmount": 0.001,
     "ErrorTolerance": 0.0001,
     "InitialOverlapTolerance": 1.9,
     "Lbb": {
@@ -12,9 +12,9 @@
     "MuZero": 1.0,
     "NumBubbles": 163840,
     "NumBubblesPerCell": 96,
-    "NumIntegrationSteps": 1000,
-    "PhiTarget": 0.5,
-    "RngSeed": 421356,
+    "NumIntegrationSteps": 100,
+    "PhiTarget": 0.8,
+    "RngSeed": 4356,
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
@@ -23,5 +23,5 @@
         "y": 10.0,
         "z": 5.0
     },
-    "TimeStep": 0.007663832822251246
+    "TimeStep": 0.11649025889821893
 }

@@ -23,11 +23,11 @@ namespace cubble
 	void integrate();
 	double getVolumeOfBubbles() const;
 	void getBubbles(std::vector<Bubble> &b) const;
+	void assignBubblesToCells();
 	
     private:
 	dim3 getGridSize(int numBubbles);
 	void generateBubbles();
-	void assignBubblesToCells();
 	void removeIntersectingBubbles();
         
 	std::shared_ptr<Env> env;
@@ -115,6 +115,7 @@ namespace cubble
     void updateData(Bubble* bubbles,
 		    int *indices,
 		    Cell *cells,
+		    dvec *accelerations,
 		    int numBubbles,
 		    int numCells);
 
@@ -147,4 +148,7 @@ namespace cubble
 
     __device__
     dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
+
+    __device__
+    dvec getWrappedPos(dvec pos);
 };

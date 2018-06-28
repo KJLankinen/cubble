@@ -57,11 +57,13 @@ void cubble::Simulator::integrate()
 	int temp = cells[i].size;
 	maxNumBubbles = maxNumBubbles < temp ? temp : maxNumBubbles;
     }
-    
+
+    assert(maxNumBubbles > 0);
     // Nearest even size
     maxNumBubbles += maxNumBubbles % 2;
     assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
     int numThreads = maxNumBubbles;
+    CudaContainer<dvec> accelerations(bubbles.getSize());
 
     do
     {
@@ -80,7 +82,7 @@ void cubble::Simulator::integrate()
 	CUDA_CALL(cudaDeviceSynchronize());
 	
 	// Calculate accelerations
-	CudaContainer<dvec> accelerations(bubbles.getSize());
+	accelerations = CudaContainer<dvec>(bubbles.getSize());
 	int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
 	numThreads = 512;
 	gridSize = getGridSize(bubbles.getSize());
@@ -143,6 +145,7 @@ void cubble::Simulator::integrate()
 	bubbles.getDevPtr(),
 	indices.getDevPtr(),
 	cells.getDevPtr(),
+	accelerations.getDevPtr(),
         bubbles.getSize(),
         cells.getSize());
 }
@@ -317,6 +320,7 @@ void cubble::Simulator::removeIntersectingBubbles()
     std::cout << "\tCalculating the size of dynamically allocated shared memory..."
 	      << std::flush;
 
+    
     int maxNumBubbles = 0;
     for (size_t i = 0; i < cells.getSize(); ++i)
     {
@@ -330,19 +334,18 @@ void cubble::Simulator::removeIntersectingBubbles()
 
     std::cout << " Done.\n\tStarting kernel for finding intersections..." << std::flush;
     
-    findIntersections<<<gridSize,
-	numThreads,
-	maxNumBubbles * sizeof(Bubble)>>>(bubbles.getDevPtr(),
-					  indices.getDevPtr(),
-					  cells.getDevPtr(),
-					  intersections.getDevPtr(),
-					  tfr,
-					  lbb,
-					  env->getInitialOverlapTolerance(),
-					  bubbles.getSize(),
-					  numDomains,
-					  cells.getSize(),
-					  maxNumBubbles);
+    findIntersections<<<gridSize, numThreads, maxNumBubbles * sizeof(Bubble)>>>(
+	bubbles.getDevPtr(),
+	indices.getDevPtr(),
+	cells.getDevPtr(),
+	intersections.getDevPtr(),
+	tfr,
+	lbb,
+	env->getInitialOverlapTolerance(),
+	bubbles.getSize(),
+	numDomains,
+	cells.getSize(),
+	maxNumBubbles);
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
@@ -592,11 +595,12 @@ void cubble::predict(Bubble *bubbles,
 	localBubbles[threadIdx.x] = bubbles[indices[self->offset + threadIdx.x]];
         Bubble *bubble = &localBubbles[threadIdx.x];
 
-	// Scale, predict, normalize
+	// Scale, predict, normalize, enfore boundaries
 	dvec interval = (tfr - lbb);
 	dvec pos = lbb + bubble->getPos() * interval;
 	pos += 0.5 * timeStep * (3.0 * bubble->getVel() - bubble->getVelPrev());
 	pos = (pos - lbb) / interval;
+	pos = getWrappedPos(pos);
 	bubble->setPosPred(pos);
 	
 	bubbles[indices[self->offset + threadIdx.x]] = localBubbles[threadIdx.x];
@@ -633,11 +637,12 @@ void cubble::correct(Bubble *bubbles,
 
 	bubble->setVelPred(accelerations[gid] * fZeroPerMuZero);
 	
-	// Scale, correct, normalize
+	// Scale, correct, normalize, enforce boundaries
 	dvec interval = (tfr - lbb);
 	dvec pos = lbb + bubble->getPos() * interval;
 	pos += 0.5 * timeStep * (bubble->getVel() + bubble->getVelPred());
 	pos = (pos - lbb) / interval;
+	pos = getWrappedPos(pos);
 
 	double error = (pos - bubble->getPosPred()).getAbsolute().getMaxComponent();
 	errors[gid] = error;
@@ -714,8 +719,8 @@ void cubble::accelerate(Bubble *bubbles,
 	    int y = pairIdx / xInterval;
 	    deviceAssert(y < yInterval);
 
-	    int gid1 = xBegin + x;
-	    int gid2 = yBegin + y;
+	    int gid1 = indices[xBegin + x];
+	    int gid2 = indices[yBegin + y];
 	    
 	    // Skip self-intersection
 	    if (gid1 == gid2)
@@ -725,7 +730,10 @@ void cubble::accelerate(Bubble *bubbles,
 	    const Bubble *b2 = &localBubbles[xInterval + y];
 	    
 	    double radii = b1->getRadius() + b2->getRadius();
-	    dvec acceleration = getShortestWrappedNormalizedVec(b1->getPos(), b2->getPos());
+	    dvec acceleration = getShortestWrappedNormalizedVec(
+		b1->getPosPred(),
+		b2->getPosPred());
+	    acceleration *= (tfr - lbb);
 	    
 	    if (radii * radii > acceleration.getSquaredLength())
 	    {
@@ -734,12 +742,12 @@ void cubble::accelerate(Bubble *bubbles,
 		acceleration *= accelerationMultiplier;
 
 		// HACK: This is wiiiiiildly inefficient.
-		atomicAddD(&accelerations[gid1].x, -acceleration.x);
-		atomicAddD(&accelerations[gid1].y, -acceleration.y);
-		atomicAddD(&accelerations[gid1].z, -acceleration.z);
-		atomicAddD(&accelerations[gid2].x, acceleration.x);
-		atomicAddD(&accelerations[gid2].y, acceleration.y);
-		atomicAddD(&accelerations[gid2].z, acceleration.z);
+		atomicAddD(&accelerations[gid1].x, acceleration.x);
+		atomicAddD(&accelerations[gid1].y, acceleration.y);
+		atomicAddD(&accelerations[gid1].z, acceleration.z);
+		atomicAddD(&accelerations[gid2].x, -acceleration.x);
+		atomicAddD(&accelerations[gid2].y, -acceleration.y);
+		atomicAddD(&accelerations[gid2].z, -acceleration.z);
 	    }
 	}
     }
@@ -749,6 +757,7 @@ __global__
 void cubble::updateData(Bubble *bubbles,
 			int *indices,
 			Cell *cells,
+			dvec *accelerations,
 			int numBubbles,
 			int numCells)
 {
@@ -771,6 +780,7 @@ void cubble::updateData(Bubble *bubbles,
 	bubble->setPos(bubble->getPosPred());
 	bubble->setVelPrev(bubble->getVel());
 	bubble->setVel(bubble->getVelPred());
+	bubble->setAcc(accelerations[gid]);
 	
 	bubbles[gid] = localBubbles[threadIdx.x];
     }
@@ -946,4 +956,16 @@ cubble::dvec cubble::getShortestWrappedNormalizedVec(dvec pos1, dvec pos2)
     pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
     
     return pos1 - pos2;
+}
+
+__forceinline__ __device__
+cubble::dvec cubble::getWrappedPos(dvec pos)
+{
+    // ASSUMPTION: Using normalized position
+    // ASSUMPTION: Position never smaller/greater than -1/1
+    pos.x = pos.x < 0 ? pos.x + 1.0 : (pos.x > 1 ? pos.x - 1.0 : pos.x);
+    pos.y = pos.y < 0 ? pos.y + 1.0 : (pos.y > 1 ? pos.y - 1.0 : pos.y);
+    pos.z = pos.z < 0 ? pos.z + 1.0 : (pos.z > 1 ? pos.z - 1.0 : pos.z);
+
+    return pos;
 }

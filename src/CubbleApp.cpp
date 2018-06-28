@@ -43,7 +43,7 @@ void CubbleApp::run()
     saveSnapshotToFile();
     
     // Shrink the box and integrate bubbles until at target phi
-    if (phi > phiTarget)
+    if (false)//phi < phiTarget)
     {
         int shrinkCount = 0;
 	std::cout << "Starting the shrinking of the simulation box..."
@@ -62,6 +62,9 @@ void CubbleApp::run()
 	    phi = bubbleVolume / env->getSimulationBoxVolume();
 	    
 	    ++shrinkCount;
+
+	    if (shrinkCount % 100 == 0)
+		simulator->assignBubblesToCells();
 	}
 	
 	std::cout << " Done. Total of " << shrinkCount << " steps." << std::endl;
@@ -69,7 +72,6 @@ void CubbleApp::run()
 	saveSnapshotToFile();
     }
     
-
     // Stabilize
     std::cout << "\nStarting the stabilization of the foam..." << std::flush;
     // do the stabilization
@@ -84,7 +86,12 @@ void CubbleApp::run()
     {
 	// Maybe set a flag in simulator to signify the start of proper simulation?
 	simulator->integrate();
+	
+	if (i % 100 == 0)
+	    simulator->assignBubblesToCells();
     }
+    
+    simulator->assignBubblesToCells();
 
     saveSnapshotToFile();
     

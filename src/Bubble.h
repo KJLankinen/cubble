@@ -61,19 +61,17 @@ namespace cubble
 	dvec getVelPred() const { return velPred; }
 	__host__ __device__
         void setVelPred(const dvec &v) { velPred = v; }
-
-	/*
-	__host__ __device__
-	dvec getAcc() const { return acc; }
-	__host__ __device__
-	void setAcc(const dvec &a) { acc = a; }
-	*/
 	
 	fvec getColor() const { return color; }
 	__host__ __device__
 	void setColor(const fvec &c) { color = c; }
 	__host__ __device__
 	void setColor(const fvec &&c) { color = c; }
+
+	__host__ __device__
+	dvec getAcc() const { return acc; }
+	__host__ __device__
+        void setAcc(const dvec &a) { acc = a; }
 	
 	__host__ __device__
 	int getCellIndex() const { return cellIndex; }
@@ -82,7 +80,10 @@ namespace cubble
 	
 	friend std::ostream& operator<<(std::ostream &os, const Bubble &b)
 	{
-	    os << b.getPos() << ", " << b.getRadius() << ", " << b.getColor();
+	    os << b.getPos()
+	       << ", " << b.getAcc()
+	       << ", " << b.getRadius()
+	       << ", " << b.getColor();
 	    
 	    return os;
 	}
@@ -100,7 +101,7 @@ namespace cubble
 	dvec velPrev = dvec(0, 0, 0);
 	dvec velPred = dvec(0, 0, 0);
 
-	//dvec acc = dvec(0, 0, 0);
+	dvec acc = dvec(0, 0, 0);
 
 	fvec color = fvec(0, 0, 0);
     };
