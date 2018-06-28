@@ -14,6 +14,12 @@
 #include <thrust/extrema.h>
 #include <thrust/execution_policy.h>
 
+
+// ******************************
+// Class functions run on CPU
+// ******************************
+
+
 cubble::Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
@@ -32,19 +38,18 @@ void cubble::Simulator::setupSimulation()
     assignBubblesToCells();
     removeIntersectingBubbles();
     assignBubblesToCells();
-    
-    bubbles.deviceToHost();
 }
 
 void cubble::Simulator::integrate()
 {
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
-    
+
     dvec tfr = env->getTfr();
     dvec lbb = env->getLbb();
     dim3 gridSize = getGridSize(bubbles.getSize());
     double timeStep = env->getTimeStep();
+    double error = 0;
     
     int maxNumBubbles = 0;
     for (size_t i = 0; i < cells.getSize(); ++i)
@@ -56,51 +61,95 @@ void cubble::Simulator::integrate()
     // Nearest even size
     maxNumBubbles += maxNumBubbles % 2;
     assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
+    int numThreads = maxNumBubbles;
 
-    // Calculate prediction
-    predict<<<gridSize,
-        maxNumBubbles,
-	sizeof(Bubble) * maxNumBubbles>>>(bubbles.getDevPtr(),
-					  indices.getDevPtr(),
-					  cells.getDevPtr(),
-					  tfr,
-					  lbb,
-					  timeStep,
-					  bubbles.getSize(),
-					  cells.getSize());
-    
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
+    do
+    {
+        // Calculate prediction
+	predict<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
+	    bubbles.getDevPtr(),
+	    indices.getDevPtr(),
+	    cells.getDevPtr(),
+	    tfr,
+	    lbb,
+	    timeStep,
+	    bubbles.getSize(),
+	    cells.getSize());
+	
+	CUDA_CALL(cudaPeekAtLastError());
+	CUDA_CALL(cudaDeviceSynchronize());
+	
+	// Calculate accelerations
+	CudaContainer<dvec> accelerations(bubbles.getSize());
+	int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
+	numThreads = 512;
+	gridSize = getGridSize(bubbles.getSize());
+	gridSize.z *= numDomains;
+	
+	accelerate<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
+	    bubbles.getDevPtr(),
+	    indices.getDevPtr(),
+	    cells.getDevPtr(),
+	    accelerations.getDevPtr(),
+	    tfr,
+	    lbb,
+	    bubbles.getSize(),
+	    numDomains,
+	    cells.getSize(),
+	    maxNumBubbles);
+	
+	CUDA_CALL(cudaPeekAtLastError());
+	CUDA_CALL(cudaDeviceSynchronize());
+	
+	// Calculate predicted velocity, correction & error
+	gridSize = getGridSize(bubbles.getSize());
+	numThreads = maxNumBubbles;
+	
+	correct<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
+	    bubbles.getDevPtr(),
+	    indices.getDevPtr(),
+	    cells.getDevPtr(),
+	    errors.getDevPtr(),
+	    accelerations.getDevPtr(),
+	    tfr,
+	    lbb,
+	    env->getFZeroPerMuZero(),
+	    timeStep,
+	    bubbles.getSize(),
+	    cells.getSize());
+	
+	CUDA_CALL(cudaPeekAtLastError());
+	CUDA_CALL(cudaDeviceSynchronize());
+	
+	errors.deviceToHost();
+        error = *thrust::max_element(thrust::host,
+					    errors.getHostPtr(),
+					    errors.getHostPtr() + errors.getSize());
+	
+	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
+	    timeStep *= 1.9;
+	else if (error > env->getErrorTolerance())
+	    timeStep *= 0.5;
+    }
+    while (error > env->getErrorTolerance());
 
-    // Calculate accelerations
-    
+    env->setTimeStep(timeStep);
+    simulationTime += timeStep;
 
-    // Calculate predicted velocity, correction & error
-    CudaContainer<double> errors(bubbles.getSize());
-    correct<<<gridSize,
-        maxNumBubbles,
-	sizeof(Bubble) * maxNumBubbles>>>(bubbles.getDevPtr(),
-					  indices.getDevPtr(),
-					  cells.getDevPtr(),
-					  errors.getDevPtr(),
-					  tfr,
-					  lbb,
-					  env->getFZeroPerMuZero(),
-					  timeStep,
-					  bubbles.getSize(),
-					  cells.getSize());
-    
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
-
-    errors.deviceToHost();
-    double error = *thrust::max_element(thrust::host,
-					errors.getHostPtr(),
-					errors.getHostPtr() + errors.getSize());
+    // Update bubble data: current --> previous, predicted --> current
+    gridSize = getGridSize(bubbles.getSize());
+    numThreads = maxNumBubbles;
+    updateData<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
+	bubbles.getDevPtr(),
+	indices.getDevPtr(),
+	cells.getDevPtr(),
+        bubbles.getSize(),
+        cells.getSize());
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
 {
+    // ASSUMPTION: Device data is up to date.
     double volume = 0;
     CudaContainer<double> volumes(bubbles.getSize());
     int numThreads = 1024;
@@ -118,8 +167,8 @@ double cubble::Simulator::getVolumeOfBubbles() const
 
 void cubble::Simulator::getBubbles(std::vector<Bubble> &b) const
 { 
-    // TODO: Should have some way of knowing which is up to date, device or host memory...
-    bubbles.hostToVec(b);
+    // ASSUMPTION: Device data is up to date
+    bubbles.deviceToVec(b);
 }
 
 void cubble::Simulator::generateBubbles()
@@ -209,6 +258,7 @@ void cubble::Simulator::assignBubblesToCells()
     
     cells = CudaContainer<Cell>(numCells);
     indices = CudaContainer<int>(bubbles.getSize());
+    errors = CudaContainer<double>(bubbles.getSize());
 
     std::cout << "\n\tCalculating offsets..." << std::flush;
     
@@ -338,6 +388,12 @@ dim3 cubble::Simulator::getGridSize(int numBubbles)
     return gridSize;
 }
 
+
+// ******************************
+// Kernels
+// ******************************
+
+
 __global__
 void cubble::calculateVolumes(Bubble *b, double *volumes, int numBubbles)
 {
@@ -352,153 +408,6 @@ void cubble::calculateVolumes(Bubble *b, double *volumes, int numBubbles)
 	
 	volumes[tid] = volume;
     }   
-}
-
-__forceinline__ __device__
-int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
-{
-    // Switch statements and ifs that diverge inside one warp/block are
-    // detrimental for performance. However, this should never diverge,
-    // as all the threads of one block should always be in the same cell
-    // going for the same neighbor.
-    ivec idxVec = cellIdx;
-    switch(neighborNum)
-    {
-    case 0:
-	// self
-	break;
-    case 1:
-	idxVec += ivec(-1, 1, 0);
-	break;
-    case 2:
-	idxVec += ivec(-1, 0, 0);
-	break;
-    case 3:
-	idxVec += ivec(-1, -1, 0);
-	break;
-    case 4:
-	idxVec += ivec(0, -1, 0);
-	break;
-#if NUM_DIM == 3
-    case 5:
-	idxVec += ivec(-1, 1, -1);
-	break;
-    case 6:
-	idxVec += ivec(-1, 0, -1);
-	break;
-    case 7:
-	idxVec += ivec(-1, -1, -1);
-	break;
-    case 8:
-	idxVec += ivec(0, 1, -1);
-	break;
-    case 9:
-	idxVec += ivec(0, 0, -1);
-	break;
-    case 10:
-	idxVec += ivec(0, -1, -1);
-	break;
-    case 11:
-	idxVec += ivec(1, 1, -1);
-	break;
-    case 12:
-	idxVec += ivec(1, 0, -1);
-	break;
-    case 13:
-	idxVec += ivec(1, -1, -1);
-	break;
-#endif
-    default:
-	printf("Should never end up here!");
-	break;
-    }
-
-    idxVec += dim;
-    idxVec %= dim;
-
-    return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
-}
-
-__forceinline__ __device__
-void cubble::getDomainOffsetsAndIntervals(int numBubbles,
-					  int numDomains,
-					  int numCells,
-					  ivec cellIdxVec,
-					  ivec boxDim,
-					  Cell *cells,
-					  int &outXBegin,
-					  int &outXInterval,
-					  int &outYBegin,
-					  int &outYInterval,
-					  bool &outIsOwnCell)
-{
-    int domain = blockIdx.z % numDomains;
-    int di = (2 * domain) / numDomains;
-    
-    deviceAssert((di == 0 && domain < (int)(0.5f * numDomains))
-	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
-    
-    int dj = domain % (int)(0.5f * numDomains);
-    int djMod2 = dj % 2;
-
-    // Find this cell
-    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
-	+ cellIdxVec.y * boxDim.x
-	+ cellIdxVec.x;
-    deviceAssert(selfCellIndex < numCells);
-    Cell self = cells[selfCellIndex];
-
-    // Find the neighbor of this cell
-    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    deviceAssert(neighborCellIndex < numCells);
-    Cell neighbor = cells[neighborCellIndex];
-    
-    outIsOwnCell = selfCellIndex == neighborCellIndex;
-
-    // Find the interval of values to use:
-    // x-axis uses the right or the left half of the neighbor cell
-    int halfSize = 0.5f * neighbor.size;
-    outXBegin = neighbor.offset + djMod2 * halfSize;
-    outXInterval = halfSize + djMod2 * (neighbor.size % 2);
-    
-    deviceAssert(outXBegin + outXInterval <= numBubbles);
-    deviceAssert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
-    deviceAssert(outXInterval == halfSize || outXInterval == halfSize + 1);
-
-    // y-axis uses the top or bottom half of this cell
-    halfSize = 0.5f * self.size;
-    outYBegin = self.offset + di * halfSize;
-    outYInterval = halfSize + di * (self.size % 2);
-
-    deviceAssert(outYBegin + outYInterval <= numBubbles);
-    deviceAssert(outYInterval == halfSize || outYInterval == halfSize + 1);
-    deviceAssert(outYBegin + outYInterval <= self.size + self.offset);
-}
-
-__forceinline__ __device__
-int cubble::getGlobalTid()
-{
-    // Simple helper function for calculating a 1D coordinate
-    // from 1, 2 or 3 dimensional coordinates.
-    int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
-    int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x)
-	+ blockIdx.y * gridDim.x
-	+ blockIdx.x;
-    int threadsBefore = blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
-    int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
-
-    return tid;
-}
-
-__forceinline__ __device__
-cubble::dvec cubble::getShortestWrappedNormalizedVec(dvec pos1, dvec pos2)
-{
-    dvec temp = pos1 - pos2;
-    pos2.x = temp.x < -0.5 ? pos2.x - 1.0 : (temp.x > 0.5 ? pos2.x + 1.0 : pos2.x);
-    pos2.y = temp.y < -0.5 ? pos2.y - 1.0 : (temp.y > 0.5 ? pos2.y + 1.0 : pos2.y);
-    pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
-    
-    return pos1 - pos2;
 }
 
 __global__
@@ -699,6 +608,7 @@ void cubble::correct(Bubble *bubbles,
 		     int *indices,
 		     Cell *cells,
 		     double *errors,
+		     dvec *accelerations,
 		     dvec tfr,
 		     dvec lbb,
 		     double fZeroPerMuZero,
@@ -721,7 +631,7 @@ void cubble::correct(Bubble *bubbles,
 	localBubbles[threadIdx.x] = bubbles[gid];
         Bubble *bubble = &localBubbles[threadIdx.x];
 
-	bubble->setVelPred(bubble->getAcc() * fZeroPerMuZero);
+	bubble->setVelPred(accelerations[gid] * fZeroPerMuZero);
 	
 	// Scale, correct, normalize
 	dvec interval = (tfr - lbb);
@@ -740,6 +650,7 @@ __global__
 void cubble::accelerate(Bubble *bubbles,
 			int *indices,
 			Cell *cells,
+		        dvec *accelerations,
 			dvec tfr,
 			dvec lbb,
 			int numBubbles,
@@ -822,10 +733,217 @@ void cubble::accelerate(Bubble *bubbles,
 		acceleration *= (radii - magnitude) / (radii * magnitude);
 		acceleration *= accelerationMultiplier;
 
-		// Need some block or fence or something to do this safely.
-		//bubbles[gid1].addAcc(-acceleration);
-		//bubbles[gid2].addAcc(acceleration);
+		// HACK: This is wiiiiiildly inefficient.
+		atomicAddD(&accelerations[gid1].x, -acceleration.x);
+		atomicAddD(&accelerations[gid1].y, -acceleration.y);
+		atomicAddD(&accelerations[gid1].z, -acceleration.z);
+		atomicAddD(&accelerations[gid2].x, acceleration.x);
+		atomicAddD(&accelerations[gid2].y, acceleration.y);
+		atomicAddD(&accelerations[gid2].z, acceleration.z);
 	    }
 	}
     }
+}
+
+__global__
+void cubble::updateData(Bubble *bubbles,
+			int *indices,
+			Cell *cells,
+			int numBubbles,
+			int numCells)
+{
+    extern __shared__ Bubble localBubbles[];
+
+    int cid = blockIdx.z * gridDim.x * gridDim.y
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
+
+    deviceAssert(cid < numCells);
+    const Cell *self = &cells[cid];
+
+    if (threadIdx.x < self->size)
+    {
+	int gid = indices[self->offset + threadIdx.x];
+	localBubbles[threadIdx.x] = bubbles[gid];
+        Bubble *bubble = &localBubbles[threadIdx.x];
+
+	bubble->setPosPrev(bubble->getPos());
+	bubble->setPos(bubble->getPosPred());
+	bubble->setVelPrev(bubble->getVel());
+	bubble->setVel(bubble->getVelPred());
+	
+	bubbles[gid] = localBubbles[threadIdx.x];
+    }
+}
+
+
+// ******************************
+// Device functions
+// ******************************
+
+
+__device__
+double cubble::atomicAddD(double *address, double val)
+{
+    unsigned long long int *addressAsUll = (unsigned long long int*)address;
+    unsigned long long int old = *addressAsUll;
+    unsigned long long int assumed = old;
+    
+    do
+    {
+	assumed = old;
+	old = atomicCAS(addressAsUll,
+			assumed,
+			__double_as_longlong(val + __longlong_as_double(assumed)));
+    }
+    while (assumed != old);
+    
+    return __longlong_as_double(old);
+}
+
+__forceinline__ __device__
+int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
+{
+    // Switch statements and ifs that diverge inside one warp/block are
+    // detrimental for performance. However, this should never diverge,
+    // as all the threads of one block should always be in the same cell
+    // going for the same neighbor.
+    ivec idxVec = cellIdx;
+    switch(neighborNum)
+    {
+    case 0:
+	// self
+	break;
+    case 1:
+	idxVec += ivec(-1, 1, 0);
+	break;
+    case 2:
+	idxVec += ivec(-1, 0, 0);
+	break;
+    case 3:
+	idxVec += ivec(-1, -1, 0);
+	break;
+    case 4:
+	idxVec += ivec(0, -1, 0);
+	break;
+#if NUM_DIM == 3
+    case 5:
+	idxVec += ivec(-1, 1, -1);
+	break;
+    case 6:
+	idxVec += ivec(-1, 0, -1);
+	break;
+    case 7:
+	idxVec += ivec(-1, -1, -1);
+	break;
+    case 8:
+	idxVec += ivec(0, 1, -1);
+	break;
+    case 9:
+	idxVec += ivec(0, 0, -1);
+	break;
+    case 10:
+	idxVec += ivec(0, -1, -1);
+	break;
+    case 11:
+	idxVec += ivec(1, 1, -1);
+	break;
+    case 12:
+	idxVec += ivec(1, 0, -1);
+	break;
+    case 13:
+	idxVec += ivec(1, -1, -1);
+	break;
+#endif
+    default:
+	printf("Should never end up here!");
+	break;
+    }
+
+    idxVec += dim;
+    idxVec %= dim;
+
+    return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
+}
+
+__forceinline__ __device__
+void cubble::getDomainOffsetsAndIntervals(int numBubbles,
+					  int numDomains,
+					  int numCells,
+					  ivec cellIdxVec,
+					  ivec boxDim,
+					  Cell *cells,
+					  int &outXBegin,
+					  int &outXInterval,
+					  int &outYBegin,
+					  int &outYInterval,
+					  bool &outIsOwnCell)
+{
+    int domain = blockIdx.z % numDomains;
+    int di = (2 * domain) / numDomains;
+    
+    deviceAssert((di == 0 && domain < (int)(0.5f * numDomains))
+	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
+    
+    int dj = domain % (int)(0.5f * numDomains);
+    int djMod2 = dj % 2;
+
+    // Find this cell
+    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
+	+ cellIdxVec.y * boxDim.x
+	+ cellIdxVec.x;
+    deviceAssert(selfCellIndex < numCells);
+    Cell self = cells[selfCellIndex];
+
+    // Find the neighbor of this cell
+    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
+    deviceAssert(neighborCellIndex < numCells);
+    Cell neighbor = cells[neighborCellIndex];
+    
+    outIsOwnCell = selfCellIndex == neighborCellIndex;
+
+    // Find the interval of values to use:
+    // x-axis uses the right or the left half of the neighbor cell
+    int halfSize = 0.5f * neighbor.size;
+    outXBegin = neighbor.offset + djMod2 * halfSize;
+    outXInterval = halfSize + djMod2 * (neighbor.size % 2);
+    
+    deviceAssert(outXBegin + outXInterval <= numBubbles);
+    deviceAssert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
+    deviceAssert(outXInterval == halfSize || outXInterval == halfSize + 1);
+
+    // y-axis uses the top or bottom half of this cell
+    halfSize = 0.5f * self.size;
+    outYBegin = self.offset + di * halfSize;
+    outYInterval = halfSize + di * (self.size % 2);
+
+    deviceAssert(outYBegin + outYInterval <= numBubbles);
+    deviceAssert(outYInterval == halfSize || outYInterval == halfSize + 1);
+    deviceAssert(outYBegin + outYInterval <= self.size + self.offset);
+}
+
+__forceinline__ __device__
+int cubble::getGlobalTid()
+{
+    // Simple helper function for calculating a 1D coordinate
+    // from 1, 2 or 3 dimensional coordinates.
+    int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
+    int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x)
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
+    int threadsBefore = blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
+    int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
+
+    return tid;
+}
+
+__forceinline__ __device__
+cubble::dvec cubble::getShortestWrappedNormalizedVec(dvec pos1, dvec pos2)
+{
+    dvec temp = pos1 - pos2;
+    pos2.x = temp.x < -0.5 ? pos2.x - 1.0 : (temp.x > 0.5 ? pos2.x + 1.0 : pos2.x);
+    pos2.y = temp.y < -0.5 ? pos2.y - 1.0 : (temp.y > 0.5 ? pos2.y + 1.0 : pos2.y);
+    pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
+    
+    return pos1 - pos2;
 }

@@ -22,6 +22,13 @@ namespace cubble
 	__host__ __device__
 	vec()
 	{}
+
+	__host__ __device__
+	vec(T x)
+	    : x(x)
+	    , y(x)
+	    , z(x)
+	{}
 	
 	template <typename T2>
 	__host__ __device__

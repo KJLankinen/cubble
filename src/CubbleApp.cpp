@@ -43,7 +43,7 @@ void CubbleApp::run()
     saveSnapshotToFile();
     
     // Shrink the box and integrate bubbles until at target phi
-    if (phi < phiTarget)
+    if (phi > phiTarget)
     {
         int shrinkCount = 0;
 	std::cout << "Starting the shrinking of the simulation box..."
@@ -80,14 +80,13 @@ void CubbleApp::run()
 	      << "\n\n**Starting the simulation proper.**"
 	      << std::endl;
     
-    while (true)
+    for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	// Maybe set a flag in simulator to signify the start of proper simulation?
 	simulator->integrate();
-
-	// Dummy break here, until proper end condition
-	break;
     }
+
+    saveSnapshotToFile();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
 }

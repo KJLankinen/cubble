@@ -34,29 +34,15 @@ namespace cubble
 	CudaContainer<Bubble> bubbles;
 	CudaContainer<int> indices;
 	CudaContainer<Cell> cells;
+	CudaContainer<double> errors;
+
+	double simulationTime = 0;
     };
-    
-    __device__
-    int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 
-    __device__
-    void getDomainOffsetsAndIntervals(int numBubbles,
-				      int numDomains,
-				      int numCells,
-				      ivec cellIdxVec,
-				      ivec boxDim,
-				      Cell *cells,
-				      int &outXBegin,
-				      int &outXInterval,
-				      int &outYBegin,
-				      int &outYInterval,
-				      bool &outIsOwnCell);
     
-    __device__
-    int getGlobalTid();
-
-    __device__
-    dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
+    // ******************************
+    // Kernels
+    // ******************************
     
     __global__
     void calculateVolumes(Bubble *b, double *volumes, int numBubbles);
@@ -105,6 +91,7 @@ namespace cubble
 		 int *indices,
 		 Cell *cells,
 		 double *errors,
+		 dvec *accelerations,
 		 dvec tfr,
 		 dvec lbb,
 		 double fZeroPerMuZero,
@@ -116,10 +103,48 @@ namespace cubble
     void accelerate(Bubble *bubbles,
 		    int *indices,
 		    Cell *cells,
+		    dvec *accelerations,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,
 		    int numDomains,
 		    int numCells,
 		    int numLocalBubbles);
+
+    __global__
+    void updateData(Bubble* bubbles,
+		    int *indices,
+		    Cell *cells,
+		    int numBubbles,
+		    int numCells);
+
+
+    // ******************************
+    // Device functions
+    // ******************************
+    
+    __device__
+    double atomicAddD(double *address, double val);
+    
+    __device__
+    int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
+
+    __device__
+    void getDomainOffsetsAndIntervals(int numBubbles,
+				      int numDomains,
+				      int numCells,
+				      ivec cellIdxVec,
+				      ivec boxDim,
+				      Cell *cells,
+				      int &outXBegin,
+				      int &outXInterval,
+				      int &outYBegin,
+				      int &outYInterval,
+				      bool &outIsOwnCell);
+    
+    __device__
+    int getGlobalTid();
+
+    __device__
+    dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
 };

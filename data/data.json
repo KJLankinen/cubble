@@ -1,6 +1,6 @@
 {
     "PhiTargetExpl" : "The target volume fraction.", 
-    "PhiTarget" : 0.8,
+    "PhiTarget" : 0.5,
     "MuZeroExpl" : "The viscosity of the fluid",
     "MuZero" : 1.0,
     "SigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
@@ -18,19 +18,19 @@
     "ErrorToleranceExpl" : "The error tolerance level for the integration.",
     "ErrorTolerance" : 1e-4,
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
-    "TimeStep" : 0.00001,
+    "TimeStep" : 0.0001,
     "RngSeedExpl" : "The seed for the RNG.",
     "RngSeed" : 421356,
     "CompressionAmountExpl" : "How much to compress the side length(s) of the simulation box per compression iteration.",
     "CompressionAmount" : 1e-6,
     "NumIntegrationStepsExpl" : "How many integration steps to do.",
-    "NumIntegrationSteps" : 1000000,
+    "NumIntegrationSteps" : 1000,
     "NumBubblesExpl" : "How many bubbles to generate.",
-    "NumBubbles" : 1638,
+    "NumBubbles" : 163840,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 96,
     "SnapshotFilenameExpl" : "The stem of the filename where to save the snap shots to.",
     "SnapshotFilename" : "snapshot",
     "InitialOverlapToleranceExpl" : "Maximum tolerated ratio of radii squared to distances squared when removing the intersecting bubbles at the simulation setup.",
-    "InitialOverlapTolerance" : 1.0
+    "InitialOverlapTolerance" : 1.9
 }

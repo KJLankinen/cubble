@@ -62,11 +62,13 @@ namespace cubble
 	__host__ __device__
         void setVelPred(const dvec &v) { velPred = v; }
 
+	/*
 	__host__ __device__
 	dvec getAcc() const { return acc; }
 	__host__ __device__
 	void setAcc(const dvec &a) { acc = a; }
-
+	*/
+	
 	fvec getColor() const { return color; }
 	__host__ __device__
 	void setColor(const fvec &c) { color = c; }
@@ -98,7 +100,7 @@ namespace cubble
 	dvec velPrev = dvec(0, 0, 0);
 	dvec velPred = dvec(0, 0, 0);
 
-	dvec acc = dvec(0, 0, 0);
+	//dvec acc = dvec(0, 0, 0);
 
 	fvec color = fvec(0, 0, 0);
     };
