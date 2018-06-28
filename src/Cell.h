@@ -2,26 +2,23 @@
 
 #pragma once
 
-#include "Bubble.h"
-
-#include <map>
+#include <cuda_runtime.h>
 
 namespace cubble
 {
     class Cell
     {
     public:
+	__host__ __device__
 	Cell() {}
-	~Cell() {}
 
-	void addNeighborRef(Cell *cell);
-	void addBubbleRef(Bubble *bubble);
-	void removeBubbleRef(size_t key);
-	void getBubbleRefsAsVector(std::vector<Bubble*> &bubbles) const;
-	void getSelfBubbleRefs(std::map<size_t, Bubble*> &bm) const;
-	void getNeighborhoodBubbleRefs(std::map<size_t, Bubble*> &bm) const;
-    private:
-	std::vector<Cell*> neighbors;
-	std::map<size_t, Bubble*> bubbleMap;
+	__host__ __device__
+	Cell(int i) {}
+	
+	__host__ __device__
+	~Cell() {}
+	
+	int offset = 0;
+	int size = 0;
     };
-}
+};

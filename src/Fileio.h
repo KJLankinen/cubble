@@ -1,5 +1,7 @@
 // -*- C++ -*-
-// For emacs to intepret .h files as C++ instead of C.
+
+// For some reason nvcc has great difficulty with this header...
+#ifndef __CUDACC__
 
 #pragma once
 
@@ -8,7 +10,9 @@
 #include <fstream>
 #include <assert.h>
 
-#include "include/json.hpp"
+#ifndef __CUDACC__
+  #include "include/json.hpp"
+#endif
 
 namespace cubble
 {
@@ -43,7 +47,7 @@ namespace cubble
 		    throw std::runtime_error("");
 		}	
 	    }
-	    
+
 	    void operator>>(nlohmann::json &j)
 	    {
 		file >> j;
@@ -53,7 +57,7 @@ namespace cubble
 	    {
 		file << std::setw(4) << j;
 	    }
-
+	    
 	    template <typename T>
 	    void operator<<(const T &val)
 	    {
@@ -66,24 +70,35 @@ namespace cubble
 	    // Only friend functions listed here are allowed to use this implementation.
 	    friend void readFileToJSON(const std::string&, nlohmann::json&);
 	    friend void writeJSONToFile(const std::string&, const nlohmann::json&);
+
+	    friend void writeStringToFile(const std::string&, const std::string&);
+	    
 	    template <typename T>
 	    friend void writeVectorToFile(const std::string&, const std::vector<T>&);
 	    template <typename T>
 	    friend void writeVectorToFile(const std::string&, const std::vector<T*>&);
 	};
 	
-	void readFileToJSON(const std::string &filename, nlohmann::json &j)
+	inline void readFileToJSON(const std::string &filename, nlohmann::json &j)
 	{
 	    FileWrapper file(filename, true);
 	    file >> j;
 	}
 	
-	void writeJSONToFile(const std::string &filename, const nlohmann::json &j)
+	inline void writeJSONToFile(const std::string &filename,
+				    const nlohmann::json &j)
 	{
 	    FileWrapper file(filename, false);
 	    file << j;
 	}
 
+	inline void writeStringToFile(const std::string &filename,
+				      const std::string &str)
+	{
+	    FileWrapper file(filename, false);
+	    file << str;
+	}
+	
 	template <typename T>
 	void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
 	{
@@ -104,3 +119,4 @@ namespace cubble
 	}
     }
 }
+#endif

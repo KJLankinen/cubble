@@ -2,20 +2,19 @@
 #include <exception>
 #include <stdexcept>
 
-#include "Simulator.h"
+#include "CubbleApp.h"
 #include "Util.h"
 
 int main(int argc, char **argv)
 {
     std::exception_ptr pExc = nullptr;
 
-    if (argc != 4)
+    if (argc != 3)
     {
-	std::cerr << "Three arguments are required."
-		  << "\nUsage: " << argv[0] << " inputFile outputFile saveFile"
+	std::cerr << "Two arguments are required."
+		  << "\nUsage: " << argv[0] << " inputFile saveFile"
 		  << "\ninputFile = the name of the (.json) file that contains"
 		  << " the necessary inputs."
-		  << "\noutputFile = file where the program output is written to"
 		  << "\nsaveFile = file that can be used as a input file"
 		  << " to continue from an earlier run"
 		  << std::endl;
@@ -25,13 +24,28 @@ int main(int argc, char **argv)
     
     try
     {
-	cubble::Simulator simulator(argv[1], argv[2], argv[3]);
-        simulator.run();
+	std::string str;
+#if (NUM_DIM == 3)
+	str = "------------------------------------------------------------------------\n";
+	str += "The current program simulates the bubbles in 3D.\n";
+	str += "If you want a 2D simulation, change the number of dimensions 'NUM_DIM'";
+	str += "\nin Makefile and rebuild the program.\n";
+	str += "------------------------------------------------------------------------\n";
+#else
+	str = "------------------------------------------------------------------------\n";
+	str += "The current program simulates the bubbles in 2D.\n";
+	str += "If you want a 3D simulation, change the number of dimensions 'NUM_DIM'";
+	str += "\nin Makefile and rebuild the program.\n";
+	str += "------------------------------------------------------------------------\n";
+#endif
+	std::cout << str << std::endl;
+	cubble::CubbleApp app(argv[1], argv[2]);
+        app.run();
     }
     catch (const std::exception &e)
     {
 	pExc = std::current_exception();
-	cubble::exception::handleException(pExc);
+	cubble::handleException(pExc);
 	
 	return EXIT_FAILURE;
     }

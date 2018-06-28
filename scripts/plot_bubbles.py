@@ -80,41 +80,42 @@ def circles(x, y, s, c='b', vmin=None, vmax=None, **kwargs):
         plt.sci(collection)
     return collection
 
-def plot_2d():
-    data = np.loadtxt("data/bubble_data_2d_setup.dat", delimiter=',')
-    data2 = np.loadtxt("data/bubble_data_2d_integrated.dat", delimiter=',')
-    acc = np.loadtxt("data/acc.dat", delimiter=',')
+def plot_2d(n):
+    fig = plt.figure()
+    axes = []
+    for i in range(n):
+        filename = "data/snapshot" + str(i) + ".dat"
 
-    x = data[:,0]
-    y = data[:,1]
-    r = data[:,2]
-    
-    x2 = data2[:,0]
-    y2 = data2[:,1]
-    r2 = data2[:,2]
+        with open(filename) as file:
+            head = [next(file) for x in xrange(11)]
 
-    accx = acc[:,0]
-    accy = acc[:,1]
-    
-    figure()
-    subplot(aspect='equal')
-
-    out = circles(x, y, r, c='green', alpha=0.3)
-    out = circles(x2, y2, r2, c='blue', alpha=0.3)
-
-    for i in range(len(accx)):
-        xx = np.array([x[i], x[i] + accx[i]])
-        yy = np.array([y[i], y[i] + accy[i]])
-        plt.plot(xx, yy)
+        lbb = np.fromstring(head[-2], count=3, sep=',')
+        tfr = np.fromstring(head[-1], count=3, sep=',')
+            
+        data = np.loadtxt(filename, delimiter=',', skiprows=11)
+            
+        x = lbb[0] + data[:,0] * (tfr - lbb)[0]
+        y = lbb[1] + data[:,1] * (tfr - lbb)[1]
+        r = data[:,3]
+            
+        axes.append(fig.add_subplot(1, n, i + 1, aspect='equal'))
+        out = circles(x, y, r, alpha=0.3)
     
     plt.show()
 
 def plot_3d():
-    data = np.loadtxt("data/bubble_data_2d.dat", delimiter=',')
+    filename = "data/snapshot0.dat"
 
-    x = data[:,0]
-    y = data[:,1]
-    z = data[:,2]
+    with open(filename) as file:
+        head = [next(file) for x in xrange(11)]
+    lbb = np.fromstring(head[-2], count=3, sep=',')
+    tfr = np.fromstring(head[-1], count=3, sep=',')
+    
+    data = np.loadtxt(filename, delimiter=',', skiprows=11)
+
+    x = lbb[0] + data[:,0] * (tfr - lbb)[0]
+    y = lbb[1] + data[:,1] * (tfr - lbb)[1]
+    z = lbb[2] + data[:,2] * (tfr - lbb)[2]
     r = data[:,3]
 
     fig = plt.figure()
@@ -131,7 +132,7 @@ def plot_3d():
     plt.show()
     
 def main():
-    plot_2d()
+    plot_2d(2)
 
 if __name__ == "__main__":
     main()

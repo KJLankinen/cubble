@@ -1,24 +1,27 @@
 {
-    "avgRad": 0.06,
-    "compressionAmount": 1e-06,
-    "errorTolerance": 0.0001,
-    "lbb": {
-        "x": 0.10490400000009457,
-        "y": 0.10490400000009457
+    "AvgRad": 0.06,
+    "CompressionAmount": 0.001,
+    "ErrorTolerance": 1e-05,
+    "InitialOverlapTolerance": 1.9,
+    "Lbb": {
+        "x": 1.2369999999999746,
+        "y": 1.2369999999999746,
+        "z": 1.2369999999999746
     },
-    "minRad": 1e-08,
-    "muZero": 1.0,
-    "numBubblesPerSweep": 1000,
-    "numIntegrationSteps": 2000000,
-    "numMaxBubbles": 5000,
-    "numMaxSweeps": 1000,
-    "phiTarget": 0.8,
-    "rngSeed": 154248,
-    "sigmaZero": 1.0,
-    "stdDevRad": 0.0126,
-    "tfr": {
-        "x": 1.3950959999853367,
-        "y": 1.3950959999853367
+    "MinRad": 1e-08,
+    "MuZero": 1.0,
+    "NumBubbles": 16384,
+    "NumBubblesPerCell": 96,
+    "NumIntegrationSteps": 100,
+    "PhiTarget": 0.8,
+    "RngSeed": 432216,
+    "SigmaZero": 0.5,
+    "SnapshotFilename": "snapshot",
+    "StdDevRad": 0.0126,
+    "Tfr": {
+        "x": 8.763000000000686,
+        "y": 8.763000000000686,
+        "z": 3.7629999999996926
     },
-    "timeStep": 2.4943235147781327e-14
+    "TimeStep": 0.11649025889821893
 }
