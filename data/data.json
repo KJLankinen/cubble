@@ -1,6 +1,6 @@
 {
     "PhiTargetExpl" : "The target volume fraction.", 
-    "PhiTarget" : 0.8,
+    "PhiTarget" : 0.84,
     "MuZeroExpl" : "The viscosity of the fluid",
     "MuZero" : 1.0,
     "SigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
@@ -14,7 +14,7 @@
     "LbbExpl" : "The coordinates of the lower bottom back corner of the simulation box.",
     "Lbb" : {"x" : 0, "y" : 0, "z" : 0},
     "TfrExpl" : "The coordinates of the top front right corner of the simulation box.",
-    "Tfr" : {"x" : 10.0, "y" : 10.0, "z" : 5.0},
+    "Tfr" : {"x" : 5.0, "y" : 5.0, "z" : 5.0},
     "ErrorToleranceExpl" : "The error tolerance level for the integration.",
     "ErrorTolerance" : 1e-5,
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
@@ -32,5 +32,9 @@
     "SnapshotFilenameExpl" : "The stem of the filename where to save the snap shots to.",
     "SnapshotFilename" : "snapshot",
     "InitialOverlapToleranceExpl" : "Maximum tolerated ratio of radii squared to distances squared when removing the intersecting bubbles at the simulation setup.",
-    "InitialOverlapTolerance" : 1.9
+    "InitialOverlapTolerance" : 1.9,
+    "NumStepsToRelaxExpl" : "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
+    "NumStepsToRelax" : 1000,
+    "MaxDeltaEnergyExpl" : "Maximum allowed energy change when relaxing the bubble bath.",
+    "MaxDeltaEnergy" : 1e-5
 }

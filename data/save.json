@@ -4,24 +4,26 @@
     "ErrorTolerance": 1e-05,
     "InitialOverlapTolerance": 1.9,
     "Lbb": {
-        "x": 1.2369999999999746,
-        "y": 1.2369999999999746,
-        "z": 1.2369999999999746
+        "x": 0.08000000000000006,
+        "y": 0.08000000000000006,
+        "z": 0.08000000000000006
     },
+    "MaxDeltaEnergy": 1e-09,
     "MinRad": 1e-08,
     "MuZero": 1.0,
     "NumBubbles": 16384,
     "NumBubblesPerCell": 96,
     "NumIntegrationSteps": 100,
-    "PhiTarget": 0.8,
+    "NumStepsToRelax": 1000,
+    "PhiTarget": 0.5,
     "RngSeed": 432216,
     "SigmaZero": 0.5,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 8.763000000000686,
-        "y": 8.763000000000686,
-        "z": 3.7629999999996926
+        "x": 4.919999999999973,
+        "y": 4.919999999999973,
+        "z": 4.919999999999973
     },
     "TimeStep": 0.11649025889821893
 }

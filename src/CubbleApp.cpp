@@ -46,8 +46,7 @@ void CubbleApp::run()
     if (phi < phiTarget)
     {
         int shrinkCount = 0;
-	std::cout << "Starting the shrinking of the simulation box..."
-		  << std::flush;
+	std::cout << "Starting the shrinking of the simulation box." << std::endl;
 	
 	while (phi < phiTarget)
 	{
@@ -67,15 +66,48 @@ void CubbleApp::run()
 		simulator->assignBubblesToCells();
 	}
 	
-	std::cout << " Done. Total of " << shrinkCount << " steps." << std::endl;
+	std::cout << "Shrinkin took total of " << shrinkCount << " steps." << std::endl;
 	printPhi(phi, phiTarget);
 	saveSnapshotToFile();
     }
     
     // Stabilize
+    int numRelaxationSteps = 0;
     std::cout << "\nStarting the stabilization of the foam..." << std::flush;
-    // do the stabilization
+    while (true)
+    {
+	double energy1 = simulator->getElasticEnergy();
+	double time = 0;
 
+	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
+	{
+	    simulator->integrate();
+	    time += env->getTimeStep();
+	    
+	    if (i % 100 == 0)
+		simulator->assignBubblesToCells();
+	}
+	
+	double energy2 = simulator->getElasticEnergy();
+	double deltaEnergy = std::abs(energy2 - energy1) / (energy1 * time);
+
+	if (deltaEnergy < env->getMaxDeltaEnergy())
+	{
+	    std::cout << "Final delta energy " << deltaEnergy
+		      << " after " << (numRelaxationSteps + 1) * env->getNumStepsToRelax()
+		      << " steps."
+		      << std::endl;
+	    break;
+	}
+	else
+	    std::cout << "Number of simulation steps relaxed: "
+		      << numRelaxationSteps * env->getNumStepsToRelax()
+		      << ", delta energy: " << deltaEnergy
+		      << std::endl;
+
+	++numRelaxationSteps;
+    }
+    saveSnapshotToFile();
 
     // Simulate
     std::cout << " Done\n**Setup done.**"

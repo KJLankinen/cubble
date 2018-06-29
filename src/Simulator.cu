@@ -35,9 +35,9 @@ cubble::Simulator::~Simulator()
 void cubble::Simulator::setupSimulation()
 {
     generateBubbles();
-    assignBubblesToCells();
+    assignBubblesToCells(true);
     removeIntersectingBubbles();
-    assignBubblesToCells();
+    assignBubblesToCells(true);
 }
 
 void cubble::Simulator::integrate()
@@ -63,7 +63,6 @@ void cubble::Simulator::integrate()
     maxNumBubbles += maxNumBubbles % 2;
     assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
     int numThreads = maxNumBubbles;
-    CudaContainer<dvec> accelerations(bubbles.getSize());
 
     do
     {
@@ -93,6 +92,7 @@ void cubble::Simulator::integrate()
 	    indices.getDevPtr(),
 	    cells.getDevPtr(),
 	    accelerations.getDevPtr(),
+	    energies.getDevPtr(),
 	    tfr,
 	    lbb,
 	    bubbles.getSize(),
@@ -136,7 +136,12 @@ void cubble::Simulator::integrate()
     while (error > env->getErrorTolerance());
 
     env->setTimeStep(timeStep);
-    simulationTime += timeStep;
+    SimulationTime += timeStep;
+
+    energies.deviceToHost();
+    ElasticEnergy = thrust::reduce(thrust::host,
+				   energies.getHostPtr(),
+				   energies.getHostPtr() + energies.getSize());
 
     // Update bubble data: current --> previous, predicted --> current
     gridSize = getGridSize(bubbles.getSize());
@@ -226,12 +231,13 @@ void cubble::Simulator::generateBubbles()
     std::cout << " Done.\n" << std::endl;
 }
 
-void cubble::Simulator::assignBubblesToCells()
+void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 {
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
-    
-    std::cout << "Starting to assign bubbles to cells." << std::flush;
+
+    if (useVerboseOutput)
+	std::cout << "Starting to assign bubbles to cells." << std::flush;
     
     int numBubblesPerCell = env->getNumBubblesPerCell();
     dim3 gridSize = getGridSize(bubbles.getSize());
@@ -239,11 +245,12 @@ void cubble::Simulator::assignBubblesToCells()
     dvec cellSize = (env->getTfr() - env->getLbb()) /
 	dvec(gridSize.x, gridSize.y, gridSize.z);
     double minCellSize = 3.0 * env->getAvgRad();
-
-    std::cout << "\n\tUsing grid size (" << gridSize.x
-	      << ", " << gridSize.y
-	      << ", " << gridSize.z
-	      << ") with total of " << numCells << " cells." << std::flush;
+    
+    if (useVerboseOutput)
+	std::cout << "\n\tUsing grid size (" << gridSize.x
+		  << ", " << gridSize.y
+		  << ", " << gridSize.z
+		  << ") with total of " << numCells << " cells." << std::flush;
     
     if (cellSize.x < minCellSize || cellSize.y < minCellSize || cellSize.z < minCellSize)
     {
@@ -261,8 +268,10 @@ void cubble::Simulator::assignBubblesToCells()
     cells = CudaContainer<Cell>(numCells);
     indices = CudaContainer<int>(bubbles.getSize());
     errors = CudaContainer<double>(bubbles.getSize());
+    energies = CudaContainer<double>(bubbles.getSize());
 
-    std::cout << "\n\tCalculating offsets..." << std::flush;
+    if (useVerboseOutput)
+	std::cout << "\n\tCalculating offsets..." << std::flush;
     
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
 						      cells.getDevPtr(),
@@ -281,8 +290,9 @@ void cubble::Simulator::assignBubblesToCells()
 	cumulativeSum += numBubbles;
     }
     cells.hostToDevice();
-
-    std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
+    
+    if (useVerboseOutput)
+	std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
     
     bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
 						   indices.getDevPtr(),
@@ -293,8 +303,9 @@ void cubble::Simulator::assignBubblesToCells()
     CUDA_CALL(cudaDeviceSynchronize());
     
     cells.deviceToHost();
-
-    std::cout << " Done.\n" << std::endl;
+    
+    if (useVerboseOutput)
+	std::cout << " Done.\n" << std::endl;
 }
 
 void cubble::Simulator::removeIntersectingBubbles()
@@ -651,6 +662,7 @@ void cubble::accelerate(Bubble *bubbles,
 			int *indices,
 			Cell *cells,
 		        dvec *accelerations,
+			double *energies,
 			dvec tfr,
 			dvec lbb,
 			int numBubbles,
@@ -733,8 +745,10 @@ void cubble::accelerate(Bubble *bubbles,
 	    if (radii * radii > acceleration.getSquaredLength())
 	    {
 		double magnitude = acceleration.getLength();
-		acceleration *= (radii - magnitude) / (radii * magnitude);
+		double temp = radii - magnitude;
+		acceleration *= temp / (radii * magnitude);
 		acceleration *= accelerationMultiplier;
+		double energy = (temp * temp) / radii;
 
 		// HACK: This is wiiiiiildly inefficient.
 		atomicAddD(&accelerations[gid1].x, acceleration.x);
@@ -743,6 +757,7 @@ void cubble::accelerate(Bubble *bubbles,
 		atomicAddD(&accelerations[gid2].x, -acceleration.x);
 		atomicAddD(&accelerations[gid2].y, -acceleration.y);
 		atomicAddD(&accelerations[gid2].z, -acceleration.z);
+		atomicAddD(&energies[gid1], energy);
 	    }
 	}
     }

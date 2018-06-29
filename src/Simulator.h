@@ -15,6 +15,8 @@ namespace cubble
 {
     class Simulator
     {
+	CUBBLE_PROP(double, SimulationTime)
+	CUBBLE_PROP(double, ElasticEnergy)
     public:
         Simulator(std::shared_ptr<Env> e);
 	~Simulator();
@@ -23,7 +25,7 @@ namespace cubble
 	void integrate();
 	double getVolumeOfBubbles() const;
 	void getBubbles(std::vector<Bubble> &b) const;
-	void assignBubblesToCells();
+	void assignBubblesToCells(bool useVerboseOutput = false);
 	
     private:
 	dim3 getGridSize(int numBubbles);
@@ -35,8 +37,8 @@ namespace cubble
 	CudaContainer<int> indices;
 	CudaContainer<Cell> cells;
 	CudaContainer<double> errors;
-
-	double simulationTime = 0;
+	CudaContainer<dvec> accelerations;
+	CudaContainer<double> energies;
     };
 
     
@@ -104,6 +106,7 @@ namespace cubble
 		    int *indices,
 		    Cell *cells,
 		    dvec *accelerations,
+		    double *energies,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,

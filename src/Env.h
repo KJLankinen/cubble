@@ -23,6 +23,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(int, NumBubbles)
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell)
 	CUBBLE_CONST_PROP(int, RngSeed)
+	CUBBLE_CONST_PROP(int, NumStepsToRelax)
 	
 	CUBBLE_CONST_PROP(double, AvgRad)
 	CUBBLE_CONST_PROP(double, StdDevRad)
@@ -34,6 +35,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(double, ErrorTolerance)
 	CUBBLE_CONST_PROP(double, CompressionAmount)
 	CUBBLE_CONST_PROP(double, InitialOverlapTolerance)
+	CUBBLE_CONST_PROP(double, MaxDeltaEnergy)
 	CUBBLE_PROP(double, TimeStep)
 	
 	CUBBLE_CONST_PROP(std::string, DataPath)
@@ -119,6 +121,8 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
 	    CUBBLE_IO_PARAMETER(read, params, InitialOverlapTolerance);
+	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
+	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
