@@ -27,9 +27,8 @@ void CubbleApp::run()
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
-    // Bubble volume doesn't change while the simulation box is being shrunk.
-    const double bubbleVolume = simulator->getVolumeOfBubbles();
     const double phiTarget = env->getPhiTarget();
+    double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
 
     auto printPhi = [](double phi, double phiTarget) -> void
@@ -59,21 +58,26 @@ void CubbleApp::run()
 	    
 	    // Calculate new phi
 	    phi = bubbleVolume / env->getSimulationBoxVolume();
-	    
-	    ++shrinkCount;
 
 	    if (shrinkCount % 100 == 0)
 		simulator->assignBubblesToCells();
+	    
+	    if (shrinkCount % 10 == 0)
+		printPhi(phi, phiTarget);
+	    
+	    ++shrinkCount;
 	}
 	
-	std::cout << "Shrinkin took total of " << shrinkCount << " steps." << std::endl;
+	std::cout << "Shrinking took total of " << shrinkCount << " steps." << std::endl;
 	printPhi(phi, phiTarget);
 	saveSnapshotToFile();
     }
     
     // Stabilize
     int numRelaxationSteps = 0;
-    std::cout << "\nStarting the stabilization of the foam..." << std::flush;
+    const int failsafe = 500;
+    std::cout << "\nStarting the relaxation of the foam..." << std::endl;
+    
     while (true)
     {
 	double energy1 = simulator->getElasticEnergy();
@@ -94,8 +98,16 @@ void CubbleApp::run()
 	if (deltaEnergy < env->getMaxDeltaEnergy())
 	{
 	    std::cout << "Final delta energy " << deltaEnergy
-		      << " after " << (numRelaxationSteps + 1) * env->getNumStepsToRelax()
+		      << " after " << numRelaxationSteps * env->getNumStepsToRelax()
 		      << " steps."
+		      << std::endl;
+	    break;
+	}
+	else if (numRelaxationSteps > failsafe)
+	{
+	    std::cout << "Over " << failsafe
+		      << " steps taken and required delta energy not reached."
+		      << " Check parameters."
 		      << std::endl;
 	    break;
 	}
@@ -106,24 +118,20 @@ void CubbleApp::run()
 		      << std::endl;
 
 	++numRelaxationSteps;
+
     }
+
     saveSnapshotToFile();
 
     // Simulate
-    std::cout << " Done\n**Setup done.**"
-	      << "\n\n**Starting the simulation proper.**"
-	      << std::endl;
-    
+    std::cout << "**Setup done.**\n\n**Starting the simulation proper.**" << std::endl;
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
-	// Maybe set a flag in simulator to signify the start of proper simulation?
-	simulator->integrate();
+	simulator->integrate(true);
 	
 	if (i % 100 == 0)
 	    simulator->assignBubblesToCells();
     }
-    
-    simulator->assignBubblesToCells();
 
     saveSnapshotToFile();
     

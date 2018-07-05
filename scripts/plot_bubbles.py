@@ -104,7 +104,7 @@ def plot_2d(n):
     plt.show()
 
 def plot_3d():
-    filename = "data/snapshot0.dat"
+    filename = "data/snapshot2.dat"
 
     with open(filename) as file:
         head = [next(file) for x in xrange(11)]
@@ -132,7 +132,7 @@ def plot_3d():
     plt.show()
     
 def main():
-    plot_2d(4)
+    plot_3d()
 
 if __name__ == "__main__":
     main()

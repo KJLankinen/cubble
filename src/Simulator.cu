@@ -40,7 +40,7 @@ void cubble::Simulator::setupSimulation()
     assignBubblesToCells(true);
 }
 
-void cubble::Simulator::integrate()
+void cubble::Simulator::integrate(bool useGasExchange)
 {
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
@@ -68,9 +68,9 @@ void cubble::Simulator::integrate()
     {
         // Calculate prediction
 	predict<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
-	    bubbles.getDevPtr(),
-	    indices.getDevPtr(),
-	    cells.getDevPtr(),
+	    bubbles.getDataPtr(),
+	    indices.getDataPtr(),
+	    cells.getDataPtr(),
 	    tfr,
 	    lbb,
 	    timeStep,
@@ -88,11 +88,11 @@ void cubble::Simulator::integrate()
 	gridSize.z *= numDomains;
 	
 	accelerate<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
-	    bubbles.getDevPtr(),
-	    indices.getDevPtr(),
-	    cells.getDevPtr(),
-	    accelerations.getDevPtr(),
-	    energies.getDevPtr(),
+	    bubbles.getDataPtr(),
+	    indices.getDataPtr(),
+	    cells.getDataPtr(),
+	    accelerations.getDataPtr(),
+	    energies.getDataPtr(),
 	    tfr,
 	    lbb,
 	    bubbles.getSize(),
@@ -108,11 +108,11 @@ void cubble::Simulator::integrate()
 	numThreads = maxNumBubbles;
 	
 	correct<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
-	    bubbles.getDevPtr(),
-	    indices.getDevPtr(),
-	    cells.getDevPtr(),
-	    errors.getDevPtr(),
-	    accelerations.getDevPtr(),
+	    bubbles.getDataPtr(),
+	    indices.getDataPtr(),
+	    cells.getDataPtr(),
+	    errors.getDataPtr(),
+	    accelerations.getDataPtr(),
 	    tfr,
 	    lbb,
 	    env->getFZeroPerMuZero(),
@@ -122,11 +122,10 @@ void cubble::Simulator::integrate()
 	
 	CUDA_CALL(cudaPeekAtLastError());
 	CUDA_CALL(cudaDeviceSynchronize());
-	
-	errors.deviceToHost();
+        
         error = *thrust::max_element(thrust::host,
-					    errors.getHostPtr(),
-					    errors.getHostPtr() + errors.getSize());
+					    errors.getDataPtr(),
+					    errors.getDataPtr() + errors.getSize());
 	
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
@@ -138,44 +137,51 @@ void cubble::Simulator::integrate()
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
-    energies.deviceToHost();
     ElasticEnergy = thrust::reduce(thrust::host,
-				   energies.getHostPtr(),
-				   energies.getHostPtr() + energies.getSize());
+				   energies.getDataPtr(),
+				   energies.getDataPtr() + energies.getSize());
 
     // Update bubble data: current --> previous, predicted --> current
     gridSize = getGridSize(bubbles.getSize());
     numThreads = maxNumBubbles;
     updateData<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
-	bubbles.getDevPtr(),
-	indices.getDevPtr(),
-	cells.getDevPtr(),
+	bubbles.getDataPtr(),
+	indices.getDataPtr(),
+	cells.getDataPtr(),
         bubbles.getSize(),
         cells.getSize());
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
 {
-    // ASSUMPTION: Device data is up to date.
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
     double volume = 0;
     CudaContainer<double> volumes(bubbles.getSize());
     int numThreads = 1024;
     int numBlocks = (int)std::ceil(bubbles.getSize() / (float)numThreads);
-    calculateVolumes<<<numBlocks, numThreads>>>(bubbles.getDevPtr(),
-						volumes.getDevPtr(),
+
+    calculateVolumes<<<numBlocks, numThreads>>>(bubbles.getDataPtr(),
+						volumes.getDataPtr(),
 						bubbles.getSize());
-    volumes.deviceToHost();
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
     volume = thrust::reduce(thrust::host,
-			    volumes.getHostPtr(),
-			    volumes.getHostPtr() + volumes.getSize());
+			    volumes.getDataPtr(),
+			    volumes.getDataPtr() + volumes.getSize());
     
     return volume;
 }
 
 void cubble::Simulator::getBubbles(std::vector<Bubble> &b) const
 { 
-    // ASSUMPTION: Device data is up to date
-    bubbles.deviceToVec(b);
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
+    bubbles.dataToVec(b);
 }
 
 void cubble::Simulator::generateBubbles()
@@ -204,25 +210,25 @@ void cubble::Simulator::generateBubbles()
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
-    CURAND_CALL(curandGenerateUniform(generator, x.getDevPtr(), n));
-    CURAND_CALL(curandGenerateUniform(generator, y.getDevPtr(), n));
-    CURAND_CALL(curandGenerateNormal(generator, r.getDevPtr(), n, avgRad, stdDevRad));
+    CURAND_CALL(curandGenerateUniform(generator, x.getDataPtr(), n));
+    CURAND_CALL(curandGenerateUniform(generator, y.getDataPtr(), n));
+    CURAND_CALL(curandGenerateNormal(generator, r.getDataPtr(), n, avgRad, stdDevRad));
     
 #if (NUM_DIM == 3)
     CudaContainer<float> z(n);
-    CURAND_CALL(curandGenerateUniform(generator, z.getDevPtr(), n));
+    CURAND_CALL(curandGenerateUniform(generator, z.getDataPtr(), n));
 #endif
 
     std::cout << " Done.\n\tAssigning data to bubbles..." << std::flush;;
     
     // Assign generated data to bubbles
-    assignDataToBubbles<<<numBlocks, numThreads>>>(x.getDevPtr(),
-						   y.getDevPtr(),
+    assignDataToBubbles<<<numBlocks, numThreads>>>(x.getDataPtr(),
+						   y.getDataPtr(),
 #if (NUM_DIM == 3)
-						   z.getDevPtr(),
+						   z.getDataPtr(),
 #endif
-						   r.getDevPtr(),
-						   bubbles.getDevPtr(),
+						   r.getDataPtr(),
+						   bubbles.getDataPtr(),
 						   n);
     
     CUDA_CALL(cudaPeekAtLastError());
@@ -252,7 +258,12 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 		  << ", " << gridSize.z
 		  << ") with total of " << numCells << " cells." << std::flush;
     
-    if (cellSize.x < minCellSize || cellSize.y < minCellSize || cellSize.z < minCellSize)
+    if (cellSize.x < minCellSize || cellSize.y < minCellSize
+#if NUM_DIM == 3
+	|| cellSize.z < minCellSize)
+#else
+	)
+#endif
     {
 	std::stringstream ss;
         ss << "Size of cell (" << cellSize
@@ -273,14 +284,12 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     if (useVerboseOutput)
 	std::cout << "\n\tCalculating offsets..." << std::flush;
     
-    calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDevPtr(),
-						      cells.getDevPtr(),
+    calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDataPtr(),
+						      cells.getDataPtr(),
 						      bubbles.getSize());
 
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
-
-    cells.deviceToHost();
 
     int cumulativeSum = 0;
     for (size_t i = 0; i < cells.getSize(); ++i)
@@ -289,20 +298,17 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
         cells[i].offset = cumulativeSum;
 	cumulativeSum += numBubbles;
     }
-    cells.hostToDevice();
     
     if (useVerboseOutput)
 	std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
     
-    bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDevPtr(),
-						   indices.getDevPtr(),
-						   cells.getDevPtr(),
+    bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDataPtr(),
+						   indices.getDataPtr(),
+						   cells.getDataPtr(),
 						   bubbles.getSize());
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
-    
-    cells.deviceToHost();
     
     if (useVerboseOutput)
 	std::cout << " Done.\n" << std::endl;
@@ -345,10 +351,10 @@ void cubble::Simulator::removeIntersectingBubbles()
     std::cout << " Done.\n\tStarting kernel for finding intersections..." << std::flush;
     
     findIntersections<<<gridSize, numThreads, maxNumBubbles * sizeof(Bubble)>>>(
-	bubbles.getDevPtr(),
-	indices.getDevPtr(),
-	cells.getDevPtr(),
-	intersections.getDevPtr(),
+	bubbles.getDataPtr(),
+	indices.getDataPtr(),
+	cells.getDataPtr(),
+	intersections.getDataPtr(),
 	tfr,
 	lbb,
 	env->getInitialOverlapTolerance(),
@@ -363,8 +369,6 @@ void cubble::Simulator::removeIntersectingBubbles()
     std::cout << " Done.\n\tCopying values from device to host..." << std::flush;
 
     std::vector<Bubble> culledBubbles;
-    bubbles.deviceToHost();
-    intersections.deviceToHost();
     
     std::cout << " Done.\n\tRemoving intersecting elements from host vector..." << std::flush;
 

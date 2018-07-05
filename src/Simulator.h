@@ -22,7 +22,7 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
-	void integrate();
+	void integrate(bool useGasExchange = false);
 	double getVolumeOfBubbles() const;
 	void getBubbles(std::vector<Bubble> &b) const;
 	void assignBubblesToCells(bool useVerboseOutput = false);
