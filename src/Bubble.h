@@ -12,14 +12,14 @@ namespace cubble
     class Bubble
     {
 	// See Macros.h for details of this macro
-	CUBBLE_HOST_DEVICE_PROP(int, CellIndex)
-	CUBBLE_HOST_DEVICE_PROP(double, Radius)
-	CUBBLE_HOST_DEVICE_PROP(dvec, Pos)
-	CUBBLE_HOST_DEVICE_PROP(dvec, PosPrev)
-	CUBBLE_HOST_DEVICE_PROP(dvec, PosPred)
-	CUBBLE_HOST_DEVICE_PROP(dvec, Vel)
-	CUBBLE_HOST_DEVICE_PROP(dvec, VelPrev)
-	CUBBLE_HOST_DEVICE_PROP(dvec, VelPred)
+	CUBBLE_HOST_DEVICE_PROP(int, CellIndex, 0)
+	CUBBLE_HOST_DEVICE_PROP(double, Radius, 0)
+	CUBBLE_HOST_DEVICE_PROP(dvec, Pos, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, PosPrev, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, PosPred, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, Vel, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, VelPrev, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, VelPred, dvec(0, 0, 0))
 	
     public:
 	__host__ __device__

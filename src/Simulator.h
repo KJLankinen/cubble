@@ -15,8 +15,8 @@ namespace cubble
 {
     class Simulator
     {
-	CUBBLE_PROP(double, SimulationTime)
-	CUBBLE_PROP(double, ElasticEnergy)
+	CUBBLE_PROP(double, SimulationTime, 0)
+	CUBBLE_PROP(double, ElasticEnergy, 0)
     public:
         Simulator(std::shared_ptr<Env> e);
 	~Simulator();

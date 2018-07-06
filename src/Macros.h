@@ -40,26 +40,26 @@
 #endif
 
 // Macro for (arbitrary) class member variable with getter and setter for CPU
-#define CUBBLE_PROP(type, var)						\
+#define CUBBLE_PROP(type, var, defVal)					\
 private:								\
-    type var;								\
+    type var = defVal;								\
 public:									\
     type get##var() const { return var; }						\
     void set##var(const type &val) { var = val; }
 
 
 // Macro for (arbitrary) const class member variable with getter for CPU
-#define CUBBLE_CONST_PROP(type, var)						\
+#define CUBBLE_CONST_PROP(type, var, defVal)				\
 private:								\
-    type var;								\
+    type var = defVal;								\
 public:									\
     type get##var() const { return var; }						
 
 
 // Macro for (arbitrary) class member variable with getter and setter, for CPU & GPU
-#define CUBBLE_HOST_DEVICE_PROP(type, var)				\
+#define CUBBLE_HOST_DEVICE_PROP(type, var, defVal)			\
 private:								\
-    type var;								\
+    type var = defVal;								\
 public:									\
     __host__ __device__ type get##var() const { return var; }			\
     __host__ __device__ void set##var(const type &val) { var = val; }

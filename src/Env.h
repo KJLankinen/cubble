@@ -19,30 +19,30 @@ namespace cubble
     class Env
     {
 	// See Macros.h for details of this macro
-	CUBBLE_CONST_PROP(int, NumIntegrationSteps)
-	CUBBLE_CONST_PROP(int, NumBubbles)
-	CUBBLE_CONST_PROP(int, NumBubblesPerCell)
-	CUBBLE_CONST_PROP(int, RngSeed)
-	CUBBLE_CONST_PROP(int, NumStepsToRelax)
+	CUBBLE_CONST_PROP(int, NumIntegrationSteps, 0)
+	CUBBLE_CONST_PROP(int, NumBubbles, 0)
+	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
+	CUBBLE_CONST_PROP(int, RngSeed, 0)
+	CUBBLE_CONST_PROP(int, NumStepsToRelax, 0)
 	
-	CUBBLE_CONST_PROP(double, AvgRad)
-	CUBBLE_CONST_PROP(double, StdDevRad)
-	CUBBLE_CONST_PROP(double, MinRad)
-	CUBBLE_CONST_PROP(double, PhiTarget)
-	CUBBLE_CONST_PROP(double, MuZero)
-	CUBBLE_CONST_PROP(double, SigmaZero)
-	CUBBLE_CONST_PROP(double, FZeroPerMuZero)
-	CUBBLE_CONST_PROP(double, ErrorTolerance)
-	CUBBLE_CONST_PROP(double, CompressionAmount)
-	CUBBLE_CONST_PROP(double, InitialOverlapTolerance)
-	CUBBLE_CONST_PROP(double, MaxDeltaEnergy)
-	CUBBLE_PROP(double, TimeStep)
+	CUBBLE_CONST_PROP(double, AvgRad, 0)
+	CUBBLE_CONST_PROP(double, StdDevRad, 0)
+	CUBBLE_CONST_PROP(double, MinRad, 0)
+	CUBBLE_CONST_PROP(double, PhiTarget, 0)
+	CUBBLE_CONST_PROP(double, MuZero, 0)
+	CUBBLE_CONST_PROP(double, SigmaZero, 0)
+	CUBBLE_CONST_PROP(double, FZeroPerMuZero, 0)
+	CUBBLE_CONST_PROP(double, ErrorTolerance, 0)
+	CUBBLE_CONST_PROP(double, CompressionAmount, 0)
+	CUBBLE_CONST_PROP(double, InitialOverlapTolerance, 0)
+	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
+	CUBBLE_PROP(double, TimeStep, 0)
 	
-	CUBBLE_CONST_PROP(std::string, DataPath)
-	CUBBLE_CONST_PROP(std::string, SnapshotFilename)
+	CUBBLE_CONST_PROP(std::string, DataPath, "")
+	CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
 
-	CUBBLE_PROP(dvec, Lbb)
-	CUBBLE_PROP(dvec, Tfr)
+	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
+	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
 	
     public:
 	Env(const std::string &inF,
