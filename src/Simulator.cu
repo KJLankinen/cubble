@@ -502,11 +502,11 @@ void cubble::findIntersections(Bubble *bubbles,
 {
     extern __shared__ Bubble localBubbles[];
 
-    deviceAssert(numBubbles > 0);
-    deviceAssert(numDomains > 0);
-    deviceAssert(numCells > 0);
-    deviceAssert(numLocalBubbles > 0);
-    deviceAssert(!(numDomains & 1));
+    DEVICE_ASSERT(numBubbles > 0);
+    DEVICE_ASSERT(numDomains > 0);
+    DEVICE_ASSERT(numCells > 0);
+    DEVICE_ASSERT(numLocalBubbles > 0);
+    DEVICE_ASSERT(!(numDomains & 1));
     
     ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
@@ -529,8 +529,8 @@ void cubble::findIntersections(Bubble *bubbles,
 				 yInterval,
 				 isOwnCell);
 
-    deviceAssert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
-    deviceAssert(xInterval + yInterval <= numLocalBubbles);
+    DEVICE_ASSERT(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    DEVICE_ASSERT(xInterval + yInterval <= numLocalBubbles);
     
     // Get the bubbles to shared memory
     if (threadIdx.x < xInterval + yInterval)
@@ -553,7 +553,7 @@ void cubble::findIntersections(Bubble *bubbles,
 	{
 	    int x = pairIdx % xInterval;
 	    int y = pairIdx / xInterval;
-	    deviceAssert(y < yInterval);
+	    DEVICE_ASSERT(y < yInterval);
 
 	    int gid1 = xBegin + x;
 	    int gid2 = yBegin + y;
@@ -597,7 +597,7 @@ void cubble::predict(Bubble *bubbles,
 	+ blockIdx.y * gridDim.x
 	+ blockIdx.x;
 
-    deviceAssert(cid < numCells);
+    DEVICE_ASSERT(cid < numCells);
     const Cell *self = &cells[cid];
 
     if (threadIdx.x < self->size)
@@ -636,7 +636,7 @@ void cubble::correct(Bubble *bubbles,
 	+ blockIdx.y * gridDim.x
 	+ blockIdx.x;
 
-    deviceAssert(cid < numCells);
+    DEVICE_ASSERT(cid < numCells);
     const Cell *self = &cells[cid];
 
     if (threadIdx.x < self->size)
@@ -676,11 +676,11 @@ void cubble::accelerate(Bubble *bubbles,
 {
     extern __shared__ Bubble localBubbles[];
 
-    deviceAssert(numBubbles > 0);
-    deviceAssert(numDomains > 0);
-    deviceAssert(numCells > 0);
-    deviceAssert(numLocalBubbles > 0);
-    deviceAssert(!(numDomains & 1));
+    DEVICE_ASSERT(numBubbles > 0);
+    DEVICE_ASSERT(numDomains > 0);
+    DEVICE_ASSERT(numCells > 0);
+    DEVICE_ASSERT(numLocalBubbles > 0);
+    DEVICE_ASSERT(!(numDomains & 1));
     
     ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
     ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
@@ -703,8 +703,8 @@ void cubble::accelerate(Bubble *bubbles,
 				 yInterval,
 				 isOwnCell);
 
-    deviceAssert(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
-    deviceAssert(xInterval + yInterval <= numLocalBubbles);
+    DEVICE_ASSERT(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    DEVICE_ASSERT(xInterval + yInterval <= numLocalBubbles);
     
     // Get the bubbles to shared memory
     if (threadIdx.x < xInterval + yInterval)
@@ -728,7 +728,7 @@ void cubble::accelerate(Bubble *bubbles,
 	{
 	    int x = pairIdx % xInterval;
 	    int y = pairIdx / xInterval;
-	    deviceAssert(y < yInterval);
+	    DEVICE_ASSERT(y < yInterval);
 
 	    int gid1 = indices[xBegin + x];
 	    int gid2 = indices[yBegin + y];
@@ -780,7 +780,7 @@ void cubble::updateData(Bubble *bubbles,
 	+ blockIdx.y * gridDim.x
 	+ blockIdx.x;
 
-    deviceAssert(cid < numCells);
+    DEVICE_ASSERT(cid < numCells);
     const Cell *self = &cells[cid];
 
     if (threadIdx.x < self->size)
@@ -904,7 +904,7 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     int domain = blockIdx.z % numDomains;
     int di = (2 * domain) / numDomains;
     
-    deviceAssert((di == 0 && domain < (int)(0.5f * numDomains))
+    DEVICE_ASSERT((di == 0 && domain < (int)(0.5f * numDomains))
 	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
     
     int dj = domain % (int)(0.5f * numDomains);
@@ -914,12 +914,12 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
 	+ cellIdxVec.y * boxDim.x
 	+ cellIdxVec.x;
-    deviceAssert(selfCellIndex < numCells);
+    DEVICE_ASSERT(selfCellIndex < numCells);
     Cell self = cells[selfCellIndex];
 
     // Find the neighbor of this cell
     int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    deviceAssert(neighborCellIndex < numCells);
+    DEVICE_ASSERT(neighborCellIndex < numCells);
     Cell neighbor = cells[neighborCellIndex];
     
     outIsOwnCell = selfCellIndex == neighborCellIndex;
@@ -930,18 +930,18 @@ void cubble::getDomainOffsetsAndIntervals(int numBubbles,
     outXBegin = neighbor.offset + djMod2 * halfSize;
     outXInterval = halfSize + djMod2 * (neighbor.size % 2);
     
-    deviceAssert(outXBegin + outXInterval <= numBubbles);
-    deviceAssert(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
-    deviceAssert(outXInterval == halfSize || outXInterval == halfSize + 1);
+    DEVICE_ASSERT(outXBegin + outXInterval <= numBubbles);
+    DEVICE_ASSERT(outXBegin + outXInterval <= neighbor.size + neighbor.offset);
+    DEVICE_ASSERT(outXInterval == halfSize || outXInterval == halfSize + 1);
 
     // y-axis uses the top or bottom half of this cell
     halfSize = 0.5f * self.size;
     outYBegin = self.offset + di * halfSize;
     outYInterval = halfSize + di * (self.size % 2);
 
-    deviceAssert(outYBegin + outYInterval <= numBubbles);
-    deviceAssert(outYInterval == halfSize || outYInterval == halfSize + 1);
-    deviceAssert(outYBegin + outYInterval <= self.size + self.offset);
+    DEVICE_ASSERT(outYBegin + outYInterval <= numBubbles);
+    DEVICE_ASSERT(outYInterval == halfSize || outYInterval == halfSize + 1);
+    DEVICE_ASSERT(outYBegin + outYInterval <= self.size + self.offset);
 }
 
 __forceinline__ __device__

@@ -39,6 +39,18 @@
   #define CURAND_CALL(result) {(result);}
 #endif
 
+// Macro for device assert.
+#ifndef NDEBUG
+  #define DEVICE_ASSERT(statement)		\
+    do							\
+    {							\
+	assert(statement);				\
+    }							\
+    while(0)
+#else
+  #define DEVICE_ASSERT(statement)
+#endif
+
 // Macro for (arbitrary) class member variable with getter and setter for CPU
 #define CUBBLE_PROP(type, var, defVal)					\
 private:								\
