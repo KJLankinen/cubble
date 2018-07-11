@@ -32,6 +32,7 @@ namespace cubble
 	void generateBubbles();
 
 	const int neighborStride = 25;
+	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
 	cudaEvent_t stop = 0;

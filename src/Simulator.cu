@@ -181,6 +181,11 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 		  << "\nCorrection: " << correctionTime
 		  << "\nTotal duration of function: " << duration.count() * 1000
 		  << std::endl;
+
+    ++integrationStep;
+
+    if (integrationStep % 100 == 0)
+	assignBubblesToCells();
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const

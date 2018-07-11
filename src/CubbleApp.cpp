@@ -27,6 +27,7 @@ void CubbleApp::run()
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
+    int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
@@ -40,44 +41,32 @@ void CubbleApp::run()
 
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
-    
-    // Shrink the box and integrate bubbles until at target phi
-    if (phi < phiTarget)
-    {
-        int shrinkCount = 0;
-	std::cout << "Starting the shrinking of the simulation box." << std::endl;
-	
-	while (phi < phiTarget)
-	{
-	    // Shrink the simulation box
-	    env->setLbb(env->getLbb() + env->getCompressionAmount());
-	    env->setTfr(env->getTfr() - env->getCompressionAmount());
-	    
-	    // Integrate
-	    simulator->integrate();
-	    
-	    // Calculate new phi
-	    phi = bubbleVolume / env->getSimulationBoxVolume();
 
-	    if (shrinkCount % 100 == 0)
-		simulator->assignBubblesToCells();
-	    
-	    if (shrinkCount % 10 == 0)
-		printPhi(phi, phiTarget);
-	    
-	    ++shrinkCount;
-	}
+    std::cout << "Starting the scaling of the simulation box." << std::endl;
+    const bool shouldShrink = phi < phiTarget;
+    const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
+    while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
+    {
+	env->setLbb(env->getLbb() + scaleAmount);
+	env->setTfr(env->getTfr() - scaleAmount);
 	
-	std::cout << "Shrinking took total of " << shrinkCount << " steps." << std::endl;
-	printPhi(phi, phiTarget);
-	saveSnapshotToFile();
+	simulator->integrate();
+	
+	phi = bubbleVolume / env->getSimulationBoxVolume();
+	
+	if (numSteps % 10 == 0)
+	    printPhi(phi, phiTarget);
+	
+	++numSteps;
     }
     
-    // Stabilize
-    int numRelaxationSteps = 0;
-    const int failsafe = 500;
-    std::cout << "\nStarting the relaxation of the foam..." << std::endl;
+    std::cout << "Shrinking took total of " << numSteps << " steps." << std::endl;
+    printPhi(phi, phiTarget);
+    saveSnapshotToFile();
     
+    std::cout << "Starting the relaxation of the foam..." << std::endl;
+    numSteps = 0;
+    const int failsafe = 500;
     while (true)
     {
 	double energy1 = simulator->getElasticEnergy();
@@ -87,23 +76,21 @@ void CubbleApp::run()
 	{
 	    simulator->integrate(false, i == env->getNumStepsToRelax() - 1);
 	    time += env->getTimeStep();
-	    
-	    if (i % 100 == 0)
-		simulator->assignBubblesToCells();
 	}
 	
 	double energy2 = simulator->getElasticEnergy();
-	double deltaEnergy = std::abs(energy2 - energy1) / (energy1 * time);
+	double deltaEnergy = energy1 == 0 ? 0
+	    : std::abs(energy2 - energy1) / (energy1 * time);
 
 	if (deltaEnergy < env->getMaxDeltaEnergy())
 	{
 	    std::cout << "Final delta energy " << deltaEnergy
-		      << " after " << numRelaxationSteps * env->getNumStepsToRelax()
+		      << " after " << numSteps * env->getNumStepsToRelax()
 		      << " steps."
 		      << std::endl;
 	    break;
 	}
-	else if (numRelaxationSteps > failsafe)
+	else if (numSteps > failsafe)
 	{
 	    std::cout << "Over " << failsafe
 		      << " steps taken and required delta energy not reached."
@@ -113,25 +100,21 @@ void CubbleApp::run()
 	}
 	else
 	    std::cout << "Number of simulation steps relaxed: "
-		      << numRelaxationSteps * env->getNumStepsToRelax()
+		      << numSteps * env->getNumStepsToRelax()
 		      << ", delta energy: " << deltaEnergy
 		      << std::endl;
 
-	++numRelaxationSteps;
-
+	++numSteps;
     }
 
     saveSnapshotToFile();
 
-    // Simulate
-    std::cout << "**Setup done.**\n\n**Starting the simulation proper.**" << std::endl;
+    std::cout << "**Setup done.**"
+	      <<"\n\n**Starting the simulation proper.**"
+	      << std::endl;
+    
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
-    {
-	simulator->integrate(true);
-	
-	if (i % 100 == 0)
-	    simulator->assignBubblesToCells();
-    }
+	simulator->integrate(true, false);
 
     saveSnapshotToFile();
     

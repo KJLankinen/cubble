@@ -20,7 +20,6 @@ namespace cubble
     {
 	// See Macros.h for details of this macro
 	CUBBLE_CONST_PROP(int, NumIntegrationSteps, 0)
-	CUBBLE_CONST_PROP(int, NumBubbles, 0)
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
 	CUBBLE_CONST_PROP(int, RngSeed, 0)
 	CUBBLE_CONST_PROP(int, NumStepsToRelax, 0)
@@ -33,8 +32,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(double, SigmaZero, 0)
 	CUBBLE_CONST_PROP(double, FZeroPerMuZero, 0)
 	CUBBLE_CONST_PROP(double, ErrorTolerance, 0)
-	CUBBLE_CONST_PROP(double, CompressionAmount, 0)
-	CUBBLE_CONST_PROP(double, InitialOverlapTolerance, 0)
+	CUBBLE_CONST_PROP(double, ScaleAmount, 0)
 	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
 	CUBBLE_PROP(double, TimeStep, 0)
 	
@@ -115,12 +113,10 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
 	    CUBBLE_IO_PARAMETER(read, params, TimeStep);
 	    CUBBLE_IO_PARAMETER(read, params, RngSeed);
-	    CUBBLE_IO_PARAMETER(read, params, CompressionAmount);
+	    CUBBLE_IO_PARAMETER(read, params, ScaleAmount);
 	    CUBBLE_IO_PARAMETER(read, params, NumIntegrationSteps);
-	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
-	    CUBBLE_IO_PARAMETER(read, params, InitialOverlapTolerance);
 	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
 	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
 	    
