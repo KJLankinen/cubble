@@ -64,7 +64,7 @@ namespace cubble
 	{
 	    v.clear();
 	    v.resize(size);
-	    std::memcpy(v.data(), dataPtr.get(), size);
+	    std::memcpy(v.data(), dataPtr.get(), size * sizeof(T));
 	}
 
 	T operator[](size_t i) const
