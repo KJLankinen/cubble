@@ -30,7 +30,6 @@ namespace cubble
     private:
 	dim3 getGridSize(int numBubbles);
 	void generateBubbles();
-	void removeIntersectingBubbles();
         
 	std::shared_ptr<Env> env;
 	CudaContainer<Bubble> bubbles;
@@ -56,7 +55,12 @@ namespace cubble
 			     float *z,
 #endif
 			     float *r,
+			     float *w,
 			     Bubble *b,
+			     ivec bubblesPerDim,
+			     dvec tfr,
+			     dvec lbb,
+			     double avgRad,
 			     int numBubbles);
 
     __global__
@@ -64,19 +68,6 @@ namespace cubble
 
     __global__
     void bubblesToCells(Bubble *bubbles, int *indices, Cell *cells, int numBubbles);
-
-    __global__
-    void findIntersections(Bubble *bubbles,
-			   int *indices,
-			   Cell *cells,
-			   int *intesectingIndices,
-			   dvec tfr,
-			   dvec lbb,
-			   double overlapTolerance,
-			   int numBubbles,
-			   int numDomains,
-			   int numCells,
-			   int numLocalBubbles);
 
     __global__
     void predict(Bubble *bubbles,

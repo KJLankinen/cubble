@@ -76,6 +76,18 @@ namespace cubble
 	}
 
 	__host__ __device__
+	static vec<T> normalize(vec<T> &v)
+	{
+	    return v / v.getLength();
+	}
+	
+	__host__ __device__
+	static vec<T> normalize(const vec<T> &v)
+	{
+	    return v / v.getLength();
+	}  
+
+	__host__ __device__
 	T getMaxComponent() const
 	{
 	    return x > y ? (x > z ? x : z) : (y > z ? y : z);
