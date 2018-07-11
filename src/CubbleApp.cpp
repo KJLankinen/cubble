@@ -54,7 +54,7 @@ void CubbleApp::run()
 	
 	phi = bubbleVolume / env->getSimulationBoxVolume();
 	
-	if (numSteps % 10 == 0)
+	if (numSteps % 1000 == 0)
 	    printPhi(phi, phiTarget);
 	
 	++numSteps;

@@ -501,7 +501,7 @@ void cubble::assignDataToBubbles(float *x,
 	randomOffset.z = z[gid];
 #endif
 
-	randomOffset = dvec::normalize(randomOffset) * w[gid] * avgRad;
+	randomOffset = dvec::normalize(randomOffset) * avgRad * 2 * w[gid];
 	randomOffset = (randomOffset - lbb) / (tfr - lbb);
 	pos = getWrappedPos(pos + randomOffset);
 
