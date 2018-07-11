@@ -77,30 +77,23 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
 	// Calculate accelerations
 	accelerations = CudaContainer<dvec>(bubbles.getSize());
-	int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
-	numThreads = 512;
-	gridSize = getGridSize(bubbles.getSize());
-	gridSize.z *= numDomains;
 	
 	accelerate<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	    bubbles.getDataPtr(),
 	    indices.getDataPtr(),
 	    cells.getDataPtr(),
+	    numberOfNeighbors.getDataPtr(),
+	    neighborIndices.getDataPtr(),
 	    accelerations.getDataPtr(),
 	    energies.getDataPtr(),
 	    tfr,
 	    lbb,
 	    bubbles.getSize(),
-	    numDomains,
 	    cells.getSize(),
-	    maxNumBubbles);
+	    neighborStride);
 	
 	CUDA_CALL(cudaPeekAtLastError());
 	CUDA_CALL(cudaDeviceSynchronize());
-	
-	// Calculate predicted velocity, correction & error
-	gridSize = getGridSize(bubbles.getSize());
-	numThreads = maxNumBubbles;
 	
 	correct<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	    bubbles.getDataPtr(),
@@ -136,15 +129,15 @@ void cubble::Simulator::integrate(bool useGasExchange)
 				   energies.getDataPtr(),
 				   energies.getDataPtr() + energies.getSize());
 
-    // Update bubble data: current --> previous, predicted --> current
-    gridSize = getGridSize(bubbles.getSize());
-    numThreads = maxNumBubbles;
     updateData<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	bubbles.getDataPtr(),
 	indices.getDataPtr(),
 	cells.getDataPtr(),
         bubbles.getSize(),
         cells.getSize());
+	
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
@@ -184,7 +177,7 @@ void cubble::Simulator::generateBubbles()
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
     
-    std::cout << "Starting to generate data for bubbles." << std::flush;
+    std::cout << "Starting to generate data for bubbles." << std::endl;
     
     const int rngSeed = env->getRngSeed();
     const double avgRad = env->getAvgRad();
@@ -193,7 +186,6 @@ void cubble::Simulator::generateBubbles()
     const dvec lbb = env->getLbb();
     ivec bubblesPerDim = 0.45 * (tfr - lbb) / avgRad;
     int n = bubblesPerDim.x * bubblesPerDim.y;
-    bubbles = CudaContainer<Bubble>(n);
     
     dim3 blocksPerGrid(1, 1, 1);
 #if (NUM_DIM == 3)
@@ -203,6 +195,8 @@ void cubble::Simulator::generateBubbles()
 #else
     dim3 threadsPerBlock(32, 32, 1);
 #endif
+    
+    bubbles = CudaContainer<Bubble>(n);
 
     blocksPerGrid.x = (int)std::ceil(bubblesPerDim.x / (float)threadsPerBlock.x);
     blocksPerGrid.y = (int)std::ceil(bubblesPerDim.y / (float)threadsPerBlock.y);
@@ -212,7 +206,7 @@ void cubble::Simulator::generateBubbles()
     CudaContainer<float> w(n);
     CudaContainer<float> r(n);
 
-    std::cout << "\n\tGenerating data..." << std::flush;
+    std::cout << "\tGenerating data..." << std::endl;
     
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -226,8 +220,11 @@ void cubble::Simulator::generateBubbles()
     CudaContainer<float> z(n);
     CURAND_CALL(curandGenerateUniform(generator, z.getDataPtr(), n));
 #endif
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
 
-    std::cout << " Done.\n\tAssigning data to bubbles..." << std::flush;;
+    std::cout << "\tAssigning data to bubbles..." << std::endl;;
     
     assignDataToBubbles<<<blocksPerGrid, threadsPerBlock>>>(x.getDataPtr(),
 							    y.getDataPtr(),
@@ -245,8 +242,6 @@ void cubble::Simulator::generateBubbles()
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
-
-    std::cout << " Done.\n" << std::endl;
 }
 
 void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
@@ -255,20 +250,20 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     CUDA_CALL(cudaDeviceSynchronize());
 
     if (useVerboseOutput)
-	std::cout << "Starting to assign bubbles to cells." << std::flush;
+	std::cout << "Starting to assign bubbles to cells." << std::endl;
     
     const int numBubblesPerCell = env->getNumBubblesPerCell();
-    const dim3 gridSize = getGridSize(bubbles.getSize());
+    dim3 gridSize = getGridSize(bubbles.getSize());
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec cellSize = (env->getTfr() - env->getLbb()) /
 	dvec(gridSize.x, gridSize.y, gridSize.z);
     const double minCellSize = 3.0 * env->getAvgRad();
     
     if (useVerboseOutput)
-	std::cout << "\n\tUsing grid size (" << gridSize.x
+	std::cout << "\tUsing grid size (" << gridSize.x
 		  << ", " << gridSize.y
 		  << ", " << gridSize.z
-		  << ") with total of " << numCells << " cells." << std::flush;
+		  << ") with total of " << numCells << " cells." << std::endl;
 
 #if NUM_DIM == 3    
     if (cellSize.x < minCellSize || cellSize.y < minCellSize || cellSize.z < minCellSize)
@@ -291,9 +286,11 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     indices = CudaContainer<int>(bubbles.getSize());
     errors = CudaContainer<double>(bubbles.getSize());
     energies = CudaContainer<double>(bubbles.getSize());
+    numberOfNeighbors = CudaContainer<int>(bubbles.getSize());
+    neighborIndices = CudaContainer<int>(bubbles.getSize() * neighborStride);
 
     if (useVerboseOutput)
-	std::cout << "\n\tCalculating offsets..." << std::flush;
+	std::cout << "\tCalculating offsets..." << std::endl;
     
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDataPtr(),
 						      cells.getDataPtr(),
@@ -302,16 +299,21 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
+    int maxNumBubbles = 0;
     int cumulativeSum = 0;
     for (size_t i = 0; i < cells.getSize(); ++i)
     {
 	int numBubbles = cells[i].offset;
         cells[i].offset = cumulativeSum;
 	cumulativeSum += numBubbles;
+	maxNumBubbles = numBubbles > maxNumBubbles ? numBubbles : maxNumBubbles;
     }
     
+    maxNumBubbles += maxNumBubbles % 2;
+    assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
+    
     if (useVerboseOutput)
-	std::cout << " Done.\n\tAssigning bubbles to cells..." << std::flush;
+	std::cout << "\tAssigning bubbles to cells..." << std::endl;
     
     bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDataPtr(),
 						   indices.getDataPtr(),
@@ -321,8 +323,31 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
     
+    int numThreads = 512;
+    int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
+    gridSize = getGridSize(bubbles.getSize());
+    gridSize.z *= numDomains;
+    assertGridSizeBelowLimit(gridSize);
+
     if (useVerboseOutput)
-	std::cout << " Done.\n" << std::endl;
+	std::cout << "\tFinding neighbors for each bubble..." << std::endl;
+    
+    findNeighbors<<<gridSize, numThreads, maxNumBubbles * sizeof(Bubble)>>>(
+	bubbles.getDataPtr(),
+	indices.getDataPtr(),
+	cells.getDataPtr(),
+        numberOfNeighbors.getDataPtr(),
+	neighborIndices.getDataPtr(),
+	env->getTfr(),
+	env->getLbb(),
+	bubbles.getSize(),
+	numDomains,
+	cells.getSize(),
+	maxNumBubbles,
+	neighborStride);
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
 }
 
 dim3 cubble::Simulator::getGridSize(int numBubbles)
@@ -442,6 +467,109 @@ void cubble::bubblesToCells(Bubble *bubbles,
 }
 
 __global__
+void cubble::findNeighbors(Bubble *bubbles,
+			   int *indices,
+			   Cell *cells,
+			   int *numberOfNeighbors,
+			   int *neighborIndices,
+			   dvec tfr,
+			   dvec lbb,
+			   int numBubbles,
+			   int numDomains,
+			   int numCells,
+			   int numLocalBubbles,
+			   int neighborStride)
+{
+    extern __shared__ Bubble localBubbles[];
+    
+    DEVICE_ASSERT(numBubbles > 0);
+    DEVICE_ASSERT(numDomains > 0);
+    DEVICE_ASSERT(numCells > 0);
+    DEVICE_ASSERT(numLocalBubbles > 0);
+    DEVICE_ASSERT(!(numDomains & 1));
+    
+    ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
+    ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+    
+    int xBegin = -1;
+    int xInterval = -1;
+    int yBegin = -1;
+    int yInterval = -1;
+    bool isOwnCell = false;
+    
+    getDomainOffsetsAndIntervals(numBubbles,
+				 numDomains,
+				 numCells,
+				 cellIdxVec,
+				 boxDim,
+				 cells,
+				 xBegin,
+				 xInterval,
+				 yBegin,
+				 yInterval,
+				 isOwnCell);
+    
+    DEVICE_ASSERT(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
+    DEVICE_ASSERT(xInterval + yInterval <= numLocalBubbles);
+    
+    // Get the bubbles to shared memory
+    if (threadIdx.x < xInterval + yInterval)
+    {
+	if (threadIdx.x < xInterval)
+	    localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
+	else
+	    localBubbles[threadIdx.x] = bubbles[indices[yBegin + (threadIdx.x - xInterval)]];
+    }
+    
+    __syncthreads();
+    
+    int numPairs = xInterval * yInterval;
+    int numRounds = 1 + (numPairs / blockDim.x);
+    
+    for (int round = 0; round < numRounds; ++round)
+    {
+        int pairIdx = round * blockDim.x + threadIdx.x;
+	if (pairIdx < numPairs)
+	{
+	    int x = pairIdx % xInterval;
+	    int y = pairIdx / xInterval;
+	    DEVICE_ASSERT(y < yInterval);
+	    
+	    int gid1 = indices[xBegin + x];
+	    int gid2 = indices[yBegin + y];
+	    
+	    if (gid1 == gid2)
+		continue;
+	    
+	    const Bubble *b1 = &localBubbles[x];
+	    const Bubble *b2 = &localBubbles[xInterval + y];
+	    
+	    double radii = b1->getRadius() + b2->getRadius();
+	    dvec posVec = getShortestWrappedNormalizedVec(b1->getPos(), b2->getPos());
+	    double length = (posVec * (tfr - lbb)).getSquaredLength();
+	    
+	    if (radii * radii > length)
+	    {
+		int index = atomicAdd(&numberOfNeighbors[gid1], 1);
+		DEVICE_ASSERT(index < neighborStride);
+		index += neighborStride * gid1;
+		DEVICE_ASSERT(index < numBubbles * neighborStride);
+		neighborIndices[index] = gid2;
+
+		if (!isOwnCell)
+		{
+		    index = atomicAdd(&numberOfNeighbors[gid2], 1);
+		    DEVICE_ASSERT(index < neighborStride);
+		    index += neighborStride * gid2;
+		    DEVICE_ASSERT(index < numBubbles * neighborStride);
+		    neighborIndices[index] = gid1;
+		}
+	    }
+	}
+    }
+}
+
+__global__
 void cubble::predict(Bubble *bubbles,
 		     int *indices,
 		     Cell *cells,
@@ -525,105 +653,53 @@ __global__
 void cubble::accelerate(Bubble *bubbles,
 			int *indices,
 			Cell *cells,
+			int *numberOfNeighbors,
+			int *neighborIndices,
 		        dvec *accelerations,
 			double *energies,
 			dvec tfr,
 			dvec lbb,
 			int numBubbles,
-			int numDomains,
 			int numCells,
-			int numLocalBubbles)
+			int neighborStride)
 {
     extern __shared__ Bubble localBubbles[];
 
-    DEVICE_ASSERT(numBubbles > 0);
-    DEVICE_ASSERT(numDomains > 0);
-    DEVICE_ASSERT(numCells > 0);
-    DEVICE_ASSERT(numLocalBubbles > 0);
-    DEVICE_ASSERT(!(numDomains & 1));
-    
-    ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
-    ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+    const int cid = blockIdx.z * gridDim.x * gridDim.y
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
 
-    int xBegin = -1;
-    int xInterval = -1;
-    int yBegin = -1;
-    int yInterval = -1;
-    bool isOwnCell = false;
-    
-    getDomainOffsetsAndIntervals(numBubbles,
-				 numDomains,
-				 numCells,
-				 cellIdxVec,
-				 boxDim,
-				 cells,
-				 xBegin,
-				 xInterval,
-				 yBegin,
-				 yInterval,
-				 isOwnCell);
+    DEVICE_ASSERT(cid < numCells);
+    const Cell *self = &cells[cid];
 
-    DEVICE_ASSERT(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
-    DEVICE_ASSERT(xInterval + yInterval <= numLocalBubbles);
-    
-    // Get the bubbles to shared memory
-    if (threadIdx.x < xInterval + yInterval)
+    if (threadIdx.x < self->size)
     {
-	if (threadIdx.x < xInterval)
-	    localBubbles[threadIdx.x] = bubbles[indices[xBegin + threadIdx.x]];
-	else
-	    localBubbles[threadIdx.x] = bubbles[indices[yBegin + (threadIdx.x - xInterval)]];
-    }
+	const int gid = indices[self->offset + threadIdx.x];
+	localBubbles[threadIdx.x] = bubbles[gid];
+        const Bubble *bubble = &localBubbles[threadIdx.x];
 
-    __syncthreads();
-      
-    int numPairs = xInterval * yInterval;
-    int numRounds = 1 + (numPairs / blockDim.x);
-    double accelerationMultiplier = isOwnCell ? 0.5 : 1.0;
-
-    for (int round = 0; round < numRounds; ++round)
-    {
-        int pairIdx = round * blockDim.x + threadIdx.x;
-	if (pairIdx < numPairs)
+	dvec acceleration(0, 0, 0);
+	double energy = 0;
+	
+	for (int i = 0; i < numberOfNeighbors[gid]; ++i)
 	{
-	    int x = pairIdx % xInterval;
-	    int y = pairIdx / xInterval;
-	    DEVICE_ASSERT(y < yInterval);
+	    const int index = neighborIndices[gid * neighborStride + i];
+	    DEVICE_ASSERT(index < numBubbles);
+	    const Bubble *neighbor = &bubbles[index];
 
-	    int gid1 = indices[xBegin + x];
-	    int gid2 = indices[yBegin + y];
-	    
-	    // Skip self-intersection
-	    if (gid1 == gid2)
-		continue;
-	    
-	    const Bubble *b1 = &localBubbles[x];
-	    const Bubble *b2 = &localBubbles[xInterval + y];
-	    
-	    double radii = b1->getRadius() + b2->getRadius();
-	    dvec acceleration = getShortestWrappedNormalizedVec(
-		b1->getPosPred(),
-		b2->getPosPred());
-	    acceleration *= (tfr - lbb);
-	    
-	    if (radii * radii > acceleration.getSquaredLength())
-	    {
-		double magnitude = acceleration.getLength();
-		double temp = radii - magnitude;
-		acceleration *= temp / (radii * magnitude);
-		acceleration *= accelerationMultiplier;
-		double energy = (temp * temp) / radii;
-
-		// HACK: This is wiiiiiildly inefficient.
-		atomicAddD(&accelerations[gid1].x, acceleration.x);
-		atomicAddD(&accelerations[gid1].y, acceleration.y);
-		atomicAddD(&accelerations[gid1].z, acceleration.z);
-		atomicAddD(&accelerations[gid2].x, -acceleration.x);
-		atomicAddD(&accelerations[gid2].y, -acceleration.y);
-		atomicAddD(&accelerations[gid2].z, -acceleration.z);
-		atomicAddD(&energies[gid1], energy);
-	    }
+	    const double radii = bubble->getRadius() + neighbor->getRadius();
+            dvec distance = getShortestWrappedNormalizedVec(bubble->getPosPred(),
+							    neighbor->getPosPred());
+            distance *= (tfr - lbb);
+	    const double magnitude = distance.getLength();
+	    const double temp = radii - magnitude;
+	    distance *= temp / (radii * magnitude);
+	    energy += (temp * temp) / radii;
+	    acceleration += distance;
 	}
+
+	accelerations[gid] = acceleration;
+	energies[gid] = energy;
     }
 }
 

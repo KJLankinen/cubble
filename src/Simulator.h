@@ -30,7 +30,9 @@ namespace cubble
     private:
 	dim3 getGridSize(int numBubbles);
 	void generateBubbles();
-        
+
+	const int neighborStride = 25;
+	
 	std::shared_ptr<Env> env;
 	CudaContainer<Bubble> bubbles;
 	CudaContainer<int> indices;
@@ -38,6 +40,8 @@ namespace cubble
 	CudaContainer<double> errors;
 	CudaContainer<dvec> accelerations;
 	CudaContainer<double> energies;
+	CudaContainer<int> numberOfNeighbors;
+	CudaContainer<int> neighborIndices;
     };
 
     
@@ -70,6 +74,20 @@ namespace cubble
     void bubblesToCells(Bubble *bubbles, int *indices, Cell *cells, int numBubbles);
 
     __global__
+    void findNeighbors(Bubble *bubbles,
+		       int *indices,
+		       Cell *cells,
+		       int *numberOfNeighbors,
+		       int *neighborIndices,
+		       dvec tfr,
+		       dvec lbb,
+		       int numBubbles,
+		       int numDomains,
+		       int numCells,
+		       int numLocalBubbles,
+		       int neighborStride);
+    
+    __global__
     void predict(Bubble *bubbles,
 		 int *indices,
 		 Cell *cells,
@@ -96,14 +114,15 @@ namespace cubble
     void accelerate(Bubble *bubbles,
 		    int *indices,
 		    Cell *cells,
+		    int *numberOfNeighbors,
+		    int *neighborIndices,
 		    dvec *accelerations,
 		    double *energies,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,
-		    int numDomains,
 		    int numCells,
-		    int numLocalBubbles);
+		    int neighborStride);
 
     __global__
     void updateData(Bubble* bubbles,
