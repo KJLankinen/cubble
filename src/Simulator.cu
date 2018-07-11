@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <chrono>
 #include <curand.h>
 #include <thrust/reduce.h>
 #include <thrust/extrema.h>
@@ -24,10 +25,16 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
     printRelevantInfoOfCurrentDevice();
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 }
 
 cubble::Simulator::~Simulator()
-{}
+{
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+}
 
 void cubble::Simulator::setupSimulation()
 {
@@ -35,8 +42,9 @@ void cubble::Simulator::setupSimulation()
     assignBubblesToCells(true);
 }
 
-void cubble::Simulator::integrate(bool useGasExchange)
+void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 {
+    auto t1 = std::chrono::high_resolution_clock::now();
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -59,9 +67,15 @@ void cubble::Simulator::integrate(bool useGasExchange)
     assertMemBelowLimit(maxNumBubbles * sizeof(Bubble));
     int numThreads = maxNumBubbles;
 
+    float predictionTime = 0.0f;
+    float accelerationTime = 0.0f;
+    float correctionTime = 0.0f;
+
+    size_t numIntegrationSteps = 0;
     do
     {
-        // Calculate prediction
+	float elapsedTime = 0.0f;
+	cudaEventRecord(start, 0);
 	predict<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	    bubbles.getDataPtr(),
 	    indices.getDataPtr(),
@@ -74,10 +88,13 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
 	CUDA_CALL(cudaPeekAtLastError());
 	CUDA_CALL(cudaDeviceSynchronize());
-	
-	// Calculate accelerations
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedTime, start, stop);
+	predictionTime += elapsedTime;
+
 	accelerations = CudaContainer<dvec>(bubbles.getSize());
-	
+	cudaEventRecord(start, 0);
 	accelerate<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	    bubbles.getDataPtr(),
 	    indices.getDataPtr(),
@@ -94,7 +111,12 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
 	CUDA_CALL(cudaPeekAtLastError());
 	CUDA_CALL(cudaDeviceSynchronize());
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedTime, start, stop);
+	accelerationTime += elapsedTime;
 	
+	cudaEventRecord(start, 0);
 	correct<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
 	    bubbles.getDataPtr(),
 	    indices.getDataPtr(),
@@ -110,6 +132,10 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
 	CUDA_CALL(cudaPeekAtLastError());
 	CUDA_CALL(cudaDeviceSynchronize());
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&elapsedTime, start, stop);
+	correctionTime += elapsedTime;
         
         error = *thrust::max_element(thrust::host,
 					    errors.getDataPtr(),
@@ -119,9 +145,15 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	    timeStep *= 1.9;
 	else if (error > env->getErrorTolerance())
 	    timeStep *= 0.5;
+
+	++numIntegrationSteps;
     }
     while (error > env->getErrorTolerance());
 
+    predictionTime /= numIntegrationSteps;
+    accelerationTime /= numIntegrationSteps;
+    correctionTime /= numIntegrationSteps;
+    
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
@@ -138,6 +170,17 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
+
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = (t2 - t1);
+    
+    if (printTimings)
+	std::cout << "Integration step average timings (ms):"
+		  << "\nPrediction: " << predictionTime
+		  << "\nAcceleration: " << accelerationTime
+		  << "\nCorrection: " << correctionTime
+		  << "\nTotal duration of function: " << duration.count() * 1000
+		  << std::endl;
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
@@ -246,6 +289,7 @@ void cubble::Simulator::generateBubbles()
 
 void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 {
+    auto t1 = std::chrono::high_resolution_clock::now();
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -292,12 +336,22 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     if (useVerboseOutput)
 	std::cout << "\tCalculating offsets..." << std::endl;
     
+    float elapsedTime = 0.0f;
+    float offsetTime = 0.0f;
+    float bubblesToCellsTime = 0.0f;
+    float neighborTime = 0.0f;
+    
+    cudaEventRecord(start, 0);
     calculateOffsets<<<gridSize, numBubblesPerCell>>>(bubbles.getDataPtr(),
 						      cells.getDataPtr(),
 						      bubbles.getSize());
 
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    offsetTime += elapsedTime;
 
     int maxNumBubbles = 0;
     int cumulativeSum = 0;
@@ -315,6 +369,7 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     if (useVerboseOutput)
 	std::cout << "\tAssigning bubbles to cells..." << std::endl;
     
+    cudaEventRecord(start, 0);
     bubblesToCells<<<gridSize,numBubblesPerCell>>>(bubbles.getDataPtr(),
 						   indices.getDataPtr(),
 						   cells.getDataPtr(),
@@ -322,6 +377,10 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    bubblesToCellsTime += elapsedTime;
     
     int numThreads = 512;
     int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
@@ -332,6 +391,7 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     if (useVerboseOutput)
 	std::cout << "\tFinding neighbors for each bubble..." << std::endl;
     
+    cudaEventRecord(start, 0);
     findNeighbors<<<gridSize, numThreads, maxNumBubbles * sizeof(Bubble)>>>(
 	bubbles.getDataPtr(),
 	indices.getDataPtr(),
@@ -348,6 +408,21 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     
     CUDA_CALL(cudaPeekAtLastError());
     CUDA_CALL(cudaDeviceSynchronize());
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    neighborTime += elapsedTime;
+    
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = (t2 - t1);
+
+    if (useVerboseOutput)
+	std::cout << "Reordering phase average timings (ms):"
+		  << "\nOffset calculation: " << offsetTime
+		  << "\nAssigning bubbles to cells: " << bubblesToCellsTime
+		  << "\nFinding neighbors: " << neighborTime
+		  << "\nTotal duration of function: " << duration.count() * 1000
+		  << std::endl;
 }
 
 dim3 cubble::Simulator::getGridSize(int numBubbles)

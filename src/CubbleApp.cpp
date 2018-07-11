@@ -85,7 +85,7 @@ void CubbleApp::run()
 
 	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
 	{
-	    simulator->integrate();
+	    simulator->integrate(false, i == env->getNumStepsToRelax() - 1);
 	    time += env->getTimeStep();
 	    
 	    if (i % 100 == 0)

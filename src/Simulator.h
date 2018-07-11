@@ -22,7 +22,7 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
-	void integrate(bool useGasExchange = false);
+	void integrate(bool useGasExchange = false, bool printTimings = false);
 	double getVolumeOfBubbles() const;
 	void getBubbles(std::vector<Bubble> &b) const;
 	void assignBubblesToCells(bool useVerboseOutput = false);
@@ -32,6 +32,9 @@ namespace cubble
 	void generateBubbles();
 
 	const int neighborStride = 25;
+
+	cudaEvent_t start = 0;
+	cudaEvent_t stop = 0;
 	
 	std::shared_ptr<Env> env;
 	CudaContainer<Bubble> bubbles;
