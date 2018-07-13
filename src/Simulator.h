@@ -24,6 +24,7 @@ namespace cubble
 	void setupSimulation();
 	void integrate(bool useGasExchange = false, bool printTimings = false);
 	double getVolumeOfBubbles() const;
+	double getAverageRadius() const;
 	void getBubbles(std::vector<Bubble> &b) const;
 	void assignBubblesToCells(bool useVerboseOutput = false);
 	

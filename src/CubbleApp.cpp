@@ -116,10 +116,18 @@ void CubbleApp::run()
     
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
-	//if (i == 3390)
-	//   saveSnapshotToFile();
-	
 	simulator->integrate(true, false);
+	
+	if (i % 1000 == 0)
+	{
+	    std::cout << "Current average radius after "
+		      << i << " steps: "
+		      << simulator->getAverageRadius()
+		      << std::endl;
+	}
+
+	if (i % 100000)
+	    saveSnapshotToFile();
     }
 
     saveSnapshotToFile();

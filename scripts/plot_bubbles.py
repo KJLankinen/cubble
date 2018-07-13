@@ -98,7 +98,7 @@ def plot_2d(n):
         y = lbb[1] + data[:,1] * (tfr - lbb)[1]
         r = data[:,3]
             
-        axes.append(fig.add_subplot(1, n, i + 1, aspect='equal'))
+        axes.append(fig.add_subplot(np.ceil(n / 2.0), np.clip(np.ceil(n / 1.9), 1, 2), i + 1, aspect='equal'))
         out = circles(x, y, r, alpha=0.3)
     
     plt.show()

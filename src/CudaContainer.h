@@ -120,3 +120,5 @@ namespace cubble
 	std::unique_ptr<T[], decltype(&destroyDataPtr)> dataPtr;
     };
 };
+
+#undef DEFAULT_CAPACITY

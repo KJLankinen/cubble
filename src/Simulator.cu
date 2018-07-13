@@ -282,6 +282,30 @@ double cubble::Simulator::getVolumeOfBubbles() const
     return volume;
 }
 
+double cubble::Simulator::getAverageRadius() const
+{
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    
+    CudaContainer<double> radii(bubbles.getSize());
+    int numThreads = 1024;
+    int numBlocks = (int)std::ceil(bubbles.getSize() / (float)numThreads);
+
+    getRadii<<<numBlocks, numThreads>>>(bubbles.getDataPtr(),
+					radii.getDataPtr(),
+					bubbles.getSize());
+    
+    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    double avgRad = thrust::reduce(thrust::host,
+				   radii.getDataPtr(),
+				   radii.getDataPtr() + radii.getSize());
+    avgRad /= radii.getSize();
+    
+    return avgRad;
+}
+
 void cubble::Simulator::getBubbles(std::vector<Bubble> &b) const
 { 
     CUDA_CALL(cudaPeekAtLastError());
@@ -892,8 +916,8 @@ void cubble::accelerate(Bubble *bubbles,
 	double radiusChangeRate = 0;
 
 	const double radius1 = bubble->getRadiusPred();
-	//if (radius1 > minRad)
-	//{
+	if (radius1 > minRad)
+	{
 	    for (int i = 0; i < numberOfNeighbors[gid]; ++i)
 	    {
 		const int index = neighborIndices[gid * neighborStride + i];
@@ -901,8 +925,8 @@ void cubble::accelerate(Bubble *bubbles,
 		const Bubble *neighbor = &bubbles[index];
 		const double radius2 = neighbor->getRadiusPred();
 		
-		//if (radius2 < minRad)
-		//   continue;
+		if (radius2 < minRad)
+		    continue;
 		
 		const double radii = radius1 + radius2;
 		const double invRadii = 1.0 / radii;
@@ -955,7 +979,7 @@ void cubble::accelerate(Bubble *bubbles,
 		    radiusChangeRate += areaOfOverlap * (1.0 / radius2 - 1.0 / radius1);
 		}
 	    }
-	    //}
+	}
 
 	if (useGasExchange)
 	    bubble->setRadiusChangeRatePred(radiusChangeRate * kParam);
