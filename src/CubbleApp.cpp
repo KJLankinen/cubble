@@ -126,7 +126,7 @@ void CubbleApp::run()
 		      << std::endl;
 	}
 
-	if (i % 100000)
+	if (i % 100000 == 0)
 	    saveSnapshotToFile();
     }
 

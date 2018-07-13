@@ -18,7 +18,7 @@
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
     "TimeStep" : 0.01,
     "RngSeedExpl" : "The seed for the RNG.",
-    "RngSeed" : 1563321,
+    "RngSeed" : 1133251,
     "ScaleAmountExpl" : "How much to scale the side length(s) of the simulation box per scaling iteration.",
     "ScaleAmount" : 1e-4,
     "NumIntegrationStepsExpl" : "How many integration steps to do.",
@@ -30,7 +30,7 @@
     "NumStepsToRelaxExpl" : "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
     "NumStepsToRelax" : 1000,
     "MaxDeltaEnergyExpl" : "Maximum allowed energy change when relaxing the bubble bath.",
-    "MaxDeltaEnergy" : 1e-1,
+    "MaxDeltaEnergy" : 1e-3,
     "KParameterExpl" : "A bundle of constants related to gas exchange between bubbles.",
     "KParameter" : 0.0001
 }
