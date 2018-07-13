@@ -34,6 +34,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(double, ErrorTolerance, 0)
 	CUBBLE_CONST_PROP(double, ScaleAmount, 0)
 	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
+	CUBBLE_CONST_PROP(double, KParameter, 0)
 	CUBBLE_PROP(double, TimeStep, 0)
 	
 	CUBBLE_CONST_PROP(std::string, DataPath, "")
@@ -59,8 +60,10 @@ namespace cubble
 	    readWriteParameters(true);
 	    
 	    // Calculate 'derived' parameters after reading.
+	    assert(MuZero > 0);
 	    FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
 
+	    MinRad = 0.1 * AvgRad;
 	    // Perform any parameter related sanity & correctness checking here.
 	    dvec interval = Tfr - Lbb;
 	    assert(interval.x == interval.y
@@ -74,7 +77,7 @@ namespace cubble
 	void writeParameters() {readWriteParameters(false); }
 #endif
 
-	double getSimulationBoxVolume()
+	double getSimulationBoxVolume() const
 	{
 	    dvec temp = Tfr - Lbb;
 #if NUM_DIM == 3
@@ -83,6 +86,8 @@ namespace cubble
 	    return temp.x * temp.y;
 #endif
 	}
+
+	double getPi() const { return 3.1415926535897932384626433832795028841971693993; }
 	
     private:
 	
@@ -107,7 +112,6 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, SigmaZero);
 	    CUBBLE_IO_PARAMETER(read, params, AvgRad);
 	    CUBBLE_IO_PARAMETER(read, params, StdDevRad);
-	    CUBBLE_IO_PARAMETER(read, params, MinRad);
 	    CUBBLE_IO_PARAMETER(read, params, Lbb);
 	    CUBBLE_IO_PARAMETER(read, params, Tfr);
 	    CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
@@ -119,6 +123,7 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
 	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
 	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
+	    CUBBLE_IO_PARAMETER(read, params, KParameter);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);

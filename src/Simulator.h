@@ -31,7 +31,7 @@ namespace cubble
 	dim3 getGridSize(int numBubbles);
 	void generateBubbles();
 
-	const int neighborStride = 25;
+	const int neighborStride = 100;
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
@@ -42,7 +42,6 @@ namespace cubble
 	CudaContainer<int> indices;
 	CudaContainer<Cell> cells;
 	CudaContainer<double> errors;
-	CudaContainer<dvec> accelerations;
 	CudaContainer<double> energies;
 	CudaContainer<int> numberOfNeighbors;
 	CudaContainer<int> neighborIndices;
@@ -52,9 +51,12 @@ namespace cubble
     // ******************************
     // Kernels
     // ******************************
+
+    __global__
+    void getRadii(Bubble *b, double *radii, int numBubbles);
     
     __global__
-    void calculateVolumes(Bubble *b, double *volumes, int numBubbles);
+    void calculateVolumes(Bubble *b, double *volumes, int numBubbles, double pi);
     
     __global__
     void assignDataToBubbles(float *x,
@@ -72,7 +74,7 @@ namespace cubble
 			     int numBubbles);
 
     __global__
-    void calculateOffsets(Bubble *bubbles, Cell *cells, int numBubbles);
+    void calculateOffsets(Bubble *bubbles, Cell *cells, int numBubbles, int numCells);
 
     __global__
     void bubblesToCells(Bubble *bubbles, int *indices, Cell *cells, int numBubbles);
@@ -99,20 +101,20 @@ namespace cubble
 		 dvec lbb,
 		 double timeStep,
 		 int numBubbles,
-		 int numCells);
+		 int numCells,
+		 bool useGasExchange);
 
     __global__
     void correct(Bubble *bubbles,
 		 int *indices,
 		 Cell *cells,
 		 double *errors,
-		 dvec *accelerations,
 		 dvec tfr,
 		 dvec lbb,
-		 double fZeroPerMuZero,
 		 double timeStep,
 		 int numBubbles,
-		 int numCells);
+		 int numCells,
+		 bool useGasExchange);
     
     __global__
     void accelerate(Bubble *bubbles,
@@ -120,20 +122,28 @@ namespace cubble
 		    Cell *cells,
 		    int *numberOfNeighbors,
 		    int *neighborIndices,
-		    dvec *accelerations,
 		    double *energies,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,
 		    int numCells,
-		    int neighborStride);
+		    int neighborStride,
+		    double fZeroPerMuZero,
+		    double kParam,
+		    double pi,
+		    double minRad,
+		    bool useGasExchange);
 
     __global__
     void updateData(Bubble* bubbles,
 		    int *indices,
 		    Cell *cells,
+		    int *toBeDeletedIndices,
+		    int *numBubblesToDelete,
 		    int numBubbles,
-		    int numCells);
+		    int numCells,
+		    double minRad,
+		    bool useGasExchange);
 
 
     // ******************************

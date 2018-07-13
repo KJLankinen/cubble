@@ -26,7 +26,7 @@
 // Cuda error checking
 // See Util.h for actual implementation
 #ifndef NDEBUG
-  #define CUDA_CALL(result) {cubble::cudaAssert((result), __FILE__, __LINE__);}
+#define CUDA_CALL(result) {cubble::cudaAssert((result), __FILE__, __LINE__);}
 #else
   #define CUDA_CALL(result) {(result);}
 #endif

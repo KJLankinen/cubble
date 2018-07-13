@@ -173,6 +173,7 @@ namespace cubble
 	cudaDeviceProp prop;
 	int device = 0;
 
+	CUDA_CALL(cudaDeviceSynchronize());
 	CUDA_CALL(cudaGetDevice(&device));
 	CUDA_CALL(cudaGetDeviceProperties(&prop, device));
 

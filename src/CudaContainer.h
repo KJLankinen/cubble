@@ -67,6 +67,11 @@ namespace cubble
 	    std::memcpy(v.data(), dataPtr.get(), size * sizeof(T));
 	}
 
+	void popBack()
+	{
+	    size = size > 0 ? size - 1 : 0;
+	}
+	
 	T operator[](size_t i) const
 	{
 	    assert(i < size);
@@ -99,6 +104,7 @@ namespace cubble
 	    T *t;
 	    CUDA_CALL(cudaMallocManaged((void**)&t, capacity * sizeof(T)));
 	    CUDA_CALL(cudaDeviceSynchronize());
+	    
 	    return t;
 	}
 

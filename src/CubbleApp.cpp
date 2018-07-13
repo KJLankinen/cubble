@@ -19,6 +19,7 @@ CubbleApp::CubbleApp(const std::string &inF,
 
 CubbleApp::~CubbleApp()
 {
+    saveSnapshotToFile();
     env->writeParameters();
 }
 
@@ -114,7 +115,12 @@ void CubbleApp::run()
 	      << std::endl;
     
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
+    {
+	//if (i == 3390)
+	//   saveSnapshotToFile();
+	
 	simulator->integrate(true, false);
+    }
 
     saveSnapshotToFile();
     
