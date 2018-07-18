@@ -10,7 +10,7 @@
     "MaxDeltaEnergy": 0.001,
     "MuZero": 0.001,
     "NumBubblesPerCell": 96,
-    "NumIntegrationSteps": 100000,
+    "NumIntegrationSteps": 3000000,
     "NumStepsToRelax": 1000,
     "PhiTarget": 0.9,
     "RngSeed": 1131,
@@ -23,5 +23,5 @@
         "y": 9.30920000000161,
         "z": 9.30920000000161
     },
-    "TimeStep": 0.00012611452266161782
+    "TimeStep": 4.82127555633684e-05
 }

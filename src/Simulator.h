@@ -26,11 +26,12 @@ namespace cubble
 	double getVolumeOfBubbles() const;
 	double getAverageRadius() const;
 	void getBubbles(std::vector<Bubble> &b) const;
-	void assignBubblesToCells(bool useVerboseOutput = false);
 	
     private:
-	dim3 getGridSize(int numBubbles);
 	void generateBubbles();
+	void assignBubblesToCells(bool useVerboseOutput = false);
+	dim3 getGridSize(int numBubbles);
+	void removeSmallBubbles(const std::vector<int> &indicesToDelete);
 
 	const int neighborStride = 100;
 	size_t integrationStep = 0;
@@ -104,18 +105,6 @@ namespace cubble
 		 int numBubbles,
 		 int numCells,
 		 bool useGasExchange);
-
-    __global__
-    void correct(Bubble *bubbles,
-		 int *indices,
-		 Cell *cells,
-		 double *errors,
-		 dvec tfr,
-		 dvec lbb,
-		 double timeStep,
-		 int numBubbles,
-		 int numCells,
-		 bool useGasExchange);
     
     __global__
     void accelerate(Bubble *bubbles,
@@ -134,6 +123,18 @@ namespace cubble
 		    double pi,
 		    double minRad,
 		    bool useGasExchange);
+
+    __global__
+    void correct(Bubble *bubbles,
+		 int *indices,
+		 Cell *cells,
+		 double *errors,
+		 dvec tfr,
+		 dvec lbb,
+		 double timeStep,
+		 int numBubbles,
+		 int numCells,
+		 bool useGasExchange);
 
     __global__
     void updateData(Bubble* bubbles,

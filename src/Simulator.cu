@@ -205,39 +205,12 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 	std::vector<int> indicesToDelete;
 	toBeDeletedIndices.dataToVec(indicesToDelete);
 	indicesToDelete.resize(numBubblesToDelete[0]);
+
 	std::sort(indicesToDelete.begin(),
 		  indicesToDelete.end(),
 		  [](int a, int b) { return a < b;});
 
-	double volume = 0;
-	size_t origSize = bubbles.getSize();
-	for (size_t i = 0; i < indicesToDelete.size(); ++i)
-	{
-	    double vol = 0;
-	    double radius = bubbles[indicesToDelete[i]].getRadius();
-	    vol = radius * radius * env->getPi();
-#if (NUM_DIM == 3)
-	    vol *= radius * 1.33333333333333333333333333;
-#endif
-	    volume += vol;
-	    bubbles[indicesToDelete[i]] = bubbles[bubbles.getSize() - 1];
-	    bubbles.popBack();
-	}
-	assert(bubbles.getSize() + indicesToDelete.size() == origSize);
-	volume /= (bubbles.getSize());
-	double radiusIncrement = volume / env->getPi();
-#if (NUM_DIM == 3)
-	radiusIncrement = std::cbrt(0.75 * radiusIncrement);
-#else
-	radiusIncrement = std::sqrt(radiusIncrement);
-#endif
-
-	std::cout << "\tRadius increment: " << radiusIncrement << std::endl;
-
-	for (size_t i = 0; i < bubbles.getSize(); ++i)
-	    bubbles[i].setRadius(bubbles[i].getRadius() + radiusIncrement);
-
-	assignBubblesToCells(true);
+	removeSmallBubbles(indicesToDelete);
     }
 
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -552,6 +525,42 @@ dim3 cubble::Simulator::getGridSize(int numBubbles)
 #endif
 
     return gridSize;
+}
+
+void cubble::Simulator::removeSmallBubbles(const std::vector<int> &indicesToDelete)
+{   
+    double radiusIncrement = 0;
+    size_t origSize = bubbles.getSize();
+    for (const auto &index : indicesToDelete)
+    {
+	double vol = 0;
+	double radius = bubbles[index].getRadius();
+	vol = radius * radius;
+#if (NUM_DIM == 3)
+	vol *= radius;
+#endif
+	radiusIncrement += vol;
+	bubbles[index] = bubbles[bubbles.getSize() - 1];
+	bubbles.popBack();
+    }
+    
+    assert(bubbles.getSize() + indicesToDelete.size() == origSize);
+    
+    radiusIncrement /= bubbles.getSize();
+    for (size_t i = 0; i < bubbles.getSize(); ++i)
+    {
+	double newRadius = bubbles[i].getRadius();
+#if (NUM_DIM == 3)
+	newRadius = newRadius * newRadius * newRadius;
+	newRadius = std::cbrt(newRadius + radiusIncrement);
+#else
+	newRadius *= newRadius;
+	newRadius = std::sqrt(newRadius + radiusIncrement);
+#endif
+	bubbles[i].setRadius(newRadius);
+    }
+    
+    assignBubblesToCells(true);
 }
 
 
