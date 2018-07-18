@@ -798,12 +798,13 @@ void cubble::predict(Bubble *bubbles,
 	localBubbles[threadIdx.x] = bubbles[gid];
         Bubble *bubble = &localBubbles[threadIdx.x];
 
-	// Scale, predict, normalize, enfore boundaries
 	const dvec interval = (tfr - lbb);
 	dvec pos = lbb + bubble->getPos() * interval;
 	pos += 0.5 * timeStep * (3.0 * bubble->getVel() - bubble->getVelPrev());
 	pos = (pos - lbb) / interval;
 	pos = getWrappedPos(pos);
+	
+	bubble->setPosPred(pos);
 
 	if (useGasExchange)
 	{
@@ -812,8 +813,6 @@ void cubble::predict(Bubble *bubbles,
 	    
 	    bubble->setRadiusPred(radius);
 	}
-	
-	bubble->setPosPred(pos);
 	
 	bubbles[gid] = localBubbles[threadIdx.x];
     }
@@ -845,8 +844,7 @@ void cubble::correct(Bubble *bubbles,
 	const int gid = indices[self->offset + threadIdx.x];
 	localBubbles[threadIdx.x] = bubbles[gid];
         Bubble *bubble = &localBubbles[threadIdx.x];
-	
-	// Scale, correct, normalize, enforce boundaries
+        
 	const dvec interval = (tfr - lbb);
 	dvec pos = lbb + bubble->getPos() * interval;
 	const dvec vel = bubble->getVel();
@@ -918,6 +916,7 @@ void cubble::accelerate(Bubble *bubbles,
 	const double radius1 = bubble->getRadiusPred();
 	if (radius1 > minRad)
 	{
+	    const double invRad1 = 1.0 / radius1;
 	    for (int i = 0; i < numberOfNeighbors[gid]; ++i)
 	    {
 		const int index = neighborIndices[gid * neighborStride + i];
@@ -929,8 +928,6 @@ void cubble::accelerate(Bubble *bubbles,
 		    continue;
 		
 		const double radii = radius1 + radius2;
-		const double invRadii = 1.0 / radii;
-		
 		dvec distance = getShortestWrappedNormalizedVec(bubble->getPosPred(),
 								neighbor->getPosPred());
 		distance *= (tfr - lbb);
@@ -939,14 +936,13 @@ void cubble::accelerate(Bubble *bubbles,
 		if (radii < magnitude)
 		    continue;
 		
-		const double temp = radii - magnitude;
-		const double epsilon = temp * invRadii;
+		const double compressionDistance = radii - magnitude;
+		const double relativeCompressionDistance = compressionDistance / radii;
 		
-		DEVICE_ASSERT(epsilon >= 0 && epsilon < 1.0);
-		
-		distance *= epsilon / magnitude;
-		energy += epsilon * temp;
-		acceleration += distance;
+		DEVICE_ASSERT(relativeCompressionDistance >= 0 && relativeCompressionDistance < 1.0);
+	        
+		acceleration += distance * relativeCompressionDistance / magnitude;
+		energy += relativeCompressionDistance * compressionDistance;
 
 		if (useGasExchange)
 		{
@@ -976,7 +972,7 @@ void cubble::accelerate(Bubble *bubbles,
 #else
 		    areaOfOverlap = 2.0 * sqrt(areaOfOverlap);
 #endif
-		    radiusChangeRate += areaOfOverlap * (1.0 / radius2 - 1.0 / radius1);
+		    radiusChangeRate += areaOfOverlap * (1.0 / radius2 - invRad1);
 		}
 	    }
 	}

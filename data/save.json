@@ -3,25 +3,25 @@
     "ErrorTolerance": 1e-05,
     "KParameter": 0.0001,
     "Lbb": {
-        "x": 0.7135999999999377,
-        "y": 0.7135999999999377,
-        "z": 0.7135999999999377
+        "x": 0.6907999999999402,
+        "y": 0.6907999999999402,
+        "z": 0.6907999999999402
     },
-    "MaxDeltaEnergy": 0.1,
+    "MaxDeltaEnergy": 0.001,
     "MuZero": 0.001,
     "NumBubblesPerCell": 96,
-    "NumIntegrationSteps": 1000000,
+    "NumIntegrationSteps": 100000,
     "NumStepsToRelax": 1000,
     "PhiTarget": 0.9,
-    "RngSeed": 1563321,
+    "RngSeed": 1131,
     "ScaleAmount": 0.0001,
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
     "Tfr": {
-        "x": 9.286400000001663,
-        "y": 9.286400000001663,
-        "z": 9.286400000001663
+        "x": 9.30920000000161,
+        "y": 9.30920000000161,
+        "z": 9.30920000000161
     },
-    "TimeStep": 0.00012773561049820692
+    "TimeStep": 0.00012611452266161782
 }
