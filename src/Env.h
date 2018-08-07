@@ -7,7 +7,7 @@
 #include <iostream>
 
 #ifndef __CUDACC__
-  #include "include/json.hpp"
+  #include "json.hpp"
 #endif
 
 #include "Macros.h"

@@ -8,7 +8,7 @@
 #include <cuda_runtime.h>
 
 #ifndef __CUDACC__
-  #include "include/json.hpp"
+  #include "json.hpp"
 #endif
 
 #include "Util.h"
