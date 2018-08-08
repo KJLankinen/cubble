@@ -71,8 +71,9 @@ DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
 # Flags
 # -----------------------------------------------------
 
+CUDA_ARCH := sm_30
 CPU_FLAGS := -Wall -std=c++14
-GPU_FLAGS := -arch=sm_20 -std=c++11
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11
 COMMON_FLAGS := 
 OPTIM_FLAGS := -O2
 
@@ -133,7 +134,7 @@ $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 
 $(GPU_CODE) : $(GPU_OBJS)
 	@mkdir -p $(BIN_PATH)
-	$(C_GPU) -arch=sm_20 -dlink $^ -o $@
+	$(C_GPU) -arch=$(CUDA_ARCH) -dlink $^ -o $@
 
 
 # -----------------------------------------------------
