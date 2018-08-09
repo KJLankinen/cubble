@@ -102,7 +102,6 @@ namespace cubble
 	T* createDataPtr(size_t capacity)
 	{
 	    T *t;
-	    std::cout << "Requestes amount of memory: " << capacity * sizeof(T) << std::endl;
 	    CUDA_CALL(cudaMallocManaged((void**)&t, capacity * sizeof(T)));
 	    CUDA_CALL(cudaDeviceSynchronize());
 	    

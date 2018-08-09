@@ -40,13 +40,18 @@ namespace cubble
 	cudaEvent_t stop = 0;
 	
 	std::shared_ptr<Env> env;
+	
 	CudaContainer<Bubble> bubbles;
-	CudaContainer<int> indices;
 	CudaContainer<Cell> cells;
-	CudaContainer<double> errors;
-	CudaContainer<double> energies;
+	
+	CudaContainer<int> indices;
 	CudaContainer<int> numberOfNeighbors;
 	CudaContainer<int> neighborIndices;
+	CudaContainer<int> numBubblesToDelete;
+	CudaContainer<int> toBeDeletedIndices;
+	
+	CudaContainer<double> errors;
+	CudaContainer<double> energies;
     };
 
     
@@ -97,26 +102,20 @@ namespace cubble
     
     __global__
     void predict(Bubble *bubbles,
-		 int *indices,
-		 Cell *cells,
 		 dvec tfr,
 		 dvec lbb,
 		 double timeStep,
 		 int numBubbles,
-		 int numCells,
 		 bool useGasExchange);
     
     __global__
     void accelerate(Bubble *bubbles,
-		    int *indices,
-		    Cell *cells,
 		    int *numberOfNeighbors,
 		    int *neighborIndices,
 		    double *energies,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,
-		    int numCells,
 		    int neighborStride,
 		    double fZeroPerMuZero,
 		    double kParam,
@@ -126,24 +125,18 @@ namespace cubble
 
     __global__
     void correct(Bubble *bubbles,
-		 int *indices,
-		 Cell *cells,
 		 double *errors,
 		 dvec tfr,
 		 dvec lbb,
 		 double timeStep,
 		 int numBubbles,
-		 int numCells,
 		 bool useGasExchange);
 
     __global__
     void updateData(Bubble* bubbles,
-		    int *indices,
-		    Cell *cells,
 		    int *toBeDeletedIndices,
 		    int *numBubblesToDelete,
 		    int numBubbles,
-		    int numCells,
 		    double minRad,
 		    bool useGasExchange);
 
