@@ -7,4 +7,5 @@
 module load goolfc/triton-2017a					## toolchain
 
 srun make clean
-srun --gres=gpu:1 make run
+srun make
+srun --gres=gpu:1 nvprof --export-profile timeline.prof bin/cubble data.json save.json
