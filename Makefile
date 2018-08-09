@@ -22,6 +22,9 @@ SRC_PATH = src/
 # All the data files recide here.
 DATA_PATH = data/
 
+# Included (external) headers
+INCL = -Iinclude/ 
+
 
 # -----------------------------------------------------
 # Object files, headers and the main executable
@@ -74,7 +77,7 @@ DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
 CUDA_ARCH := sm_30
 CPU_FLAGS := -Wall -std=c++14
 GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11
-COMMON_FLAGS := 
+COMMON_FLAGS :=  $(INCL)
 OPTIM_FLAGS := -O2
 
 

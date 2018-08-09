@@ -11,7 +11,7 @@
 #include <assert.h>
 
 #ifndef __CUDACC__
-  #include "include/json.hpp"
+  #include "json.hpp"
 #endif
 
 namespace cubble
