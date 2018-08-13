@@ -48,11 +48,8 @@ void CubbleApp::run()
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
-	env->setLbb(env->getLbb() + scaleAmount);
 	env->setTfr(env->getTfr() - scaleAmount);
-	
 	simulator->integrate();
-	
 	phi = bubbleVolume / env->getSimulationBoxVolume();
 	
 	if (numSteps % 1000 == 0)
@@ -61,7 +58,7 @@ void CubbleApp::run()
 	++numSteps;
     }
     
-    std::cout << "Shrinking took total of " << numSteps << " steps." << std::endl;
+    std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
     
@@ -75,7 +72,7 @@ void CubbleApp::run()
 
 	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
 	{
-	    simulator->integrate(false, i == env->getNumStepsToRelax() - 1);
+	    simulator->integrate(false);
 	    time += env->getTimeStep();
 	}
 	
@@ -116,7 +113,7 @@ void CubbleApp::run()
     
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
-	simulator->integrate(true, false);
+	simulator->integrate(true);
 	
 	if (i % 1000 == 0)
 	{

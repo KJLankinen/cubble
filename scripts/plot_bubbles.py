@@ -84,7 +84,7 @@ def plot_2d(n):
     fig = plt.figure()
     axes = []
     for i in range(n):
-        filename = "data/snapshot" + str(i + 16) + ".dat"
+        filename = "data/snapshot" + str(i + 0) + ".dat"
 
         with open(filename) as file:
             head = [next(file) for x in xrange(11)]
@@ -132,7 +132,7 @@ def plot_3d():
     plt.show()
     
 def main():
-    plot_2d(4)
+    plot_2d(1)
 
 if __name__ == "__main__":
     main()

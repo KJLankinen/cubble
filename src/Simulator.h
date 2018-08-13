@@ -7,6 +7,7 @@
 #include "Vec.h"
 #include "CudaContainer.h"
 #include "Cell.h"
+#include "DeviceMemoryHandler.h"
 
 #include <cuda_runtime.h>
 #include <memory>
@@ -22,26 +23,29 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
-	void integrate(bool useGasExchange = false, bool printTimings = false);
+	void integrate(bool useGasExchange = false);
 	double getVolumeOfBubbles() const;
 	double getAverageRadius() const;
-	void getBubbles(std::vector<Bubble> &b) const;
+	void getBubbles(std::vector<Bubble> &bubbles) const;
 	
     private:
+	double sumReduction(double *inputData, size_t lengthOfData) const;
+	double getMaxElement(double *inputData, size_t lengthOfData) const;
 	void generateBubbles();
 	void assignBubblesToCells(bool useVerboseOutput = false);
-	dim3 getGridSize(int numBubbles);
-	void removeSmallBubbles(const std::vector<int> &indicesToDelete);
+	dim3 getGridSize();
 
+	size_t givenNumBubblesPerDim = 0;
+	size_t numBubbles = 0;
 	const int neighborStride = 100;
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
 	cudaEvent_t stop = 0;
-	
+
+	std::unique_ptr<DeviceMemoryHandler> dmh;
 	std::shared_ptr<Env> env;
-	
-	CudaContainer<Bubble> bubbles;
+        
 	CudaContainer<Cell> cells;
 	
 	CudaContainer<int> indices;
@@ -49,9 +53,6 @@ namespace cubble
 	CudaContainer<int> neighborIndices;
 	CudaContainer<int> numBubblesToDelete;
 	CudaContainer<int> toBeDeletedIndices;
-	
-	CudaContainer<double> errors;
-	CudaContainer<double> energies;
     };
 
     
@@ -60,34 +61,46 @@ namespace cubble
     // ******************************
 
     __global__
-    void getRadii(Bubble *b, double *radii, int numBubbles);
+    void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
     
     __global__
-    void calculateVolumes(Bubble *b, double *volumes, int numBubbles, double pi);
-    
-    __global__
-    void assignDataToBubbles(float *x,
-			     float *y,
-#if (NUM_DIM == 3)
-			     float *z,
-#endif
-			     float *r,
-			     float *w,
-			     Bubble *b,
-			     ivec bubblesPerDim,
+    void assignDataToBubbles(double *x,
+			     double *y,
+			     double *z,
+			     double *xp,
+			     double *yp,
+			     double *zp,
+			     double *r,
+			     double *w,
+			     int givenNumBubblesPerDim,
 			     dvec tfr,
 			     dvec lbb,
 			     double avgRad,
 			     int numBubbles);
 
     __global__
-    void calculateOffsets(Bubble *bubbles, Cell *cells, int numBubbles, int numCells);
+    void calculateOffsets(double *x,
+			  double *y,
+			  double *z,
+			  Cell *cells,
+			  dvec domainDim,
+			  int numBubbles,
+			  int numCells);
 
     __global__
-    void bubblesToCells(Bubble *bubbles, int *indices, Cell *cells, int numBubbles);
+    void bubblesToCells(double *x,
+			double *y,
+			double *z,
+			int *indices,
+			Cell *cells,
+			dvec domainDim,
+			int numBubbles);
 
     __global__
-    void findNeighbors(Bubble *bubbles,
+    void findNeighbors(double *x,
+		       double *y,
+		       double *z,
+		       double *r,
 		       int *indices,
 		       Cell *cells,
 		       int *numberOfNeighbors,
@@ -97,11 +110,29 @@ namespace cubble
 		       int numBubbles,
 		       int numDomains,
 		       int numCells,
-		       int numLocalBubbles,
 		       int neighborStride);
     
     __global__
-    void predict(Bubble *bubbles,
+    void predict(double *x,
+		 double *y,
+		 double *z,
+		 double *r,
+		 
+		 double *xPrd,
+		 double *yPrd,
+		 double *zPrd,
+		 double *rPrd,
+		 
+		 double *dxdt,
+		 double *dydt,
+		 double *dzdt,
+		 double *drdt,
+		 
+		 double *dxdtOld,
+		 double *dydtOld,
+		 double *dzdtOld,
+		 double *drdtOld,
+		 
 		 dvec tfr,
 		 dvec lbb,
 		 double timeStep,
@@ -109,10 +140,19 @@ namespace cubble
 		 bool useGasExchange);
     
     __global__
-    void accelerate(Bubble *bubbles,
+    void accelerate(double *xPrd,
+		    double *yPrd,
+		    double *zPrd,
+		    double *rPrd,
+		    
+		    double *dxdtPrd,
+		    double *dydtPrd,
+		    double *dzdtPrd,
+		    double *drdtPrd,
+		    
+		    double *energies,
 		    int *numberOfNeighbors,
 		    int *neighborIndices,
-		    double *energies,
 		    dvec tfr,
 		    dvec lbb,
 		    int numBubbles,
@@ -124,7 +164,26 @@ namespace cubble
 		    bool useGasExchange);
 
     __global__
-    void correct(Bubble *bubbles,
+    void correct(double *x,
+		 double *y,
+		 double *z,
+		 double *r,
+		 
+		 double *xPrd,
+		 double *yPrd,
+		 double *zPrd,
+		 double *rPrd,
+		 
+		 double *dxdt,
+		 double *dydt,
+		 double *dzdt,
+		 double *drdt,
+		 
+		 double *dxdtPrd,
+		 double *dydtPrd,
+		 double *dzdtPrd,
+		 double *drdtPrd,
+		 
 		 double *errors,
 		 dvec tfr,
 		 dvec lbb,
@@ -133,20 +192,44 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void updateData(Bubble* bubbles,
+    void updateData(double *x,
+		    double *y,
+		    double *z,
+		    double *r,
+		    
+		    double *xPrd,
+		    double *yPrd,
+		    double *zPrd,
+		    double *rPrd,
+		    
+		    double *dxdt,
+		    double *dydt,
+		    double *dzdt,
+		    double *drdt,
+		    
+		    double *dxdtOld,
+		    double *dydtOld,
+		    double *dzdtOld,
+		    double *drdtOld,
+		    
+		    double *dxdtPrd,
+		    double *dydtPrd,
+		    double *dzdtPrd,
+		    double *drdtPrd,
+		    
 		    int *toBeDeletedIndices,
 		    int *numBubblesToDelete,
 		    int numBubbles,
 		    double minRad,
 		    bool useGasExchange);
 
+    __global__
+    void removeSmallBubbles();
+    
 
     // ******************************
     // Device functions
     // ******************************
-    
-    __device__
-    double atomicAddD(double *address, double val);
     
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);

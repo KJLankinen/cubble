@@ -23,6 +23,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
 	CUBBLE_CONST_PROP(int, RngSeed, 0)
 	CUBBLE_CONST_PROP(int, NumStepsToRelax, 0)
+	CUBBLE_CONST_PROP(int, NumBubbles, 0)
 	
 	CUBBLE_CONST_PROP(double, AvgRad, 0)
 	CUBBLE_CONST_PROP(double, StdDevRad, 0)
@@ -64,14 +65,6 @@ namespace cubble
 	    FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
 
 	    MinRad = 0.1 * AvgRad;
-	    // Perform any parameter related sanity & correctness checking here.
-	    dvec interval = Tfr - Lbb;
-	    assert(interval.x == interval.y
-		   && "Simulation box must be a square or a cube!");
-#if(NUM_DIM == 3)
-	    assert(interval.x == interval.z
-		   && "Simulation box must be a square or a cube!");
-#endif
 	}
 	
 	void writeParameters() {readWriteParameters(false); }
@@ -112,8 +105,6 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, SigmaZero);
 	    CUBBLE_IO_PARAMETER(read, params, AvgRad);
 	    CUBBLE_IO_PARAMETER(read, params, StdDevRad);
-	    CUBBLE_IO_PARAMETER(read, params, Lbb);
-	    CUBBLE_IO_PARAMETER(read, params, Tfr);
 	    CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
 	    CUBBLE_IO_PARAMETER(read, params, TimeStep);
 	    CUBBLE_IO_PARAMETER(read, params, RngSeed);
@@ -124,6 +115,7 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
 	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
 	    CUBBLE_IO_PARAMETER(read, params, KParameter);
+	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
