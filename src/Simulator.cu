@@ -157,6 +157,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
 
     double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
     double *errors = dmh->getDataPtr(BubbleProperty::ERROR);
+    double *volumes = dmh->getDataPtr(BubbleProperty::VOLUME);
     
     do
     {
@@ -213,36 +214,57 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					  dxdt, dydt, dzdt, drdt,
 					  dxdtOld, dydtOld, dzdtOld, drdtOld,
 					  dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-					  toBeDeletedIndices.getDataPtr(),
-					  numBubblesToDelete.getDataPtr(),
+					  volumes,
+					  numBubblesToKeep.getDataPtr(),
+					  indicesToKeep.getDataPtr(),
 					  numBubbles,
 					  env->getMinRad(),
+					  env->getPi(),
 					  useGasExchange);
     
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());
-    
-    if (numBubblesToDelete[0] > 0)
+
+    bool assignedToCellsAlready = false;
+    if (numBubblesToKeep[0] != numBubbles)
     {
-	std::cout << "Should remove small bubble(s)..." << std::endl;
-	/*
-	std::cout << "\tRemoving " << numBubblesToDelete[0]
-		  <<  " bubbles, since their radii are below the minimum radius."
-		  << std::endl;
+        // HACK: This is REEEEEAAAAAALLY stupid and slow but it's temporary.
+	std::vector<int> tempVec(numBubblesToKeep[0]);
+	indicesToKeep.dataToVec(tempVec);
+	std::sort(tempVec.begin(), tempVec.end());
+	indicesToKeep = CudaContainer<int>(tempVec);
 	
-	std::vector<int> indicesToDelete;
-	toBeDeletedIndices.dataToVec(indicesToDelete);
-	indicesToDelete.resize(numBubblesToDelete[0]);
+	double deltaVolume = sumReduction(volumes, numBubbles);
+	deltaVolume /= (numBubblesToKeep[0]);
 
-	std::sort(indicesToDelete.begin(), indicesToDelete.end(), [](int a, int b) { return a < b; } );
+        double *currentData = dmh->getRawPtr();
+	double *temporaryData = dmh->getRawPtrToTemporaryData();
 
-	removeSmallBubbles(indicesToDelete);
-	*/
+	removeSmallBubbles<<<numBlocks, numThreads>>>(currentData,
+						      temporaryData,
+						      indicesToKeep.getDataPtr(),
+						      numBubblesToKeep[0],
+						      dmh->getMemoryStride(),
+						      BubbleProperty::R,
+						      1.0 / env->getPi(),
+						      deltaVolume);
+    
+	CUDA_CALL(cudaDeviceSynchronize());
+	CUDA_CALL(cudaPeekAtLastError());
+	
+	dmh->swapData();
+	numBubbles = numBubblesToKeep[0];
+	
+	assignBubblesToCells();
+	
+	assignedToCellsAlready = true;
     }
+
+    numBubblesToKeep[0] = 0;
 
     ++integrationStep;
 
-    if (integrationStep % 100 == 0)
+    if (integrationStep % 100 == 0 && !assignedToCellsAlready)
 	assignBubblesToCells();
 }
 
@@ -367,8 +389,8 @@ void cubble::Simulator::generateBubbles()
     indices = CudaContainer<int>(numBubbles);
     numberOfNeighbors = CudaContainer<int>(numBubbles);
     neighborIndices = CudaContainer<int>(numBubbles * neighborStride);
-    numBubblesToDelete = CudaContainer<int>(1);
-    toBeDeletedIndices = CudaContainer<int>(numBubbles);
+    indicesToKeep = CudaContainer<int>(numBubbles);
+    numBubblesToKeep = CudaContainer<int>(1);
     
     std::cout << "\tGenerating data..." << std::endl;
 
@@ -449,14 +471,12 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     
     cells = CudaContainer<Cell>(numCells);
 
-    cudaMemset((void*)numBubblesToDelete.getDataPtr(), 0, sizeof(int));
     cudaMemset((void*)numberOfNeighbors.getDataPtr(), 0, sizeof(int) * numBubbles);
     cudaMemset((void*)indices.getDataPtr(), 0, sizeof(int) * numBubbles);
     cudaMemset((void*)neighborIndices.getDataPtr(), 0, sizeof(int) * numBubbles * neighborStride);
+    cudaMemset((void*)indicesToKeep.getDataPtr(), 0, sizeof(int) * numBubbles);
     
-    dmh->resetData(BubbleProperty::ERROR);
-    dmh->resetData(BubbleProperty::ENERGY);
-    dmh->resetData(BubbleProperty::VOLUME);
+    dmh->resetShortLivedData();
     
     if (useVerboseOutput)
 	std::cout << "\tCalculating offsets..." << std::endl;
@@ -999,11 +1019,13 @@ void cubble::updateData(double *x,
 			double *dydtPrd,
 			double *dzdtPrd,
 			double *drdtPrd,
-			
-			int *toBeDeletedIndices,
-			int *numBubblesToDelete,
+
+			double *volumes,
+			int *numBubblesToKeep,
+		        int *indicesToKeep,
 			int numBubbles,
 			double minRad,
+			double pi,
 			bool useGasExchange)
 {
     const int tid = getGlobalTid();
@@ -1020,7 +1042,7 @@ void cubble::updateData(double *x,
         dxdt[tid] = dxdtPrd[tid];
 	dydt[tid] = dydtPrd[tid];
 	dzdt[tid] = dzdtPrd[tid];
-
+	
 	if (useGasExchange)
 	{
 	    r[tid] = rPrd[tid];
@@ -1028,12 +1050,81 @@ void cubble::updateData(double *x,
 	    drdt[tid] = drdtPrd[tid];
 	}
 
-	if (r[tid] < minRad)
+	double volume = r[tid] * r[tid];
+#if (NUM_DIM == 3)
+	volume *= 1.33333333333333333333333 * r[tid];
+#endif
+	volume *= pi;
+	
+	if (r[tid] > minRad)
 	{
-	    int index = atomicAdd(&numBubblesToDelete[0], 1);
-	    DEVICE_ASSERT(index < numBubbles);
-	    toBeDeletedIndices[index] = tid;
+	    int idx = atomicAdd(numBubblesToKeep, 1);
+	    indicesToKeep[idx] = tid;
+	    volume = 0;
 	}
+	
+	volumes[tid] = volume;
+    }
+}
+
+
+__global__
+void cubble::removeSmallBubbles(double *currentData,
+				double *temporaryData,
+				int *indicesToKeep,
+				int numBubblesToKeep,
+				int memoryStride,
+				int memoryIndexOfRadius,
+				double invPi,
+				double deltaVolume)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubblesToKeep)
+    {
+	int idx = indicesToKeep[tid];
+	DEVICE_ASSERT(idx < numBubblesToKeep);
+	
+	double radius = currentData[memoryStride * memoryIndexOfRadius + idx];
+	double volume = radius * radius;
+	
+#if (NUM_DIM == 3)
+	volume *= radius;
+	volume += deltaVolume * invPi * 0.75;
+	radius = cbrt(volume);
+#else
+	volume += deltaVolume * invPi;
+	radius = sqrt(volume);
+#endif
+	currentData[memoryStride * memoryIndexOfRadius + idx] = radius;
+	
+	temporaryData[tid + 0 * memoryStride] = currentData[idx + 0 * memoryStride];
+	temporaryData[tid + 1 * memoryStride] = currentData[idx + 1 * memoryStride];
+	temporaryData[tid + 2 * memoryStride] = currentData[idx + 2 * memoryStride];
+	temporaryData[tid + 3 * memoryStride] = currentData[idx + 3 * memoryStride];
+
+	temporaryData[tid + 4 * memoryStride] = currentData[idx + 4 * memoryStride];
+	temporaryData[tid + 5 * memoryStride] = currentData[idx + 5 * memoryStride];
+	temporaryData[tid + 6 * memoryStride] = currentData[idx + 6 * memoryStride];
+	temporaryData[tid + 7 * memoryStride] = currentData[idx + 7 * memoryStride];
+	
+	temporaryData[tid + 8 * memoryStride] = currentData[idx + 8 * memoryStride];
+	temporaryData[tid + 9 * memoryStride] = currentData[idx + 9 * memoryStride];
+	temporaryData[tid + 10 * memoryStride] = currentData[idx + 10 * memoryStride];
+	temporaryData[tid + 11 * memoryStride] = currentData[idx + 11 * memoryStride];
+
+	temporaryData[tid + 12 * memoryStride] = currentData[idx + 12 * memoryStride];
+	temporaryData[tid + 13 * memoryStride] = currentData[idx + 13 * memoryStride];
+	temporaryData[tid + 14 * memoryStride] = currentData[idx + 14 * memoryStride];
+	temporaryData[tid + 15 * memoryStride] = currentData[idx + 15 * memoryStride];
+	
+	temporaryData[tid + 16 * memoryStride] = currentData[idx + 16 * memoryStride];
+	temporaryData[tid + 17 * memoryStride] = currentData[idx + 17 * memoryStride];
+	temporaryData[tid + 18 * memoryStride] = currentData[idx + 18 * memoryStride];
+	temporaryData[tid + 19 * memoryStride] = currentData[idx + 19 * memoryStride];
+
+	temporaryData[tid + 20 * memoryStride] = currentData[idx + 20 * memoryStride];
+	temporaryData[tid + 21 * memoryStride] = currentData[idx + 21 * memoryStride];
+	temporaryData[tid + 22 * memoryStride] = currentData[idx + 22 * memoryStride];
     }
 }
 
@@ -1078,6 +1169,7 @@ void cubble::eulerIntegration(double *x,
 	r[tid] = r[tid] + timeStep * drdt[tid];
     }
 }
+
 
 // ******************************
 // Device functions

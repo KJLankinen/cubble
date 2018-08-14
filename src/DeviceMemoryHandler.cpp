@@ -6,9 +6,8 @@
 
 cubble::DeviceMemoryHandler::DeviceMemoryHandler(size_t numBubbles)
     : givenNumBubbles(numBubbles)
-    , numBubbles(numBubbles)
 {
-    stride = (size_t)std::ceil((float)numBubbles / 32.0f) * 32;
+    stride = (size_t)std::ceil((float)givenNumBubbles / 32.0f) * 32;
     std::cout << "Number of bubbles given: " << givenNumBubbles << ", leading to stride of " << stride << std::endl;
 }
 
@@ -33,6 +32,17 @@ double* cubble::DeviceMemoryHandler::getDataPtr(cubble::BubbleProperty prop)
     return dataPtr;
 }
 
+void cubble::DeviceMemoryHandler::swapData()
+{
+    size_t numBytes = getMemorySizeInBytes();
+    double *temporaryData = getRawPtrToTemporaryData();
+    cudaMemcpy(static_cast<void*>(rawDeviceMemoryPtr),
+	       static_cast<void*>(temporaryData),
+	       numBytes,
+	       cudaMemcpyDeviceToDevice);
+    cudaMemset(static_cast<void*>(temporaryData), 0, numBytes);
+}
+
 void cubble::DeviceMemoryHandler::reserveMemory()
 {
     // This only allocates memory for the 'double' properties of bubbles.
@@ -40,7 +50,7 @@ void cubble::DeviceMemoryHandler::reserveMemory()
     
     if (rawDeviceMemoryPtr == nullptr)
     {
-	size_t numBytes = stride * sizeof(double) * BubbleProperty::NUM_VALUES;
+	size_t numBytes = 2 * getMemorySizeInBytes();
 	std::cout << "Allocating " << numBytes << " bytes of device memory for "
 		  << givenNumBubbles << " bubbles."
 		  << "\nMemory is allocated for the smallest multiplicate of 32 that's >= "
@@ -56,12 +66,34 @@ void cubble::DeviceMemoryHandler::reserveMemory()
 		  << std::endl;
 }
 
+double* cubble::DeviceMemoryHandler::getRawPtr()
+{
+    return static_cast<double*>(rawDeviceMemoryPtr);
+}
+
+double* cubble::DeviceMemoryHandler::getRawPtrToTemporaryData()
+{
+    double *tempPtr = getRawPtr();
+    tempPtr += getNumValuesInMemory();
+
+    return tempPtr;
+}
+
 void cubble::DeviceMemoryHandler::resetData(cubble::BubbleProperty prop)
 {
     assert(prop < cubble::BubbleProperty::NUM_VALUES);
     
     size_t numBytes = stride * sizeof(double);
     cudaMemset(getDataPtr(prop), 0, numBytes);
+}
+
+void cubble::DeviceMemoryHandler::resetShortLivedData()
+{
+    size_t numTemporaryProperties = BubbleProperty::NUM_VALUES - BubbleProperty::ERROR;
+    assert(numTemporaryProperties == 3 && "Update how temporary properties should be reset!");
+    
+    size_t numBytes = stride * sizeof(double) * numTemporaryProperties;
+    cudaMemset(static_cast<void*>(getDataPtr(BubbleProperty::VOLUME)), 0, numBytes);
 }
 
 void cubble::DeviceMemoryHandler::freeMemory()

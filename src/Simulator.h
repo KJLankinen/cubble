@@ -51,8 +51,9 @@ namespace cubble
 	CudaContainer<int> indices;
 	CudaContainer<int> numberOfNeighbors;
 	CudaContainer<int> neighborIndices;
-	CudaContainer<int> numBubblesToDelete;
-	CudaContainer<int> toBeDeletedIndices;
+	
+	CudaContainer<int> indicesToKeep;
+	CudaContainer<int> numBubblesToKeep;
     };
 
     
@@ -216,12 +217,24 @@ namespace cubble
 		    double *dydtPrd,
 		    double *dzdtPrd,
 		    double *drdtPrd,
-		    
-		    int *toBeDeletedIndices,
-		    int *numBubblesToDelete,
+
+		    double *volumes,
+		    int *numBubblesToKeep,
+		    int *indicesToKeep,
 		    int numBubbles,
 		    double minRad,
+		    double pi,
 		    bool useGasExchange);
+
+    __global__
+    void removeSmallBubbles(double *currentData,
+			    double *temporaryData,
+			    int *indicesToKeep,
+			    int numBubblesToKeep,
+			    int memoryStride,
+			    int memoryIndexOfRadius,
+			    double invPi,
+			    double deltaVolume);
 
     __global__
     void eulerIntegration(double *x,
@@ -238,9 +251,6 @@ namespace cubble
 			  dvec lbb,
 			  double timeStep,
 			  int numBubbles);
-
-    __global__
-    void removeSmallBubbles();
     
 
     // ******************************

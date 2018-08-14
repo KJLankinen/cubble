@@ -33,6 +33,8 @@ namespace cubble
 	DZDT_OLD,
 	DRDT_OLD,
 
+	// Add all temporary data (= data that is guaranteed to be up to date only for one iteration)
+	// here, so they can be reset with just one cudaMemset call.
 	ERROR,
 	ENERGY,
 	VOLUME,
@@ -46,8 +48,15 @@ namespace cubble
 	DeviceMemoryHandler(size_t numBubbles);
 	~DeviceMemoryHandler();
 	double *getDataPtr(BubbleProperty prop);
+	void swapData();
 	void reserveMemory();
+        double *getRawPtr();
+	double *getRawPtrToTemporaryData();
 	void resetData(BubbleProperty prop);
+	void resetShortLivedData();
+	size_t getNumValuesInMemory() { return stride * BubbleProperty::NUM_VALUES; }
+        size_t getMemorySizeInBytes() { return sizeof(double) * getNumValuesInMemory(); }
+	size_t getMemoryStride() { return stride; }
 	
     private:
 	void freeMemory();
@@ -56,6 +65,5 @@ namespace cubble
 	
 	const size_t givenNumBubbles;
 	size_t stride = 0;
-	size_t numBubbles = 0;
     };
 }
