@@ -53,6 +53,68 @@ void cubble::Simulator::setupSimulation()
 {
     generateBubbles();
     assignBubblesToCells(true);
+
+    // Calculate some initial values which are needed
+    // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
+
+    double *x = dmh->getDataPtr(BubbleProperty::X);
+    double *y = dmh->getDataPtr(BubbleProperty::Y);
+    double *z = dmh->getDataPtr(BubbleProperty::Z);
+    double *r = dmh->getDataPtr(BubbleProperty::R);
+    
+    double *dxdt = dmh->getDataPtr(BubbleProperty::DXDT);
+    double *dydt = dmh->getDataPtr(BubbleProperty::DYDT);
+    double *dzdt = dmh->getDataPtr(BubbleProperty::DZDT);
+    double *drdt = dmh->getDataPtr(BubbleProperty::DRDT);
+    
+    double *dxdtOld = dmh->getDataPtr(BubbleProperty::DXDT_OLD);
+    double *dydtOld = dmh->getDataPtr(BubbleProperty::DYDT_OLD);
+    double *dzdtOld = dmh->getDataPtr(BubbleProperty::DZDT_OLD);
+    double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
+    
+    double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
+
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const double minRad = env->getMinRad();
+    const size_t numThreads = 512;
+    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+
+    double timeStep = env->getTimeStep();
+
+    accelerate<<<numBlocks, numThreads>>>(x, y, z, r,
+					  dxdtOld, dydtOld, dzdtOld, drdtOld,
+					  energies,
+					  numberOfNeighbors.getDataPtr(),
+					  neighborIndices.getDataPtr(),
+					  tfr,
+					  lbb,
+					  numBubbles,
+					  neighborStride,
+					  env->getFZeroPerMuZero(),
+					  env->getKParameter(),
+					  env->getPi(),
+					  env->getMinRad(),
+					  true);
+
+    eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
+						dxdtOld, dydtOld, dzdtOld, drdtOld,
+						tfr, lbb, timeStep, numBubbles);
+    
+    accelerate<<<numBlocks, numThreads>>>(x, y, z, r,
+					  dxdt, dydt, dzdt, drdt,
+					  energies,
+					  numberOfNeighbors.getDataPtr(),
+					  neighborIndices.getDataPtr(),
+					  tfr,
+					  lbb,
+					  numBubbles,
+					  neighborStride,
+					  env->getFZeroPerMuZero(),
+					  env->getKParameter(),
+					  env->getPi(),
+					  env->getMinRad(),
+					  true);
 }
 
 void cubble::Simulator::integrate(bool useGasExchange)
@@ -131,7 +193,6 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					   useGasExchange);
         
         error = getMaxElement(errors, numBubbles);
-	std::cout << "error: " << error << " ";
 	
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
@@ -314,9 +375,11 @@ void cubble::Simulator::generateBubbles()
     double *x = dmh->getDataPtr(BubbleProperty::X);
     double *y = dmh->getDataPtr(BubbleProperty::Y);
     double *z = dmh->getDataPtr(BubbleProperty::Z);
-    double *xp = dmh->getDataPtr(BubbleProperty::X_PRD);
-    double *yp = dmh->getDataPtr(BubbleProperty::Y_PRD);
-    double *zp = dmh->getDataPtr(BubbleProperty::Z_PRD);
+    
+    double *xPrd = dmh->getDataPtr(BubbleProperty::X_PRD);
+    double *yPrd = dmh->getDataPtr(BubbleProperty::Y_PRD);
+    double *zPrd = dmh->getDataPtr(BubbleProperty::Z_PRD);
+    
     double *r = dmh->getDataPtr(BubbleProperty::R);
     double *w = dmh->getDataPtr(BubbleProperty::R_PRD);
     
@@ -336,8 +399,9 @@ void cubble::Simulator::generateBubbles()
 
     const size_t numThreads = 512;
     const size_t numBlocks = (size_t)std::ceil((float)numBubbles / (float)numThreads);
-    assignDataToBubbles<<<numBlocks, numThreads>>>(
-	x, y, z, xp, yp, zp, r, w, givenNumBubblesPerDim, tfr, lbb, avgRad, numBubbles);
+    assignDataToBubbles<<<numBlocks, numThreads>>>(x, y, z,
+						   xPrd, yPrd, zPrd,
+						   r, w, givenNumBubblesPerDim, tfr, lbb, avgRad, numBubbles);
 }
 
 void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
@@ -472,9 +536,9 @@ __global__
 void cubble::assignDataToBubbles(double *x,
 				 double *y,
 				 double *z,
-				 double *xp,
-				 double *yp,
-				 double *zp,
+				 double *xPrd,
+				 double *yPrd,
+				 double *zPrd,
 				 double *r,
 				 double *w,
 				 int givenNumBubblesPerDim,
@@ -506,9 +570,11 @@ void cubble::assignDataToBubbles(double *x,
 	x[tid] = pos.x;
 	y[tid] = pos.y;
 	z[tid] = pos.z;
-	xp[tid] = pos.x;
-	yp[tid] = pos.y;
-	zp[tid] = pos.z;
+	
+	xPrd[tid] = pos.x;
+	yPrd[tid] = pos.y;
+	zPrd[tid] = pos.z;
+	
 	w[tid] = r[tid];
     }
 }
@@ -719,15 +785,15 @@ void cubble::predict(double *x,
 }
 
 __global__
-void cubble::accelerate(double *xPrd,
-			double *yPrd,
-			double *zPrd,
-			double *rPrd,
+void cubble::accelerate(double *x,
+			double *y,
+			double *z,
+			double *r,
 			
-			double *dxdtPrd,
-			double *dydtPrd,
-			double *dzdtPrd,
-			double *drdtPrd,
+			double *dxdt,
+			double *dydt,
+			double *dzdt,
+			double *drdt,
 			
 			double *energies,
 			int *numberOfNeighbors,
@@ -749,11 +815,11 @@ void cubble::accelerate(double *xPrd,
 	double energy = 0;
 	double radiusChangeRate = 0;
 
-	const double radius1 = rPrd[tid];
+	const double radius1 = r[tid];
         dvec pos1(0, 0, 0);
-	pos1.x = xPrd[tid];
-	pos1.y = yPrd[tid];
-	pos1.z = zPrd[tid];
+	pos1.x = x[tid];
+	pos1.y = y[tid];
+	pos1.z = z[tid];
 	
 	if (radius1 > minRad)
 	{
@@ -763,11 +829,11 @@ void cubble::accelerate(double *xPrd,
 		const int index = neighborIndices[tid * neighborStride + i];
 		DEVICE_ASSERT(index < numBubbles);
 		
-		const double radius2 = rPrd[index];
+		const double radius2 = r[index];
 	        dvec pos2(0, 0, 0);
-		pos2.x = xPrd[index];
-		pos2.y = yPrd[index];
-		pos2.z = zPrd[index];
+		pos2.x = x[index];
+		pos2.y = y[index];
+		pos2.z = z[index];
 		
 		if (radius2 < minRad)
 		    continue;
@@ -822,11 +888,11 @@ void cubble::accelerate(double *xPrd,
 	}
 
 	if (useGasExchange)
-	    drdtPrd[tid] = radiusChangeRate * kParam;
+	    drdt[tid] = radiusChangeRate * kParam;
 	
-	dxdtPrd[tid] = acceleration.x * fZeroPerMuZero;
-	dydtPrd[tid] = acceleration.y * fZeroPerMuZero;
-	dzdtPrd[tid] = acceleration.z * fZeroPerMuZero;
+	dxdt[tid] = acceleration.x * fZeroPerMuZero;
+	dydt[tid] = acceleration.y * fZeroPerMuZero;
+	dzdt[tid] = acceleration.z * fZeroPerMuZero;
 	energies[tid] = energy;
     }
 }
@@ -880,7 +946,8 @@ void cubble::correct(double *x,
 	velPrd.x = dxdtPrd[tid];
 	velPrd.y = dydtPrd[tid];
 	velPrd.z = dzdtPrd[tid];
-	
+
+	pos = lbb + pos * interval;
 	pos += 0.5 * timeStep * (vel + velPrd);
 	pos = (pos - lbb) / interval;
 	pos = getWrappedPos(pos);
@@ -970,6 +1037,47 @@ void cubble::updateData(double *x,
     }
 }
 
+__global__
+void cubble::eulerIntegration(double *x,
+			      double *y,
+			      double *z,
+			      double *r,
+			      
+			      double *dxdt,
+			      double *dydt,
+			      double *dzdt,
+			      double *drdt,
+			      
+			      dvec tfr,
+			      dvec lbb,
+			      double timeStep,
+			      int numBubbles)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubbles)
+    {
+	dvec interval = tfr - lbb;
+	dvec pos(0, 0, 0);
+	pos.x = x[tid];
+	pos.y = y[tid];
+	pos.z = z[tid];
+
+	dvec vel(0, 0, 0);
+	vel.x = dxdt[tid];
+	vel.y = dydt[tid];
+	vel.z = dzdt[tid];
+
+	pos = lbb + pos * interval;
+	pos += timeStep * vel;
+	pos = (pos - lbb) / interval;
+	pos = getWrappedPos(pos);
+	
+	x[tid] = pos.x;
+	y[tid] = pos.y;
+	z[tid] = pos.z;
+	r[tid] = r[tid] + timeStep * drdt[tid];
+    }
+}
 
 // ******************************
 // Device functions

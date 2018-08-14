@@ -67,9 +67,9 @@ namespace cubble
     void assignDataToBubbles(double *x,
 			     double *y,
 			     double *z,
-			     double *xp,
-			     double *yp,
-			     double *zp,
+			     double *xPrd,
+			     double *yPrd,
+			     double *zPrd,
 			     double *r,
 			     double *w,
 			     int givenNumBubblesPerDim,
@@ -140,15 +140,15 @@ namespace cubble
 		 bool useGasExchange);
     
     __global__
-    void accelerate(double *xPrd,
-		    double *yPrd,
-		    double *zPrd,
-		    double *rPrd,
+    void accelerate(double *x,
+		    double *y,
+		    double *z,
+		    double *r,
 		    
-		    double *dxdtPrd,
-		    double *dydtPrd,
-		    double *dzdtPrd,
-		    double *drdtPrd,
+		    double *dxdt,
+		    double *dydt,
+		    double *dzdt,
+		    double *drdt,
 		    
 		    double *energies,
 		    int *numberOfNeighbors,
@@ -222,6 +222,22 @@ namespace cubble
 		    int numBubbles,
 		    double minRad,
 		    bool useGasExchange);
+
+    __global__
+    void eulerIntegration(double *x,
+			  double *y,
+			  double *z,
+			  double *r,
+			  
+			  double *dxdt,
+			  double *dydt,
+			  double *dzdt,
+			  double *drdt,
+			  
+			  dvec tfr,
+			  dvec lbb,
+			  double timeStep,
+			  int numBubbles);
 
     __global__
     void removeSmallBubbles();
