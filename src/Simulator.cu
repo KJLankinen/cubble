@@ -55,8 +55,6 @@ void cubble::Simulator::setupSimulation()
     assignBubblesToCells(true);
     nvtxRangePop();
 
-    std::cout << "Calculating some initial values..." << std::endl;
-
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
 
@@ -89,8 +87,6 @@ void cubble::Simulator::setupSimulation()
 
     nvtxRangePop();
     nvtxRangePushA("Acceleration, integration, acceleration.");
-
-    std::cout << "Starting acceleration kernel." << std::endl;
     
     accelerate<<<numBlocks, numThreads>>>(x, y, z, r,
 					  dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -107,14 +103,10 @@ void cubble::Simulator::setupSimulation()
 					  env->getMinRad(),
 					  true);
 
-
-    std::cout << "Starting euler kernel." << std::endl;
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
 						dxdtOld, dydtOld, dzdtOld, drdtOld,
 						tfr, lbb, timeStep, numBubbles);
     
-
-    std::cout << "Starting acceleration kernel." << std::endl;
     accelerate<<<numBlocks, numThreads>>>(x, y, z, r,
 					  dxdt, dydt, dzdt, drdt,
 					  energies,
@@ -131,9 +123,6 @@ void cubble::Simulator::setupSimulation()
 					  true);
 
     nvtxRangePop();
-    
-
-    std::cout << "Setup done." << std::endl;
 }
 
 void cubble::Simulator::integrate(bool useGasExchange)
