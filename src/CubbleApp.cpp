@@ -1,4 +1,6 @@
 #include <iostream>
+#include <cuda_profiler_api.h>
+#include <nvToolsExt.h>
 
 #include "CubbleApp.h"
 #include "Fileio.h"
@@ -25,9 +27,14 @@ CubbleApp::~CubbleApp()
 
 void CubbleApp::run()
 {
+    nvtxRangePushA("Setup");
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
+    nvtxRangePop();
+    
+    cudaProfilerStart();
+    
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
@@ -43,6 +50,7 @@ void CubbleApp::run()
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
 
+    nvtxRangePushA("Scaling.");
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
@@ -57,6 +65,7 @@ void CubbleApp::run()
 	
 	++numSteps;
     }
+    nvtxRangePop();
     
     std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
     printPhi(phi, phiTarget);
@@ -110,7 +119,7 @@ void CubbleApp::run()
     std::cout << "**Setup done.**"
 	      <<"\n\n**Starting the simulation proper.**"
 	      << std::endl;
-    
+    nvtxRangePushA("Simulation");
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	simulator->integrate(true);
@@ -126,14 +135,19 @@ void CubbleApp::run()
 	if (i % 100000 == 0)
 	    saveSnapshotToFile();
     }
-
+    
+    nvtxRangePop();
+    
     saveSnapshotToFile();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
+
+    cudaProfilerStop();
 }
 
 void CubbleApp::saveSnapshotToFile()
 {
+    nvtxRangePushA("snapshot");
     std::cout << "Writing a snap shot to a file..." << std::flush;
 
     std::vector<Bubble> tempVec;
@@ -171,4 +185,5 @@ void CubbleApp::saveSnapshotToFile()
     ++numSnapshots;
 
     std::cout << " Done." << std::endl;
+    nvtxRangePop();
 }
