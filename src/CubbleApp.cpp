@@ -30,14 +30,14 @@ void CubbleApp::run()
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
+    std::cout << "Before profiler stop." << std::endl;
+    cudaProfilerStop();
+    std::cout << "After profiler stop" << std::endl;
+
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
-
-    std::cout << "Before profiler stop." << std::endl;
-    cudaProfilerStop();
-    std::cout << "After profiler stop" << std::endl;
     
     auto printPhi = [](double phi, double phiTarget) -> void
 	{
@@ -59,7 +59,7 @@ void CubbleApp::run()
     {
 	if (numSteps == 0)
 	    cudaProfilerStart();
-	else if (numSteps == 100)
+	else if (numSteps == 1)
 	    cudaProfilerStop();
 	
 	env->setTfr(env->getTfr() - scaleAmount);
@@ -88,7 +88,7 @@ void CubbleApp::run()
 	{
 	    if (numSteps == 0 && i == 0)
 		cudaProfilerStart();
-	    else if (numSteps == 0 && i == 100)
+	    else if (numSteps == 0 && i == 1)
 		cudaProfilerStop();
 	    
 	    simulator->integrate(false);
