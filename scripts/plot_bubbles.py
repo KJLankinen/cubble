@@ -132,7 +132,7 @@ def plot_3d():
     plt.show()
     
 def main():
-    plot_2d(4)
+    plot_2d(2)
 
 if __name__ == "__main__":
     main()

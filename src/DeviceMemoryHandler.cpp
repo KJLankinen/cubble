@@ -16,33 +16,6 @@ cubble::DeviceMemoryHandler::~DeviceMemoryHandler()
     freeMemory();
 }
 
-double* cubble::DeviceMemoryHandler::getDataPtr(cubble::BubbleProperty prop)
-{
-    // ASSUMPTION: Only properties of type 'double' are used.
-    // Note that this function exposes raw device memory. Proceed with caution.
-
-    assert(prop < cubble::BubbleProperty::NUM_VALUES);
-    double *dataPtr = nullptr;
-    assert(rawDeviceMemoryPtr != nullptr
-	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
-    
-    dataPtr = static_cast<double*>(rawDeviceMemoryPtr);
-    dataPtr += prop * stride;
-
-    return dataPtr;
-}
-
-void cubble::DeviceMemoryHandler::swapData()
-{
-    size_t numBytes = getMemorySizeInBytes();
-    double *temporaryData = getRawPtrToTemporaryData();
-    cudaMemcpy(static_cast<void*>(rawDeviceMemoryPtr),
-	       static_cast<void*>(temporaryData),
-	       numBytes,
-	       cudaMemcpyDeviceToDevice);
-    cudaMemset(static_cast<void*>(temporaryData), 0, numBytes);
-}
-
 void cubble::DeviceMemoryHandler::reserveMemory()
 {
     // This only allocates memory for the 'double' properties of bubbles.
@@ -66,6 +39,51 @@ void cubble::DeviceMemoryHandler::reserveMemory()
 		  << std::endl;
 }
 
+void cubble::DeviceMemoryHandler::swapData()
+{
+    cudaMemcpy(static_cast<void*>(rawDeviceMemoryPtr),
+	       static_cast<void*>(getRawPtrToTemporaryData()),
+	       getMemorySizeInBytes(),
+	       cudaMemcpyDeviceToDevice);
+}
+
+void cubble::DeviceMemoryHandler::resetTemporaryData()
+{
+    cudaMemset(static_cast<void*>(getRawPtrToTemporaryData()), 0, getMemorySizeInBytes());
+}
+
+double* cubble::DeviceMemoryHandler::getDataPtr(cubble::BubbleProperty prop)
+{
+    // Note that this function exposes raw device memory. Proceed with caution.
+    size_t propIdx = (size_t)prop;
+    assert(propIdx < (size_t)BubbleProperty::NUM_VALUES);
+    
+    double *dataPtr = nullptr;
+    assert(rawDeviceMemoryPtr != nullptr
+	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
+    
+    dataPtr = getRawPtr();
+    dataPtr += propIdx * stride;
+
+    return dataPtr;
+}
+
+double* cubble::DeviceMemoryHandler::getDataPtr(TemporaryBubbleProperty prop)
+{
+    // Note that this function exposes raw device memory. Proceed with caution.
+    size_t propIdx = (size_t)prop;
+    assert(propIdx < (size_t)BubbleProperty::NUM_VALUES);
+
+    double *dataPtr = nullptr;
+    assert(rawDeviceMemoryPtr != nullptr
+	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
+
+    dataPtr = getRawPtrToTemporaryData();
+    dataPtr += propIdx * stride;
+
+    return dataPtr;
+}
+
 double* cubble::DeviceMemoryHandler::getRawPtr()
 {
     return static_cast<double*>(rawDeviceMemoryPtr);
@@ -79,21 +97,13 @@ double* cubble::DeviceMemoryHandler::getRawPtrToTemporaryData()
     return tempPtr;
 }
 
-void cubble::DeviceMemoryHandler::resetData(cubble::BubbleProperty prop)
+size_t cubble::DeviceMemoryHandler::getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop)
 {
-    assert(prop < cubble::BubbleProperty::NUM_VALUES);
+    size_t propIdx = (size_t)prop;
+    size_t maxIdx = (size_t)BubbleProperty::NUM_VALUES;
+    assert(propIdx < maxIdx);
     
-    size_t numBytes = stride * sizeof(double);
-    cudaMemset(getDataPtr(prop), 0, numBytes);
-}
-
-void cubble::DeviceMemoryHandler::resetShortLivedData()
-{
-    size_t numTemporaryProperties = BubbleProperty::NUM_VALUES - BubbleProperty::ERROR;
-    assert(numTemporaryProperties == 3 && "Update how temporary properties should be reset!");
-    
-    size_t numBytes = stride * sizeof(double) * numTemporaryProperties;
-    cudaMemset(static_cast<void*>(getDataPtr(BubbleProperty::VOLUME)), 0, numBytes);
+    return (maxIdx - propIdx) * stride * sizeof(double);
 }
 
 void cubble::DeviceMemoryHandler::freeMemory()

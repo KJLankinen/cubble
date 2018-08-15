@@ -6,7 +6,7 @@
 
 namespace cubble
 {
-    enum BubbleProperty
+    enum class BubbleProperty
     {
 	X,
 	Y,
@@ -32,12 +32,20 @@ namespace cubble
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
+	
+	NUM_VALUES
+    };
 
-	// Add all temporary data (= data that is guaranteed to be up to date only for one iteration)
-	// here, so they can be reset with just one cudaMemset call.
-	ERROR,
+    // Memory for these aren't allocated per se.
+    // They're used only temporarily and thus are saved
+    // in the secondary (temporary) half of the memory pool.
+    enum class TemporaryBubbleProperty
+    {
 	ENERGY,
+	ERROR,
 	VOLUME,
+	REDUCTION_OUTPUT,
+	REDUCTION_TEMP,
 	
 	NUM_VALUES
     };
@@ -47,16 +55,20 @@ namespace cubble
     public:
 	DeviceMemoryHandler(size_t numBubbles);
 	~DeviceMemoryHandler();
-	double *getDataPtr(BubbleProperty prop);
-	void swapData();
+	
 	void reserveMemory();
+	void swapData();
+	void resetTemporaryData();
+	
+	double *getDataPtr(BubbleProperty prop);
+	double *getDataPtr(TemporaryBubbleProperty prop);
         double *getRawPtr();
 	double *getRawPtrToTemporaryData();
-	void resetData(BubbleProperty prop);
-	void resetShortLivedData();
-	size_t getNumValuesInMemory() { return stride * BubbleProperty::NUM_VALUES; }
+	
+	size_t getNumValuesInMemory() { return stride * (size_t)BubbleProperty::NUM_VALUES; }
         size_t getMemorySizeInBytes() { return sizeof(double) * getNumValuesInMemory(); }
 	size_t getMemoryStride() { return stride; }
+	size_t getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop);
 	
     private:
 	void freeMemory();

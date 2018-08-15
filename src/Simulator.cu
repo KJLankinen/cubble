@@ -7,13 +7,14 @@
 #include "Vec.h"
 #include "Util.h"
 
+#include "cub/cub/cub.cuh"
+
 #include <iostream>
 #include <sstream>
 #include <chrono>
 #include <algorithm>
 #include <vector>
 #include <curand.h>
-#include "cub/cub/cub.cuh"
 
 
 // ******************************
@@ -72,7 +73,7 @@ void cubble::Simulator::setupSimulation()
     double *dzdtOld = dmh->getDataPtr(BubbleProperty::DZDT_OLD);
     double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
     
-    double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
+    double *energies = dmh->getDataPtr(TemporaryBubbleProperty::ENERGY);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -155,9 +156,9 @@ void cubble::Simulator::integrate(bool useGasExchange)
     double *dzdtOld = dmh->getDataPtr(BubbleProperty::DZDT_OLD);
     double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
 
-    double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
-    double *errors = dmh->getDataPtr(BubbleProperty::ERROR);
-    double *volumes = dmh->getDataPtr(BubbleProperty::VOLUME);
+    double *energies = dmh->getDataPtr(TemporaryBubbleProperty::ENERGY);
+    double *errors = dmh->getDataPtr(TemporaryBubbleProperty::ERROR);
+    double *volumes = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
     
     do
     {
@@ -193,7 +194,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					   numBubbles,
 					   useGasExchange);
         
-        error = getMaxElement(errors, numBubbles);
+        error = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
 	
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
@@ -207,7 +208,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
-    ElasticEnergy = sumReduction(energies, numBubbles);
+    ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
     updateData<<<numBlocks, numThreads>>>(x, y, z, r,
 					  xPrd, yPrd, zPrd, rPrd,
@@ -228,15 +229,25 @@ void cubble::Simulator::integrate(bool useGasExchange)
     bool assignedToCellsAlready = false;
     if (numBubblesToKeep[0] != numBubbles)
     {
+	std::cout << "Starting removal of bubbles. Removing "
+		  << numBubbles - numBubblesToKeep[0]
+		  << " bubbles"
+		  << std::endl;
+	
         // HACK: This is REEEEEAAAAAALLY stupid and slow but it's temporary.
 	std::vector<int> tempVec(numBubblesToKeep[0]);
 	indicesToKeep.dataToVec(tempVec);
+        tempVec.resize(numBubblesToKeep[0]);
 	std::sort(tempVec.begin(), tempVec.end());
 	indicesToKeep = CudaContainer<int>(tempVec);
-	
-	double deltaVolume = sumReduction(volumes, numBubbles);
+
+	double deltaVolume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volumes, numBubbles);
+	std::cout << "Volume to redistribute: " << deltaVolume << std::endl;
 	deltaVolume /= (numBubblesToKeep[0]);
 
+	dmh->resetTemporaryData();
+	std::cout << "Temp data reset." << std::endl;
+	
         double *currentData = dmh->getRawPtr();
 	double *temporaryData = dmh->getRawPtrToTemporaryData();
 
@@ -244,23 +255,29 @@ void cubble::Simulator::integrate(bool useGasExchange)
 						      temporaryData,
 						      indicesToKeep.getDataPtr(),
 						      numBubblesToKeep[0],
+						      numBubbles,
 						      dmh->getMemoryStride(),
-						      BubbleProperty::R,
+						      (int)BubbleProperty::R,
 						      1.0 / env->getPi(),
 						      deltaVolume);
     
 	CUDA_CALL(cudaDeviceSynchronize());
 	CUDA_CALL(cudaPeekAtLastError());
+
+	std::cout << "Small bubbles removed." << std::endl;
 	
 	dmh->swapData();
 	numBubbles = numBubblesToKeep[0];
+
+	std::cout << "Bubbles left in simulation after removal: " << numBubbles << std::endl;
 	
-	assignBubblesToCells();
-	
+	assignBubblesToCells(true);
 	assignedToCellsAlready = true;
     }
-
+    
+    CUDA_CALL(cudaDeviceSynchronize());
     numBubblesToKeep[0] = 0;
+    CUDA_CALL(cudaDeviceSynchronize());
 
     ++integrationStep;
 
@@ -273,7 +290,7 @@ double cubble::Simulator::getVolumeOfBubbles() const
     const size_t numThreads = 512;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
-    double *volPtr = dmh->getDataPtr(BubbleProperty::VOLUME);
+    double *volPtr = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
     
     calculateVolumes<<<numBlocks, numThreads>>>(
 	dmh->getDataPtr(BubbleProperty::R), volPtr, numBubbles, env->getPi());
@@ -281,7 +298,7 @@ double cubble::Simulator::getVolumeOfBubbles() const
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());
 
-    double volume = sumReduction(volPtr, numBubbles);
+    double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
     
     return volume;
 }
@@ -289,7 +306,7 @@ double cubble::Simulator::getVolumeOfBubbles() const
 double cubble::Simulator::getAverageRadius() const
 {
     double *r = dmh->getDataPtr(BubbleProperty::R);
-    double avgRad = sumReduction(r, numBubbles);
+    double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad/= numBubbles;
     
     return avgRad;
@@ -328,52 +345,6 @@ void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 	b.setRadius(r[i]);
 	bubbles[i] = b;
     }
-}
-
-double cubble::Simulator::sumReduction(double *inputData, size_t lengthOfData) const
-{
-    // Stupid and inefficient, but it's just temporary
-    double *outputData = nullptr;
-    void *devTempStoragePtr = NULL;
-    size_t tempStorageBytes = 0;
-    std::vector<double> stupidVec(1);
-    
-    cub::DeviceReduce::Sum(devTempStoragePtr, tempStorageBytes, inputData, outputData, lengthOfData);
-
-    cudaMalloc(&devTempStoragePtr, tempStorageBytes);
-    cudaMalloc((void**)&outputData, sizeof(double));
-    
-    cub::DeviceReduce::Sum(devTempStoragePtr, tempStorageBytes, inputData, outputData, lengthOfData);
-    
-    cudaMemcpy(stupidVec.data(), outputData, sizeof(double), cudaMemcpyDeviceToHost);
-
-    cudaFree(outputData);
-    cudaFree(devTempStoragePtr);
-
-    return stupidVec[0];
-}
-
-double cubble::Simulator::getMaxElement(double *inputData, size_t lengthOfData) const
-{
-    // Stupid and inefficient, but it's just temporary
-    double *outputData = nullptr;
-    void *devTempStoragePtr = NULL;
-    size_t tempStorageBytes = 0;
-    std::vector<double> stupidVec(1);
-    
-    cub::DeviceReduce::Max(devTempStoragePtr, tempStorageBytes, inputData, outputData, lengthOfData);
-
-    cudaMalloc(&devTempStoragePtr, tempStorageBytes);
-    cudaMalloc((void**)&outputData, sizeof(double));
-    
-    cub::DeviceReduce::Max(devTempStoragePtr, tempStorageBytes, inputData, outputData, lengthOfData);
-    
-    cudaMemcpy(stupidVec.data(), outputData, sizeof(double), cudaMemcpyDeviceToHost);
-
-    cudaFree(outputData);
-    cudaFree(devTempStoragePtr);
-
-    return stupidVec[0];   
 }
 
 void cubble::Simulator::generateBubbles()
@@ -444,7 +415,7 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     double *z = dmh->getDataPtr(BubbleProperty::Z);
     double *r = dmh->getDataPtr(BubbleProperty::R);
 
-    const double minCellSize = getMaxElement(r, numBubbles);
+    const double minCellSize = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, r, numBubbles);
     
     if (useVerboseOutput)
 	std::cout << "\tUsing grid size (" << gridSize.x
@@ -475,8 +446,6 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     cudaMemset((void*)indices.getDataPtr(), 0, sizeof(int) * numBubbles);
     cudaMemset((void*)neighborIndices.getDataPtr(), 0, sizeof(int) * numBubbles * neighborStride);
     cudaMemset((void*)indicesToKeep.getDataPtr(), 0, sizeof(int) * numBubbles);
-    
-    dmh->resetShortLivedData();
     
     if (useVerboseOutput)
 	std::cout << "\tCalculating offsets..." << std::endl;
@@ -848,6 +817,7 @@ void cubble::accelerate(double *x,
 	    {
 		const int index = neighborIndices[tid * neighborStride + i];
 		DEVICE_ASSERT(index < numBubbles);
+		DEVICE_ASSERT(index != tid);
 		
 		const double radius2 = r[index];
 	        dvec pos2(0, 0, 0);
@@ -867,8 +837,8 @@ void cubble::accelerate(double *x,
 		    continue;
 		
 		const double compressionDistance = radii - magnitude;
-		const double relativeCompressionDistance = compressionDistance / radii;
-		
+		const double relativeCompressionDistance = 1.0 - magnitude / radii;
+
 		DEVICE_ASSERT(relativeCompressionDistance >= 0 && relativeCompressionDistance < 1.0);
 	        
 		acceleration += distance * relativeCompressionDistance / magnitude;
@@ -1067,12 +1037,12 @@ void cubble::updateData(double *x,
     }
 }
 
-
 __global__
 void cubble::removeSmallBubbles(double *currentData,
 				double *temporaryData,
 				int *indicesToKeep,
 				int numBubblesToKeep,
+				int numBubbles,
 				int memoryStride,
 				int memoryIndexOfRadius,
 				double invPi,
@@ -1082,7 +1052,7 @@ void cubble::removeSmallBubbles(double *currentData,
     if (tid < numBubblesToKeep)
     {
 	int idx = indicesToKeep[tid];
-	DEVICE_ASSERT(idx < numBubblesToKeep);
+	DEVICE_ASSERT(idx < numBubbles);
 	
 	double radius = currentData[memoryStride * memoryIndexOfRadius + idx];
 	double volume = radius * radius;
