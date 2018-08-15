@@ -35,7 +35,9 @@ void CubbleApp::run()
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
 
+    std::cout << "Before profiler stop." << std::endl;
     cudaProfilerStop();
+    std::cout << "After profiler stop" << std::endl;
     
     auto printPhi = [](double phi, double phiTarget) -> void
 	{
@@ -44,8 +46,11 @@ void CubbleApp::run()
 	    << std::endl;
 	};
 
+    std::cout << "Before phi & snapshot" << std::endl;
     printPhi(phi, phiTarget);
+    std::cout << "After phi" << std::endl;
     saveSnapshotToFile();
+    std::cout << "after snap" << std::endl;
 
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
