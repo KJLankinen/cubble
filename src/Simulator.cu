@@ -316,16 +316,12 @@ void cubble::Simulator::integrate(bool useGasExchange)
 
 double cubble::Simulator::getVolumeOfBubbles() const
 {
-    std::cout << "Starting volume redux." << std::endl;
-    
     nvtxRangePushA("Volume reduction.");
     const size_t numThreads = 512;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
     double *volPtr = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
 
-    std::cout << "Starting volume kernel." << std::endl;
-    
     nvtxRangePushA("Volume kernel.");
     calculateVolumes<<<numBlocks, numThreads>>>(
 	dmh->getDataPtr(BubbleProperty::R), volPtr, numBubbles, env->getPi());
@@ -335,15 +331,11 @@ double cubble::Simulator::getVolumeOfBubbles() const
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());
 
-    std::cout << "Starting cub redux" << std::endl;
-    
     nvtxRangePushA("cub reduction.");
     double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
     nvtxRangePop();
     
     nvtxRangePop();
-    
-    std::cout << "volume redux done." << std::endl;
     
     return volume;
 }
