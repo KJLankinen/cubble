@@ -4,9 +4,9 @@
     "KParameter": 0.0001,
     "MaxDeltaEnergy": 0.001,
     "MuZero": 0.001,
-    "NumBubbles": 1000,
+    "NumBubbles": 100000,
     "NumBubblesPerCell": 96,
-    "NumIntegrationSteps": 100000,
+    "NumIntegrationSteps": 3000000,
     "NumStepsToRelax": 1000,
     "PhiTarget": 0.9,
     "RngSeed": 127321,
@@ -14,5 +14,5 @@
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.00027081141169060774
+    "TimeStep": 0.0002496617495158725
 }
