@@ -1,5 +1,4 @@
 #include <iostream>
-#include <cuda_profiler_api.h>
 
 #include "CubbleApp.h"
 #include "Fileio.h"
@@ -26,7 +25,6 @@ CubbleApp::~CubbleApp()
 
 void CubbleApp::run()
 {
-    cudaProfilerStart();
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
@@ -35,8 +33,6 @@ void CubbleApp::run()
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
 
-    cudaProfilerStop();
-    
     auto printPhi = [](double phi, double phiTarget) -> void
 	{
 	    std::cout << "Volume ratios: current: " << phi
@@ -52,11 +48,6 @@ void CubbleApp::run()
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
-	if (numSteps == 0)
-	    cudaProfilerStart();
-	else if (numSteps == 100)
-	    cudaProfilerStop();
-	
 	env->setTfr(env->getTfr() - scaleAmount);
 	simulator->integrate();
 	phi = bubbleVolume / env->getSimulationBoxVolume();
@@ -81,11 +72,6 @@ void CubbleApp::run()
 
 	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
 	{
-	    if (numSteps == 0 && i == 0)
-		cudaProfilerStart();
-	    else if (numSteps == 0 && i == 100)
-		cudaProfilerStop();
-	    
 	    simulator->integrate(false);
 	    time += env->getTimeStep();
 	}

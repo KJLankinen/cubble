@@ -62,6 +62,9 @@ namespace cubble
 	const int neighborStride = 100;
 	size_t integrationStep = 0;
 
+	cudaEvent_t start = 0;
+	cudaEvent_t stop = 0;
+
 	std::unique_ptr<DeviceMemoryHandler> dmh;
 	std::shared_ptr<Env> env;
         
