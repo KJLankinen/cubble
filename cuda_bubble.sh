@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1 --constraint='pascal'		## use K80 or P100
 #SBATCH --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL
 
-module load goolfc/triton-2017a					## toolchain
+module load goolfc/triton-2016a					## toolchain
 
 srun make clean
 srun make
