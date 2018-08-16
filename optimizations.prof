@@ -1,0 +1,287 @@
+rm -f bin/*
+rm -f src/*~
+rm -f scripts/*~
+g++ src/Main.cpp -Wall -std=c++14 -Iinclude/  -O2 -DDATA_PATH="data/" -DNUM_DIM=2 -c -o bin/Main.o
+g++ src/CubbleApp.cpp -Wall -std=c++14 -Iinclude/  -O2 -DDATA_PATH="data/" -DNUM_DIM=2 -c -o bin/CubbleApp.o
+nvcc src/Simulator.cu -arch=sm_30 -std=c++11 -Iinclude/  -O2 -DDATA_PATH="data/" -DNUM_DIM=2 -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__ -dc -o bin/Simulator.o
+g++ src/DeviceMemoryHandler.cpp -Wall -std=c++14 -Iinclude/  -O2 -DDATA_PATH="data/" -DNUM_DIM=2 -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__ -c -o bin/DeviceMemoryHandler.o
+nvcc -arch=sm_30 -dlink bin/Simulator.o -o bin/GPUCode.o
+g++  bin/Main.o  bin/CubbleApp.o  bin/Simulator.o  bin/DeviceMemoryHandler.o bin/GPUCode.o -lcudart -lcurand -lnvToolsExt -o bin/cubble
+------------------------------------------------------------------------
+The current program simulates the bubbles in 2D.
+If you want a 3D simulation, change the number of dimensions 'NUM_DIM'
+in Makefile and rebuild the program.
+------------------------------------------------------------------------
+
+
+Reading parameters from file data/data.json
+"The target volume fraction.": 0.9
+"The viscosity of the fluid": 0.001
+"The surface tension (spring constant) of the fluid.": 1
+"The average radius of the bubbles.": 0.06
+"The standard deviation of the bubble radii.": 0.0126
+"The error tolerance level for the integration.": 1e-05
+"The initial time step with which to increment the simulation time.": 1e-05
+"The seed for the RNG.": 127321
+"How much to scale the side length(s) of the simulation box per scaling iteration.": 0.0001
+"How many integration steps to do.": 100
+"How many bubbles per cell.": 96
+"The stem of the filename where to save the snap shots to.": snapshot
+"How many steps to take per 'relaxation round' when equilibrating the bubble bath.": 1000
+"Maximum allowed energy change when relaxing the bubble bath.": 0.001
+"A bundle of constants related to gas exchange between bubbles.": 0.0001
+"Total number of bubbles to simulate.": 1000
+==83526== NVPROF is profiling process 83526, command: bin/cubble data.json save.json
+Number of bubbles given: 1024, leading to stride of 1024
+Allocating 327680 bytes of device memory for 1024 bubbles.
+Memory is allocated for the smallest multiplicate of 32 that's >= 1024.
+
+----------Properties of current device----------
+
+	General
+	-------
+	Name: Tesla P100-PCIE-16GB
+	Compute capability: 6.0
+
+	Memory
+	------
+	Total global memory (bytes): 17071734784
+	Shared memory per block (bytes): 49152
+	Total constant memory (bytes): 65536
+	Maximum number of registers per block: 65536
+
+	Warp, threads, blocks, grid
+	---------------------------
+	Warp size: 32
+	Maximum number of threads per block: 1024
+	Maximum block size: (1024, 1024, 64)
+	Maximum grid size: (2147483647, 65535, 65535)
+	Multiprocessor count: 56
+
+If you want more info, see src/Util.h:201
+and 'Device Management' section of the CUDA Runtime API docs.
+------------------------------------------------
+
+**Starting the simulation setup.**
+
+Starting to generate data for bubbles.
+	Generating data...
+	Assigning data to bubbles...
+Starting to assign bubbles to cells.
+	Using grid size (4, 4, 1) with total of 16 cells.
+	Calculating offsets...
+	Assigning bubbles to cells...
+	Finding neighbors for each bubble...
+Volume ratios: current: 0.824772, target: 0.9
+Writing a snap shot to a file... Done.
+Starting the scaling of the simulation box.
+Volume ratios: current: 0.824815, target: 0.9
+Volume ratios: current: 0.869514, target: 0.9
+Scaling took total of 1640 steps.
+Volume ratios: current: 0.900006, target: 0.9
+Writing a snap shot to a file... Done.
+Starting the relaxation of the foam...
+Number of simulation steps relaxed: 0, delta energy: 1.29966
+Number of simulation steps relaxed: 1000, delta energy: 0.372724
+Number of simulation steps relaxed: 2000, delta energy: 0.359216
+Number of simulation steps relaxed: 3000, delta energy: 0.167636
+Number of simulation steps relaxed: 4000, delta energy: 0.0739734
+Number of simulation steps relaxed: 5000, delta energy: 0.0322125
+Number of simulation steps relaxed: 6000, delta energy: 0.0185546
+Number of simulation steps relaxed: 7000, delta energy: 0.019438
+Number of simulation steps relaxed: 8000, delta energy: 0.0263101
+Number of simulation steps relaxed: 9000, delta energy: 0.0376278
+Number of simulation steps relaxed: 10000, delta energy: 0.0268442
+Number of simulation steps relaxed: 11000, delta energy: 0.0189799
+Number of simulation steps relaxed: 12000, delta energy: 0.0123787
+Number of simulation steps relaxed: 13000, delta energy: 0.0135043
+Number of simulation steps relaxed: 14000, delta energy: 0.0192035
+Number of simulation steps relaxed: 15000, delta energy: 0.0279414
+Number of simulation steps relaxed: 16000, delta energy: 0.0323466
+Number of simulation steps relaxed: 17000, delta energy: 0.0208756
+Number of simulation steps relaxed: 18000, delta energy: 0.0126172
+Number of simulation steps relaxed: 19000, delta energy: 0.00963797
+Number of simulation steps relaxed: 20000, delta energy: 0.0132753
+Number of simulation steps relaxed: 21000, delta energy: 0.0113517
+Number of simulation steps relaxed: 22000, delta energy: 0.0041399
+Number of simulation steps relaxed: 23000, delta energy: 0.0020216
+Number of simulation steps relaxed: 24000, delta energy: 0.00127636
+Final delta energy 0.000926147 after 25000 steps.
+Writing a snap shot to a file... Done.
+**Setup done.**
+
+**Starting the simulation proper.**
+Current average radius after 0 steps: 0.0602127
+Writing a snap shot to a file... Done.
+Writing a snap shot to a file... Done.
+**Simulation has been finished.**
+Goodbye!
+Writing a snap shot to a file... Done.
+
+Saving parameters to file data/save.json
+==83526== Profiling application: bin/cubble data.json save.json
+==83526== Profiling result:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 64.96%  8.5771ms       100  85.770us  4.7040us  167.71us  cubble::updateData(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, int, double, double, bool)
+ 19.44%  2.5663ms       105  24.441us  23.616us  24.960us  cubble::accelerate(double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, double, double, double, double, bool)
+  3.61%  476.29us       105  4.5360us  4.3830us  6.1760us  cubble::correct(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  3.44%  454.43us       105  4.3270us  4.1280us  4.7040us  cubble::predict(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  2.70%  356.76us       106  3.3650us  3.1360us  3.5840us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*, int, cub::Max, double>(int, cub::Max, cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*)
+  2.49%  329.24us       101  3.2590us  2.4960us  3.4230us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*, int, cub::Sum, double>(int, cub::Sum, cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*)
+  1.66%  219.20us       215  1.0190us     991ns  1.3760us  [CUDA memcpy DtoH]
+  0.81%  106.53us         1  106.53us  106.53us  106.53us  cubble::calculateOffsets(double*, double*, double*, cubble::Cell*, cubble::vec<double>, int, int)
+  0.63%  82.559us         1  82.559us  82.559us  82.559us  cubble::bubblesToCells(double*, double*, double*, int*, cubble::Cell*, cubble::vec<double>, int)
+  0.24%  31.871us         1  31.871us  31.871us  31.871us  cubble::findNeighbors(double*, double*, double*, double*, int*, cubble::Cell*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, int, int)
+  0.02%  3.0720us         4     768ns     768ns     768ns  [CUDA memset]
+
+==83526== Unified Memory profiling result:
+Device "Tesla P100-PCIE-16GB (0)"
+   Count  Avg Size  Min Size  Max Size  Total Size  Total Time  Name
+     101  4.0000KB  4.0000KB  4.0000KB  404.0000KB  190.0800us  Host To Device
+     101  4.0000KB  4.0000KB  4.0000KB  404.0000KB  118.4000us  Device To Host
+     101         -         -         -           -  2.597726ms  GPU Page fault groups
+Total CPU Page faults: 101
+
+==83526== API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 50.89%  17.844ms       625  28.550us  5.7480us  7.8320ms  cudaLaunch
+ 28.57%  10.017ms       306  32.736us  2.0530us  172.33us  cudaDeviceSynchronize
+ 11.25%  3.9462ms       215  18.354us  12.570us  34.876us  cudaMemcpy
+  5.11%  1.7914ms     10378     172ns     140ns  19.153us  cudaSetupArgument
+  2.80%  980.06us       414  2.3670us  1.7890us  18.724us  cudaFuncGetAttributes
+  0.63%  222.15us       625     355ns     214ns  10.244us  cudaConfigureCall
+  0.37%  130.23us         4  32.556us  28.601us  36.276us  cudaMemset
+  0.27%  93.457us       307     304ns     232ns     469ns  cudaPeekAtLastError
+  0.06%  19.389us         1  19.389us  19.389us  19.389us  cudaMallocManaged
+  0.05%  16.850us         1  16.850us  16.850us  16.850us  cudaFree
+  0.00%  1.6270us         3     542ns     349ns     918ns  cudaGetDevice
+  0.00%  1.3190us         3     439ns     329ns     643ns  cudaDeviceGetAttribute
+
+==83526== NVTX result:
+==83526==   Thread "<unnamed>" (id = 172220096)
+==83526==     Domain "<unnamed>"
+==83526==       Range "Accelerate" (29113 times, total time: 355.87ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  2.5663ms       105  24.441us  23.616us  24.960us  cubble::accelerate(double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, double, double, double, double, bool)
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  1.1099ms       105  10.570us  8.9530us  16.095us  cudaLaunch
+==83526==       Range "Correct" (29113 times, total time: 271.07ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  476.29us       105  4.5360us  4.3830us  6.1760us  cubble::correct(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  726.34us       105  6.9170us  6.2080us  13.191us  cudaLaunch
+==83526==       Range "Cub reduction" (29113 times, total time: 974.70ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 77.03%  353.62us       105  3.3670us  3.3280us  3.5840us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*, int, cub::Max, double>(int, cub::Max, cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*)
+ 22.97%  105.44us       105  1.0040us     991ns  1.0240us  [CUDA memcpy DtoH]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 75.82%  2.0823ms       105  19.831us  16.723us  34.876us  cudaMemcpy
+ 24.18%  664.02us       105  6.3230us  5.7480us  11.935us  cudaLaunch
+==83526==       Range "Predict" (29113 times, total time: 1.01238s)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  454.43us       105  4.3270us  4.1280us  4.7040us  cubble::predict(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  10.617ms       105  101.11us  8.6990us  7.8320ms  cudaLaunch
+==83526==       Range "Scaling." (1 times, total time: 354.29ms)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "Setup" (1 times, total time: 10.958ms)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "Simulation" (1 times, total time: 82.371ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 64.99%  8.5771ms       100  85.770us  4.7040us  167.71us  cubble::updateData(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, int, double, double, bool)
+ 19.45%  2.5663ms       105  24.441us  23.616us  24.960us  cubble::accelerate(double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, double, double, double, double, bool)
+  3.61%  476.29us       105  4.5360us  4.3830us  6.1760us  cubble::correct(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  3.44%  454.43us       105  4.3270us  4.1280us  4.7040us  cubble::predict(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  2.70%  356.76us       106  3.3650us  3.1360us  3.5840us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*, int, cub::Max, double>(int, cub::Max, cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*)
+  2.49%  329.24us       101  3.2590us  2.4960us  3.4230us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*, int, cub::Sum, double>(int, cub::Sum, cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*)
+  1.62%  213.76us       211  1.0130us     991ns  1.3760us  [CUDA memcpy DtoH]
+  0.81%  106.53us         1  106.53us  106.53us  106.53us  cubble::calculateOffsets(double*, double*, double*, cubble::Cell*, cubble::vec<double>, int, int)
+  0.63%  82.559us         1  82.559us  82.559us  82.559us  cubble::bubblesToCells(double*, double*, double*, int*, cubble::Cell*, cubble::vec<double>, int)
+  0.24%  31.871us         1  31.871us  31.871us  31.871us  cubble::findNeighbors(double*, double*, double*, double*, int*, cubble::Cell*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, int, int)
+  0.02%  3.0720us         4     768ns     768ns     768ns  [CUDA memset]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 81.65%  17.844ms       625  28.550us  5.7480us  7.8320ms  cudaLaunch
+ 17.75%  3.8797ms       211  18.387us  12.570us  34.876us  cudaMemcpy
+  0.60%  130.23us         4  32.556us  28.601us  36.276us  cudaMemset
+==83526==       Range "Update data" (27740 times, total time: 1.85105s)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  8.5771ms       100  85.770us  4.7040us  167.71us  cubble::updateData(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, int, double, double, bool)
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  2.2519ms       100  22.518us  20.780us  32.316us  cudaLaunch
+==83526==       Range "assignBubblesToCells" (278 times, total time: 332.37ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 46.69%  106.53us         1  106.53us  106.53us  106.53us  cubble::calculateOffsets(double*, double*, double*, cubble::Cell*, cubble::vec<double>, int, int)
+ 36.19%  82.559us         1  82.559us  82.559us  82.559us  cubble::bubblesToCells(double*, double*, double*, int*, cubble::Cell*, cubble::vec<double>, int)
+ 13.97%  31.871us         1  31.871us  31.871us  31.871us  cubble::findNeighbors(double*, double*, double*, double*, int*, cubble::Cell*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, int, int)
+  1.37%  3.1360us         1  3.1360us  3.1360us  3.1360us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*, int, cub::Max, double>(int, cub::Max, cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*)
+  1.35%  3.0720us         4     768ns     768ns     768ns  [CUDA memset]
+  0.43%     992ns         1     992ns     992ns     992ns  [CUDA memcpy DtoH]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 50.22%  130.23us         4  32.556us  28.601us  36.276us  cudaMemset
+ 42.54%  110.30us         4  27.574us  24.896us  30.215us  cudaLaunch
+  7.24%  18.761us         1  18.761us  18.761us  18.761us  cudaMemcpy
+==83526==       Range "generateBubbles" (1 times, total time: 8.6571ms)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "getAverageRadius" (1 times, total time: 64.112us)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 70.91%  2.4960us         1  2.4960us  2.4960us  2.4960us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*, int, cub::Sum, double>(int, cub::Sum, cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*)
+ 29.09%  1.0240us         1  1.0240us  1.0240us  1.0240us  [CUDA memcpy DtoH]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 58.21%  31.745us         1  31.745us  31.745us  31.745us  cudaLaunch
+ 41.79%  22.792us         1  22.792us  22.792us  22.792us  cudaMemcpy
+==83526==       Range "getBubbles" (6 times, total time: 875.45us)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  10.880us         8  1.3600us  1.3120us  1.3760us  [CUDA memcpy DtoH]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  129.76us         8  16.219us  12.570us  26.223us  cudaMemcpy
+==83526==       Range "getGridSize" (278 times, total time: 74.017us)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "getVolumeOfBubbles" (1 times, total time: 118.89us)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "integrate" (27740 times, total time: 6.61306s)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 65.03%  8.5771ms       100  85.770us  4.7040us  167.71us  cubble::updateData(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, int, double, double, bool)
+ 19.46%  2.5663ms       105  24.441us  23.616us  24.960us  cubble::accelerate(double*, double*, double*, double*, double*, double*, double*, double*, double*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, double, double, double, double, bool)
+  3.61%  476.29us       105  4.5360us  4.3830us  6.1760us  cubble::correct(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  3.45%  454.43us       105  4.3270us  4.1280us  4.7040us  cubble::predict(double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, double*, cubble::vec<double>, cubble::vec<double>, double, int, bool)
+  2.70%  356.76us       106  3.3650us  3.1360us  3.5840us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*, int, cub::Max, double>(int, cub::Max, cub::DeviceReducePolicy<double, int, cub::Max>::Policy600, double*, double*)
+  2.48%  326.75us       100  3.2670us  3.2310us  3.4230us  void cub::DeviceReduceSingleTileKernel<cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*, int, cub::Sum, double>(int, cub::Sum, cub::DeviceReducePolicy<double, int, cub::Sum>::Policy600, double*, double*)
+  1.57%  207.30us       206  1.0060us     991ns  1.2480us  [CUDA memcpy DtoH]
+  0.81%  106.53us         1  106.53us  106.53us  106.53us  cubble::calculateOffsets(double*, double*, double*, cubble::Cell*, cubble::vec<double>, int, int)
+  0.63%  82.559us         1  82.559us  82.559us  82.559us  cubble::bubblesToCells(double*, double*, double*, int*, cubble::Cell*, cubble::vec<double>, int)
+  0.24%  31.871us         1  31.871us  31.871us  31.871us  cubble::findNeighbors(double*, double*, double*, double*, int*, cubble::Cell*, int*, int*, cubble::vec<double>, cubble::vec<double>, int, int, int, int)
+  0.02%  3.0720us         4     768ns     768ns     768ns  [CUDA memset]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+ 81.95%  17.812ms       624  28.545us  5.7480us  7.8320ms  cudaLaunch
+ 17.45%  3.7936ms       206  18.415us  15.631us  34.876us  cudaMemcpy
+  0.60%  130.23us         4  32.556us  28.601us  36.276us  cudaMemset
+==83526==       Range "setupSimulation" (1 times, total time: 10.877ms)
+No kernels were profiled in this range.
+==83526==     API calls:
+No API activities were profiled in this range.
+==83526==       Range "snapshot" (6 times, total time: 16.142ms)
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  10.880us         8  1.3600us  1.3120us  1.3760us  [CUDA memcpy DtoH]
+==83526==     API calls:
+Time(%)      Time     Calls       Avg       Min       Max  Name
+100.00%  129.76us         8  16.219us  12.570us  26.223us  cudaMemcpy
