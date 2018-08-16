@@ -84,11 +84,12 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
     size_t numIntegrationSteps = 0;
     if (printTimings)
 	std::cout << "\tStarting loop..." << std::endl;
+    
+    if (integrationStep == 15)
+	cudaProfilerStart();
+    
     do
-    {
-	if (integrationStep == 15 && numIntegrationSteps == 15)
-	    cudaProfilerStart();
-	
+    {	
 	float elapsedTime = 0.0f;
 	cudaEventRecord(start, 0);
 	predict<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
@@ -165,11 +166,11 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 	    timeStep *= 0.5;
 
 	++numIntegrationSteps;
-	
-	if (integrationStep == 15 && numIntegrationSteps == 20)
-	    cudaProfilerStop();
     }
     while (error > env->getErrorTolerance());
+	
+    if (integrationStep == 15)
+	cudaProfilerStop();
     
     if (printTimings)
 	std::cout << "\tLoop done..." << std::endl;
