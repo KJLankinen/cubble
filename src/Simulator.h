@@ -199,7 +199,7 @@ namespace cubble
 					    int numBubbles,
 					    int neighborStride,
 					    double fZeroPerMuZero,
-					    double kParam)
+					    double kParam);
     
     __global__
     void accelerate(double *x,

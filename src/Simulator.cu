@@ -84,25 +84,26 @@ void cubble::Simulator::setupSimulation()
     double *ay = dmh->getDataPtr(AccelerationProperty::Y);
     double *az = dmh->getDataPtr(AccelerationProperty::Z);
     double *ar = dmh->getDataPtr(AccelerationProperty::R);
-    double *e = dmh->getDataPtr(AccelerationProperty::E)
+    double *e = dmh->getDataPtr(AccelerationProperty::E);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
     const size_t numThreads = 256;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+    const size_t numBlocksForAcc = (size_t)std::ceil(numBubbles * neighborStride / (float)numThreads);
 
     double timeStep = env->getTimeStep();
 
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
 							     ax, ay, az, ar, e,
 							     numberOfNeighbors.getDataPtr(),
-							     neighborIndices.getDataPtr()
+							     neighborIndices.getDataPtr(),
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
-							     useGasExchange);
+							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -119,12 +120,12 @@ void cubble::Simulator::setupSimulation()
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
 							     ax, ay, az, ar, e,
 							     numberOfNeighbors.getDataPtr(),
-							     neighborIndices.getDataPtr()
+							     neighborIndices.getDataPtr(),
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
-							     useGasExchange);
+							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -185,7 +186,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
     double *ay = dmh->getDataPtr(AccelerationProperty::Y);
     double *az = dmh->getDataPtr(AccelerationProperty::Z);
     double *ar = dmh->getDataPtr(AccelerationProperty::R);
-    double *e = dmh->getDataPtr(AccelerationProperty::E)
+    double *e = dmh->getDataPtr(AccelerationProperty::E);
     
     do
     {
@@ -201,7 +202,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 								 ax, ay, az, ar, e,
 								 numberOfNeighbors.getDataPtr(),
-								 neighborIndices.getDataPtr()
+								 neighborIndices.getDataPtr(),
 								 tfr - lbb,
 								 numBubbles,
 								 neighborStride,
@@ -924,7 +925,7 @@ void cubble::createAccelerationArray(double *x,
 	    tempVal = 1.0 / magnitude;
 	    
 	    x2 *= tempVal - radii;
-	    yy *= tempVal - radii;
+	    y2 *= tempVal - radii;
 	    z2 *= tempVal - radii;
 
 	    ax[tid] = x2;

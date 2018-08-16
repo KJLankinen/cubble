@@ -100,7 +100,7 @@ double *cubble::DeviceMemoryHandler::getDataPtr(AccelerationProperty prop)
 	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
 
     dataPtr = getRawPtrToTemporaryData();
-    dataPtr += propIdx * stride * neighboStride;
+    dataPtr += propIdx * stride * neighborStride;
 
     assert(dataPtr < getRawPtr() + getNumPermanentValuesInMemory() + getNumTemporaryValuesInMemory());
 
@@ -125,7 +125,7 @@ size_t cubble::DeviceMemoryHandler::getNumTemporaryValuesInMemory() const
     return (size_t)AccelerationProperty::NUM_VALUES * neighborStride * stride;
 }
 
-size_t cubble::DeviceMemoryHandler::getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop)
+size_t cubble::DeviceMemoryHandler::getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop) const
 {
     size_t valuesBefore = ((size_t)prop + (size_t)BubbleProperty::NUM_VALUES) * stride;
     
