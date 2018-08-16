@@ -59,7 +59,7 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
-	const int neighborStride = 100;
+	const int neighborStride = 30;
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
@@ -161,6 +161,45 @@ namespace cubble
 		 double timeStep,
 		 int numBubbles,
 		 bool useGasExchange);
+
+    __global__
+    void createAccelerationArray(double *x,
+				 double *y,
+				 double *z,
+				 double *r,
+				 
+				 double *ax,
+				 double *ay,
+				 double *az,
+				 double *ar,
+				 double *e,
+				 
+				 int *numberOfNeighbors,
+				 int *neighborIndices,
+				 dvec interval,
+				 int numBubbles,
+				 int neighborStride,
+				 double pi,
+				 bool useGasExchange);
+
+    __global__
+    void calculateVelocityFromAccelerations(double *ax,
+					    double *ay,
+					    double *az,
+					    double *ar,
+					    double *e,
+					    
+					    double *dxdt,
+					    double *dydt,
+					    double *dzdt,
+					    double *drdt,
+					    
+					    double *energies,
+					    
+					    int numBubbles,
+					    int neighborStride,
+					    double fZeroPerMuZero,
+					    double kParam)
     
     __global__
     void accelerate(double *x,
