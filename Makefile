@@ -60,7 +60,7 @@ C_GPU := nvcc
 # External libraries to link
 # -----------------------------------------------------
 
-LIBS := -lcudart -lcurand
+LIBS := -lcudart -lcurand -lnvToolsExt
 
 
 # -----------------------------------------------------
