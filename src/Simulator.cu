@@ -167,11 +167,11 @@ void cubble::Simulator::integrate(bool useGasExchange)
     double *errors = dmh->getDataPtr(TemporaryBubbleProperty::ERROR);
     double *volumes = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
     
+    if (integrationStep == 15)
+	cudaProfilerStart();
+    
     do
     {
-	if (integrationStep == 15 && numIntegrationSteps == 15)
-	    cudaProfilerStart();
-	
 	nvtxRangePushA("Predict");
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
@@ -221,11 +221,11 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	    timeStep *= 0.5;
 
 	++numIntegrationSteps;
-	
-	if (integrationStep == 15 && numIntegrationSteps == 20)
-	    cudaProfilerStop();
     }
     while (error > env->getErrorTolerance());
+	
+    if (integrationStep == 15)
+	cudaProfilerStop();
     
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
