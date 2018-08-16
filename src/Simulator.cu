@@ -126,7 +126,7 @@ void cubble::Simulator::setupSimulation()
 
 void cubble::Simulator::integrate(bool useGasExchange)
 {
-  nvtxRangePushA(__FUNCTION__);
+    nvtxRangePushA(__FUNCTION__);
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
@@ -169,7 +169,10 @@ void cubble::Simulator::integrate(bool useGasExchange)
     
     do
     {
-      nvtxRangePushA("Predict");
+	if (integrationStep == 15 && numIntegrationSteps == 15)
+	    cudaProfilerStart();
+	
+	nvtxRangePushA("Predict");
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
 					   dxdt, dydt, dzdt, drdt,
@@ -218,6 +221,9 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	    timeStep *= 0.5;
 
 	++numIntegrationSteps;
+	
+	if (integrationStep == 15 && numIntegrationSteps == 20)
+	    cudaProfilerStop();
     }
     while (error > env->getErrorTolerance());
     

@@ -120,7 +120,6 @@ void CubbleApp::run()
 
     nvtxRangePushA("Simulation");
 
-    cudaProfilerStart();    
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	simulator->integrate(true);
@@ -142,8 +141,6 @@ void CubbleApp::run()
     saveSnapshotToFile();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
-
-    cudaProfilerStop();
 }
 
 void CubbleApp::saveSnapshotToFile()
