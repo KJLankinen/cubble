@@ -17,6 +17,9 @@
 #include <thrust/extrema.h>
 #include <thrust/execution_policy.h>
 
+#include <cuda_profiler_api.h>
+#include <nvToolsExt.h>
+
 
 // ******************************
 // Class functions run on CPU
@@ -83,6 +86,9 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 	std::cout << "\tStarting loop..." << std::endl;
     do
     {
+	if (integrationStep == 15 && numIntegrationSteps == 15)
+	    cudaProfilerStart();
+	
 	float elapsedTime = 0.0f;
 	cudaEventRecord(start, 0);
 	predict<<<gridSize, numThreads, sizeof(Bubble) * maxNumBubbles>>>(
@@ -159,6 +165,9 @@ void cubble::Simulator::integrate(bool useGasExchange, bool printTimings)
 	    timeStep *= 0.5;
 
 	++numIntegrationSteps;
+	
+	if (integrationStep == 15 && numIntegrationSteps == 20)
+	    cudaProfilerStop();
     }
     while (error > env->getErrorTolerance());
     
