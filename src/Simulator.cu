@@ -89,7 +89,7 @@ void cubble::Simulator::setupSimulation()
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
-    const size_t numThreads = 256;
+    const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
     const size_t numBlocksForAcc = (size_t)std::ceil(numBubbles * neighborStride / (float)numThreads);
 
@@ -144,7 +144,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
-    const size_t numThreads = 256;
+    const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
     const size_t numBlocksForAcc = (size_t)std::ceil(numBubbles * neighborStride / (float)numThreads);
 
@@ -348,7 +348,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
 double cubble::Simulator::getVolumeOfBubbles() const
 {
     nvtxRangePushA(__FUNCTION__);
-    const size_t numThreads = 256;
+    const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
     double *volPtr = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
@@ -462,7 +462,7 @@ void cubble::Simulator::generateBubbles()
 
     std::cout << "\tAssigning data to bubbles..." << std::endl;;
 
-    const size_t numThreads = 256;
+    const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil((float)numBubbles / (float)numThreads);
     assignDataToBubbles<<<numBlocks, numThreads>>>(x, y, z,
 						   xPrd, yPrd, zPrd,
@@ -481,7 +481,7 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
     const dvec cellSize = (env->getTfr() - env->getLbb()) / domainDim;
-    const size_t numThreads = 256;
+    const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
     const int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
 
@@ -775,7 +775,7 @@ void cubble::findNeighbors(double *x,
 	    {
 		int index = atomicAdd(&numberOfNeighbors[gid1], 1);
 		DEVICE_ASSERT(index < neighborStride);
-		index = neighborStride * index + gid1;
+		index = numBubbles * index + gid1;
 		DEVICE_ASSERT(index < numBubbles * neighborStride);
 		neighborIndices[index] = gid2;
 
@@ -783,7 +783,7 @@ void cubble::findNeighbors(double *x,
 		{
 		    index = atomicAdd(&numberOfNeighbors[gid2], 1);
 		    DEVICE_ASSERT(index < neighborStride);
-		    index = neighborStride * index + gid2;
+		    index = numBubbles * index + gid2;
 		    DEVICE_ASSERT(index < numBubbles * neighborStride);
 		    neighborIndices[index] = gid1;
 		}
@@ -935,16 +935,17 @@ void cubble::createAccelerationArray(double *x,
 	    if (useGasExchange)
 	    {
 		DEVICE_ASSERT(magnitude > r1 && magnitude > r2);
-		
-		tempVal = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) * tempVal;
+
+		radii = r2 * r2;
+		tempVal = 0.5 * (radii - r1 * r1 + magnitude * magnitude) * tempVal;
 		tempVal *= tempVal;
-		tempVal = r2 * r2 - tempVal;
-		tempVal = (tempVal > -0.0000000001 && tempVal < 0) ? -tempVal : tempVal;
-		
+		tempVal = radii - tempVal;
+		DEVICE_ASSERT(tempVal > -0.001);
+		tempVal = tempVal < 0 ? -tempVal : tempVal;
 		DEVICE_ASSERT(tempVal >= 0);
 		
 #if (NUM_DIM == 3)
-		templVal *= pi;
+		tempVal *= pi;
 #else
 		tempVal = 2.0 * sqrt(tempVal);
 #endif
