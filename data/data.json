@@ -18,7 +18,7 @@
     "ScaleAmountExpl" : "How much to scale the side length(s) of the simulation box per scaling iteration.",
     "ScaleAmount" : 1e-4,
     "NumIntegrationStepsExpl" : "How many integration steps to do.",
-    "NumIntegrationSteps" : 1e6,
+    "NumIntegrationSteps" : 1e4,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 96,
     "NumBubblesExpl" : "Total number of bubbles to simulate.",
