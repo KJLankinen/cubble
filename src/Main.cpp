@@ -1,6 +1,7 @@
 #include <iostream>
 #include <exception>
 #include <stdexcept>
+#include <cuda.h>
 
 #include "CubbleApp.h"
 #include "Util.h"
@@ -50,5 +51,6 @@ int main(int argc, char **argv)
 	return EXIT_FAILURE;
     }
     
+    cudaDeviceReset();
     return EXIT_SUCCESS;
 }

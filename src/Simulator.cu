@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <vector>
 #include <curand.h>
+
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
 
@@ -54,6 +55,8 @@ cubble::Simulator::~Simulator()
 
 void cubble::Simulator::setupSimulation()
 {
+  nvtxRangePushA(__FUNCTION__);
+
     generateBubbles();
     assignBubblesToCells(true);
 
@@ -118,10 +121,12 @@ void cubble::Simulator::setupSimulation()
 					  env->getPi(),
 					  env->getMinRad(),
 					  true);
+    nvtxRangePop();
 }
 
 void cubble::Simulator::integrate(bool useGasExchange)
 {
+  nvtxRangePushA(__FUNCTION__);
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
@@ -164,12 +169,15 @@ void cubble::Simulator::integrate(bool useGasExchange)
     
     do
     {
+      nvtxRangePushA("Predict");
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
-        
+	nvtxRangePop();
+	nvtxRangePushA("Accelerate");
+
 	accelerate<<<numBlocks, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 					      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
 					      energies,
@@ -184,6 +192,8 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					      env->getPi(),
 					      env->getMinRad(),
 					      useGasExchange);
+	nvtxRangePop();
+	nvtxRangePushA("Correct");
         
 	correct<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
@@ -195,9 +205,13 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					   timeStep,
 					   numBubbles,
 					   useGasExchange);
+	nvtxRangePop();
+	nvtxRangePushA("Cub reduction");
         
         error = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
-	
+
+	nvtxRangePop();
+
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
 	else if (error > env->getErrorTolerance())
@@ -211,7 +225,8 @@ void cubble::Simulator::integrate(bool useGasExchange)
     SimulationTime += timeStep;
 
     ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
-    
+
+    nvtxRangePushA("Update data");    
     updateData<<<numBlocks, numThreads>>>(x, y, z, r,
 					  xPrd, yPrd, zPrd, rPrd,
 					  dxdt, dydt, dzdt, drdt,
@@ -225,16 +240,21 @@ void cubble::Simulator::integrate(bool useGasExchange)
 					  env->getPi(),
 					  useGasExchange);
     
+
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());
+
+    nvtxRangePop();
 
     bool assignedToCellsAlready = false;
     if (numBubblesToKeep[0] != numBubbles)
     {
-	std::cout << "Starting removal of bubbles. Removing "
-		  << numBubbles - numBubblesToKeep[0]
-		  << " bubbles"
-		  << std::endl;
+      nvtxRangePushA("Deleting bubbles");
+      nvtxRangePushA("CPU serial sort");
+      std::cout << "Starting removal of bubbles. Removing "
+		<< numBubbles - numBubblesToKeep[0]
+		<< " bubbles"
+		<< std::endl;
 	
         // HACK: This is REEEEEAAAAAALLY stupid and slow but it's temporary.
 	std::vector<int> tempVec(numBubblesToKeep[0]);
@@ -242,6 +262,8 @@ void cubble::Simulator::integrate(bool useGasExchange)
         tempVec.resize(numBubblesToKeep[0]);
 	std::sort(tempVec.begin(), tempVec.end());
 	indicesToKeep = CudaContainer<int>(tempVec);
+
+	nvtxRangePop();
 
 	double deltaVolume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volumes, numBubbles);
 	std::cout << "Volume to redistribute: " << deltaVolume << std::endl;
@@ -252,7 +274,7 @@ void cubble::Simulator::integrate(bool useGasExchange)
 	
         double *currentData = dmh->getRawPtr();
 	double *temporaryData = dmh->getRawPtrToTemporaryData();
-
+	nvtxRangePushA("Removal kernel");
 	removeSmallBubbles<<<numBlocks, numThreads>>>(currentData,
 						      temporaryData,
 						      indicesToKeep.getDataPtr(),
@@ -265,16 +287,23 @@ void cubble::Simulator::integrate(bool useGasExchange)
     
 	CUDA_CALL(cudaDeviceSynchronize());
 	CUDA_CALL(cudaPeekAtLastError());
+	nvtxRangePop();
 
 	std::cout << "Small bubbles removed." << std::endl;
-	
+
+	nvtxRangePushA("Swapping data");
+
 	dmh->swapData();
 	numBubbles = numBubblesToKeep[0];
+
+	nvtxRangePop();
 
 	std::cout << "Bubbles left in simulation after removal: " << numBubbles << std::endl;
 	
 	assignBubblesToCells(true);
 	assignedToCellsAlready = true;
+
+	nvtxRangePop();
     }
     
     CUDA_CALL(cudaDeviceSynchronize());
@@ -285,10 +314,12 @@ void cubble::Simulator::integrate(bool useGasExchange)
 
     if (integrationStep % 100 == 0 && !assignedToCellsAlready)
 	assignBubblesToCells();
+    nvtxRangePop();
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
 {
+  nvtxRangePushA(__FUNCTION__);
     const size_t numThreads = 512;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
@@ -302,20 +333,24 @@ double cubble::Simulator::getVolumeOfBubbles() const
 
     double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
     
+    nvtxRangePop();
     return volume;
 }
 
 double cubble::Simulator::getAverageRadius() const
 {
+  nvtxRangePushA(__FUNCTION__);
     double *r = dmh->getDataPtr(BubbleProperty::R);
     double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad/= numBubbles;
     
+    nvtxRangePop();
     return avgRad;
 }
 
 void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 {
+  nvtxRangePushA(__FUNCTION__);
     // Very inefficient function, should rework.
     bubbles.clear();
     bubbles.resize(numBubbles);
@@ -347,10 +382,12 @@ void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 	b.setRadius(r[i]);
 	bubbles[i] = b;
     }
+    nvtxRangePop();
 }
 
 void cubble::Simulator::generateBubbles()
 {
+  nvtxRangePushA(__FUNCTION__);
     std::cout << "Starting to generate data for bubbles." << std::endl;
     
     const int rngSeed = env->getRngSeed();
@@ -397,10 +434,12 @@ void cubble::Simulator::generateBubbles()
     assignDataToBubbles<<<numBlocks, numThreads>>>(x, y, z,
 						   xPrd, yPrd, zPrd,
 						   r, w, givenNumBubblesPerDim, tfr, lbb, avgRad, numBubbles);
+    nvtxRangePop();
 }
 
 void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 {
+  nvtxRangePushA(__FUNCTION__);
     if (useVerboseOutput)
 	std::cout << "Starting to assign bubbles to cells." << std::endl;
     
@@ -486,10 +525,12 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 					    numDomains,
 					    cells.getSize(),
 					    neighborStride);
+    nvtxRangePop();
 }
 
 dim3 cubble::Simulator::getGridSize()
 {
+  nvtxRangePushA(__FUNCTION__);
     int numBubblesPerCell = env->getNumBubblesPerCell();
 #if NUM_DIM == 3
     int numCellsPerDim = std::ceil(std::cbrt((float)numBubbles / numBubblesPerCell));
@@ -499,6 +540,7 @@ dim3 cubble::Simulator::getGridSize()
     dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
 #endif
 
+    nvtxRangePop();
     return gridSize;
 }
 

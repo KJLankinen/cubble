@@ -33,8 +33,6 @@ void CubbleApp::run()
 
     nvtxRangePop();
     
-    cudaProfilerStart();
-    
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
@@ -119,7 +117,10 @@ void CubbleApp::run()
     std::cout << "**Setup done.**"
 	      <<"\n\n**Starting the simulation proper.**"
 	      << std::endl;
+
     nvtxRangePushA("Simulation");
+
+    cudaProfilerStart();    
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	simulator->integrate(true);
