@@ -1,5 +1,8 @@
 #include <iostream>
 
+#include <cuda_profiler_api.h>
+#include <nvToolsExt.h>
+
 #include "CubbleApp.h"
 #include "Fileio.h"
 #include "Bubble.h"
@@ -113,7 +116,7 @@ void CubbleApp::run()
     std::cout << "**Setup done.**"
 	      <<"\n\n**Starting the simulation proper.**"
 	      << std::endl;
-    
+    cudaProfilerStart();
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	simulator->integrate(true, false);
@@ -129,7 +132,7 @@ void CubbleApp::run()
 	if (i % 100000 == 0)
 	    saveSnapshotToFile();
     }
-
+    cudaProfilerStop();
     saveSnapshotToFile();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
