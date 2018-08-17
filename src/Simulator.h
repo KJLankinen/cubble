@@ -59,7 +59,8 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
-	const int neighborStride = 30;
+	const static int neighborStride = 32;
+	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
@@ -77,7 +78,6 @@ namespace cubble
 	CudaContainer<int> indicesToKeep;
 	CudaContainer<int> numBubblesToKeep;
     };
-
     
     // ******************************
     // Kernels

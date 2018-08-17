@@ -990,13 +990,32 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	double vr = 0.0;
 	double energy = 0;
 
-	for (int i = 0; i < neighborStride; ++i)
+	for (int i = 0; i < neighborStride; i = i + 4)
 	{
 	    vx += ax[tid + i * numBubbles];
+	    vx += ax[tid + (i + 1) * numBubbles];
+	    vx += ax[tid + (i + 2) * numBubbles];
+	    vx += ax[tid + (i + 3) * numBubbles];
+	    
 	    vy += ay[tid + i * numBubbles];
+	    vy += ay[tid + (i + 1) * numBubbles];
+	    vy += ay[tid + (i + 2) * numBubbles];
+	    vy += ay[tid + (i + 3) * numBubbles];
+	    
 	    vz += az[tid + i * numBubbles];
+	    vz += az[tid + (i + 1) * numBubbles];
+	    vz += az[tid + (i + 2) * numBubbles];
+	    vz += az[tid + (i + 3) * numBubbles];
+	    
 	    vr += ar[tid + i * numBubbles];
+	    vr += ar[tid + (i + 1) * numBubbles];
+	    vr += ar[tid + (i + 2) * numBubbles];
+	    vr += ar[tid + (i + 3) * numBubbles];
+	    
 	    energy += e[tid + i * numBubbles];
+	    energy += e[tid + (i + 1) * numBubbles];
+	    energy += e[tid + (i + 2) * numBubbles];
+	    energy += e[tid + (i + 3) * numBubbles];
 	}
 	    
 	dxdt[tid] = vx * fZeroPerMuZero;
