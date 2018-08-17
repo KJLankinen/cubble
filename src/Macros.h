@@ -1,12 +1,6 @@
 //-*- C++ -*-
 #pragma once
 
-#ifdef USE_DOUBLE
-  typedef cubble_fp double;
-#else
-  typedef cubble_fp float;
-#endif
-
 #define CUBBLE_XSTRINGIFY(s) CUBBLE_STRINGIFY(s)
 #define CUBBLE_STRINGIFY(s) #s
 
