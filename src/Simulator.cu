@@ -889,26 +889,31 @@ void cubble::createAccelerationArray(double *x,
 	{
 	    const int idx2 = neighborIndices[tid];
 	    
+	    double x1 = x[idx1];
+	    double y1 = y[idx1];
+	    double z1 = z[idx1];
+	    double r1 = r[idx1];
+	    
 	    double x2 = x[idx2];
 	    double y2 = y[idx2];
 	    double z2 = z[idx2];
-	    const double r2 = r[idx2];
-	    const double r1 = r[idx1];
+	    double r2 = r[idx2];
+	    
 	    double radii = r1 + r2;
 	    
-	    double magnitude = x[idx1] - x2;
+	    double magnitude = x1 - x2;
 	    x2 = magnitude < -0.5 ? x2 - 1.0 : (magnitude > 0.5 ? x2 + 1.0 : x2);
-	    x2 = x[idx1] - x2;
+	    x2 = x1 - x2;
 	    x2 *= interval.x;
 	    
-	    magnitude = y[idx1] - y2;
+	    magnitude = y1 - y2;
 	    y2 = magnitude < -0.5 ? y2 - 1.0 : (magnitude > 0.5 ? y2 + 1.0 : y2);
-	    y2 = y[idx1] - y2;
+	    y2 = y1 - y2;
 	    y2 *= interval.y;
 	    
-	    magnitude = z[idx1] - z2;
+	    magnitude = z1 - z2;
 	    z2 = magnitude < -0.5 ? z2 - 1.0 : (magnitude > 0.5 ? z2 + 1.0 : z2);
-	    z2 = z[idx1] - z2;
+	    z2 = z1 - z2;
 	    z2 *= interval.z;
 	    
 	    magnitude = sqrt(x2 * x2 + y2 * y2 + z2 * z2);
@@ -985,22 +990,15 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	double vr = 0.0;
 	double energy = 0;
 
-	// TODO: Check if faster like this or with one loop.
 	for (int i = 0; i < neighborStride; ++i)
+	{
 	    vx += ax[tid + i * numBubbles];
-	
-	for (int i = 0; i < neighborStride; ++i)
 	    vy += ay[tid + i * numBubbles];
-	
-	for (int i = 0; i < neighborStride; ++i)
 	    vz += az[tid + i * numBubbles];
-	
-	for (int i = 0; i < neighborStride; ++i)
 	    vr += ar[tid + i * numBubbles];
-
-	for (int i = 0; i < neighborStride; ++i)
 	    energy += e[tid + i * numBubbles];
-
+	}
+	    
 	dxdt[tid] = vx * fZeroPerMuZero;
 	dydt[tid] = vy * fZeroPerMuZero;
 	dzdt[tid] = vz * fZeroPerMuZero;
