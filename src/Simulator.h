@@ -23,7 +23,7 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
-	void integrate(bool useGasExchange = false);
+	void integrate(bool useGasExchange = false, bool calculateEnergy = false);
 	double getVolumeOfBubbles() const;
 	double getAverageRadius() const;
 	void getBubbles(std::vector<Bubble> &bubbles) const;
@@ -180,7 +180,8 @@ namespace cubble
 				 int numBubbles,
 				 int neighborStride,
 				 double pi,
-				 bool useGasExchange);
+				 bool useGasExchange,
+				 bool calculateEnergy);
 
     __global__
     void calculateVelocityFromAccelerations(double *ax,
@@ -199,31 +200,8 @@ namespace cubble
 					    int numBubbles,
 					    int neighborStride,
 					    double fZeroPerMuZero,
-					    double kParam);
-    
-    __global__
-    void accelerate(double *x,
-		    double *y,
-		    double *z,
-		    double *r,
-		    
-		    double *dxdt,
-		    double *dydt,
-		    double *dzdt,
-		    double *drdt,
-		    
-		    double *energies,
-		    int *numberOfNeighbors,
-		    int *neighborIndices,
-		    dvec tfr,
-		    dvec lbb,
-		    int numBubbles,
-		    int neighborStride,
-		    double fZeroPerMuZero,
-		    double kParam,
-		    double pi,
-		    double minRad,
-		    bool useGasExchange);
+					    double kParam,
+					    bool calculateEnergy);
 
     __global__
     void correct(double *x,
@@ -252,40 +230,6 @@ namespace cubble
 		 double timeStep,
 		 int numBubbles,
 		 bool useGasExchange);
-
-    __global__
-    void updateData(double *x,
-		    double *y,
-		    double *z,
-		    double *r,
-		    
-		    double *xPrd,
-		    double *yPrd,
-		    double *zPrd,
-		    double *rPrd,
-		    
-		    double *dxdt,
-		    double *dydt,
-		    double *dzdt,
-		    double *drdt,
-		    
-		    double *dxdtOld,
-		    double *dydtOld,
-		    double *dzdtOld,
-		    double *drdtOld,
-		    
-		    double *dxdtPrd,
-		    double *dydtPrd,
-		    double *dzdtPrd,
-		    double *drdtPrd,
-
-		    double *volumes,
-		    int *numBubblesToKeep,
-		    int *indicesToKeep,
-		    int numBubbles,
-		    double minRad,
-		    double pi,
-		    bool useGasExchange);
 
     __global__
     void removeSmallBubbles(double *currentData,

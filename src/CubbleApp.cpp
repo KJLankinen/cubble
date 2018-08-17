@@ -79,7 +79,7 @@ void CubbleApp::run()
 
 	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
 	{
-	    simulator->integrate();
+	    simulator->integrate(false, true);
 	    time += env->getTimeStep();
 	}
 	
@@ -123,9 +123,12 @@ void CubbleApp::run()
     cudaProfilerStart();
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
-	simulator->integrate(true);
+	if (i == 55)
+	    cudaProfilerStart();
+	
+	simulator->integrate(true, false);
 
-	if (i == 100)
+	if (i == 60)
 	    cudaProfilerStop();
 	
 	if (i % 1000 == 0)

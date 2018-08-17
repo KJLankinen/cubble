@@ -103,6 +103,7 @@ void cubble::Simulator::setupSimulation()
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
+							     false,
 							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
@@ -111,7 +112,8 @@ void cubble::Simulator::setupSimulation()
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
-								  env->getKParameter());
+								  env->getKParameter(),
+								  false);
     
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
 						dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -125,6 +127,7 @@ void cubble::Simulator::setupSimulation()
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
+							     false,
 							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
@@ -133,11 +136,12 @@ void cubble::Simulator::setupSimulation()
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
-								  env->getKParameter());
+								  env->getKParameter(),
+								  false);
     nvtxRangePop();
 }
 
-void cubble::Simulator::integrate(bool useGasExchange)
+void cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 {
     nvtxRangePushA(__FUNCTION__);
     
@@ -207,7 +211,8 @@ void cubble::Simulator::integrate(bool useGasExchange)
 								 numBubbles,
 								 neighborStride,
 								 env->getPi(),
-								 useGasExchange);
+								 useGasExchange,
+								 calculateEnergy);
 	nvtxRangePop();
 	nvtxRangePushA("VelFromAcc");
         
@@ -217,7 +222,8 @@ void cubble::Simulator::integrate(bool useGasExchange)
 								      numBubbles,
 								      neighborStride,
 								      env->getFZeroPerMuZero(),
-								      env->getKParameter());
+								      env->getKParameter(),
+								      calculateEnergy);
 	
 	nvtxRangePop();
 	nvtxRangePushA("Correct");
@@ -251,37 +257,45 @@ void cubble::Simulator::integrate(bool useGasExchange)
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
-    ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
+    if (calculateEnergy)
+	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
 
     nvtxRangePushA("UpdateData");
-    updateData<<<numBlocks, numThreads>>>(x, y, z, r,
-					  xPrd, yPrd, zPrd, rPrd,
-					  dxdt, dydt, dzdt, drdt,
-					  dxdtOld, dydtOld, dzdtOld, drdtOld,
-					  dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-					  volumes,
-					  numBubblesToKeep.getDataPtr(),
-					  indicesToKeep.getDataPtr(),
-					  numBubbles,
-					  env->getMinRad(),
-					  env->getPi(),
-					  useGasExchange);
-    
+    size_t numBytesToCopy = sizeof(double) * dmh->getMemoryStride();
+    if (useGasExchange)
+    {
+	cudaMemcpyAsync(r, rPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+	cudaMemcpyAsync(drdtOld, drdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+	cudaMemcpyAsync(drdt, drdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    }
 
-    CUDA_CALL(cudaDeviceSynchronize());
-    CUDA_CALL(cudaPeekAtLastError());
+    double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
+    
+    cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    
+    cudaMemcpyAsync(y, yPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dydtOld, dydt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dydt, dydtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    
+    cudaMemcpyAsync(z, zPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dzdtOld, dzdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dzdt, dzdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
 
     nvtxRangePop();
 
     bool assignedToCellsAlready = false;
-    if (numBubblesToKeep[0] != numBubbles)
+    if (minRadius < env->getMinRad())
     {
-      nvtxRangePushA("Deleting bubbles");
-      nvtxRangePushA("CPU serial sort");
-      std::cout << "Starting removal of bubbles. Removing "
-		<< numBubbles - numBubblesToKeep[0]
-		<< " bubbles"
-		<< std::endl;
+	assert(false && "This needs to be updated!");
+	
+	nvtxRangePushA("Deleting bubbles");
+	nvtxRangePushA("CPU serial sort");
+	std::cout << "Starting removal of bubbles. Removing "
+		  << numBubbles - numBubblesToKeep[0]
+		  << " bubbles"
+		  << std::endl;
 	
         // HACK: This is REEEEEAAAAAALLY stupid and slow but it's temporary.
 	std::vector<int> tempVec(numBubblesToKeep[0]);
@@ -869,7 +883,8 @@ void cubble::createAccelerationArray(double *x,
 				     int numBubbles,
 				     int neighborStride,
 				     double pi,
-				     bool useGasExchange)
+				     bool useGasExchange,
+				     bool calculateEnergy)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles * neighborStride)
@@ -919,13 +934,17 @@ void cubble::createAccelerationArray(double *x,
 	    magnitude = sqrt(x2 * x2 + y2 * y2 + z2 * z2);
 	    DEVICE_ASSERT(magnitude > 0);
 	    DEVICE_ASSERT(radii > 0);
-
-	    double tempVal = radii - magnitude;
-	    tempVal *= tempVal;
-	    radii = 1.0 / radii;
-	    tempVal *= radii;
-
-	    e[tid] = tempVal;
+	    
+	    double tempVal = 0;
+	    if (calculateEnergy)
+	    {
+	        tempVal = radii - magnitude;
+		tempVal *= tempVal;
+		radii = 1.0 / radii;
+		tempVal *= radii;
+		
+		e[tid] = tempVal;
+	    }
 	    
 	    tempVal = 1.0 / magnitude;
 	    
@@ -979,7 +998,8 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 						int numBubbles,
 						int neighborStride,
 						double fZeroPerMuZero,
-						double kParam)
+						double kParam,
+						bool calculateEnergy)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
@@ -996,128 +1016,18 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	    vy += ay[tid + i * numBubbles];
 	    vz += az[tid + i * numBubbles];
 	    vr += ar[tid + i * numBubbles];
-	    energy += e[tid + i * numBubbles];
+	    
+	    if (calculateEnergy)
+		energy += e[tid + i * numBubbles];
 	}
 	    
 	dxdt[tid] = vx * fZeroPerMuZero;
 	dydt[tid] = vy * fZeroPerMuZero;
 	dzdt[tid] = vz * fZeroPerMuZero;
 	drdt[tid] = vr * kParam;
-	energies[tid] = energy;
-    }
-}
-
-__global__
-void cubble::accelerate(double *x,
-			double *y,
-			double *z,
-			double *r,
-			
-			double *dxdt,
-			double *dydt,
-			double *dzdt,
-			double *drdt,
-			
-			double *energies,
-			int *numberOfNeighbors,
-			int *neighborIndices,
-			dvec tfr,
-			dvec lbb,
-			int numBubbles,
-			int neighborStride,
-			double fZeroPerMuZero,
-			double kParam,
-			double pi,
-			double minRad,
-			bool useGasExchange)
-{
-    const int tid = getGlobalTid();
-    if (tid < numBubbles)
-    {
-	dvec acceleration(0, 0, 0);
-	double energy = 0;
-	double radiusChangeRate = 0;
-
-	const double radius1 = r[tid];
-        dvec pos1(0, 0, 0);
-	pos1.x = x[tid];
-	pos1.y = y[tid];
-	pos1.z = z[tid];
 	
-	if (radius1 > minRad)
-	{
-	    const double invRad1 = 1.0 / radius1;
-	    for (int i = 0; i < numberOfNeighbors[tid]; ++i)
-	    {
-		const int index = neighborIndices[tid * neighborStride + i];
-		DEVICE_ASSERT(index < numBubbles);
-		DEVICE_ASSERT(index != tid);
-		
-		const double radius2 = r[index];
-	        dvec pos2(0, 0, 0);
-		pos2.x = x[index];
-		pos2.y = y[index];
-		pos2.z = z[index];
-		
-		if (radius2 < minRad)
-		    continue;
-		
-		const double radii = radius1 + radius2;
-		dvec distance = getShortestWrappedNormalizedVec(pos1, pos2);
-		distance *= (tfr - lbb);
-		const double magnitude = distance.getLength();
-		
-		if (radii < magnitude)
-		    continue;
-		
-		const double compressionDistance = radii - magnitude;
-		const double relativeCompressionDistance = 1.0 - magnitude / radii;
-
-		DEVICE_ASSERT(relativeCompressionDistance >= 0 && relativeCompressionDistance < 1.0);
-	        
-		acceleration += distance * relativeCompressionDistance / magnitude;
-		energy += relativeCompressionDistance * compressionDistance;
-
-		if (useGasExchange)
-		{
-		    double areaOfOverlap = 0;
-		    if (magnitude < radius2 || magnitude < radius1)
-		    {
-			areaOfOverlap = radius1 < radius2 ? radius1 : radius2;
-			areaOfOverlap *= areaOfOverlap;
-		    }
-		    else
-		    {
-			areaOfOverlap = radius2 * radius2
-			    - radius1 * radius1
-			    + magnitude * magnitude;
-			areaOfOverlap /= 2.0 * magnitude;
-			areaOfOverlap *= areaOfOverlap;
-			areaOfOverlap = radius2 * radius2 - areaOfOverlap;
-			areaOfOverlap = (areaOfOverlap > -0.000000001 && areaOfOverlap < 0)
-			    ? -areaOfOverlap
-			    : areaOfOverlap;
-		    }
-		    
-		    DEVICE_ASSERT(areaOfOverlap >= 0);
-		    
-#if (NUM_DIM == 3)
-		    areaOfOverlap *= pi;
-#else
-		    areaOfOverlap = 2.0 * sqrt(areaOfOverlap);
-#endif
-		    radiusChangeRate += areaOfOverlap * (1.0 / radius2 - invRad1);
-		}
-	    }
-	}
-
-	if (useGasExchange)
-	    drdt[tid] = radiusChangeRate * kParam;
-	
-	dxdt[tid] = acceleration.x * fZeroPerMuZero;
-	dydt[tid] = acceleration.y * fZeroPerMuZero;
-	dzdt[tid] = acceleration.z * fZeroPerMuZero;
-	energies[tid] = energy;
+	if (calculateEnergy)
+	    energies[tid] = energy;
     }
 }
 
@@ -1195,79 +1105,6 @@ void cubble::correct(double *x,
 	xPrd[tid] = pos.x;
 	yPrd[tid] = pos.y;
 	zPrd[tid] = pos.z;
-    }
-}
-
-__global__
-void cubble::updateData(double *x,
-			double *y,
-			double *z,
-			double *r,
-			
-			double *xPrd,
-			double *yPrd,
-			double *zPrd,
-			double *rPrd,
-			
-			double *dxdt,
-			double *dydt,
-			double *dzdt,
-			double *drdt,
-			
-			double *dxdtOld,
-			double *dydtOld,
-			double *dzdtOld,
-			double *drdtOld,
-			
-			double *dxdtPrd,
-			double *dydtPrd,
-			double *dzdtPrd,
-			double *drdtPrd,
-
-			double *volumes,
-			int *numBubblesToKeep,
-		        int *indicesToKeep,
-			int numBubbles,
-			double minRad,
-			double pi,
-			bool useGasExchange)
-{
-    const int tid = getGlobalTid();
-    if (tid < numBubbles)
-    {
-	x[tid] = xPrd[tid];
-	y[tid] = yPrd[tid];
-	z[tid] = zPrd[tid];
-
-	dxdtOld[tid] = dxdt[tid];
-	dydtOld[tid] = dydt[tid];
-	dzdtOld[tid] = dzdt[tid];
-
-        dxdt[tid] = dxdtPrd[tid];
-	dydt[tid] = dydtPrd[tid];
-	dzdt[tid] = dzdtPrd[tid];
-	
-	if (useGasExchange)
-	{
-	    r[tid] = rPrd[tid];
-	    drdtOld[tid] = drdt[tid];
-	    drdt[tid] = drdtPrd[tid];
-	}
-
-	double volume = r[tid] * r[tid];
-#if (NUM_DIM == 3)
-	volume *= 1.33333333333333333333333 * r[tid];
-#endif
-	volume *= pi;
-	
-	if (r[tid] > minRad)
-	{
-	    int idx = atomicAdd(numBubblesToKeep, 1);
-	    indicesToKeep[idx] = tid;
-	    volume = 0;
-	}
-	
-	volumes[tid] = volume;
     }
 }
 
