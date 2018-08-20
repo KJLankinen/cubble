@@ -40,6 +40,7 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     
     dmh = std::unique_ptr<cubble::DeviceMemoryHandler>(new DeviceMemoryHandler(numBubbles, neighborStride));
     dmh->reserveMemory();
+    hostData.resize(dmh->getNumPermanentValuesInMemory(), 0);
     
     printRelevantInfoOfCurrentDevice();
 
@@ -141,7 +142,7 @@ void cubble::Simulator::setupSimulation()
     nvtxRangePop();
 }
 
-void cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
+bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 {
     nvtxRangePushA(__FUNCTION__);
     
@@ -254,109 +255,84 @@ void cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     }
     while (error > env->getErrorTolerance());
     
+    nvtxRangePushA("UpdateData");
+    // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
+    size_t numBytesToCopy = 4 * sizeof(double) * dmh->getMemoryStride();
+    cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    nvtxRangePop();
+    
+    ++integrationStep;
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
 
-    nvtxRangePushA("UpdateData");
-    size_t numBytesToCopy = sizeof(double) * dmh->getMemoryStride();
-    if (useGasExchange)
-    {
-	cudaMemcpyAsync(r, rPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-	cudaMemcpyAsync(drdtOld, drdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
-	cudaMemcpyAsync(drdt, drdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    }
-
     double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
-    
-    cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    
-    cudaMemcpyAsync(y, yPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dydtOld, dydt, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dydt, dydtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    
-    cudaMemcpyAsync(z, zPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dzdtOld, dzdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dzdt, dzdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-
-    nvtxRangePop();
-
-    bool assignedToCellsAlready = false;
     if (minRadius < env->getMinRad())
     {
-	assert(false && "This needs to be updated!");
+	nvtxRangePushA("BubbleRemoval");
 	
-	nvtxRangePushA("Deleting bubbles");
-	nvtxRangePushA("CPU serial sort");
-	std::cout << "Starting removal of bubbles. Removing "
-		  << numBubbles - numBubblesToKeep[0]
-		  << " bubbles"
-		  << std::endl;
+	cudaMemcpyAsync(hostData.data(),
+			dmh->getRawPtr(),
+			dmh->getPermanentMemorySizeInBytes(),
+			cudaMemcpyDeviceToHost);
+
+	size_t numBubblesOriginally = numBubbles;
+	minRadius = env->getMinRad();
+	size_t memoryStride = dmh->getMemoryStride();
+	size_t rIdx = (size_t)BubbleProperty::R;
+	std::vector<int> idxVec;
 	
-        // HACK: This is REEEEEAAAAAALLY stupid and slow but it's temporary.
-	std::vector<int> tempVec(numBubblesToKeep[0]);
-	indicesToKeep.dataToVec(tempVec);
-        tempVec.resize(numBubblesToKeep[0]);
-	std::sort(tempVec.begin(), tempVec.end());
-	indicesToKeep = CudaContainer<int>(tempVec);
+	for (size_t i = 0; i < (size_t)BubbleProperty::NUM_VALUES; ++i)
+	    idxVec.push_back(i);
 
-	nvtxRangePop();
-
-	double deltaVolume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volumes, numBubbles);
-	std::cout << "Volume to redistribute: " << deltaVolume << std::endl;
-	deltaVolume /= (numBubblesToKeep[0]);
-
-	dmh->resetTemporaryData();
-	std::cout << "Temp data reset." << std::endl;
-	
-        double *currentData = dmh->getRawPtr();
-	double *temporaryData = dmh->getRawPtrToTemporaryData();
-	nvtxRangePushA("Removal kernel");
-	removeSmallBubbles<<<numBlocks, numThreads>>>(currentData,
-						      temporaryData,
-						      indicesToKeep.getDataPtr(),
-						      numBubblesToKeep[0],
-						      numBubbles,
-						      dmh->getMemoryStride(),
-						      (int)BubbleProperty::R,
-						      1.0 / env->getPi(),
-						      deltaVolume);
-    
+	// Synchronize if memcpy not done yet.
 	CUDA_CALL(cudaDeviceSynchronize());
-	CUDA_CALL(cudaPeekAtLastError());
-	nvtxRangePop();
 
-	std::cout << "Small bubbles removed." << std::endl;
+	double deltaVolume = 0;
+	for (int i = (int)numBubbles - 1; i > -1; --i)
+	{
+	    double radius = hostData[rIdx * memoryStride + i];
+	    if (radius < minRad)
+	    {
+		double volume = 0;
+	        volume = radius * radius;
+#if (NUM_DIM == 3)
+		volume *= 1.33333333333333333333333 * radius;
+#endif
+		volume *= env->getPi();
+		deltaVolume += volume;
+		
+		for (size_t j = 0; j < idxVec.size(); ++j)
+		    hostData[j * memoryStride + i] = hostData[j * memoryStride + (numBubbles - 1)];
+		--numBubbles;
+	    }
+	}
 
-	nvtxRangePushA("Swapping data");
+	cudaMemcpyAsync(dmh->getRawPtr(),
+			hostData.data(),
+			dmh->getPermanentMemorySizeInBytes(),
+			cudaMemcpyHostToDevice);
 
-	dmh->swapData();
-	numBubbles = numBubblesToKeep[0];
+	deltaVolume /= numBubbles;
 
-	nvtxRangePop();
-
-	std::cout << "Bubbles left in simulation after removal: " << numBubbles << std::endl;
+	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, deltaVolume, 1.0 / env->getPi());
 	
-	assignBubblesToCells(true);
-	assignedToCellsAlready = true;
-
 	nvtxRangePop();
+	
+	assignBubblesToCells(false);
+	
+	std::cout << "Bubbles left: " << numBubbles << std::endl;
     }
-    
-    CUDA_CALL(cudaDeviceSynchronize());
-    numBubblesToKeep[0] = 0;
-    CUDA_CALL(cudaDeviceSynchronize());
-
-    ++integrationStep;
-
-    if (integrationStep % 100 == 0 && !assignedToCellsAlready)
+    else if (integrationStep % 100)
 	assignBubblesToCells();
-    
+
     nvtxRangePop();
+
+    return numBubbles > 300;
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
@@ -395,36 +371,25 @@ double cubble::Simulator::getAverageRadius() const
 void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 {
     nvtxRangePushA(__FUNCTION__);
-    
-    // Very inefficient function, should rework.
     bubbles.clear();
     bubbles.resize(numBubbles);
 
-    std::vector<double> x;
-    std::vector<double> y;
-    std::vector<double> z;
-    std::vector<double> r;
-    x.resize(numBubbles);
-    y.resize(numBubbles);
-    z.resize(numBubbles);
-    r.resize(numBubbles);
-
+    size_t memoryStride = dmh->getMemoryStride();
     double *devX = dmh->getDataPtr(BubbleProperty::X);
-    double *devY = dmh->getDataPtr(BubbleProperty::Y);
-    double *devZ = dmh->getDataPtr(BubbleProperty::Z);
-    double *devR = dmh->getDataPtr(BubbleProperty::R);
+    std::vector<double> xyzr;
+    xyzr.resize(memoryStride * 4);
 
-    cudaMemcpy(x.data(), devX, sizeof(double) * numBubbles, cudaMemcpyDeviceToHost);
-    cudaMemcpy(y.data(), devY, sizeof(double) * numBubbles, cudaMemcpyDeviceToHost);
-    cudaMemcpy(z.data(), devZ, sizeof(double) * numBubbles, cudaMemcpyDeviceToHost);
-    cudaMemcpy(r.data(), devR, sizeof(double) * numBubbles, cudaMemcpyDeviceToHost);
+    cudaMemcpy(xyzr.data(), devX, sizeof(double) * 4 * memoryStride, cudaMemcpyDeviceToHost);
     
     for (size_t i = 0; i < numBubbles; ++i)
     {
 	Bubble b;
-	dvec pos(x[i], y[i], z[i]);
+	dvec pos(-1, -1, -1);
+	pos.x = xyzr[i];
+	pos.y = xyzr[i + memoryStride];
+	pos.z = xyzr[i + 2 * memoryStride];
 	b.setPos(pos);
-	b.setRadius(r[i]);
+	b.setRadius(xyzr[i + 3 * memoryStride]);
 	bubbles[i] = b;
     }
     
@@ -446,8 +411,6 @@ void cubble::Simulator::generateBubbles()
     indices = CudaContainer<int>(numBubbles);
     numberOfNeighbors = CudaContainer<int>(numBubbles);
     neighborIndices = CudaContainer<int>(numBubbles * neighborStride);
-    indicesToKeep = CudaContainer<int>(numBubbles);
-    numBubblesToKeep = CudaContainer<int>(1);
     
     std::cout << "\tGenerating data..." << std::endl;
 
@@ -534,7 +497,6 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
     cudaMemset((void*)numberOfNeighbors.getDataPtr(), 0, sizeof(int) * numBubbles);
     cudaMemset((void*)indices.getDataPtr(), 0, sizeof(int) * numBubbles);
     cudaMemset((void*)neighborIndices.getDataPtr(), 0, sizeof(int) * numBubbles * neighborStride);
-    cudaMemset((void*)indicesToKeep.getDataPtr(), 0, sizeof(int) * numBubbles);
     
     if (useVerboseOutput)
 	std::cout << "\tCalculating offsets..." << std::endl;
@@ -936,21 +898,21 @@ void cubble::createAccelerationArray(double *x,
 	    DEVICE_ASSERT(radii > 0);
 	    
 	    double tempVal = 0;
+	    double invRadii = 1.0 / radii;
 	    if (calculateEnergy)
 	    {
 	        tempVal = radii - magnitude;
 		tempVal *= tempVal;
-		radii = 1.0 / radii;
-		tempVal *= radii;
+		tempVal *= invRadii;
 		
 		e[tid] = tempVal;
 	    }
 	    
 	    tempVal = 1.0 / magnitude;
 	    
-	    x2 *= tempVal - radii;
-	    y2 *= tempVal - radii;
-	    z2 *= tempVal - radii;
+	    x2 *= tempVal - invRadii;
+	    y2 *= tempVal - invRadii;
+	    z2 *= tempVal - invRadii;
 
 	    ax[tid] = x2;
 	    ay[tid] = y2;
@@ -958,22 +920,26 @@ void cubble::createAccelerationArray(double *x,
 	    
 	    if (useGasExchange)
 	    {
-		DEVICE_ASSERT(magnitude > r1 && magnitude > r2);
-
-		radii = r2 * r2;
-		tempVal = 0.5 * (radii - r1 * r1 + magnitude * magnitude) * tempVal;
-		tempVal *= tempVal;
-		tempVal = radii - tempVal;
-		DEVICE_ASSERT(tempVal > -0.001);
-		tempVal = tempVal < 0 ? -tempVal : tempVal;
-		DEVICE_ASSERT(tempVal >= 0);
-		
+		if (magnitude > r1 && magnitude > r2)
+		{
+		    radii = r2 * r2;
+		    tempVal = 0.5 * (radii - r1 * r1 + magnitude * magnitude) * tempVal;
+		    tempVal *= tempVal;
+		    tempVal = radii - tempVal;
+		    DEVICE_ASSERT(tempVal > -0.001);
+		    tempVal = tempVal < 0 ? -tempVal : tempVal;
+		    DEVICE_ASSERT(tempVal >= 0);
+		    
 #if (NUM_DIM == 3)
-		tempVal *= pi;
+		    tempVal = tempVal * 0.25;
+		    tempVal /= r1 * r1;
 #else
-		tempVal = 2.0 * sqrt(tempVal);
+		    tempVal = sqrt(tempVal) / (pi * r1);
 #endif
-		tempVal *= 1.0 / r2 - 1.0 / r1;
+		    tempVal *= 1.0 / r2 - 1.0 / r1;
+		}
+		else
+		    tempVal = 0.0;
 		
 		ar[tid] = tempVal;
 	    }
@@ -1109,63 +1075,22 @@ void cubble::correct(double *x,
 }
 
 __global__
-void cubble::removeSmallBubbles(double *currentData,
-				double *temporaryData,
-				int *indicesToKeep,
-				int numBubblesToKeep,
-				int numBubbles,
-				int memoryStride,
-				int memoryIndexOfRadius,
-				double invPi,
-				double deltaVolume)
+void cubble::addVolume(double *r, int numBubbles, double deltaVolume, double invPi)
 {
     const int tid = getGlobalTid();
-    if (tid < numBubblesToKeep)
+    if (tid < numBubbles)
     {
-	int idx = indicesToKeep[tid];
-	DEVICE_ASSERT(idx < numBubbles);
-	
-	double radius = currentData[memoryStride * memoryIndexOfRadius + idx];
+	double radius = r[tid];
 	double volume = radius * radius;
-	
 #if (NUM_DIM == 3)
 	volume *= radius;
-	volume += deltaVolume * invPi * 0.75;
+	volume += 0.75 * deltaVolume * invPi;
 	radius = cbrt(volume);
 #else
 	volume += deltaVolume * invPi;
 	radius = sqrt(volume);
 #endif
-	currentData[memoryStride * memoryIndexOfRadius + idx] = radius;
-	
-	temporaryData[tid + 0 * memoryStride] = currentData[idx + 0 * memoryStride];
-	temporaryData[tid + 1 * memoryStride] = currentData[idx + 1 * memoryStride];
-	temporaryData[tid + 2 * memoryStride] = currentData[idx + 2 * memoryStride];
-	temporaryData[tid + 3 * memoryStride] = currentData[idx + 3 * memoryStride];
-
-	temporaryData[tid + 4 * memoryStride] = currentData[idx + 4 * memoryStride];
-	temporaryData[tid + 5 * memoryStride] = currentData[idx + 5 * memoryStride];
-	temporaryData[tid + 6 * memoryStride] = currentData[idx + 6 * memoryStride];
-	temporaryData[tid + 7 * memoryStride] = currentData[idx + 7 * memoryStride];
-	
-	temporaryData[tid + 8 * memoryStride] = currentData[idx + 8 * memoryStride];
-	temporaryData[tid + 9 * memoryStride] = currentData[idx + 9 * memoryStride];
-	temporaryData[tid + 10 * memoryStride] = currentData[idx + 10 * memoryStride];
-	temporaryData[tid + 11 * memoryStride] = currentData[idx + 11 * memoryStride];
-
-	temporaryData[tid + 12 * memoryStride] = currentData[idx + 12 * memoryStride];
-	temporaryData[tid + 13 * memoryStride] = currentData[idx + 13 * memoryStride];
-	temporaryData[tid + 14 * memoryStride] = currentData[idx + 14 * memoryStride];
-	temporaryData[tid + 15 * memoryStride] = currentData[idx + 15 * memoryStride];
-	
-	temporaryData[tid + 16 * memoryStride] = currentData[idx + 16 * memoryStride];
-	temporaryData[tid + 17 * memoryStride] = currentData[idx + 17 * memoryStride];
-	temporaryData[tid + 18 * memoryStride] = currentData[idx + 18 * memoryStride];
-	temporaryData[tid + 19 * memoryStride] = currentData[idx + 19 * memoryStride];
-
-	temporaryData[tid + 20 * memoryStride] = currentData[idx + 20 * memoryStride];
-	temporaryData[tid + 21 * memoryStride] = currentData[idx + 21 * memoryStride];
-	temporaryData[tid + 22 * memoryStride] = currentData[idx + 22 * memoryStride];
+	r[tid] = radius;
     }
 }
 

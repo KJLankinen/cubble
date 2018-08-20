@@ -1,18 +1,18 @@
 {
     "AvgRad": 0.06,
     "ErrorTolerance": 1e-05,
-    "KParameter": 0.0001,
+    "KParameter": 1e-05,
     "MaxDeltaEnergy": 0.001,
-    "MuZero": 0.001,
+    "MuZero": 1.0,
     "NumBubbles": 1000,
     "NumBubblesPerCell": 96,
-    "NumIntegrationSteps": 10000,
+    "NumIntegrationSteps": 1000000,
     "NumStepsToRelax": 100,
     "PhiTarget": 0.9,
-    "RngSeed": 127321,
+    "RngSeed": 551155136,
     "ScaleAmount": 0.0001,
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.0001544673035763364
+    "TimeStep": 0.10959551615547965
 }

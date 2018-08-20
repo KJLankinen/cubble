@@ -20,10 +20,7 @@ CubbleApp::CubbleApp(const std::string &inF,
 }
 
 CubbleApp::~CubbleApp()
-{
-    saveSnapshotToFile();
-    env->writeParameters();
-}
+{}
 
 void CubbleApp::run()
 {
@@ -72,6 +69,7 @@ void CubbleApp::run()
     std::cout << "Starting the relaxation of the foam..." << std::endl;
     numSteps = 0;
     const int failsafe = 500;
+    simulator->integrate(false, true);
     while (true)
     {
 	double energy1 = simulator->getElasticEnergy();
@@ -82,7 +80,8 @@ void CubbleApp::run()
 	    simulator->integrate(false, true);
 	    time += env->getTimeStep();
 	}
-	
+
+	//time *= env->getKparameter() / (env->getAvgRad() * env->getAvgRad());;
 	double energy2 = simulator->getElasticEnergy();
 	double deltaEnergy = energy1 == 0 ? 0
 	    : std::abs(energy2 - energy1) / (energy1 * time);
@@ -121,31 +120,43 @@ void CubbleApp::run()
     nvtxRangePushA("Simulation");
 
     cudaProfilerStart();
+    simulator->setSimulationTime(0);
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	if (i == 55)
 	    cudaProfilerStart();
 	
-	simulator->integrate(true, false);
+	bool continueSimulation = simulator->integrate(true, false);
 
 	if (i == 60)
 	    cudaProfilerStop();
 	
 	if (i % 1000 == 0)
 	{
-	    std::cout << "Current average radius after "
-		      << i << " steps: "
-		      << simulator->getAverageRadius()
+	    std::cout << "Step " << i
+		      << " time " << simulator->getSimulationTime() * env->getKParameter() / (env->getAvgRad() * env->getAvgRad())
+		      << " average radius " << simulator->getAverageRadius()
 		      << std::endl;
+	    
+	    bubbleVolume = simulator->getVolumeOfBubbles();
+	    phi = bubbleVolume / env->getSimulationBoxVolume();
+	    printPhi(phi, phiTarget);
 	}
 
-	if (i % 100000 == 0)
+	if (i % 10000 == 0)
 	    saveSnapshotToFile();
+	
+	if (!continueSimulation)
+	{
+	    std::cout << "Stopping simulation!" << std::endl;
+	    break;
+	}
     }
     
     nvtxRangePop();
     
     saveSnapshotToFile();
+    env->writeParameters();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
 }

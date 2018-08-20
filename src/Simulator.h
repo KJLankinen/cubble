@@ -23,7 +23,7 @@ namespace cubble
 	~Simulator();
 
 	void setupSimulation();
-	void integrate(bool useGasExchange = false, bool calculateEnergy = false);
+	bool integrate(bool useGasExchange = false, bool calculateEnergy = false);
 	double getVolumeOfBubbles() const;
 	double getAverageRadius() const;
 	void getBubbles(std::vector<Bubble> &bubbles) const;
@@ -74,9 +74,8 @@ namespace cubble
 	CudaContainer<int> indices;
 	CudaContainer<int> numberOfNeighbors;
 	CudaContainer<int> neighborIndices;
-	
-	CudaContainer<int> indicesToKeep;
-	CudaContainer<int> numBubblesToKeep;
+
+	std::vector<double> hostData;
     };
     
     // ******************************
@@ -232,15 +231,7 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void removeSmallBubbles(double *currentData,
-			    double *temporaryData,
-			    int *indicesToKeep,
-			    int numBubblesToKeep,
-			    int numBubbles,
-			    int memoryStride,
-			    int memoryIndexOfRadius,
-			    double invPi,
-			    double deltaVolume);
+    void addVolume(double *r, int numBubbles, double deltaVolume, double invPi);
 
     __global__
     void eulerIntegration(double *x,
