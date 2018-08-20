@@ -279,8 +279,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 			dmh->getRawPtr(),
 			dmh->getPermanentMemorySizeInBytes(),
 			cudaMemcpyDeviceToHost);
-
-	size_t numBubblesOriginally = numBubbles;
+	
 	minRadius = env->getMinRad();
 	size_t memoryStride = dmh->getMemoryStride();
 	size_t rIdx = (size_t)BubbleProperty::R;
@@ -324,8 +323,6 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	nvtxRangePop();
 	
 	assignBubblesToCells(false);
-	
-	std::cout << "Bubbles left: " << numBubbles << std::endl;
     }
     else if (integrationStep % 100)
 	assignBubblesToCells();

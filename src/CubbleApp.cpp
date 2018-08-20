@@ -121,6 +121,7 @@ void CubbleApp::run()
 
     cudaProfilerStart();
     simulator->setSimulationTime(0);
+    size_t timesPrinted = 0;
     for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
     {
 	if (i == 55)
@@ -130,21 +131,19 @@ void CubbleApp::run()
 
 	if (i == 60)
 	    cudaProfilerStop();
+
+	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
+	    / (env->getAvgRad() * env->getAvgRad());
 	
-	if (i % 1000 == 0)
+	if ((size_t)scaledTime >= timesPrinted)
 	{
-	    std::cout << "Step " << i
-		      << " time " << simulator->getSimulationTime() * env->getKParameter() / (env->getAvgRad() * env->getAvgRad())
-		      << " average radius " << simulator->getAverageRadius()
+	    std::cout << "t*: " << scaledTime
+		      << " <R>/<R_in>: " << simulator->getAverageRadius() / env->getAvgRad()
 		      << std::endl;
 	    
-	    bubbleVolume = simulator->getVolumeOfBubbles();
-	    phi = bubbleVolume / env->getSimulationBoxVolume();
-	    printPhi(phi, phiTarget);
-	}
-
-	if (i % 10000 == 0)
 	    saveSnapshotToFile();
+	    ++timesPrinted;
+	}
 	
 	if (!continueSimulation)
 	{
