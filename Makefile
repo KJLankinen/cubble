@@ -8,6 +8,12 @@ NUM_DIM := 2
 
 
 # -----------------------------------------------------
+# Profile or not?
+# -----------------------------------------------------
+USE_PROFILING := 0
+
+
+# -----------------------------------------------------
 # Directories
 # -----------------------------------------------------
 
@@ -31,7 +37,7 @@ INCL = -Iinclude/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o CubbleApp.o Simulator.o
+OBJ_NAMES := Main.o CubbleApp.o Simulator.o DeviceMemoryHandler.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
@@ -67,7 +73,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM)
+DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING)
 
 
 # -----------------------------------------------------

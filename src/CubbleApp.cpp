@@ -1,4 +1,6 @@
 #include <iostream>
+#include <cuda_profiler_api.h>
+#include <nvToolsExt.h>
 
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
@@ -21,16 +23,16 @@ CubbleApp::CubbleApp(const std::string &inF,
 }
 
 CubbleApp::~CubbleApp()
-{
-    saveSnapshotToFile();
-    env->writeParameters();
-}
+{}
 
 void CubbleApp::run()
 {
+    NVTX_RANGE_PUSH_A("Setup");
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
+    NVTX_RANGE_POP();
+    
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
@@ -46,16 +48,14 @@ void CubbleApp::run()
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
 
+    NVTX_RANGE_PUSH_A("Scaling.");
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
-	env->setLbb(env->getLbb() + scaleAmount);
 	env->setTfr(env->getTfr() - scaleAmount);
-	
 	simulator->integrate();
-	
 	phi = bubbleVolume / env->getSimulationBoxVolume();
 	
 	if (numSteps % 1000 == 0)
@@ -63,14 +63,16 @@ void CubbleApp::run()
 	
 	++numSteps;
     }
+    NVTX_RANGE_POP();
     
-    std::cout << "Shrinking took total of " << numSteps << " steps." << std::endl;
+    std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
     
     std::cout << "Starting the relaxation of the foam..." << std::endl;
     numSteps = 0;
     const int failsafe = 500;
+    simulator->integrate(false, true);
     while (true)
     {
 	double energy1 = simulator->getElasticEnergy();
@@ -78,10 +80,11 @@ void CubbleApp::run()
 
 	for (int i = 0; i < env->getNumStepsToRelax(); ++i)
 	{
-	    simulator->integrate(false, i == env->getNumStepsToRelax() - 1);
+	    simulator->integrate(false, true);
 	    time += env->getTimeStep();
 	}
-	
+
+	//time *= env->getKparameter() / (env->getAvgRad() * env->getAvgRad());;
 	double energy2 = simulator->getElasticEnergy();
 	double deltaEnergy = energy1 == 0 ? 0
 	    : std::abs(energy2 - energy1) / (energy1 * time);
@@ -116,30 +119,57 @@ void CubbleApp::run()
     std::cout << "**Setup done.**"
 	      <<"\n\n**Starting the simulation proper.**"
 	      << std::endl;
-    cudaProfilerStart();
-    for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
+
+    NVTX_RANGE_PUSH_A("Simulation");
+
+    CUDA_PROFILER_START();
+    simulator->setSimulationTime(0);
+
+    numSteps = 0;
+    size_t timesPrinted = 0;
+    bool stopSimulation = false;
+    
+    while (!stopSimulation)
     {
-	simulator->integrate(true, false);
-	
-	if (i % 1000 == 0)
+	if (numSteps == 55)
 	{
-	    std::cout << "Current average radius after "
-		      << i << " steps: "
-		      << simulator->getAverageRadius()
-		      << std::endl;
+	    CUDA_PROFILER_START();
+	}
+	
+        stopSimulation = !simulator->integrate(true, false);
+
+	if (numSteps == 60)
+	{
+	    CUDA_PROFILER_STOP();
 	}
 
-	if (i % 100000 == 0)
+	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
+	    / (env->getAvgRad() * env->getAvgRad());
+	
+	if ((size_t)scaledTime >= timesPrinted)
+	{
+	    std::cout << "t*: " << scaledTime
+		      << " <R>/<R_in>: " << simulator->getAverageRadius() / env->getAvgRad()
+		      << std::endl;
+	    
 	    saveSnapshotToFile();
+	    ++timesPrinted;
+	}
+
+	++numSteps;
     }
-    cudaProfilerStop();
+    
+    NVTX_RANGE_POP();
+    
     saveSnapshotToFile();
+    env->writeParameters();
     
     std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
 }
 
 void CubbleApp::saveSnapshotToFile()
 {
+    NVTX_RANGE_PUSH_A("snapshot");
     std::cout << "Writing a snap shot to a file..." << std::flush;
 
     std::vector<Bubble> tempVec;
@@ -177,4 +207,5 @@ void CubbleApp::saveSnapshotToFile()
     ++numSnapshots;
 
     std::cout << " Done." << std::endl;
+    NVTX_RANGE_POP();
 }
