@@ -24,11 +24,11 @@ CubbleApp::~CubbleApp()
 
 void CubbleApp::run()
 {
-    nvtxRangePushA("Setup");
+    NVTX_RANGE_PUSH_A("Setup");
     std::cout << "**Starting the simulation setup.**\n" << std::endl;
     simulator->setupSimulation();
 
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
@@ -45,7 +45,7 @@ void CubbleApp::run()
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
 
-    nvtxRangePushA("Scaling.");
+    NVTX_RANGE_PUSH_A("Scaling.");
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
@@ -60,7 +60,7 @@ void CubbleApp::run()
 	
 	++numSteps;
     }
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
     printPhi(phi, phiTarget);
@@ -117,20 +117,28 @@ void CubbleApp::run()
 	      <<"\n\n**Starting the simulation proper.**"
 	      << std::endl;
 
-    nvtxRangePushA("Simulation");
+    NVTX_RANGE_PUSH_A("Simulation");
 
-    cudaProfilerStart();
+    CUDA_PROFILER_START();
     simulator->setSimulationTime(0);
-    size_t timesPrinted = 0;
-    for (int i = 0; i < env->getNumIntegrationSteps(); ++i)
-    {
-	if (i == 55)
-	    cudaProfilerStart();
-	
-	bool continueSimulation = simulator->integrate(true, false);
 
-	if (i == 60)
-	    cudaProfilerStop();
+    numSteps = 0;
+    size_t timesPrinted = 0;
+    bool stopSimulation = false;
+    
+    while (!stopSimulation)
+    {
+	if (numSteps == 55)
+	{
+	    CUDA_PROFILER_START();
+	}
+	
+        stopSimulation = !simulator->integrate(true, false);
+
+	if (numSteps == 60)
+	{
+	    CUDA_PROFILER_STOP();
+	}
 
 	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
 	    / (env->getAvgRad() * env->getAvgRad());
@@ -144,15 +152,11 @@ void CubbleApp::run()
 	    saveSnapshotToFile();
 	    ++timesPrinted;
 	}
-	
-	if (!continueSimulation)
-	{
-	    std::cout << "Stopping simulation!" << std::endl;
-	    break;
-	}
+
+	++numSteps;
     }
     
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     saveSnapshotToFile();
     env->writeParameters();
@@ -162,7 +166,7 @@ void CubbleApp::run()
 
 void CubbleApp::saveSnapshotToFile()
 {
-    nvtxRangePushA("snapshot");
+    NVTX_RANGE_PUSH_A("snapshot");
     std::cout << "Writing a snap shot to a file..." << std::flush;
 
     std::vector<Bubble> tempVec;
@@ -200,5 +204,5 @@ void CubbleApp::saveSnapshotToFile()
     ++numSnapshots;
 
     std::cout << " Done." << std::endl;
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 }

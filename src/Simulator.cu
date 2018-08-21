@@ -56,7 +56,7 @@ cubble::Simulator::~Simulator()
 
 void cubble::Simulator::setupSimulation()
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
 
     generateBubbles();
     assignBubblesToCells(true);
@@ -139,12 +139,12 @@ void cubble::Simulator::setupSimulation()
 								  env->getFZeroPerMuZero(),
 								  env->getKParameter(),
 								  false);
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 }
 
 bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -195,14 +195,14 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     
     do
     {
-	nvtxRangePushA("Predict");
+	NVTX_RANGE_PUSH_A("Predict");
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
-	nvtxRangePop();
-	nvtxRangePushA("AccArr");
+	NVTX_RANGE_POP();
+	NVTX_RANGE_PUSH_A("AccArr");
 
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 								 ax, ay, az, ar, e,
@@ -214,8 +214,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								 env->getPi(),
 								 useGasExchange,
 								 calculateEnergy);
-	nvtxRangePop();
-	nvtxRangePushA("VelFromAcc");
+	NVTX_RANGE_POP();
+	NVTX_RANGE_PUSH_A("VelFromAcc");
         
 	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
@@ -226,8 +226,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								      env->getKParameter(),
 								      calculateEnergy);
 	
-	nvtxRangePop();
-	nvtxRangePushA("Correct");
+	NVTX_RANGE_POP();
+	NVTX_RANGE_PUSH_A("Correct");
         
 	correct<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
@@ -239,12 +239,12 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   timeStep,
 					   numBubbles,
 					   useGasExchange);
-	nvtxRangePop();
-	nvtxRangePushA("CUB");
+	NVTX_RANGE_POP();
+	NVTX_RANGE_PUSH_A("CUB");
         
         error = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
 
-	nvtxRangePop();
+	NVTX_RANGE_POP();
 
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
@@ -255,13 +255,13 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     }
     while (error > env->getErrorTolerance());
     
-    nvtxRangePushA("UpdateData");
+    NVTX_RANGE_PUSH_A("UpdateData");
     // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
     size_t numBytesToCopy = 4 * sizeof(double) * dmh->getMemoryStride();
     cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
     cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
     cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     ++integrationStep;
     env->setTimeStep(timeStep);
@@ -273,7 +273,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
     if (minRadius < env->getMinRad())
     {
-	nvtxRangePushA("BubbleRemoval");
+	NVTX_RANGE_PUSH_A("BubbleRemoval");
 	
 	cudaMemcpyAsync(hostData.data(),
 			dmh->getRawPtr(),
@@ -320,21 +320,21 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
 	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, deltaVolume, 1.0 / env->getPi());
 	
-	nvtxRangePop();
+	NVTX_RANGE_POP();
 	
 	assignBubblesToCells(false);
     }
     else if (integrationStep % 100)
 	assignBubblesToCells();
 
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 
-    return numBubbles > 300;
+    return numBubbles > env->getMinNumBubbles();
 }
 
 double cubble::Simulator::getVolumeOfBubbles() const
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
@@ -348,26 +348,26 @@ double cubble::Simulator::getVolumeOfBubbles() const
 
     double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
     
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     return volume;
 }
 
 double cubble::Simulator::getAverageRadius() const
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     double *r = dmh->getDataPtr(BubbleProperty::R);
     double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad/= numBubbles;
     
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     
     return avgRad;
 }
 
 void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     bubbles.clear();
     bubbles.resize(numBubbles);
 
@@ -390,12 +390,12 @@ void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 	bubbles[i] = b;
     }
     
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 }
 
 void cubble::Simulator::generateBubbles()
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     
     std::cout << "Starting to generate data for bubbles." << std::endl;
     
@@ -441,12 +441,12 @@ void cubble::Simulator::generateBubbles()
     assignDataToBubbles<<<numBlocks, numThreads>>>(x, y, z,
 						   xPrd, yPrd, zPrd,
 						   r, w, givenNumBubblesPerDim, tfr, lbb, avgRad, numBubbles);
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 }
 
 void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 {
-    nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     
     if (useVerboseOutput)
 	std::cout << "Starting to assign bubbles to cells." << std::endl;
@@ -532,12 +532,12 @@ void cubble::Simulator::assignBubblesToCells(bool useVerboseOutput)
 					    numDomains,
 					    cells.getSize(),
 					    neighborStride);
-    nvtxRangePop();
+    NVTX_RANGE_POP();
 }
 
 dim3 cubble::Simulator::getGridSize()
 {
-  nvtxRangePushA(__FUNCTION__);
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
     int numBubblesPerCell = env->getNumBubblesPerCell();
 #if NUM_DIM == 3
     int numCellsPerDim = std::ceil(std::cbrt((float)numBubbles / numBubblesPerCell));
@@ -547,7 +547,7 @@ dim3 cubble::Simulator::getGridSize()
     dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
 #endif
 
-    nvtxRangePop();
+    NVTX_RANGE_POP();
     return gridSize;
 }
 

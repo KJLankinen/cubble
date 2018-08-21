@@ -19,11 +19,11 @@ namespace cubble
     class Env
     {
 	// See Macros.h for details of this macro
-	CUBBLE_CONST_PROP(int, NumIntegrationSteps, 0)
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
 	CUBBLE_CONST_PROP(int, RngSeed, 0)
 	CUBBLE_CONST_PROP(int, NumStepsToRelax, 0)
 	CUBBLE_CONST_PROP(int, NumBubbles, 0)
+	CUBBLE_CONST_PROP(int, MinNumBubbles, 0)
 	
 	CUBBLE_CONST_PROP(double, AvgRad, 0)
 	CUBBLE_CONST_PROP(double, StdDevRad, 0)
@@ -36,6 +36,7 @@ namespace cubble
 	CUBBLE_CONST_PROP(double, ScaleAmount, 0)
 	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
 	CUBBLE_CONST_PROP(double, KParameter, 0)
+	CUBBLE_CONST_PROP(double, Kappa, 0)
 	CUBBLE_PROP(double, TimeStep, 0)
 	
 	CUBBLE_CONST_PROP(std::string, DataPath, "")
@@ -109,13 +110,14 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, TimeStep);
 	    CUBBLE_IO_PARAMETER(read, params, RngSeed);
 	    CUBBLE_IO_PARAMETER(read, params, ScaleAmount);
-	    CUBBLE_IO_PARAMETER(read, params, NumIntegrationSteps);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
 	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
 	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
 	    CUBBLE_IO_PARAMETER(read, params, KParameter);
 	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
+	    CUBBLE_IO_PARAMETER(read, params, Kappa);
+	    CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);
