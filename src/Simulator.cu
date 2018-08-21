@@ -107,16 +107,22 @@ void cubble::Simulator::setupSimulation()
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
+							     -1.0,
+							     0.0,
 							     false,
 							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
+								  r,
 								  energies,
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
 								  env->getKParameter(),
+								  env->getKappa(),
+								  1.0,
+								  false,
 								  false);
     
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
@@ -131,16 +137,22 @@ void cubble::Simulator::setupSimulation()
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
+							     -1.0,
+							     0.0,
 							     false,
 							     false);
     
     calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
+								  r,
 								  energies,
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
 								  env->getKParameter(),
+								  env->getKappa(),
+								  1.0,
+								  false,
 								  false);
     NVTX_RANGE_POP();
 }
@@ -205,6 +217,9 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
 	NVTX_RANGE_POP();
+
+	double sumR = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, rPrd, numBubbles);
+	
 	NVTX_RANGE_PUSH_A("AccArr");
 
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
@@ -215,6 +230,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								 numBubbles,
 								 neighborStride,
 								 env->getPi(),
+								 env->getKappa(),
+								 sumR,
 								 useGasExchange,
 								 calculateEnergy);
 	NVTX_RANGE_POP();
@@ -222,12 +239,16 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         
 	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
 								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
+								      rPrd,
 								      energies,
 								      numBubbles,
 								      neighborStride,
 								      env->getFZeroPerMuZero(),
 								      env->getKParameter(),
-								      calculateEnergy);
+								      env->getKappa(),
+								      sumR,
+								      calculateEnergy,
+								      useGasExchange);
 	
 	NVTX_RANGE_POP();
 	NVTX_RANGE_PUSH_A("Correct");
@@ -297,19 +318,20 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	// Synchronize if memcpy not done yet.
 	CUDA_CALL(cudaDeviceSynchronize());
 
-	double deltaVolume = 0;
+	double volumeMultiplier = 0;
 	for (int i = (int)numBubbles - 1; i > -1; --i)
 	{
 	    double radius = hostData[rIdx * memoryStride + i];
+	    assert(radius > 0 && "Radius is negative!");
 	    if (radius < minRad)
 	    {
 		double volume = 0;
 	        volume = radius * radius;
 #if (NUM_DIM == 3)
-		volume *= 1.33333333333333333333333 * radius;
+		volume *= 1.333333333333333333333333 * radius;
 #endif
 		volume *= env->getPi();
-		deltaVolume += volume;
+	        volumeMultiplier += volume;
 		
 		for (size_t j = 0; j < idxVec.size(); ++j)
 		    hostData[j * memoryStride + i] = hostData[j * memoryStride + (numBubbles - 1)];
@@ -322,9 +344,16 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 			dmh->getPermanentMemorySizeInBytes(),
 			cudaMemcpyHostToDevice);
 
-	deltaVolume /= numBubbles;
+        volumeMultiplier /= getVolumeOfBubbles();
+	volumeMultiplier += 1.0;
 
-	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, deltaVolume, 1.0 / env->getPi());
+#if (NUM_DIM == 3)
+	volumeMultiplier = std::cbrt(volumeMultiplier);
+#else
+	volumeMultiplier = std::sqrt(volumeMultiplier);
+#endif
+
+	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier);
 	
 	NVTX_RANGE_POP();
 	
@@ -848,6 +877,8 @@ void cubble::createAccelerationArray(double *x,
 				     int numBubbles,
 				     int neighborStride,
 				     double pi,
+				     double kappa,
+				     double sumR,
 				     bool useGasExchange,
 				     bool calculateEnergy)
 {
@@ -939,7 +970,7 @@ void cubble::createAccelerationArray(double *x,
 #else
 		    tempVal = sqrt(tempVal) / (pi * r1);
 #endif
-		    tempVal *= 1.0 / r2 - 1.0 / r1;
+		    tempVal *= 1.0 / r2 + (kappa - 1.0) / r1 - kappa * (numBubbles - 1) / (sumR - r1);
 		}
 		else
 		    tempVal = 0.0;
@@ -962,13 +993,17 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 						double *dzdt,
 						double *drdt,
 
+						double *r,
 						double *energies,
 
 						int numBubbles,
 						int neighborStride,
 						double fZeroPerMuZero,
 						double kParam,
-						bool calculateEnergy)
+						double kappa,
+						double sumR,
+						bool calculateEnergy,
+						bool useGasExchange)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
@@ -979,24 +1014,55 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	double vr = 0.0;
 	double energy = 0;
 
-	for (int i = 0; i < neighborStride; ++i)
+	if (useGasExchange)
+	    vr = kappa * ((numBubbles - 1) / (sumR - r[tid]) - 1.0 / r[tid]);
+	
+	if (useGasExchange && calculateEnergy)
 	{
-	    vx += ax[tid + i * numBubbles];
-	    vy += ay[tid + i * numBubbles];
-	    vz += az[tid + i * numBubbles];
-	    vr += ar[tid + i * numBubbles];
-	    
-	    if (calculateEnergy)
+	    for (int i = 0; i < neighborStride; ++i)
+	    {
+		vx += ax[tid + i * numBubbles];
+		vy += ay[tid + i * numBubbles];
+		vz += az[tid + i * numBubbles];
+		vr += ar[tid + i * numBubbles];
 		energy += e[tid + i * numBubbles];
+	    }
+	}
+	else if (useGasExchange)
+	{
+	    for (int i = 0; i < neighborStride; ++i)
+	    {
+		vx += ax[tid + i * numBubbles];
+		vy += ay[tid + i * numBubbles];
+		vz += az[tid + i * numBubbles];
+		vr += ar[tid + i * numBubbles];
+	    }
+	}
+	else if (calculateEnergy)
+	{
+	    for (int i = 0; i < neighborStride; ++i)
+	    {
+		vx += ax[tid + i * numBubbles];
+		vy += ay[tid + i * numBubbles];
+		vz += az[tid + i * numBubbles];
+		energy += e[tid + i * numBubbles];
+	    }
+	}
+	else
+	{
+	    for (int i = 0; i < neighborStride; ++i)
+	    {
+		vx += ax[tid + i * numBubbles];
+		vy += ay[tid + i * numBubbles];
+		vz += az[tid + i * numBubbles];
+	    }
 	}
 	    
 	dxdt[tid] = vx * fZeroPerMuZero;
 	dydt[tid] = vy * fZeroPerMuZero;
 	dzdt[tid] = vz * fZeroPerMuZero;
-	drdt[tid] = vr * kParam;
-	
-	if (calculateEnergy)
-	    energies[tid] = energy;
+	drdt[tid] = kParam * vr;
+	energies[tid] = energy;
     }
 }
 
@@ -1078,23 +1144,11 @@ void cubble::correct(double *x,
 }
 
 __global__
-void cubble::addVolume(double *r, int numBubbles, double deltaVolume, double invPi)
+void cubble::addVolume(double *r, int numBubbles, double volumeMultiplier)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
-    {
-	double radius = r[tid];
-	double volume = radius * radius;
-#if (NUM_DIM == 3)
-	volume *= radius;
-	volume += 0.75 * deltaVolume * invPi;
-	radius = cbrt(volume);
-#else
-	volume += deltaVolume * invPi;
-	radius = sqrt(volume);
-#endif
-	r[tid] = radius;
-    }
+	r[tid] = r[tid] * volumeMultiplier;
 }
 
 __global__

@@ -10,10 +10,10 @@
     "NumBubblesPerCell": 96,
     "NumStepsToRelax": 1000,
     "PhiTarget": 0.9,
-    "RngSeed": 223168,
+    "RngSeed": 2231468,
     "ScaleAmount": 0.0001,
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.18354873753488696
+    "TimeStep": 0.12382141695621555
 }

@@ -59,7 +59,7 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
-	const static int neighborStride = 32;
+	const static int neighborStride = 64;
 	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
 	size_t integrationStep = 0;
 
@@ -179,6 +179,8 @@ namespace cubble
 				 int numBubbles,
 				 int neighborStride,
 				 double pi,
+				 double kappa,
+				 double sumR,
 				 bool useGasExchange,
 				 bool calculateEnergy);
 
@@ -194,14 +196,18 @@ namespace cubble
 					    double *dzdt,
 					    double *drdt,
 					    
+					    double *r,
 					    double *energies,
 					    
 					    int numBubbles,
 					    int neighborStride,
 					    double fZeroPerMuZero,
 					    double kParam,
-					    bool calculateEnergy);
-
+					    double kappa,
+					    double sumR,
+					    bool calculateEnergy,
+					    bool useGasExchange);
+    
     __global__
     void correct(double *x,
 		 double *y,
@@ -231,7 +237,7 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void addVolume(double *r, int numBubbles, double deltaVolume, double invPi);
+    void addVolume(double *r, int numBubbles, double volumeMultiplier);
 
     __global__
     void eulerIntegration(double *x,

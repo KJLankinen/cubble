@@ -150,6 +150,7 @@ void CubbleApp::run()
 	{
 	    std::cout << "t*: " << scaledTime
 		      << " <R>/<R_in>: " << simulator->getAverageRadius() / env->getAvgRad()
+		      << " phi: " << simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume()
 		      << std::endl;
 	    
 	    saveSnapshotToFile();
