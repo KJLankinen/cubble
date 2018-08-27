@@ -84,7 +84,7 @@ def plot_2d(n):
     fig = plt.figure()
     axes = []
     for i in range(n):
-        filename = "data/snapshot" + str(i + 12) + ".dat"
+        filename = "data/snapshot" + str(i + 13) + ".dat"
 
         with open(filename) as file:
             head = [next(file) for x in xrange(11)]

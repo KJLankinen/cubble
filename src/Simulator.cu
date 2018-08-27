@@ -240,16 +240,16 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
 	if (useGasExchange)
 	{
-	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, numBubbles);
+	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, env->getPi(), numBubbles);
 	    double invRho = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
 	    invRho /= cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
-	    invRho = 1.0 / invRho;
 
 	    calculateFinalRadiusChangeRate<<<numBlocks, numThreads>>>(drdtPrd,
 								      rPrd,
 								      freeArea,
 								      numBubbles,
 								      invRho,
+								      1.0 / env->getPi(),
 								      env->getKappa(),
 								      env->getKParameter());
 	}
@@ -1069,12 +1069,6 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	if (useGasExchange)
 	{
 	    drdt[tid] = vr;
-	    if (!(a < 1.0))
-	    {
-		for (int i = 0; i < neighborStride; ++i)
-		    printf("%d %d %d %f %f\n", i, tid, numBubbles, areaOverlap[tid + i * numBubbles], a);
-	    }
-	    
 	    DEVICE_ASSERT(a < 1.0);
 	    freeArea[tid] = 1.0 - a;
 	}
@@ -1085,11 +1079,19 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 }
 
 __global__
-void cubble::calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, int numBubbles)
+void cubble::calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, double pi, int numBubbles)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
-	output[tid] = freeArea[tid] * r[tid];
+    {
+	// Seemingly redundant operations (first multiply, then divide) but freeArea is summed separately later.
+#if (NUM_DIM == 3)
+	freeArea[tid] *= 4.0 * pi * r[tid] * r[tid];
+#else
+	freeArea[tid] *= 2.0 * pi * r[tid];
+#endif
+	output[tid] = freeArea[tid] / r[tid];
+    }
 }
 
 __global__
@@ -1098,14 +1100,22 @@ void cubble::calculateFinalRadiusChangeRate(double *drdt,
 					    double *freeArea,
 					    int numBubbles,
 					    double invRho,
+					    double invPi,
 					    double kappa,
 					    double kParam)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
     {
-	double vr = drdt[tid];
-	vr += kappa * freeArea[tid] * (invRho - 1.0 / r[tid]);
+	double vr = kappa * freeArea[tid] * (invRho - 1.0 / r[tid]);
+#if (NUM_DIM == 3)
+	vr *= 0.25 * invPi;
+	vr /= r[tid] * r[tid];
+#else
+	vr *= 0.5 * invPi;
+	vr /= r[tid];
+#endif
+	vr += drdt[tid];
 	drdt[tid] = kParam * vr;
     }
 }

@@ -206,7 +206,7 @@ namespace cubble
 					    bool useGasExchange);
 
     __global__
-    void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, int numBubbles);
+    void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, double pi, int numBubbles);
 
     __global__
     void calculateFinalRadiusChangeRate(double *drdt,
@@ -214,6 +214,7 @@ namespace cubble
 					double *freeArea,
 					int numBubbles,
 					double invRho,
+					double invPi,
 					double kappa,
 					double kParam);
     
