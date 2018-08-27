@@ -67,7 +67,7 @@ namespace cubble
         void* getRawPtrToMemory();
 
 	void* getRawPtrToCubReductionOutputMemory(size_t sizeRequirementInBytes);
-	void *getRawPtrToCubReductionTempMemory(size_t sizeRequirementInBytes);
+	void* getRawPtrToCubReductionTempMemory(size_t sizeRequirementInBytes);
 	
 	size_t getNumPermanentValuesInMemory() const { return stride * (size_t)BubbleProperty::NUM_VALUES; }
 	size_t getNumTemporaryValuesInMemory() const;

@@ -83,12 +83,14 @@ void cubble::Simulator::setupSimulation()
     double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
     
     double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
+    double *freeArea = dmh->getDataPtr(BubbleProperty::FREE_AREA);
 
     double *ax = dmh->getDataPtr(BubblePairProperty::ACCELERATION_X);
     double *ay = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Y);
     double *az = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Z);
     double *ar = dmh->getDataPtr(BubblePairProperty::ACCELERATION_R);
     double *e = dmh->getDataPtr(BubblePairProperty::ENERGY);
+    double *areaOverlap = dmh->getDataPtr(BubblePairProperty::OVERLAP_AREA);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -100,28 +102,23 @@ void cubble::Simulator::setupSimulation()
     double timeStep = env->getTimeStep();
 
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
-							     ax, ay, az, ar, e,
+							     ax, ay, az, ar, e, areaOverlap,
 							     numberOfNeighbors.getDataPtr(),
 							     neighborIndices.getDataPtr(),
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
-							     -1.0,
-							     0.0,
 							     false,
 							     false);
     
-    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
+    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
-								  r,
+								  freeArea,
 								  energies,
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
-								  env->getKParameter(),
-								  env->getKappa(),
-								  1.0,
 								  false,
 								  false);
     
@@ -130,28 +127,23 @@ void cubble::Simulator::setupSimulation()
 						tfr, lbb, timeStep, numBubbles);
     
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
-							     ax, ay, az, ar, e,
+							     ax, ay, az, ar, e, areaOverlap,
 							     numberOfNeighbors.getDataPtr(),
 							     neighborIndices.getDataPtr(),
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
 							     env->getPi(),
-							     -1.0,
-							     0.0,
 							     false,
 							     false);
     
-    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
+    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
-								  r,
+								  freeArea,
 								  energies,
 								  numBubbles,
 								  neighborStride,
 								  env->getFZeroPerMuZero(),
-								  env->getKParameter(),
-								  env->getKappa(),
-								  1.0,
 								  false,
 								  false);
     NVTX_RANGE_POP();
@@ -201,12 +193,14 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
     double *errors = dmh->getDataPtr(BubbleProperty::ERROR);
     double *volumes = dmh->getDataPtr(BubbleProperty::VOLUME);
+    double *freeArea = dmh->getDataPtr(BubbleProperty::FREE_AREA);
 
     double *ax = dmh->getDataPtr(BubblePairProperty::ACCELERATION_X);
     double *ay = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Y);
     double *az = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Z);
     double *ar = dmh->getDataPtr(BubblePairProperty::ACCELERATION_R);
     double *e = dmh->getDataPtr(BubblePairProperty::ENERGY);
+    double *areaOverlap = dmh->getDataPtr(BubblePairProperty::OVERLAP_AREA);
     
     do
     {
@@ -217,40 +211,49 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
 	NVTX_RANGE_POP();
-
-	double sumR = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, rPrd, numBubbles);
-	
 	NVTX_RANGE_PUSH_A("AccArr");
 
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
-								 ax, ay, az, ar, e,
+								 ax, ay, az, ar, e, areaOverlap,
 								 numberOfNeighbors.getDataPtr(),
 								 neighborIndices.getDataPtr(),
 								 tfr - lbb,
 								 numBubbles,
 								 neighborStride,
 								 env->getPi(),
-								 env->getKappa(),
-								 sumR,
 								 useGasExchange,
 								 calculateEnergy);
 	NVTX_RANGE_POP();
 	NVTX_RANGE_PUSH_A("VelFromAcc");
         
-	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e,
+	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
 								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-								      rPrd,
+								      freeArea,
 								      energies,
 								      numBubbles,
 								      neighborStride,
 								      env->getFZeroPerMuZero(),
-								      env->getKParameter(),
-								      env->getKappa(),
-								      sumR,
 								      calculateEnergy,
 								      useGasExchange);
 	
 	NVTX_RANGE_POP();
+
+	if (useGasExchange)
+	{
+	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, numBubbles);
+	    double invRho = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
+	    invRho /= cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
+	    invRho = 1.0 / invRho;
+
+	    calculateFinalRadiusChangeRate<<<numBlocks, numThreads>>>(drdtPrd,
+								      rPrd,
+								      freeArea,
+								      numBubbles,
+								      invRho,
+								      env->getKappa(),
+								      env->getKParameter());
+	}
+	
 	NVTX_RANGE_PUSH_A("Correct");
         
 	correct<<<numBlocks, numThreads>>>(x, y, z, r,
@@ -870,6 +873,7 @@ void cubble::createAccelerationArray(double *x,
 				     double *az,
 				     double *ar,
 				     double *e,
+				     double *areaOverlap,
 				     
 				     int *numberOfNeighbors,
 				     int *neighborIndices,
@@ -877,8 +881,6 @@ void cubble::createAccelerationArray(double *x,
 				     int numBubbles,
 				     int neighborStride,
 				     double pi,
-				     double kappa,
-				     double sumR,
 				     bool useGasExchange,
 				     bool calculateEnergy)
 {
@@ -895,6 +897,8 @@ void cubble::createAccelerationArray(double *x,
 	ay[tid] = 0;
 	az[tid] = 0;
 	ar[tid] = 0;
+	areaOverlap[tid] = 0;
+	e[tid] = 0;
 
 	if (neighborNum < numberOfNeighbors[idx1])
 	{
@@ -970,7 +974,9 @@ void cubble::createAccelerationArray(double *x,
 #else
 		    tempVal = sqrt(tempVal) / (pi * r1);
 #endif
-		    tempVal *= 1.0 / r2 + (kappa - 1.0) / r1 - kappa * (numBubbles - 1) / (sumR - r1);
+		    areaOverlap[tid] = tempVal;
+		    
+		    tempVal *= 1.0 / r2 - 1.0 / r1;
 		}
 		else
 		    tempVal = 0.0;
@@ -987,21 +993,19 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 						double *az,
 						double *ar,
 						double *e,
+						double *areaOverlap,
 			
 						double *dxdt,
 						double *dydt,
 						double *dzdt,
 						double *drdt,
 
-						double *r,
+						double *freeArea,
 						double *energies,
 
 						int numBubbles,
 						int neighborStride,
 						double fZeroPerMuZero,
-						double kParam,
-						double kappa,
-						double sumR,
 						bool calculateEnergy,
 						bool useGasExchange)
 {
@@ -1013,9 +1017,7 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	double vz = 0.0;
 	double vr = 0.0;
 	double energy = 0;
-
-	if (useGasExchange)
-	    vr = kappa * ((numBubbles - 1) / (sumR - r[tid]) - 1.0 / r[tid]);
+	double a = 0;
 	
 	if (useGasExchange && calculateEnergy)
 	{
@@ -1025,6 +1027,7 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 		vy += ay[tid + i * numBubbles];
 		vz += az[tid + i * numBubbles];
 		vr += ar[tid + i * numBubbles];
+		a += areaOverlap[tid + i * numBubbles];
 		energy += e[tid + i * numBubbles];
 	    }
 	}
@@ -1036,6 +1039,7 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 		vy += ay[tid + i * numBubbles];
 		vz += az[tid + i * numBubbles];
 		vr += ar[tid + i * numBubbles];
+		a += areaOverlap[tid + i * numBubbles];
 	    }
 	}
 	else if (calculateEnergy)
@@ -1061,8 +1065,48 @@ void cubble::calculateVelocityFromAccelerations(double *ax,
 	dxdt[tid] = vx * fZeroPerMuZero;
 	dydt[tid] = vy * fZeroPerMuZero;
 	dzdt[tid] = vz * fZeroPerMuZero;
+
+	if (useGasExchange)
+	{
+	    drdt[tid] = vr;
+	    if (!(a < 1.0))
+	    {
+		for (int i = 0; i < neighborStride; ++i)
+		    printf("%d %d %d %f %f\n", i, tid, numBubbles, areaOverlap[tid + i * numBubbles], a);
+	    }
+	    
+	    DEVICE_ASSERT(a < 1.0);
+	    freeArea[tid] = 1.0 - a;
+	}
+	
+	if (calculateEnergy)
+	    energies[tid] = energy;
+    }
+}
+
+__global__
+void cubble::calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, int numBubbles)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubbles)
+	output[tid] = freeArea[tid] * r[tid];
+}
+
+__global__
+void cubble::calculateFinalRadiusChangeRate(double *drdt,
+					    double *r,
+					    double *freeArea,
+					    int numBubbles,
+					    double invRho,
+					    double kappa,
+					    double kParam)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubbles)
+    {
+	double vr = drdt[tid];
+	vr += kappa * freeArea[tid] * (invRho - 1.0 / r[tid]);
 	drdt[tid] = kParam * vr;
-	energies[tid] = energy;
     }
 }
 

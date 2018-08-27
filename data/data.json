@@ -14,11 +14,11 @@
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
     "TimeStep" : 1e-5,
     "RngSeedExpl" : "The seed for the RNG.",
-    "RngSeed" : 2231468,
+    "RngSeed" : 2468,
     "ScaleAmountExpl" : "How much to scale the side length(s) of the simulation box per scaling iteration.",
     "ScaleAmount" : 1e-4,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
-    "NumBubblesPerCell" : 96,
+    "NumBubblesPerCell" : 32,
     "NumBubblesExpl" : "Total number of bubbles to simulate.",
     "NumBubbles" : 1e3,
     "SnapshotFilenameExpl" : "The stem of the filename where to save the snap shots to.",
@@ -30,7 +30,7 @@
     "KParameterExpl" : "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
     "KParameter" : 0.00001,
     "KappaExpl" : "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
-    "Kappa" : 0.0,
+    "Kappa" : 0.1,
     "MinNumBubblesExpl" : "The simulation runs as long as there are at least this many bubbles.",
     "MinNumBubbles" : 300
 }

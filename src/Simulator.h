@@ -172,6 +172,7 @@ namespace cubble
 				 double *az,
 				 double *ar,
 				 double *e,
+				 double *areaOverlap,
 				 
 				 int *numberOfNeighbors,
 				 int *neighborIndices,
@@ -179,8 +180,6 @@ namespace cubble
 				 int numBubbles,
 				 int neighborStride,
 				 double pi,
-				 double kappa,
-				 double sumR,
 				 bool useGasExchange,
 				 bool calculateEnergy);
 
@@ -190,23 +189,33 @@ namespace cubble
 					    double *az,
 					    double *ar,
 					    double *e,
+					    double *areaOverlap,
 					    
 					    double *dxdt,
 					    double *dydt,
 					    double *dzdt,
 					    double *drdt,
 					    
-					    double *r,
+					    double *freeArea,
 					    double *energies,
 					    
 					    int numBubbles,
 					    int neighborStride,
 					    double fZeroPerMuZero,
-					    double kParam,
-					    double kappa,
-					    double sumR,
 					    bool calculateEnergy,
 					    bool useGasExchange);
+
+    __global__
+    void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, int numBubbles);
+
+    __global__
+    void calculateFinalRadiusChangeRate(double *drdt,
+					double *r,
+					double *freeArea,
+					int numBubbles,
+					double invRho,
+					double kappa,
+					double kParam);
     
     __global__
     void correct(double *x,
