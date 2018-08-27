@@ -40,19 +40,6 @@ void cubble::DeviceMemoryHandler::reserveMemory()
 		  << std::endl;
 }
 
-void cubble::DeviceMemoryHandler::swapData()
-{
-    cudaMemcpy(static_cast<void*>(rawDeviceMemoryPtr),
-	       static_cast<void*>(getRawPtrToTemporaryData()),
-	       getPermanentMemorySizeInBytes(),
-	       cudaMemcpyDeviceToDevice);
-}
-
-void cubble::DeviceMemoryHandler::resetTemporaryData()
-{
-    cudaMemset(static_cast<void*>(getRawPtrToTemporaryData()), 0, getTemporaryMemorySizeInBytes());
-}
-
 double* cubble::DeviceMemoryHandler::getDataPtr(cubble::BubbleProperty prop)
 {
     // Note that this function exposes raw device memory. Proceed with caution.
@@ -63,37 +50,19 @@ double* cubble::DeviceMemoryHandler::getDataPtr(cubble::BubbleProperty prop)
     assert(rawDeviceMemoryPtr != nullptr
 	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
     
-    dataPtr = getRawPtr();
+    dataPtr = static_cast<double*>(getRawPtrToMemory());
     dataPtr += propIdx * stride;
     
-    assert(dataPtr < getRawPtr() + getNumPermanentValuesInMemory());
+    assert(dataPtr < static_cast<double*>(getRawPtrToMemory()) + getNumPermanentValuesInMemory());
 
     return dataPtr;
 }
 
-double* cubble::DeviceMemoryHandler::getDataPtr(TemporaryBubbleProperty prop)
+double *cubble::DeviceMemoryHandler::getDataPtr(BubblePairProperty prop)
 {
     // Note that this function exposes raw device memory. Proceed with caution.
     size_t propIdx = (size_t)prop;
-    assert(propIdx < (size_t)BubbleProperty::NUM_VALUES);
-
-    double *dataPtr = nullptr;
-    assert(rawDeviceMemoryPtr != nullptr
-	   && "Device memory pointer is a nullptr! Can't get a data pointer from the memory handler!");
-
-    dataPtr = getRawPtrToTemporaryData();
-    dataPtr += propIdx * stride;
-
-    assert(dataPtr < getRawPtr() + getNumPermanentValuesInMemory() + getNumTemporaryValuesInMemory());
-
-    return dataPtr;
-}
-
-double *cubble::DeviceMemoryHandler::getDataPtr(AccelerationProperty prop)
-{
-    // Note that this function exposes raw device memory. Proceed with caution.
-    size_t propIdx = (size_t)prop;
-    assert(propIdx < (size_t)AccelerationProperty::NUM_VALUES);
+    assert(propIdx < (size_t)BubblePairProperty::NUM_VALUES);
 
     double *dataPtr = nullptr;
     assert(rawDeviceMemoryPtr != nullptr
@@ -102,34 +71,66 @@ double *cubble::DeviceMemoryHandler::getDataPtr(AccelerationProperty prop)
     dataPtr = getRawPtrToTemporaryData();
     dataPtr += propIdx * stride * neighborStride;
 
-    assert(dataPtr < getRawPtr() + getNumPermanentValuesInMemory() + getNumTemporaryValuesInMemory());
+    assert(dataPtr < static_cast<double*>(getRawPtrToMemory())
+	   + getNumPermanentValuesInMemory() + getNumTemporaryValuesInMemory());
 
     return dataPtr;
 }
 
-double* cubble::DeviceMemoryHandler::getRawPtr()
+void* cubble::DeviceMemoryHandler::getRawPtrToMemory()
 {
-    return static_cast<double*>(rawDeviceMemoryPtr);
+    return rawDeviceMemoryPtr;
 }
 
 double* cubble::DeviceMemoryHandler::getRawPtrToTemporaryData()
 {
-    double *tempPtr = getRawPtr();
+    double *tempPtr = static_cast<double*>(getRawPtrToMemory());
     tempPtr += getNumPermanentValuesInMemory();
 
     return tempPtr;
 }
 
-size_t cubble::DeviceMemoryHandler::getNumTemporaryValuesInMemory() const
+void* cubble::DeviceMemoryHandler::getRawPtrToCubReductionOutputMemory(size_t sizeRequirementInBytes)
 {
-    return (size_t)AccelerationProperty::NUM_VALUES * neighborStride * stride;
+    if (sizeRequirementInBytes > cubReductionOutputMemorySizeInBytes)
+    {
+	if (cubReductionOutputPtr)
+	{
+	    cudaFree(cubReductionOutputPtr);
+	    cubReductionOutputPtr = nullptr;
+	}
+	else
+	    std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
+
+	cudaMalloc((void**)&cubReductionOutputPtr, sizeRequirementInBytes);
+	cubReductionOutputMemorySizeInBytes = sizeRequirementInBytes;
+    }
+    
+    return cubReductionOutputPtr;
 }
 
-size_t cubble::DeviceMemoryHandler::getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop) const
+void* cubble::DeviceMemoryHandler::getRawPtrToCubReductionTempMemory(size_t sizeRequirementInBytes)
 {
-    size_t valuesBefore = ((size_t)prop + (size_t)BubbleProperty::NUM_VALUES) * stride;
+    if (sizeRequirementInBytes > cubReductionTemporaryMemorySizeInBytes)
+    {
+	if (cubReductionTempPtr)
+	{
+	    cudaFree(cubReductionTempPtr);
+	    cubReductionTempPtr = nullptr;
+	}
+	else
+	    std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
+
+	cudaMalloc((void**)&cubReductionTempPtr, sizeRequirementInBytes);
+	cubReductionTemporaryMemorySizeInBytes = sizeRequirementInBytes;
+    }
     
-    return (getNumPermanentValuesInMemory() + getNumTemporaryValuesInMemory() - valuesBefore) * sizeof(double);
+    return cubReductionTempPtr;   
+}
+
+size_t cubble::DeviceMemoryHandler::getNumTemporaryValuesInMemory() const
+{
+    return (size_t)BubblePairProperty::NUM_VALUES * neighborStride * stride;
 }
 
 void cubble::DeviceMemoryHandler::freeMemory()
@@ -138,6 +139,22 @@ void cubble::DeviceMemoryHandler::freeMemory()
     {
 	cudaFree(rawDeviceMemoryPtr);
 	rawDeviceMemoryPtr = nullptr;
+    }
+    else
+	std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
+    
+    if (cubReductionOutputPtr)
+    {
+	cudaFree(cubReductionOutputPtr);
+	cubReductionOutputPtr = nullptr;
+    }
+    else
+	std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
+    
+    if (cubReductionTempPtr)
+    {
+	cudaFree(cubReductionTempPtr);
+	cubReductionTempPtr = nullptr;
     }
     else
 	std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;

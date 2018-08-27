@@ -30,7 +30,7 @@
     "KParameterExpl" : "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
     "KParameter" : 0.00001,
     "KappaExpl" : "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
-    "Kappa" : 0.1,
+    "Kappa" : 0.0,
     "MinNumBubblesExpl" : "The simulation runs as long as there are at least this many bubbles.",
     "MinNumBubbles" : 300
 }

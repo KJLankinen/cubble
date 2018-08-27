@@ -32,31 +32,23 @@ namespace cubble
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
-	
-	NUM_VALUES
-    };
-
-    // Memory for these aren't allocated per se.
-    // They're used only temporarily and thus are saved
-    // in the secondary (temporary) half of the memory pool.
-    enum class TemporaryBubbleProperty
-    {
+	    
 	ENERGY,
 	ERROR,
 	VOLUME,
-	REDUCTION_OUTPUT,
-	REDUCTION_TEMP,
+	FREE_AREA,
 	
 	NUM_VALUES
     };
 
-    enum class AccelerationProperty
+    enum class BubblePairProperty
     {
-	X,
-	Y,
-	Z,
-	R,
-	E,
+	ACCELERATION_X,
+	ACCELERATION_Y,
+	ACCELERATION_Z,
+	ACCELERATION_R,
+	ENERGY,
+	OVERLAP_AREA,
 
 	NUM_VALUES
     };
@@ -68,29 +60,35 @@ namespace cubble
 	~DeviceMemoryHandler();
 	
 	void reserveMemory();
-	void swapData();
-	void resetTemporaryData();
 	
-	double *getDataPtr(BubbleProperty prop);
-	double *getDataPtr(TemporaryBubbleProperty prop);
-	double *getDataPtr(AccelerationProperty prop);
-        double *getRawPtr();
-	double *getRawPtrToTemporaryData();
+	double* getDataPtr(BubbleProperty prop);
+	double* getDataPtr(BubblePairProperty prop);
+	
+        void* getRawPtrToMemory();
+
+	void* getRawPtrToCubReductionOutputMemory(size_t sizeRequirementInBytes);
+	void *getRawPtrToCubReductionTempMemory(size_t sizeRequirementInBytes);
 	
 	size_t getNumPermanentValuesInMemory() const { return stride * (size_t)BubbleProperty::NUM_VALUES; }
 	size_t getNumTemporaryValuesInMemory() const;
-        size_t getPermanentMemorySizeInBytes() const { return sizeof(double) * getNumPermanentValuesInMemory(); }
+
+	size_t getPermanentMemorySizeInBytes() const { return sizeof(double) * getNumPermanentValuesInMemory(); }
 	size_t getTemporaryMemorySizeInBytes() const { return sizeof(double) * getNumTemporaryValuesInMemory(); }
+
 	size_t getMemoryStride() const { return stride; }
-	size_t getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty prop) const;
 	
     private:
+        double* getRawPtrToTemporaryData();
 	void freeMemory();
 	
 	void *rawDeviceMemoryPtr = nullptr;
+	void *cubReductionOutputPtr = nullptr;
+	void *cubReductionTempPtr = nullptr;
 	
 	const size_t givenNumBubbles;
 	const size_t neighborStride;
 	size_t stride = 0;
+	size_t cubReductionOutputMemorySizeInBytes = 0;
+	size_t cubReductionTemporaryMemorySizeInBytes = 0;
     };
 }

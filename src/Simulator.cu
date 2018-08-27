@@ -82,13 +82,13 @@ void cubble::Simulator::setupSimulation()
     double *dzdtOld = dmh->getDataPtr(BubbleProperty::DZDT_OLD);
     double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
     
-    double *energies = dmh->getDataPtr(TemporaryBubbleProperty::ENERGY);
+    double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
 
-    double *ax = dmh->getDataPtr(AccelerationProperty::X);
-    double *ay = dmh->getDataPtr(AccelerationProperty::Y);
-    double *az = dmh->getDataPtr(AccelerationProperty::Z);
-    double *ar = dmh->getDataPtr(AccelerationProperty::R);
-    double *e = dmh->getDataPtr(AccelerationProperty::E);
+    double *ax = dmh->getDataPtr(BubblePairProperty::ACCELERATION_X);
+    double *ay = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Y);
+    double *az = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Z);
+    double *ar = dmh->getDataPtr(BubblePairProperty::ACCELERATION_R);
+    double *e = dmh->getDataPtr(BubblePairProperty::ENERGY);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -198,15 +198,15 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *dzdtOld = dmh->getDataPtr(BubbleProperty::DZDT_OLD);
     double *drdtOld = dmh->getDataPtr(BubbleProperty::DRDT_OLD);
 
-    double *energies = dmh->getDataPtr(TemporaryBubbleProperty::ENERGY);
-    double *errors = dmh->getDataPtr(TemporaryBubbleProperty::ERROR);
-    double *volumes = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
+    double *energies = dmh->getDataPtr(BubbleProperty::ENERGY);
+    double *errors = dmh->getDataPtr(BubbleProperty::ERROR);
+    double *volumes = dmh->getDataPtr(BubbleProperty::VOLUME);
 
-    double *ax = dmh->getDataPtr(AccelerationProperty::X);
-    double *ay = dmh->getDataPtr(AccelerationProperty::Y);
-    double *az = dmh->getDataPtr(AccelerationProperty::Z);
-    double *ar = dmh->getDataPtr(AccelerationProperty::R);
-    double *e = dmh->getDataPtr(AccelerationProperty::E);
+    double *ax = dmh->getDataPtr(BubblePairProperty::ACCELERATION_X);
+    double *ay = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Y);
+    double *az = dmh->getDataPtr(BubblePairProperty::ACCELERATION_Z);
+    double *ar = dmh->getDataPtr(BubblePairProperty::ACCELERATION_R);
+    double *e = dmh->getDataPtr(BubblePairProperty::ENERGY);
     
     do
     {
@@ -303,7 +303,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	NVTX_RANGE_PUSH_A("BubbleRemoval");
 	
 	cudaMemcpyAsync(hostData.data(),
-			dmh->getRawPtr(),
+			dmh->getRawPtrToMemory(),
 			dmh->getPermanentMemorySizeInBytes(),
 			cudaMemcpyDeviceToHost);
 	
@@ -339,7 +339,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	    }
 	}
 
-	cudaMemcpyAsync(dmh->getRawPtr(),
+	cudaMemcpyAsync(dmh->getRawPtrToMemory(),
 			hostData.data(),
 			dmh->getPermanentMemorySizeInBytes(),
 			cudaMemcpyHostToDevice);
@@ -373,7 +373,7 @@ double cubble::Simulator::getVolumeOfBubbles() const
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
-    double *volPtr = dmh->getDataPtr(TemporaryBubbleProperty::VOLUME);
+    double *volPtr = dmh->getDataPtr(BubbleProperty::VOLUME);
     
     calculateVolumes<<<numBlocks, numThreads>>>(
 	dmh->getDataPtr(BubbleProperty::R), volPtr, numBubbles, env->getPi());

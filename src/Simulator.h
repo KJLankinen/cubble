@@ -30,23 +30,23 @@ namespace cubble
 	
     private:
 	template<typename T, typename InputIterT, typename OutputIterT>
-        T cubReduction(cudaError_t (* reduxFunc)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
+        T cubReduction(cudaError_t (* reduxF)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		       InputIterT deviceInputData,
 		       size_t numValues) const
 	{
 	    assert(deviceInputData != nullptr);
 
 	    OutputIterT deviceOutputData = static_cast<OutputIterT>(
-		dmh->getDataPtr(TemporaryBubbleProperty::REDUCTION_OUTPUT));
-
+		dmh->getRawPtrToCubReductionOutputMemory(sizeof(T)));
+	    assert(deviceOutputData != nullptr);
+	    
 	    size_t tempStorageBytes = 0;
-	    void *devTempStoragePtr = NULL;
-	    (*reduxFunc)(devTempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
-	    assert(tempStorageBytes <=
-		   dmh->getNumBytesOfMemoryFromPropertyToEnd(TemporaryBubbleProperty::REDUCTION_TEMP));
-	    devTempStoragePtr = static_cast<void*>(dmh->getDataPtr(TemporaryBubbleProperty::REDUCTION_TEMP));
-
-	    (*reduxFunc)(devTempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    void *devTempStoragePtr = nullptr;
+	    (*reduxF)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    devTempStoragePtr = dmh->getRawPtrToCubReductionTempMemory(tempStorageBytes);
+	    assert(devTempStoragePtr != nullptr);
+	    (*reduxF)(devTempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    
 	    T hostOutputData;
 	    cudaMemcpy(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
 

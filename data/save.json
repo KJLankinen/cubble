@@ -2,7 +2,7 @@
     "AvgRad": 0.06,
     "ErrorTolerance": 1e-05,
     "KParameter": 1e-05,
-    "Kappa": 0.1,
+    "Kappa": 0.0,
     "MaxDeltaEnergy": 0.001,
     "MinNumBubbles": 300,
     "MuZero": 1.0,
@@ -15,5 +15,5 @@
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.12382141695621555
+    "TimeStep": 0.10368701913795349
 }
