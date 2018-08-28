@@ -126,7 +126,7 @@ void CubbleApp::run()
     simulator->setSimulationTime(0);
 
     numSteps = 0;
-    size_t timesPrinted = 0;
+    int timesPrinted = 0;
     bool stopSimulation = false;
     
     while (!stopSimulation)
@@ -146,14 +146,16 @@ void CubbleApp::run()
 	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
 	    / (env->getAvgRad() * env->getAvgRad());
 	
-	if ((size_t)scaledTime >= timesPrinted)
+	if ((int)scaledTime >= timesPrinted)
 	{
 	    std::cout << "t*: " << scaledTime
 		      << " <R>/<R_in>: " << simulator->getAverageRadius() / env->getAvgRad()
 		      << " phi: " << simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume()
 		      << std::endl;
 	    
-	    saveSnapshotToFile();
+	    if ((timesPrinted & (timesPrinted - 1)) == 0)
+	      saveSnapshotToFile();
+
 	    ++timesPrinted;
 	}
 
