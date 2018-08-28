@@ -45,3 +45,9 @@ The default way is to just use 'make' in the folder that contains the makefile. 
 The other two ways build different versions with either all or none of the debug options on. 'make clean' is used to delete the built binaries and temporary files created by emacs from source, script and data folders.
 
 In addition to the options above, there are some extra parameters in the makefile which can be used to e.g. turn profiling on/off.
+
+## Notes and tips
+The whole program was authored by one person, meaning it might not be the most easy or intuitive to use for someone else. If you as a user find something that was difficult for you to understand, but to which you were able to find an answer to, make note of it. If you have access to this repository, please add a small comment or a description of the problem and solution to it below. If you find that the implementation is stupid, feel free to make it less stupid.
+
+As an example:
+- When adding new parameters to the .json, always add an explanation of the parameter **BEFORE** the parameter itself: "EliteParamExpl" : "This parameter controls the elitism of the program.", \n "EliteParam" : 1337.1337
