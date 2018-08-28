@@ -56,7 +56,7 @@ bin/cubble data.json save.json
 ```
 The program runs until a certain amount of bubbles is left. After this, the program writes one final data file and returns.
 
-**N.B.** The parameter that controls this amount of bubbles (called MinNumBubbles) should always be larger than the number of bubbles in one cell multiplied by 3^NumDim. In other words, if the number of bubbles in a cell is 32 and the dimensionality of the program is 2 (2D simulation), then the minimum number of bubbles should be larger than 32 * 3^2 = 32 * 3 * 3 = 288. For 3D this would be 864. 300 and 900 are nice round numbers for MinNumBubbles.
+**N.B.** The parameter that controls this amount of bubbles (called MinNumBubbles) should always be larger than the number of bubbles in one cell multiplied by 3^NumDim. In other words, if the number of bubbles in a cell is 32 and the dimensionality of the program is 2 (2D simulation), then the minimum number of bubbles should be larger than **32 * 3^2 = 32 * 3 * 3 = 288**. For 3D this would be 864. **300 and 900 are nice round numbers for MinNumBubbles**.
 
 The reason for this is that the neighbor search is done in a manner that assumes at least 3 cells in each dimension. If there are less than 3 cells per dimension, some cells are searched through more than once, leading to bubbles having the same bubble as a neighbor multiple times. The implementation should and could be improved to circumvent this, but "in the mean time" just follow the above rule.
 
