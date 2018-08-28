@@ -4,7 +4,7 @@
 
 # The compiled code is different for different dimensions,
 # so this can't be given as a normal program parameter.
-NUM_DIM := 3
+NUM_DIM := 2
 
 
 # -----------------------------------------------------
@@ -37,7 +37,7 @@ INCL = -Iinclude/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o CubbleApp.o Simulator.o DeviceMemoryHandler.o
+OBJ_NAMES := Main.o CubbleApp.o Simulator.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.

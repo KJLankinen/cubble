@@ -5,15 +5,77 @@
 #include "Env.h"
 #include "Bubble.h"
 #include "Vec.h"
-#include "CudaContainer.h"
-#include "Cell.h"
-#include "DeviceMemoryHandler.h"
+#include "FixedSizeDeviceArray.h"
 
 #include <cuda_runtime.h>
 #include <memory>
+#include <vector>
 
 namespace cubble
 {
+    enum class BubbleProperty
+    {
+	X,
+	Y,
+	Z,
+	R,
+	
+	X_PRD,
+	Y_PRD,
+	Z_PRD,
+	R_PRD,
+	
+	DXDT,
+	DYDT,
+	DZDT,
+	DRDT,
+	
+	DXDT_PRD,
+	DYDT_PRD,
+	DZDT_PRD,
+	DRDT_PRD,
+	
+	DXDT_OLD,
+	DYDT_OLD,
+	DZDT_OLD,
+	DRDT_OLD,
+	
+	ENERGY,
+	ERROR,
+	VOLUME,
+	FREE_AREA,
+	
+	NUM_VALUES
+    };
+    
+    enum class BubblePairProperty
+    {
+	ACCELERATION_X,
+	ACCELERATION_Y,
+	ACCELERATION_Z,
+	ACCELERATION_R,
+	ENERGY,
+	OVERLAP_AREA,
+	
+	NUM_VALUES
+    };
+
+    enum class CellProperty
+    {
+	OFFSET,
+	SIZE,
+	
+	NUM_VALUES
+    };
+
+    enum class MiscIntProperty
+    {
+	NUM_NEIGHBORS,
+	INDEX,
+	
+	NUM_VALUES
+    };
+    
     class Simulator
     {
 	CUBBLE_PROP(double, SimulationTime, 0)
@@ -24,37 +86,72 @@ namespace cubble
 
 	void setupSimulation();
 	bool integrate(bool useGasExchange = false, bool calculateEnergy = false);
-	double getVolumeOfBubbles() const;
-	double getAverageRadius() const;
+	double getVolumeOfBubbles();
+	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 	
     private:
 	template<typename T, typename InputIterT, typename OutputIterT>
-        T cubReduction(cudaError_t (* reduxF)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
+        T cubReduction(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		       InputIterT deviceInputData,
-		       size_t numValues) const
+		       size_t numValues)
 	{
 	    assert(deviceInputData != nullptr);
 
-	    OutputIterT deviceOutputData = static_cast<OutputIterT>(
-		dmh->getRawPtrToCubReductionOutputMemory(sizeof(T)));
-	    assert(deviceOutputData != nullptr);
+	    if (sizeof(T) > cubOutputData.getSizeInBytes())
+	        cubOutputData = FixedSizeDeviceArray<char>(sizeof(T), 1);
+
+	    void *rawOutputPtr = static_cast<void*>(cubOutputData.getDataPtr());
+	    OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
 	    
 	    size_t tempStorageBytes = 0;
-	    void *devTempStoragePtr = nullptr;
-	    (*reduxF)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
-	    devTempStoragePtr = dmh->getRawPtrToCubReductionTempMemory(tempStorageBytes);
-	    assert(devTempStoragePtr != nullptr);
-	    (*reduxF)(devTempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+
+	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
+		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
+	    (*func)(tempStoragePtr,
+		    tempStorageBytes,
+		    deviceInputData,
+		    deviceOutputData,
+		    numValues,
+		    0,
+		    false);
 	    
 	    T hostOutputData;
 	    cudaMemcpy(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
 
 	    return hostOutputData;
 	}
+
+	template<typename InputIterT, typename OutputIterT>
+	void cubScan(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
+		     InputIterT deviceInputData,
+		     OutputIterT deviceOutputData,
+		     size_t numValues)
+	{
+	    assert(deviceInputData != nullptr);
+	    assert(deviceOutputData != nullptr);
+
+	    size_t tempStorageBytes = 0;
+	    (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+
+	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
+		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+	 
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());   
+	    (*func)(tempStoragePtr,
+		    tempStorageBytes,
+		    deviceInputData,
+		    deviceOutputData,
+		    numValues,
+		    0,
+		    false);
+	}
 	    
 	void generateBubbles();
-	void assignBubblesToCells(bool useVerboseOutput = false);
+	void assignBubblesToCells();
 	dim3 getGridSize();
 
 	size_t givenNumBubblesPerDim = 0;
@@ -66,15 +163,17 @@ namespace cubble
 	cudaEvent_t start = 0;
 	cudaEvent_t stop = 0;
 
-	std::unique_ptr<DeviceMemoryHandler> dmh;
 	std::shared_ptr<Env> env;
-        
-	CudaContainer<Cell> cells;
-	
-	CudaContainer<int> indices;
-	CudaContainer<int> numberOfNeighbors;
-	CudaContainer<int> neighborIndices;
 
+	FixedSizeDeviceArray<double> bubbleData;
+	FixedSizeDeviceArray<double> bubblePairData;
+	FixedSizeDeviceArray<int> cellData;
+	FixedSizeDeviceArray<int> miscData;
+        FixedSizeDeviceArray<int> neighborIndices;
+	
+	FixedSizeDeviceArray<char> cubOutputData;
+	FixedSizeDeviceArray<char> cubTemporaryStorage;
+        
 	std::vector<double> hostData;
     };
     
@@ -104,7 +203,7 @@ namespace cubble
     void calculateOffsets(double *x,
 			  double *y,
 			  double *z,
-			  Cell *cells,
+			  int *sizes,
 			  dvec domainDim,
 			  int numBubbles,
 			  int numCells);
@@ -114,7 +213,8 @@ namespace cubble
 			double *y,
 			double *z,
 			int *indices,
-			Cell *cells,
+		        int *offsets,
+			int *sizes,
 			dvec domainDim,
 			int numBubbles);
 
@@ -124,8 +224,9 @@ namespace cubble
 		       double *z,
 		       double *r,
 		       int *indices,
-		       Cell *cells,
-		       int *numberOfNeighbors,
+		       int *offsets,
+		       int *sizes,
+		       int *numNeighbors,
 		       int *neighborIndices,
 		       dvec tfr,
 		       dvec lbb,
@@ -279,7 +380,8 @@ namespace cubble
 				      int numCells,
 				      ivec cellIdxVec,
 				      ivec boxDim,
-				      Cell *cells,
+				      int *offsets,
+				      int *sizes,
 				      int &outXBegin,
 				      int &outXInterval,
 				      int &outYBegin,

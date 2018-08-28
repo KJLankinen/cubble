@@ -17,7 +17,7 @@
 namespace cubble
 {
     class Env
-    {
+    {	
 	// See Macros.h for details of this macro
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
 	CUBBLE_CONST_PROP(int, RngSeed, 0)
