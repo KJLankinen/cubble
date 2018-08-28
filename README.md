@@ -18,11 +18,9 @@ In addition to this readme, the repository contains the following items:
 
 ## Description of the source files and their purposes
 - **Bubble.h**: A convenience wrapper around data & stream output operator. Contains nothing of real interest, but is useful for easy printing of data to file/cout.
-- **Cell.h**: A convenience wrapper around some data. Should be removed & the relying code reworked.
 - **CubbleApp.h/.cpp**: 'The application'. Separate from the entry point to the program, which is in Main. Basically initializes, runs and cleans up after the main simulation.
-- **CudaConainer.h**: A wrapper around raw data. This was used extensively in an earlier version of the program. This should be removed and the relying code reworked accordingly.
-- **DeviceMemoryHandler.h/.cpp**: This file controls the allocation and deallocation of device memory. This is potentially a very dangerous place to play around, since it exposes raw pointers to device memory. Keep your fingers away, unless you understand what it does and have a good idea of what you're doing. Basically if you feel comfortable with pointer arithmetic and C-level memory handling, feel free to change and add things.
 - **Env.h**: This is basically a wrapper around the parameters of the program. All the input/output parameters from the .json files are handled by this. Also contains some program constants and other useful data, which should only be defined in one location. CubbleApp creates a shared pointer of this and it's passed around in constructor to anyone who needs to get/set parameters during the simulation. Whenever new input parameters are needed, add them to the input .json file _AND_ here.
+- **FixedSizeDeviceArray.h**: This is a device memory container. It handles the allocation, deallocation and memset by itself. Relatively safe and easy to use.
 - **Fileio.h**: Contains some file IO functions.
 - **Macros.h**: Contains convenience macros. Preprocessor constants set in Makefile affect the definitions of the macros.
 - **Main.cpp**: Contains the entry point of the program.
