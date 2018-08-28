@@ -99,8 +99,6 @@ void* cubble::DeviceMemoryHandler::getRawPtrToCubReductionOutputMemory(size_t si
 	    cudaFree(cubReductionOutputPtr);
 	    cubReductionOutputPtr = nullptr;
 	}
-	else
-	    std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
 
 	cudaMalloc((void**)&cubReductionOutputPtr, sizeRequirementInBytes);
 	cubReductionOutputMemorySizeInBytes = sizeRequirementInBytes;
@@ -118,8 +116,6 @@ void* cubble::DeviceMemoryHandler::getRawPtrToCubReductionTempMemory(size_t size
 	    cudaFree(cubReductionTempPtr);
 	    cubReductionTempPtr = nullptr;
 	}
-	else
-	    std::cout << "Device memory pointer is a nullptr, can't free the memory." << std::endl;
 
 	cudaMalloc((void**)&cubReductionTempPtr, sizeRequirementInBytes);
 	cubReductionTemporaryMemorySizeInBytes = sizeRequirementInBytes;
