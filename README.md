@@ -54,9 +54,13 @@ or by manually writing the path to the executable and the io files, e.g.
 ```
 bin/cubble data.json save.json
 ```
+The program runs until a certain amount of bubbles is left. After this, the program writes one final data file and returns.
+
+**N.B.** The parameter that controls this amount of bubbles (called MinNumBubbles) should always be larger than the number of bubbles in one cell multiplied by 3^NumDim. In other words, if the number of bubbles in a cell is 32 and the dimensionality of the program is 2 (2D simulation), then the minimum number of bubbles should be larger than 32 * 3^2 = 32 * 3 * 3 = 288. For 3D this would be 864. 300 and 900 are nice round numbers for MinNumBubbles.
+
+The reason for this is that the neighbor search is done in a manner that assumes at least 3 cells in each dimension. If there are less than 3 cells per dimension, some cells are searched through more than once, leading to bubbles having the same bubble as a neighbor multiple times. The implementation should and could be improved to circumvent this, but "in the mean time" just follow the above rule.
 
 ## Notes and tips
 The whole program was authored by one person, meaning it might not be the most easy or intuitive to use for someone else. If you as a user find something that was difficult for you to understand, but to which you were able to find an answer to, make note of it. If you have access to this repository, please add a small comment or a description of the problem and solution to it below. If you find that the implementation is stupid, feel free to make it less stupid.
 
-As an example:
 - When adding new parameters to the .json, always add an explanation of the parameter **BEFORE** the parameter itself: "EliteParamExpl" : "This parameter controls the eliteness of the program.", \n "EliteParam" : 1337.1337
