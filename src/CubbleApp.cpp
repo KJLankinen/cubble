@@ -150,14 +150,14 @@ void CubbleApp::runSimulation()
     
     while (!stopSimulation)
     {
-	if (numSteps == 55)
+	if (numSteps == 60)
 	{
 	    CUDA_PROFILER_START();
 	}
 	
         stopSimulation = !simulator->integrate(true, false);
 
-	if (numSteps == 60)
+	if (numSteps == 100)
 	{
 	    CUDA_PROFILER_STOP();
 #if (USE_PROFILING == 1)
