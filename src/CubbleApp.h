@@ -16,9 +16,12 @@ namespace cubble
 		  const std::string &saveFile);
 	~CubbleApp();
 	void run();
+    private:
+	void setupSimulation();
+	void stabilizeSimulation();
+	void runSimulation();
 	void saveSnapshotToFile();
 	
-    private:
 	static int numSnapshots;
 	std::unique_ptr<Simulator> simulator;
 	std::shared_ptr<Env> env;

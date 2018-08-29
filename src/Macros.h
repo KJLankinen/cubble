@@ -13,7 +13,7 @@
   #define NVTX_RANGE_PUSH_A(string)
   #define NVTX_RANGE_POP()
   #define CUDA_PROFILER_START()
-  #define CUDA_PROFILER_STOP()
+  #define CUDA_PROFILER_STOP(returnValue)
 #endif
 
 // Macro for reading and writing parameters from/to .json file

@@ -172,8 +172,6 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double timeStep = env->getTimeStep();
     double error = 0;
 
-    size_t numIntegrationSteps = 0;
-
     double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
     double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
     double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
@@ -215,15 +213,12 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     
     do
     {
-	NVTX_RANGE_PUSH_A("Predict");
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
-	NVTX_RANGE_POP();
-	NVTX_RANGE_PUSH_A("AccArr");
-
+	
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 								 ax, ay, az, ar, e, areaOverlap,
 								 numNeighbors,
@@ -234,9 +229,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								 env->getPi(),
 								 useGasExchange,
 								 calculateEnergy);
-	NVTX_RANGE_POP();
-	NVTX_RANGE_PUSH_A("VelFromAcc");
-        
+	
 	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
 								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
 								      freeArea,
@@ -246,12 +239,11 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								      env->getFZeroPerMuZero(),
 								      calculateEnergy,
 								      useGasExchange);
-	
-	NVTX_RANGE_POP();
 
 	if (useGasExchange)
 	{
 	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, env->getPi(), numBubbles);
+
 	    double invRho = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
 	    invRho /= cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
 
@@ -264,8 +256,6 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 								      env->getKappa(),
 								      env->getKParameter());
 	}
-	
-	NVTX_RANGE_PUSH_A("Correct");
         
 	correct<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
@@ -277,32 +267,17 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   timeStep,
 					   numBubbles,
 					   useGasExchange);
-	NVTX_RANGE_POP();
-	NVTX_RANGE_PUSH_A("CUB");
         
         error = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
-
-	NVTX_RANGE_POP();
 
 	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
 	    timeStep *= 1.9;
 	else if (error > env->getErrorTolerance())
 	    timeStep *= 0.5;
-
-	++numIntegrationSteps;
     }
     while (error > env->getErrorTolerance());
-	
-    if (integrationStep == 15)
-	cudaProfilerStop();
-    
-    NVTX_RANGE_PUSH_A("UpdateData");
-    // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
-    size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
-    cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
-    NVTX_RANGE_POP();
+
+    updateData();
     
     ++integrationStep;
     env->setTimeStep(timeStep);
@@ -310,136 +285,12 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
-
-    double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
-    if (minRadius < env->getMinRad())
-    {
-	NVTX_RANGE_PUSH_A("BubbleRemoval");
-	
-	cudaMemcpyAsync(hostData.data(),
-		        bubbleData.getDataPtr(),
-		        bubbleData.getSizeInBytes(),
-			cudaMemcpyDeviceToHost);
-	
-	minRadius = env->getMinRad();
-	size_t memoryStride = bubbleData.getWidth();
-	size_t rIdx = (size_t)(size_t)BubbleProperty::R;
-	std::vector<int> idxVec;
-	
-	for (size_t i = 0; i < (size_t)BubbleProperty::NUM_VALUES; ++i)
-	    idxVec.push_back(i);
-
-	// Synchronize if memcpy not done yet.
-	CUDA_CALL(cudaDeviceSynchronize());
-
-	double volumeMultiplier = 0;
-	for (int i = (int)numBubbles - 1; i > -1; --i)
-	{
-	    double radius = hostData[rIdx * memoryStride + i];
-	    assert(radius > 0 && "Radius is negative!");
-	    if (radius < minRad)
-	    {
-		double volume = 0;
-	        volume = radius * radius;
-#if (NUM_DIM == 3)
-		volume *= 1.333333333333333333333333 * radius;
-#endif
-		volume *= env->getPi();
-	        volumeMultiplier += volume;
-		
-		for (size_t j = 0; j < idxVec.size(); ++j)
-		    hostData[j * memoryStride + i] = hostData[j * memoryStride + (numBubbles - 1)];
-		--numBubbles;
-	    }
-	}
-
-	cudaMemcpyAsync(bubbleData.getDataPtr(),
-			hostData.data(),
-		        bubbleData.getSizeInBytes(),
-			cudaMemcpyHostToDevice);
-
-        volumeMultiplier /= getVolumeOfBubbles();
-	volumeMultiplier += 1.0;
-
-#if (NUM_DIM == 3)
-	volumeMultiplier = std::cbrt(volumeMultiplier);
-#else
-	volumeMultiplier = std::sqrt(volumeMultiplier);
-#endif
-
-	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier);
-	
-	NVTX_RANGE_POP();
-	
-	assignBubblesToCells();
-    }
-    else if (integrationStep % 100)
-	assignBubblesToCells();
+    
+    deleteSmallBubbles();
 
     NVTX_RANGE_POP();
 
     return numBubbles > env->getMinNumBubbles();
-}
-
-double cubble::Simulator::getVolumeOfBubbles()
-{
-    NVTX_RANGE_PUSH_A(__FUNCTION__);
-    const size_t numThreads = 128;
-    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
-
-    double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
-    
-    calculateVolumes<<<numBlocks, numThreads>>>(
-	bubbleData.getRowPtr((size_t)BubbleProperty::R), volPtr, numBubbles, env->getPi());
-    
-    CUDA_CALL(cudaDeviceSynchronize());
-    CUDA_CALL(cudaPeekAtLastError());
-
-    double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
-    
-    NVTX_RANGE_POP();
-    
-    return volume;
-}
-
-double cubble::Simulator::getAverageRadius()
-{
-    NVTX_RANGE_PUSH_A(__FUNCTION__);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-    double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
-    avgRad/= numBubbles;
-    
-    NVTX_RANGE_POP();
-    
-    return avgRad;
-}
-
-void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
-{
-    NVTX_RANGE_PUSH_A(__FUNCTION__);
-    bubbles.clear();
-    bubbles.resize(numBubbles);
-
-    size_t memoryStride = bubbleData.getWidth();
-    double *devX = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    std::vector<double> xyzr;
-    xyzr.resize(memoryStride * 4);
-
-    cudaMemcpy(xyzr.data(), devX, sizeof(double) * 4 * memoryStride, cudaMemcpyDeviceToHost);
-    
-    for (size_t i = 0; i < numBubbles; ++i)
-    {
-	Bubble b;
-	dvec pos(-1, -1, -1);
-	pos.x = xyzr[i];
-	pos.y = xyzr[i + memoryStride];
-	pos.z = xyzr[i + 2 * memoryStride];
-	b.setPos(pos);
-	b.setRadius(xyzr[i + 3 * memoryStride]);
-	bubbles[i] = b;
-    }
-    
-    NVTX_RANGE_POP();
 }
 
 void cubble::Simulator::generateBubbles()
@@ -540,22 +391,174 @@ void cubble::Simulator::assignBubblesToCells()
     NVTX_RANGE_POP();
 }
 
-dim3 cubble::Simulator::getGridSize()
+void cubble::Simulator::updateData()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
     
+    // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
+    size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
+
+    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
+    double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
+    double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
+    
+    cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice);
+    cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice);
+
+    NVTX_RANGE_POP();
+}
+
+void cubble::Simulator::deleteSmallBubbles()
+{
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
+    
+    const size_t numThreads = 128;
+    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+    
+    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
+    
+    if (minRadius < env->getMinRad())
+    {
+	NVTX_RANGE_PUSH_A("BubbleRemoval");
+	
+	cudaMemcpyAsync(hostData.data(),
+		        bubbleData.getDataPtr(),
+		        bubbleData.getSizeInBytes(),
+			cudaMemcpyDeviceToHost);
+	
+	minRadius = env->getMinRad();
+	size_t memoryStride = bubbleData.getWidth();
+	size_t rIdx = (size_t)(size_t)BubbleProperty::R;
+	std::vector<int> idxVec;
+	
+	for (size_t i = 0; i < (size_t)BubbleProperty::NUM_VALUES; ++i)
+	    idxVec.push_back(i);
+
+	// Synchronize if memcpy not done yet.
+	CUDA_CALL(cudaDeviceSynchronize());
+
+	double volumeMultiplier = 0;
+	for (int i = (int)numBubbles - 1; i > -1; --i)
+	{
+	    double radius = hostData[rIdx * memoryStride + i];
+	    assert(radius > 0 && "Radius is negative!");
+	    if (radius < minRadius)
+	    {
+		double volume = 0;
+	        volume = radius * radius;
+#if (NUM_DIM == 3)
+		volume *= 1.333333333333333333333333 * radius;
+#endif
+		volume *= env->getPi();
+	        volumeMultiplier += volume;
+		
+		for (size_t j = 0; j < idxVec.size(); ++j)
+		    hostData[j * memoryStride + i] = hostData[j * memoryStride + (numBubbles - 1)];
+		--numBubbles;
+	    }
+	}
+
+	cudaMemcpyAsync(bubbleData.getDataPtr(),
+			hostData.data(),
+		        bubbleData.getSizeInBytes(),
+			cudaMemcpyHostToDevice);
+
+        volumeMultiplier /= getVolumeOfBubbles();
+	volumeMultiplier += 1.0;
+
+#if (NUM_DIM == 3)
+	volumeMultiplier = std::cbrt(volumeMultiplier);
+#else
+	volumeMultiplier = std::sqrt(volumeMultiplier);
+#endif
+
+	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier);
+	
+	NVTX_RANGE_POP();
+	
+	assignBubblesToCells();
+    }
+    else if (integrationStep % 100)
+	assignBubblesToCells();
+
+    NVTX_RANGE_POP();
+}
+
+dim3 cubble::Simulator::getGridSize()
+{
     int numBubblesPerCell = env->getNumBubblesPerCell();
-#if NUM_DIM == 3
+#if (NUM_DIM == 3)
     int numCellsPerDim = std::ceil(std::cbrt((float)numBubbles / numBubblesPerCell));
     dim3 gridSize(numCellsPerDim, numCellsPerDim, numCellsPerDim);
 #else
     int numCellsPerDim = std::ceil(std::sqrt((float)numBubbles / numBubblesPerCell));
     dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
 #endif
-
-    NVTX_RANGE_POP();
     
     return gridSize;
+}
+
+double cubble::Simulator::getVolumeOfBubbles()
+{
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
+
+    const size_t numThreads = 128;
+    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+
+    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
+    calculateVolumes<<<numBlocks, numThreads>>>(r, volPtr, numBubbles, env->getPi());
+    double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
+    
+    NVTX_RANGE_POP();
+    
+    return volume;
+}
+
+double cubble::Simulator::getAverageRadius()
+{
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
+    
+    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
+    avgRad/= numBubbles;
+    
+    NVTX_RANGE_POP();
+    
+    return avgRad;
+}
+
+void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
+{
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
+    
+    bubbles.clear();
+    bubbles.resize(numBubbles);
+
+    size_t memoryStride = bubbleData.getWidth();
+    double *devX = bubbleData.getRowPtr((size_t)BubbleProperty::X);
+    std::vector<double> xyzr;
+    xyzr.resize(memoryStride * 4);
+
+    cudaMemcpy(xyzr.data(), devX, sizeof(double) * 4 * memoryStride, cudaMemcpyDeviceToHost);
+    
+    for (size_t i = 0; i < numBubbles; ++i)
+    {
+	Bubble b;
+	dvec pos(-1, -1, -1);
+	pos.x = xyzr[i];
+	pos.y = xyzr[i + memoryStride];
+	pos.z = xyzr[i + 2 * memoryStride];
+	b.setPos(pos);
+	b.setRadius(xyzr[i + 3 * memoryStride]);
+	bubbles[i] = b;
+    }
+    
+    NVTX_RANGE_POP();
 }
 
 

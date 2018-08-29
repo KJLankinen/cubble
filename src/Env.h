@@ -41,6 +41,7 @@ namespace cubble
 	
 	CUBBLE_CONST_PROP(std::string, DataPath, "")
 	CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
+	CUBBLE_CONST_PROP(std::string, DataFilename, "")
 
 	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
 	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
@@ -118,6 +119,7 @@ namespace cubble
 	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
 	    CUBBLE_IO_PARAMETER(read, params, Kappa);
 	    CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
+	    CUBBLE_IO_PARAMETER(read, params, DataFilename);
 	    
 	    if (!read)
 		fileio::writeJSONToFile(saveFile, params);

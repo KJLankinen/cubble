@@ -152,11 +152,13 @@ namespace cubble
 	    
 	void generateBubbles();
 	void assignBubblesToCells();
+	void updateData();
+	void deleteSmallBubbles();
 	dim3 getGridSize();
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
-	const static int neighborStride = 64;
+	const static int neighborStride = 32;
 	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
 	size_t integrationStep = 0;
 

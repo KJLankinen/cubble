@@ -27,11 +27,20 @@ CubbleApp::~CubbleApp()
 
 void CubbleApp::run()
 {
-    NVTX_RANGE_PUSH_A("Setup");
-    std::cout << "**Starting the simulation setup.**\n" << std::endl;
-    simulator->setupSimulation();
+    setupSimulation();
+    stabilizeSimulation();
+    runSimulation();
+    saveSnapshotToFile();
+    env->writeParameters();
+    
+    std::cout << "Simulation has been finished.\nGoodbye!" << std::endl;
+}
 
-    NVTX_RANGE_POP();
+void CubbleApp::setupSimulation()
+{
+    std::cout << "======\nSetup\n======" << std::endl;
+    
+    simulator->setupSimulation();
     
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
@@ -48,14 +57,15 @@ void CubbleApp::run()
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
 
-    NVTX_RANGE_PUSH_A("Scaling.");
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
 	env->setTfr(env->getTfr() - scaleAmount);
+	
 	simulator->integrate();
+	
 	phi = bubbleVolume / env->getSimulationBoxVolume();
 	
 	if (numSteps % 1000 == 0)
@@ -63,16 +73,22 @@ void CubbleApp::run()
 	
 	++numSteps;
     }
-    NVTX_RANGE_POP();
     
     std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
-    printPhi(phi, phiTarget);
-    saveSnapshotToFile();
     
-    std::cout << "Starting the relaxation of the foam..." << std::endl;
-    numSteps = 0;
+    printPhi(phi, phiTarget);
+    saveSnapshotToFile();   
+}
+
+void CubbleApp::stabilizeSimulation()
+{
+    std::cout << "=============\nStabilization\n=============" << std::endl;
+    
+    int numSteps = 0;
     const int failsafe = 500;
+    
     simulator->integrate(false, true);
+    
     while (true)
     {
 	double energy1 = simulator->getElasticEnergy();
@@ -84,10 +100,8 @@ void CubbleApp::run()
 	    time += env->getTimeStep();
 	}
 
-	//time *= env->getKparameter() / (env->getAvgRad() * env->getAvgRad());;
 	double energy2 = simulator->getElasticEnergy();
-	double deltaEnergy = energy1 == 0 ? 0
-	    : std::abs(energy2 - energy1) / (energy1 * time);
+	double deltaEnergy = energy1 == 0 ? 0 : std::abs(energy2 - energy1) / (energy1 * time);
 
 	if (deltaEnergy < env->getMaxDeltaEnergy())
 	{
@@ -99,7 +113,7 @@ void CubbleApp::run()
 	}
 	else if (numSteps > failsafe)
 	{
-	    std::cout << "Over " << failsafe
+	    std::cout << "Over " << failsafe * env->getNumStepsToRelax()
 		      << " steps taken and required delta energy not reached."
 		      << " Check parameters."
 		      << std::endl;
@@ -115,19 +129,24 @@ void CubbleApp::run()
     }
 
     saveSnapshotToFile();
+}
 
-    std::cout << "**Setup done.**"
-	      <<"\n\n**Starting the simulation proper.**"
-	      << std::endl;
+void CubbleApp::runSimulation()
+{
+    std::cout << "==========\nSimulation\n==========" << std::endl;
 
-    NVTX_RANGE_PUSH_A("Simulation");
-
-    CUDA_PROFILER_START();
     simulator->setSimulationTime(0);
 
-    numSteps = 0;
+    int numSteps = 0;
     int timesPrinted = 0;
     bool stopSimulation = false;
+
+    std::stringstream dataStream;
+    dataStream << env->getDataPath() << env->getDataFilename();
+
+    std::string filename(dataStream.str());
+    dataStream.clear();
+    dataStream.str("");
     
     while (!stopSimulation)
     {
@@ -141,6 +160,9 @@ void CubbleApp::run()
 	if (numSteps == 60)
 	{
 	    CUDA_PROFILER_STOP();
+#if (USE_PROFILING == 1)
+	    break;
+#endif
 	}
 
 	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
@@ -148,11 +170,17 @@ void CubbleApp::run()
 	
 	if ((int)scaledTime >= timesPrinted)
 	{
+	    double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
+	    double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
+	    
 	    std::cout << "t*: " << scaledTime
-		      << " <R>/<R_in>: " << simulator->getAverageRadius() / env->getAvgRad()
-		      << " phi: " << simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume()
+		      << " <R>/<R_in>: " << relativeRadius
+		      << " phi: " << phi
 		      << std::endl;
 	    
+	    dataStream << scaledTime << " " << relativeRadius << "\n";
+
+	    // Only write snapshots when t* is a power of 2.
 	    if ((timesPrinted & (timesPrinted - 1)) == 0)
 	      saveSnapshotToFile();
 
@@ -161,19 +189,14 @@ void CubbleApp::run()
 
 	++numSteps;
     }
-    
-    NVTX_RANGE_POP();
-    
-    saveSnapshotToFile();
-    env->writeParameters();
-    
-    std::cout << "**Simulation has been finished.**\nGoodbye!" << std::endl;
+
+    fileio::writeStringToFile(filename, dataStream.str());
 }
 
 void CubbleApp::saveSnapshotToFile()
 {
-    NVTX_RANGE_PUSH_A("snapshot");
-    std::cout << "Writing a snap shot to a file..." << std::flush;
+    std::cout << "Writing a snapshot to a file." << std::endl;
+    // This could easily be parallellized s.t. bubbles are fetched serially, but written to file parallelly.
 
     std::vector<Bubble> tempVec;
     simulator->getBubbles(tempVec);
@@ -208,7 +231,4 @@ void CubbleApp::saveSnapshotToFile()
     
     fileio::writeStringToFile(filename, ss.str());
     ++numSnapshots;
-
-    std::cout << " Done." << std::endl;
-    NVTX_RANGE_POP();
 }
