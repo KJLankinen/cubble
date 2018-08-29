@@ -151,9 +151,9 @@ namespace cubble
 	}
 	    
 	void generateBubbles();
-	void assignBubblesToCells();
+	void updateCellsAndNeighbors();
 	void updateData();
-	void deleteSmallBubbles();
+        bool deleteSmallBubbles();
 	dim3 getGridSize();
 
 	size_t givenNumBubblesPerDim = 0;

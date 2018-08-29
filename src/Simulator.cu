@@ -69,7 +69,8 @@ void cubble::Simulator::setupSimulation()
     NVTX_RANGE_PUSH_A(__FUNCTION__);
 
     generateBubbles();
-    assignBubblesToCells();
+    deleteSmallBubbles();
+    updateCellsAndNeighbors();
 
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
@@ -134,6 +135,9 @@ void cubble::Simulator::setupSimulation()
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
 						dxdtOld, dydtOld, dzdtOld, drdtOld,
 						tfr, lbb, timeStep, numBubbles);
+
+    if (deleteSmallBubbles())
+	updateCellsAndNeighbors();
     
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
 							     ax, ay, az, ar, e, areaOverlap,
@@ -155,6 +159,7 @@ void cubble::Simulator::setupSimulation()
 								  env->getFZeroPerMuZero(),
 								  false,
 								  false);
+    
     NVTX_RANGE_POP();
 }
 
@@ -286,7 +291,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
-    deleteSmallBubbles();
+    if (deleteSmallBubbles() || integrationStep % 100)
+	updateCellsAndNeighbors();
 
     NVTX_RANGE_POP();
 
@@ -330,7 +336,7 @@ void cubble::Simulator::generateBubbles()
 
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    std::cout << "\tAssigning data to bubbles..." << std::endl;;
+    std::cout << "\tAssigning data to bubbles..." << std::endl;
 
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil((float)numBubbles / (float)numThreads);
@@ -340,17 +346,16 @@ void cubble::Simulator::generateBubbles()
     NVTX_RANGE_POP();
 }
 
-void cubble::Simulator::assignBubblesToCells()
+void cubble::Simulator::updateCellsAndNeighbors()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
     
+    const int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
-    const dvec cellSize = (env->getTfr() - env->getLbb()) / domainDim;
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
-    const int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
 
     double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
     double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
@@ -372,7 +377,7 @@ void cubble::Simulator::assignBubblesToCells()
     cudaMemset(static_cast<void*>(sizes), 0, sizeof(int) * numCells);
 
     bubblesToCells<<<numBlocks, numThreads>>>(x, y, z, indices, offsets, sizes, domainDim, numBubbles);
-
+    
     gridSize.z *= numDomains;
     assertGridSizeBelowLimit(gridSize);
     
@@ -388,6 +393,7 @@ void cubble::Simulator::assignBubblesToCells()
 					    numDomains,
 					    numCells,
 					    neighborStride);
+    
     NVTX_RANGE_POP();
 }
 
@@ -411,7 +417,7 @@ void cubble::Simulator::updateData()
     NVTX_RANGE_POP();
 }
 
-void cubble::Simulator::deleteSmallBubbles()
+bool cubble::Simulator::deleteSmallBubbles()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
     
@@ -420,6 +426,8 @@ void cubble::Simulator::deleteSmallBubbles()
     
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
+
+    bool atLeastOneBubbleDeleted = false;
     
     if (minRadius < env->getMinRad())
     {
@@ -480,12 +488,12 @@ void cubble::Simulator::deleteSmallBubbles()
 	
 	NVTX_RANGE_POP();
 	
-	assignBubblesToCells();
+	atLeastOneBubbleDeleted = true;
     }
-    else if (integrationStep % 100)
-	assignBubblesToCells();
-
+    
     NVTX_RANGE_POP();
+
+    return atLeastOneBubbleDeleted;
 }
 
 dim3 cubble::Simulator::getGridSize()
@@ -624,7 +632,9 @@ void cubble::assignDataToBubbles(double *x,
 	xPrd[tid] = pos.x;
 	yPrd[tid] = pos.y;
 	zPrd[tid] = pos.z;
-	
+
+	double radius = r[tid];
+	r[tid] = radius > 0 ? radius : -radius;
 	w[tid] = r[tid];
     }
 }
