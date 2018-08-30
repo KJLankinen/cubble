@@ -37,9 +37,6 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     env->setTfr(tfr);
 
     bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BubbleProperty::NUM_VALUES);
-    bubblePairData = FixedSizeDeviceArray<double>(numBubbles,
-						  neighborStride,
-						  (size_t)BubblePairProperty::NUM_VALUES);
 
     indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
     // TODO: Figure out a more sensible value for this.
@@ -97,13 +94,6 @@ void cubble::Simulator::setupSimulation()
     double *energies = bubbleData.getRowPtr((size_t)BubbleProperty::ENERGY);
     double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
 
-    double *ax = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_X);
-    double *ay = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_Y);
-    double *az = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_Z);
-    double *ar = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_R);
-    double *e = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ENERGY);
-    double *areaOverlap = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::OVERLAP_AREA);
-
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
 
@@ -112,30 +102,22 @@ void cubble::Simulator::setupSimulation()
     const double minRad = env->getMinRad();
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
-    const size_t numBlocksForAcc = (size_t)std::ceil(numBubbles * neighborStride / (float)numThreads);
 
     double timeStep = env->getTimeStep();
 
-    createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
-							     ax, ay, az, ar, e, areaOverlap,
-							     firstIndices,
-							     secondIndices,
-							     tfr - lbb,
-							     numBubbles,
-							     neighborStride,
-							     env->getPi(),
-							     false,
-							     false);
-    
-    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
-								  dxdtOld, dydtOld, dzdtOld, drdtOld,
-								  freeArea,
-								  energies,
-								  numBubbles,
-								  neighborStride,
-								  env->getFZeroPerMuZero(),
-								  false,
-								  false);
+    calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(x, y, z, r,
+							       dxdtOld, dydtOld, dzdtOld, drdtOld,
+							       energies,
+							       freeArea,
+							       firstIndices,
+							       secondIndices,
+							       numBubbles,
+							       hostNumPairs,
+							       env->getFZeroPerMuZero(),
+							       env->getPi(),
+							       env->getTfr() - env->getLbb(),
+							       false,
+							       false);
     
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
 						dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -144,26 +126,19 @@ void cubble::Simulator::setupSimulation()
     if (deleteSmallBubbles())
 	updateCellsAndNeighbors();
     
-    createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
-							     ax, ay, az, ar, e, areaOverlap,
-							     firstIndices,
-							     secondIndices,
-							     tfr - lbb,
-							     numBubbles,
-							     neighborStride,
-							     env->getPi(),
-							     false,
-							     false);
-    
-    calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
-								  dxdtOld, dydtOld, dzdtOld, drdtOld,
-								  freeArea,
-								  energies,
-								  numBubbles,
-								  neighborStride,
-								  env->getFZeroPerMuZero(),
-								  false,
-								  false);
+    calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(x, y, z, r,
+							       dxdtOld, dydtOld, dzdtOld, drdtOld,
+							       energies,
+							       freeArea,
+							       firstIndices,
+							       secondIndices,
+							       numBubbles,
+							       hostNumPairs,
+							       env->getFZeroPerMuZero(),
+							       env->getPi(),
+							       env->getTfr() - env->getLbb(),
+							       false,
+							       false);
     
     NVTX_RANGE_POP();
 }
@@ -212,13 +187,6 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
     double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
 
-    double *ax = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_X);
-    double *ay = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_Y);
-    double *az = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_Z);
-    double *ar = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ACCELERATION_R);
-    double *e = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ENERGY);
-    double *areaOverlap = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::OVERLAP_AREA);
-
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
     
@@ -229,27 +197,20 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
-	
-	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
-								 ax, ay, az, ar, e, areaOverlap,
-								 firstIndices,
-								 secondIndices,
-								 tfr - lbb,
-								 numBubbles,
-								 neighborStride,
-								 env->getPi(),
-								 useGasExchange,
-								 calculateEnergy);
-	
-	calculateVelocityFromAccelerations<<<numBlocks, numThreads>>>(ax, ay, az, ar, e, areaOverlap,
-								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-								      freeArea,
-								      energies,
-								      numBubbles,
-								      neighborStride,
-								      env->getFZeroPerMuZero(),
-								      calculateEnergy,
-								      useGasExchange);
+
+	calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
+								   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
+								   energies,
+								   freeArea,
+								   firstIndices,
+								   secondIndices,
+								   numBubbles,
+								   hostNumPairs,
+								   env->getFZeroPerMuZero(),
+								   env->getPi(),
+								   env->getTfr() - env->getLbb(),
+								   calculateEnergy,
+								   useGasExchange);
 
 	if (useGasExchange)
 	{
@@ -752,15 +713,6 @@ void cubble::findBubblePairs(double *x,
     const int neighborSize = sizes[neighborCellIndex];
     const int neighborOffset = offsets[neighborCellIndex];
     int numComparisons = sizes[selfCellIndex] * neighborSize;
-    
-    auto wrapCoordinate = [](double val1, double val2, double multiplier) -> double
-	{
-	    double magnitude = val1 - val2;
-	    val2 = magnitude < -0.5 ? val2 - 1.0 : (magnitude > 0.5 ? val2 + 1.0 : val2);
-	    val2 = val1 - val2;
-
-	    return val2 * multiplier;
-	};
 
     int id = 0;
     for (int i = 0; i < (1 + numComparisons / blockDim.x); ++i)
@@ -780,15 +732,15 @@ void cubble::findBubblePairs(double *x,
 	    if (selfComparison && idx2 <= idx1)
 		continue;
 	    
-	    double wrappedComponent = wrapCoordinate(x[idx1], x[idx2], interval.x);
+	    double wrappedComponent = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
 	    wrappedComponent *= wrappedComponent;
 	    double magnitude = wrappedComponent;
 	    
-	    wrappedComponent = wrapCoordinate(y[idx1], y[idx2], interval.y);
+	    wrappedComponent = getWrappedCoordinate(y[idx1], y[idx2], interval.y);
 	    wrappedComponent *= wrappedComponent;
 	    magnitude += wrappedComponent;
 	    
-	    wrappedComponent = wrapCoordinate(z[idx1], z[idx2], interval.z);
+	    wrappedComponent = getWrappedCoordinate(z[idx1], z[idx2], interval.z);
 	    wrappedComponent *= wrappedComponent;
 	    magnitude += wrappedComponent;
 	    
@@ -798,12 +750,9 @@ void cubble::findBubblePairs(double *x,
 	    if (magnitude < wrappedComponent)
 	    {
 		// Set the smaller index to idx1 and larger to idx2
-		if (idx1 > idx2)
-		{
-		    id = idx1;
-		    idx1 = idx2;
-		    idx2 = id;
-		}
+		id = idx1;
+		idx1 = idx1 > idx2 ? idx2 : idx1;
+		idx2 = idx1 == idx2 ? idx1 : idx2;
 		    
 		id = atomicAdd(numLocalPairs, 2);
 		localPairs[id] = idx1;
@@ -890,220 +839,117 @@ void cubble::predict(double *x,
     }
 }
 
-// TODO: This needs to be updated!
 __global__
-void cubble::createAccelerationArray(double *x,
-				     double *y,
-				     double *z,
-				     double *r,
+void cubble::calculateVelocityAndGasExchange(double *x,
+					     double *y,
+					     double *z,
+					     double *r,
+					     
+					     double *dxdt,
+					     double *dydt,
+					     double *dzdt,
+					     double *drdt,
 
-				     double *ax,
-				     double *ay,
-				     double *az,
-				     double *ar,
-				     double *e,
-				     double *areaOverlap,
-				     
-				     int *numberOfNeighbors,
-				     int *neighborIndices,
-				     dvec interval,
-				     int numBubbles,
-				     int neighborStride,
-				     double pi,
-				     bool useGasExchange,
-				     bool calculateEnergy)
+					     double *energy,
+					     double *freeArea,
+					     
+					     int *firstIndices,
+					     int *secondIndices,
+					     
+					     int numBubbles,
+					     int numPairs,
+					     double fZeroPerMuZero,
+					     double pi,
+					     dvec interval,
+					     bool calculateEnergy,
+					     bool useGasExchange)
 {
+    // FYI: This kernel heavily reuses variables, since kernels can easily become register bound.
+    // Pay attention to the last assignation of a variable.
+    
     const int tid = getGlobalTid();
-    if (tid < numBubbles * neighborStride)
+    if (tid < numPairs)
     {
-	const int idx1 = tid % numBubbles;
-	const int neighborNum = tid / numBubbles;
-
-	// Accelerations recide in temporary memory which is also used by reductions
-	// and other temporary things, so they might contain garbage data.
-	// Later these arrays are summed, so it's important to zero all the values.
-	ax[tid] = 0;
-	ay[tid] = 0;
-	az[tid] = 0;
-	ar[tid] = 0;
-	areaOverlap[tid] = 0;
-	e[tid] = 0;
-
-	if (neighborNum < numberOfNeighbors[idx1])
-	{
-	    const int idx2 = neighborIndices[tid];
-	    
-	    double x1 = x[idx1];
-	    double y1 = y[idx1];
-	    double z1 = z[idx1];
-	    double r1 = r[idx1];
-	    
-	    double x2 = x[idx2];
-	    double y2 = y[idx2];
-	    double z2 = z[idx2];
-	    double r2 = r[idx2];
-	    
-	    double radii = r1 + r2;
-	    
-	    double magnitude = x1 - x2;
-	    x2 = magnitude < -0.5 ? x2 - 1.0 : (magnitude > 0.5 ? x2 + 1.0 : x2);
-	    x2 = x1 - x2;
-	    x2 *= interval.x;
-	    
-	    magnitude = y1 - y2;
-	    y2 = magnitude < -0.5 ? y2 - 1.0 : (magnitude > 0.5 ? y2 + 1.0 : y2);
-	    y2 = y1 - y2;
-	    y2 *= interval.y;
-	    
-	    magnitude = z1 - z2;
-	    z2 = magnitude < -0.5 ? z2 - 1.0 : (magnitude > 0.5 ? z2 + 1.0 : z2);
-	    z2 = z1 - z2;
-	    z2 *= interval.z;
-	    
-	    magnitude = sqrt(x2 * x2 + y2 * y2 + z2 * z2);
-	    DEVICE_ASSERT(magnitude > 0);
-	    DEVICE_ASSERT(radii > 0);
-	    
-	    double tempVal = 0;
-	    double invRadii = 1.0 / radii;
-	    if (calculateEnergy)
-	    {
-	        tempVal = radii - magnitude;
-		tempVal *= tempVal;
-		tempVal *= invRadii;
-		
-		e[tid] = tempVal;
-	    }
-	    
-	    tempVal = 1.0 / magnitude;
-	    
-	    x2 *= tempVal - invRadii;
-	    y2 *= tempVal - invRadii;
-	    z2 *= tempVal - invRadii;
-
-	    ax[tid] = x2;
-	    ay[tid] = y2;
-	    az[tid] = z2;
-	    
-	    if (useGasExchange)
-	    {
-		if (magnitude > r1 && magnitude > r2)
-		{
-		    radii = r2 * r2;
-		    tempVal = 0.5 * (radii - r1 * r1 + magnitude * magnitude) * tempVal;
-		    tempVal *= tempVal;
-		    tempVal = radii - tempVal;
-		    DEVICE_ASSERT(tempVal > -0.001);
-		    tempVal = tempVal < 0 ? -tempVal : tempVal;
-		    DEVICE_ASSERT(tempVal >= 0);
-		    
-#if (NUM_DIM == 3)
-		    tempVal = tempVal * 0.25;
-		    tempVal /= r1 * r1;
-#else
-		    tempVal = sqrt(tempVal) / (pi * r1);
-#endif
-		    areaOverlap[tid] = tempVal;
-		    
-		    tempVal *= 1.0 / r2 - 1.0 / r1;
-		}
-		else
-		    tempVal = 0.0;
-		
-		ar[tid] = tempVal;
-	    }
-	}
-    }
-}
-
-__global__
-void cubble::calculateVelocityFromAccelerations(double *ax,
-						double *ay,
-						double *az,
-						double *ar,
-						double *e,
-						double *areaOverlap,
-			
-						double *dxdt,
-						double *dydt,
-						double *dzdt,
-						double *drdt,
-
-						double *freeArea,
-						double *energies,
-
-						int numBubbles,
-						int neighborStride,
-						double fZeroPerMuZero,
-						bool calculateEnergy,
-						bool useGasExchange)
-{
-    const int tid = getGlobalTid();
-    if (tid < numBubbles)
-    {
-	double vx = 0.0;
-	double vy = 0.0;
-	double vz = 0.0;
-	double vr = 0.0;
-	double energy = 0;
-	double a = 0;
+	const int idx1 = firstIndices[tid];
+	const int idx2 = secondIndices[tid];
 	
-	if (useGasExchange && calculateEnergy)
+	double velX = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
+	velX *= velX;
+	double magnitude = velX;
+	
+	double velY = getWrappedCoordinate(y[idx1], y[idx2], interval.y);
+        velY *= velY;
+        magnitude += velY;
+
+	double velZ = 0;
+#if (NUM_DIM == 3)
+        velZ = getWrappedCoordinate(z[idx1], z[idx2], interval.z);
+	velZ *= velZ;
+        magnitude += velZ;
+#endif
+	magnitude = sqrt(magnitude);
+	double generalVariable = r[idx1] + r[idx2];
+	double invMagnitude = 0.0;
+
+	if (calculateEnergy)
 	{
-	    for (int i = 0; i < neighborStride; ++i)
-	    {
-		vx += ax[tid + i * numBubbles];
-		vy += ay[tid + i * numBubbles];
-		vz += az[tid + i * numBubbles];
-		vr += ar[tid + i * numBubbles];
-		a += areaOverlap[tid + i * numBubbles];
-		energy += e[tid + i * numBubbles];
-	    }
-	}
-	else if (useGasExchange)
-	{
-	    for (int i = 0; i < neighborStride; ++i)
-	    {
-		vx += ax[tid + i * numBubbles];
-		vy += ay[tid + i * numBubbles];
-		vz += az[tid + i * numBubbles];
-		vr += ar[tid + i * numBubbles];
-		a += areaOverlap[tid + i * numBubbles];
-	    }
-	}
-	else if (calculateEnergy)
-	{
-	    for (int i = 0; i < neighborStride; ++i)
-	    {
-		vx += ax[tid + i * numBubbles];
-		vy += ay[tid + i * numBubbles];
-		vz += az[tid + i * numBubbles];
-		energy += e[tid + i * numBubbles];
-	    }
-	}
-	else
-	{
-	    for (int i = 0; i < neighborStride; ++i)
-	    {
-		vx += ax[tid + i * numBubbles];
-		vy += ay[tid + i * numBubbles];
-		vz += az[tid + i * numBubbles];
-	    }
-	}
+	    invMagnitude = 1.0 / generalVariable;
+	    generalVariable -= magnitude;
+	    generalVariable *= generalVariable;
+	    generalVariable *= invMagnitude;
+
+	    atomicAdd(energy[idx1], generalVariable);
+	    atomicAdd(energy[idx2], generalVariable);
 	    
-	dxdt[tid] = vx * fZeroPerMuZero;
-	dydt[tid] = vy * fZeroPerMuZero;
-	dzdt[tid] = vz * fZeroPerMuZero;
+	    generalVariable = invMagnitude;
+	}
+	
+	invMagnitude = 1.0 / magnitude;
+        generalVariable = fZeroPerMuZero * (invMagnitude - generalVariable);
+	
+        velX *= generalVariable;
+	velY *= generalVariable;
+	velZ *= generalVariable;
+
+	atomicAdd(dxdt[idx1], velX);
+	atomicAdd(dxdt[idx2], -velX);
+	
+	atomicAdd(dydt[idx1], velY);
+	atomicAdd(dydt[idx2], -velY);
+#if (NUM_DIM == 3)
+	atomicAdd(dzdt[idx1], velZ);
+	atomicAdd(dzdt[idx2], -velZ);
+#endif
 
 	if (useGasExchange)
 	{
-	    drdt[tid] = vr;
-	    DEVICE_ASSERT(a < 1.0);
-	    freeArea[tid] = 1.0 - a;
+	    velX = r[idx1];
+	    velY = r[idx2];
+	    
+	    DEVICE_ASSERT(magnitude > velX && magnitude > velY);
+	    
+	    generalVariable = velY * velY;
+	    velZ = 0.5 * (generalVariable - velX * velX + magnitude * magnitude) * invMagnitude;
+	    velZ *= velZ;
+	    velZ = generalVariable - velZ;
+	    DEVICE_ASSERT(velZ > -0.0001);
+	    velZ = velZ < 0 ? -velZ : velZ;
+	    DEVICE_ASSERT(velZ >= 0);
+	    
+#if (NUM_DIM == 3)
+	    velZ *= pi;
+#else
+	    // N.B.: Need to divide by area later.
+	    velZ = 2.0 * sqrt(velZ);
+#endif
+	    atomicAdd(freeArea[idx1], velZ);
+	    atomicAdd(freeArea[idx2], velZ);
+	    
+	    velZ *= 1.0 / velY - 1.0 / velX;
+	    
+	    atomicAdd(drdt[idx1], velZ);
+	    atomicAdd(drdt[idx2], -velZ);
 	}
-	
-	if (calculateEnergy)
-	    energies[tid] = energy;
     }
 }
 
@@ -1113,12 +959,12 @@ void cubble::calculateFreeAreaPerRadius(double *r, double *freeArea, double *out
     const int tid = getGlobalTid();
     if (tid < numBubbles)
     {
-	// Seemingly redundant operations (first multiply, then divide) but freeArea is summed separately later.
+	double area = 2.0 * pi * r[tid];
 #if (NUM_DIM == 3)
-	freeArea[tid] *= 4.0 * pi * r[tid] * r[tid];
-#else
-	freeArea[tid] *= 2.0 * pi * r[tid];
+	area *= 2.0 * r[tid];
 #endif
+	area -= freeArea[tid];
+	freeArea[tid] = area;
 	output[tid] = freeArea[tid] / r[tid];
     }
 }
@@ -1137,6 +983,8 @@ void cubble::calculateFinalRadiusChangeRate(double *drdt,
     if (tid < numBubbles)
     {
 	double vr = kappa * freeArea[tid] * (invRho - 1.0 / r[tid]);
+	vr += drdt[tid];
+	
 #if (NUM_DIM == 3)
 	vr *= 0.25 * invPi;
 	vr /= r[tid] * r[tid];
@@ -1144,7 +992,7 @@ void cubble::calculateFinalRadiusChangeRate(double *drdt,
 	vr *= 0.5 * invPi;
 	vr /= r[tid];
 #endif
-	vr += drdt[tid];
+	
 	drdt[tid] = kParam * vr;
     }
 }
@@ -1282,6 +1130,16 @@ void cubble::eulerIntegration(double *x,
 // ******************************
 
 __forceinline__ __device__
+double cubble::getWrappedCoordinate(double val1, double val2, double multiplier)
+{
+    double magnitude = val1 - val2;
+    val2 = magnitude < -0.5 ? val2 - 1.0 : (magnitude > 0.5 ? val2 + 1.0 : val2);
+    val2 = val1 - val2;
+    
+    return val2 * multiplier;
+}
+
+__forceinline__ __device__
 int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
     // Switch statements and ifs that diverge inside one warp/block are
@@ -1347,65 +1205,6 @@ int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 }
 
 __forceinline__ __device__
-void cubble::getDomainOffsetsAndIntervals(int numBubbles,
-					  int numDomains,
-					  int numCells,
-					  ivec cellIdxVec,
-					  ivec boxDim,
-					  int *offsets,
-					  int *sizes,
-					  int &outXBegin,
-					  int &outXInterval,
-					  int &outYBegin,
-					  int &outYInterval,
-					  bool &outIsOwnCell)
-{
-    int domain = blockIdx.z % numDomains;
-    int di = (2 * domain) / numDomains;
-    
-    DEVICE_ASSERT((di == 0 && domain < (int)(0.5f * numDomains))
-	   || (di == 1 && domain >= (int)(0.5f * numDomains)));
-    
-    int dj = domain % (int)(0.5f * numDomains);
-    int djMod2 = dj % 2;
-
-    // Find this cell
-    int selfCellIndex = cellIdxVec.z * boxDim.x * boxDim.y
-	+ cellIdxVec.y * boxDim.x
-	+ cellIdxVec.x;
-    DEVICE_ASSERT(selfCellIndex < numCells);
-    int selfOffset = offsets[selfCellIndex];
-    int selfSize = sizes[selfCellIndex];
-
-    // Find the neighbor of this cell
-    int neighborCellIndex = getNeighborCellIndex(cellIdxVec, boxDim, dj / 2);
-    DEVICE_ASSERT(neighborCellIndex < numCells);
-    int neighborOffset = offsets[neighborCellIndex];
-    int neighborSize = sizes[neighborCellIndex];
-    
-    outIsOwnCell = selfCellIndex == neighborCellIndex;
-
-    // Find the interval of values to use:
-    // x-axis uses the right or the left half of the neighbor cell
-    int halfSize = 0.5f * neighborSize;
-    outXBegin = neighborOffset + djMod2 * halfSize;
-    outXInterval = halfSize + djMod2 * (neighborSize % 2);
-    
-    DEVICE_ASSERT(outXBegin + outXInterval <= numBubbles);
-    DEVICE_ASSERT(outXBegin + outXInterval <= neighborSize + neighborOffset);
-    DEVICE_ASSERT(outXInterval == halfSize || outXInterval == halfSize + 1);
-
-    // y-axis uses the top or bottom half of this cell
-    halfSize = 0.5f * selfSize;
-    outYBegin = selfOffset + di * halfSize;
-    outYInterval = halfSize + di * (selfSize % 2);
-
-    DEVICE_ASSERT(outYBegin + outYInterval <= numBubbles);
-    DEVICE_ASSERT(outYInterval == halfSize || outYInterval == halfSize + 1);
-    DEVICE_ASSERT(outYBegin + outYInterval <= selfSize + selfOffset);
-}
-
-__forceinline__ __device__
 int cubble::getGlobalTid()
 {
     // Simple helper function for calculating a 1D coordinate
@@ -1418,17 +1217,6 @@ int cubble::getGlobalTid()
     int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
 
     return tid;
-}
-
-__forceinline__ __device__
-cubble::dvec cubble::getShortestWrappedNormalizedVec(dvec pos1, dvec pos2)
-{
-    dvec temp = pos1 - pos2;
-    pos2.x = temp.x < -0.5 ? pos2.x - 1.0 : (temp.x > 0.5 ? pos2.x + 1.0 : pos2.x);
-    pos2.y = temp.y < -0.5 ? pos2.y - 1.0 : (temp.y > 0.5 ? pos2.y + 1.0 : pos2.y);
-    pos2.z = temp.z < -0.5 ? pos2.z - 1.0 : (temp.z > 0.5 ? pos2.z + 1.0 : pos2.z);
-    
-    return pos1 - pos2;
 }
 
 __forceinline__ __device__

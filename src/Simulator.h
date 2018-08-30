@@ -47,18 +47,6 @@ namespace cubble
 	
 	NUM_VALUES
     };
-    
-    enum class BubblePairProperty
-    {
-	ACCELERATION_X,
-	ACCELERATION_Y,
-	ACCELERATION_Z,
-	ACCELERATION_R,
-	ENERGY,
-	OVERLAP_AREA,
-	
-	NUM_VALUES
-    };
 
     enum class CellProperty
     {
@@ -217,7 +205,6 @@ namespace cubble
 	std::shared_ptr<Env> env;
 
 	FixedSizeDeviceArray<double> bubbleData;
-	FixedSizeDeviceArray<double> bubblePairData;
 	FixedSizeDeviceArray<int> cellData;
 	FixedSizeDeviceArray<int> indicesPerCell;
         FixedSizeDeviceArray<int> neighborPairIndices;
@@ -284,9 +271,6 @@ namespace cubble
 			 int numCells,
 			 int numBubbles,
 			 dvec interval);
-
-    __global__
-    void selectUniquePairs(int *firstIndices, int *secondIndices, int *numPairs);
     
     __global__
     void predict(double *x,
@@ -316,48 +300,29 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void createAccelerationArray(double *x,
-				 double *y,
-				 double *z,
-				 double *r,
-				 
-				 double *ax,
-				 double *ay,
-				 double *az,
-				 double *ar,
-				 double *e,
-				 double *areaOverlap,
-				 
-				 int *firstIndices,
-				 int *secondIndices,
-				 dvec interval,
-				 int numBubbles,
-				 int neighborStride,
-				 double pi,
-				 bool useGasExchange,
-				 bool calculateEnergy);
-
-    __global__
-    void calculateVelocityFromAccelerations(double *ax,
-					    double *ay,
-					    double *az,
-					    double *ar,
-					    double *e,
-					    double *areaOverlap,
-					    
-					    double *dxdt,
-					    double *dydt,
-					    double *dzdt,
-					    double *drdt,
-					    
-					    double *freeArea,
-					    double *energies,
-					    
-					    int numBubbles,
-					    int neighborStride,
-					    double fZeroPerMuZero,
-					    bool calculateEnergy,
-					    bool useGasExchange);
+    void calculateVelocityAndGasExchange(double *x,
+					 double *y,
+					 double *z,
+					 double *r,
+					 
+					 double *dxdt,
+					 double *dydt,
+					 double *dzdt,
+					 double *drdt,
+					 
+					 double *energy,
+					 double *freeArea,
+					 
+					 int *firstIndices,
+					 int *secondIndices,
+					 
+					 int numBubbles,
+					 int numPairs,
+					 double fZeroPerMuZero,
+					 double pi,
+					 dvec interval,
+					 bool calculateEnergy,
+					 bool useGasExchange);
 
     __global__
     void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, double pi, int numBubbles);
@@ -423,29 +388,15 @@ namespace cubble
     // ******************************
     // Device functions
     // ******************************
+
+    __device__
+    double getWrappedCoordinate(double val1, double val2, double multiplier);
     
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-
-    __device__
-    void getDomainOffsetsAndIntervals(int numBubbles,
-				      int numDomains,
-				      int numCells,
-				      ivec cellIdxVec,
-				      ivec boxDim,
-				      int *offsets,
-				      int *sizes,
-				      int &outXBegin,
-				      int &outXInterval,
-				      int &outYBegin,
-				      int &outYInterval,
-				      bool &outIsOwnCell);
     
     __device__
     int getGlobalTid();
-
-    __device__
-    dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
 
     __device__
     dvec getWrappedPos(dvec pos);
