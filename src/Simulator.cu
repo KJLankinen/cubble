@@ -40,8 +40,12 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     bubblePairData = FixedSizeDeviceArray<double>(numBubbles,
 						  neighborStride,
 						  (size_t)BubblePairProperty::NUM_VALUES);
-    miscData = FixedSizeDeviceArray<int>(numBubbles, (size_t)MiscIntProperty::NUM_VALUES);
-    neighborIndices = FixedSizeDeviceArray<int>(numBubbles, neighborStride);
+
+    indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
+    // TODO: Figure out a more sensible value for this.
+    const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
+    neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 4);
+    numPairs = FixedSizeDeviceArray<int>(1, 1);
     
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -100,7 +104,8 @@ void cubble::Simulator::setupSimulation()
     double *e = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ENERGY);
     double *areaOverlap = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::OVERLAP_AREA);
 
-    int *numNeighbors = miscData.getRowPtr((size_t)MiscIntProperty::NUM_NEIGHBORS);
+    int *firstIndices = neighborPairIndices.getRowPtr(0);
+    int *secondIndices = neighborPairIndices.getRowPtr(1);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -113,8 +118,8 @@ void cubble::Simulator::setupSimulation()
 
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
 							     ax, ay, az, ar, e, areaOverlap,
-							     numNeighbors,
-							     neighborIndices.getDataPtr(),
+							     firstIndices,
+							     secondIndices,
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
@@ -141,8 +146,8 @@ void cubble::Simulator::setupSimulation()
     
     createAccelerationArray<<<numBlocksForAcc, numThreads>>>(x, y, z, r,
 							     ax, ay, az, ar, e, areaOverlap,
-							     numNeighbors,
-							     neighborIndices.getDataPtr(),
+							     firstIndices,
+							     secondIndices,
 							     tfr - lbb,
 							     numBubbles,
 							     neighborStride,
@@ -214,7 +219,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *e = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::ENERGY);
     double *areaOverlap = bubblePairData.getRowPtr(0, (size_t)BubblePairProperty::OVERLAP_AREA);
 
-    int *numNeighbors = miscData.getRowPtr((size_t)MiscIntProperty::NUM_NEIGHBORS);
+    int *firstIndices = neighborPairIndices.getRowPtr(0);
+    int *secondIndices = neighborPairIndices.getRowPtr(1);
     
     do
     {
@@ -226,8 +232,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	
 	createAccelerationArray<<<numBlocksForAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 								 ax, ay, az, ar, e, areaOverlap,
-								 numNeighbors,
-								 neighborIndices.getDataPtr(),
+								 firstIndices,
+								 secondIndices,
 								 tfr - lbb,
 								 numBubbles,
 								 neighborStride,
@@ -350,49 +356,64 @@ void cubble::Simulator::updateCellsAndNeighbors()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
     
-    const int numDomains = (CUBBLE_NUM_NEIGHBORS + 1) * 4;
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
     const size_t numThreads = 128;
-    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+    size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
+    cellData.setBytesToZero();
+    indicesPerCell.setBytesToZero();
+    neighborPairIndices.setBytesToZero();
+    numPairs.setBytesToZero();
+    
     double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
     double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
     double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
-    int *numNeighbors = miscData.getRowPtr((size_t)MiscIntProperty::NUM_NEIGHBORS);
-    int *indices = miscData.getRowPtr((size_t)MiscIntProperty::INDEX);
-
-    cellData.setBytesToZero();
-    miscData.setBytesToZero();
-    neighborIndices.setBytesToZero();
     
     calculateOffsets<<<numBlocks, numThreads>>>(x, y, z, sizes, domainDim, numBubbles, numCells);
 
     cubScan<int*, int*>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
     cudaMemset(static_cast<void*>(sizes), 0, sizeof(int) * numCells);
 
-    bubblesToCells<<<numBlocks, numThreads>>>(x, y, z, indices, offsets, sizes, domainDim, numBubbles);
+    bubblesToCells<<<numBlocks, numThreads>>>(x, y, z,
+					      indicesPerCell.getDataPtr(),
+					      offsets,
+					      sizes,
+					      domainDim,
+					      numBubbles);
     
-    gridSize.z *= numDomains;
-    assertGridSizeBelowLimit(gridSize);
-    
-    findNeighbors<<<gridSize, numThreads>>>(x, y, z, r,
-					    indices,
-					    offsets,
-					    sizes,
-					    numNeighbors,
-					    neighborIndices.getDataPtr(),
-					    env->getTfr(),
-					    env->getLbb(),
-					    numBubbles,
-					    numDomains,
-					    numCells,
-					    neighborStride);
+    gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
+
+    int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+    sharedMemSizeInBytes *= sharedMemSizeInBytes;
+    sharedMemSizeInBytes *= 2;
+    sharedMemSizeInBytes *= sizeof(int);
+
+    assertMemBelowLimit(sharedMemSizeInBytes);
+
+    findBubblePairs<<<gridSize, numThreads, sharedMemSizeInBytes>>>(x, y, z, r,
+								    indicesPerCell.getDataPtr(),
+								    offsets,
+								    sizes,
+								    neighborPairIndices.getRowPtr(2),
+								    neighborPairIndices.getRowPtr(3),
+								    numPairs.getDataPtr(),
+								    numCells,
+								    numBubbles,
+								    env->getTfr() - env->getLbb());
+
+    cudaMemcpy(&hostNumPairs, static_cast<void*>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost);
+
+    cubSortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
+			   neighborPairIndices.getRowPtr(0),
+			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
+			   neighborPairIndices.getRowPtr(1),
+			   hostNumPairs);
     
     NVTX_RANGE_POP();
 }
@@ -690,100 +711,122 @@ void cubble::bubblesToCells(double *x,
 }
 
 __global__
-void cubble::findNeighbors(double *x,
-			   double *y,
-			   double *z,
-			   double *r,
-			   int *indices,
-			   int *offsets,
-			   int *sizes,
-			   int *numNeighbors,
-			   int *neighborIndices,
-			   dvec tfr,
-			   dvec lbb,
-			   int numBubbles,
-			   int numDomains,
-			   int numCells,
-			   int neighborStride)
+void cubble::findBubblePairs(double *x,
+			     double *y,
+			     double *z,
+			     double *r,
+			     int *indices,
+			     int *offsets,
+			     int *sizes,
+			     int *firstIndices,
+			     int *secondIndices,
+			     int *numPairs,
+			     int numCells,
+			     int numBubbles,
+			     dvec interval)
 {
-    DEVICE_ASSERT(numBubbles > 0);
-    DEVICE_ASSERT(numDomains > 0);
-    DEVICE_ASSERT(numCells > 0);
-    DEVICE_ASSERT(!(numDomains & 1));
+    __shared__ int numLocalPairs[1];
+    extern __shared__ int localPairs[];
+
+    if (threadIdx.x == 0)
+	numLocalPairs[0] = 0;
     
-    ivec cellIdxVec(blockIdx.x, blockIdx.y, blockIdx.z / numDomains);
-    ivec boxDim(gridDim.x, gridDim.y, gridDim.z / numDomains);
+    __syncthreads();
     
-    int xBegin = -1;
-    int xInterval = -1;
-    int yBegin = -1;
-    int yInterval = -1;
-    bool isOwnCell = false;
+#if (NUM_DIM == 3)
+    const int numNeighborCells = 14;
+#else
+    const int numNeighborCells = 5;
+#endif
+
+    const int selfCellIndex = blockIdx.z / numNeighborCells * gridDim.y * gridDim.x
+	+ blockIdx.y * gridDim.x
+	+ blockIdx.x;
+    const int neighborCellIndex = getNeighborCellIndex(ivec(blockIdx.x, blockIdx.y, blockIdx.z / numNeighborCells),
+						       ivec(gridDim.x, gridDim.y, gridDim.z / numNeighborCells),
+						       blockIdx.z % numNeighborCells);
+    DEVICE_ASSERT(neighborCellIndex < numCells);
+
+    const bool selfComparison = selfCellIndex == neighborCellIndex;
+    const int selfOffset = offsets[selfCellIndex];
+    const int neighborSize = sizes[neighborCellIndex];
+    const int neighborOffset = offsets[neighborCellIndex];
+    int numComparisons = sizes[selfCellIndex] * neighborSize;
     
-    getDomainOffsetsAndIntervals(numBubbles,
-				 numDomains,
-				 numCells,
-				 cellIdxVec,
-				 boxDim,
-				 offsets,
-				 sizes,
-				 xBegin,
-				 xInterval,
-				 yBegin,
-				 yInterval,
-				 isOwnCell);
-    
-    DEVICE_ASSERT(xBegin >= 0 && xInterval > 0 && yBegin >= 0 && yInterval > 0);
-    
-    int numPairs = xInterval * yInterval;
-    int numRounds = 1 + (numPairs / blockDim.x);
-    
-    for (int round = 0; round < numRounds; ++round)
-    {
-        int pairIdx = round * blockDim.x + threadIdx.x;
-	if (pairIdx < numPairs)
+    auto wrapCoordinate = [](double val1, double val2, double multiplier) -> double
 	{
-	    int xid = pairIdx % xInterval;
-	    int yid = pairIdx / xInterval;
-	    DEVICE_ASSERT(yid < yInterval);
-	    
-	    int gid1 = indices[xBegin + xid];
-	    int gid2 = indices[yBegin + yid];
-	    
-	    if (gid1 == gid2)
+	    double magnitude = val1 - val2;
+	    val2 = magnitude < -0.5 ? val2 - 1.0 : (magnitude > 0.5 ? val2 + 1.0 : val2);
+	    val2 = val1 - val2;
+
+	    return val2 * multiplier;
+	};
+
+    int id = 0;
+    for (int i = 0; i < (1 + numComparisons / blockDim.x); ++i)
+    {
+        id = i * blockDim.x + threadIdx.x;
+	if (id < numComparisons)
+	{
+	    int idx1 = id / neighborSize;
+	    int idx2 = id % neighborSize;
+
+	    DEVICE_ASSERT(selfOffset + idx1 < numBubbles);
+	    DEVICE_ASSERT(neighborOffset + idx2 < numBubbles);
+
+	    idx1 = indices[selfOffset + idx1];
+	    idx2 = indices[neighborOffset + idx2];
+
+	    if (selfComparison && idx2 <= idx1)
 		continue;
+	    
+	    double wrappedComponent = wrapCoordinate(x[idx1], x[idx2], interval.x);
+	    wrappedComponent *= wrappedComponent;
+	    double magnitude = wrappedComponent;
+	    
+	    wrappedComponent = wrapCoordinate(y[idx1], y[idx2], interval.y);
+	    wrappedComponent *= wrappedComponent;
+	    magnitude += wrappedComponent;
+	    
+	    wrappedComponent = wrapCoordinate(z[idx1], z[idx2], interval.z);
+	    wrappedComponent *= wrappedComponent;
+	    magnitude += wrappedComponent;
+	    
+	    wrappedComponent = r[idx1] + r[idx2];
+	    wrappedComponent *= wrappedComponent;
 
-	    dvec pos1, pos2;
-	    pos1.x = x[gid1];
-	    pos1.y = y[gid1];
-	    pos1.z = z[gid1];
-	    
-	    pos2.x = x[gid2];
-	    pos2.y = y[gid2];
-	    pos2.z = z[gid2];
-	    
-	    dvec posVec = getShortestWrappedNormalizedVec(pos1, pos2);
-	    const double length = (posVec * (tfr - lbb)).getSquaredLength();
-	    
-	    const double radii = r[gid1] + r[gid2];
-	    
-	    if (radii * radii > length)
+	    if (magnitude < wrappedComponent)
 	    {
-		int index = atomicAdd(&numNeighbors[gid1], 1);
-		DEVICE_ASSERT(index < neighborStride);
-		index = numBubbles * index + gid1;
-		DEVICE_ASSERT(index < numBubbles * neighborStride);
-		neighborIndices[index] = gid2;
-
-		if (!isOwnCell)
+		// Set the smaller index to idx1 and larger to idx2
+		if (idx1 > idx2)
 		{
-		    index = atomicAdd(&numNeighbors[gid2], 1);
-		    DEVICE_ASSERT(index < neighborStride);
-		    index = numBubbles * index + gid2;
-		    DEVICE_ASSERT(index < numBubbles * neighborStride);
-		    neighborIndices[index] = gid1;
+		    id = idx1;
+		    idx1 = idx2;
+		    idx2 = id;
 		}
+		    
+		id = atomicAdd(numLocalPairs, 2);
+		localPairs[id] = idx1;
+		localPairs[id + 1] = idx2;
 	    }
+	}
+    }
+
+    __syncthreads();
+
+    numComparisons = numLocalPairs[0] / 2;
+    if (threadIdx.x == 0)
+	numLocalPairs[0] = atomicAdd(numPairs, numComparisons);
+
+    __syncthreads();
+    
+    for (int i = 0; i < (1 + numComparisons / blockDim.x); ++i)
+    {
+	id = i * blockDim.x + threadIdx.x;
+	if (id < numComparisons)
+	{
+	    firstIndices[numLocalPairs[0] + id] = localPairs[2 * id];
+	    secondIndices[numLocalPairs[0] + id] = localPairs[2 * id + 1];
 	}
     }
 }
@@ -847,6 +890,7 @@ void cubble::predict(double *x,
     }
 }
 
+// TODO: This needs to be updated!
 __global__
 void cubble::createAccelerationArray(double *x,
 				     double *y,

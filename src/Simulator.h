@@ -67,17 +67,9 @@ namespace cubble
 	
 	NUM_VALUES
     };
-
-    enum class MiscIntProperty
-    {
-	NUM_NEIGHBORS,
-	INDEX,
-	
-	NUM_VALUES
-    };
     
     class Simulator
-    {
+    {	
 	CUBBLE_PROP(double, SimulationTime, 0)
 	CUBBLE_PROP(double, ElasticEnergy, 0)
     public:
@@ -94,7 +86,7 @@ namespace cubble
 	template<typename T, typename InputIterT, typename OutputIterT>
         T cubReduction(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		       InputIterT deviceInputData,
-		       size_t numValues)
+		       int numValues)
 	{
 	    assert(deviceInputData != nullptr);
 
@@ -129,7 +121,7 @@ namespace cubble
 	void cubScan(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		     InputIterT deviceInputData,
 		     OutputIterT deviceOutputData,
-		     size_t numValues)
+		     int numValues)
 	{
 	    assert(deviceInputData != nullptr);
 	    assert(deviceOutputData != nullptr);
@@ -140,12 +132,66 @@ namespace cubble
 	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
 		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 	 
-	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());   
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
 	    (*func)(tempStoragePtr,
 		    tempStorageBytes,
 		    deviceInputData,
 		    deviceOutputData,
 		    numValues,
+		    0,
+		    false);
+	}
+
+	template<typename KeyT, typename ValueT>
+	void cubSortPairs(cudaError_t (*func)(
+			      void*,
+			      size_t&,
+			      const KeyT*,
+			      KeyT*,
+			      const ValueT*,
+			      ValueT*,
+			      int,
+			      int,
+			      int,
+			      cudaStream_t,
+			      bool),
+			  const KeyT *keysIn,
+			  KeyT *keysOut,
+			  const ValueT *valuesIn,
+			  ValueT *valuesOut,
+			  int numValues)
+	{
+	    assert(keysIn != nullptr);
+	    assert(keysOut != nullptr);
+	    assert(valuesIn != nullptr);
+	    assert(valuesOut != nullptr);
+
+	    size_t tempStorageBytes = 0;
+	    (*func)(NULL,
+		    tempStorageBytes,
+		    keysIn,
+		    keysOut,
+		    valuesIn,
+		    valuesOut,
+		    numValues,
+		    0,
+		    sizeof(KeyT) * 8,
+		    0,
+		    false);
+
+	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
+		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+	    
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
+	    (*func)(tempStoragePtr,
+		    tempStorageBytes,
+		    keysIn,
+		    keysOut,
+		    valuesIn,
+		    valuesOut,
+		    numValues,
+		    0,
+		    sizeof(KeyT) * 8,
 		    0,
 		    false);
 	}
@@ -158,8 +204,11 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
+        int hostNumPairs = 0;
+
 	const static int neighborStride = 32;
 	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
+
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
@@ -170,8 +219,9 @@ namespace cubble
 	FixedSizeDeviceArray<double> bubbleData;
 	FixedSizeDeviceArray<double> bubblePairData;
 	FixedSizeDeviceArray<int> cellData;
-	FixedSizeDeviceArray<int> miscData;
-        FixedSizeDeviceArray<int> neighborIndices;
+	FixedSizeDeviceArray<int> indicesPerCell;
+        FixedSizeDeviceArray<int> neighborPairIndices;
+	FixedSizeDeviceArray<int> numPairs;
 	
 	FixedSizeDeviceArray<char> cubOutputData;
 	FixedSizeDeviceArray<char> cubTemporaryStorage;
@@ -221,21 +271,22 @@ namespace cubble
 			int numBubbles);
 
     __global__
-    void findNeighbors(double *x,
-		       double *y,
-		       double *z,
-		       double *r,
-		       int *indices,
-		       int *offsets,
-		       int *sizes,
-		       int *numNeighbors,
-		       int *neighborIndices,
-		       dvec tfr,
-		       dvec lbb,
-		       int numBubbles,
-		       int numDomains,
-		       int numCells,
-		       int neighborStride);
+    void findBubblePairs(double *x,
+			 double *y,
+			 double *z,
+			 double *r,
+			 int *indices,
+			 int *offsets,
+			 int *sizes,
+			 int *firstIndices,
+			 int *secondIndices,
+			 int *numPairs,
+			 int numCells,
+			 int numBubbles,
+			 dvec interval);
+
+    __global__
+    void selectUniquePairs(int *firstIndices, int *secondIndices, int *numPairs);
     
     __global__
     void predict(double *x,
@@ -277,8 +328,8 @@ namespace cubble
 				 double *e,
 				 double *areaOverlap,
 				 
-				 int *numberOfNeighbors,
-				 int *neighborIndices,
+				 int *firstIndices,
+				 int *secondIndices,
 				 dvec interval,
 				 int numBubbles,
 				 int neighborStride,
