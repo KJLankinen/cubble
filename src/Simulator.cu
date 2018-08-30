@@ -115,7 +115,7 @@ void cubble::Simulator::setupSimulation()
 							       hostNumPairs,
 							       env->getFZeroPerMuZero(),
 							       env->getPi(),
-							       env->getTfr() - env->getLbb(),
+							       tfr - lbb,
 							       false,
 							       false);
     
@@ -189,7 +189,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
-    
+
     do
     {
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
@@ -215,10 +215,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	if (useGasExchange)
 	{
 	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, env->getPi(), numBubbles);
-
 	    double invRho = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
 	    invRho /= cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
-
 	    calculateFinalRadiusChangeRate<<<numBlocks, numThreads>>>(drdtPrd,
 								      rPrd,
 								      freeArea,
@@ -350,6 +348,7 @@ void cubble::Simulator::updateCellsAndNeighbors()
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
 
     int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     sharedMemSizeInBytes *= sizeof(int);
@@ -452,10 +451,10 @@ bool cubble::Simulator::deleteSmallBubbles()
 	    }
 	}
 
-	cudaMemcpyAsync(bubbleData.getDataPtr(),
-			hostData.data(),
-		        bubbleData.getSizeInBytes(),
-			cudaMemcpyHostToDevice);
+	cudaMemcpy(bubbleData.getDataPtr(),
+		   hostData.data(),
+		   bubbleData.getSizeInBytes(),
+		   cudaMemcpyHostToDevice);
 
         volumeMultiplier /= getVolumeOfBubbles();
 	volumeMultiplier += 1.0;
@@ -707,12 +706,19 @@ void cubble::findBubblePairs(double *x,
 						       ivec(gridDim.x, gridDim.y, gridDim.z / numNeighborCells),
 						       blockIdx.z % numNeighborCells);
     DEVICE_ASSERT(neighborCellIndex < numCells);
+    DEVICE_ASSERT(selfCellIndex < numCells);
 
     const bool selfComparison = selfCellIndex == neighborCellIndex;
+    const int selfSize = sizes[selfCellIndex];
     const int selfOffset = offsets[selfCellIndex];
     const int neighborSize = sizes[neighborCellIndex];
     const int neighborOffset = offsets[neighborCellIndex];
-    int numComparisons = sizes[selfCellIndex] * neighborSize;
+    int numComparisons = selfSize * neighborSize;
+
+    DEVICE_ASSERT(selfOffset < numBubbles);
+    DEVICE_ASSERT(neighborOffset < numBubbles);
+    DEVICE_ASSERT(neighborSize < numBubbles);
+    DEVICE_ASSERT(selfSize < numBubbles);
 
     int id = 0;
     for (int i = 0; i < (1 + numComparisons / blockDim.x); ++i)
@@ -729,7 +735,7 @@ void cubble::findBubblePairs(double *x,
 	    idx1 = indices[selfOffset + idx1];
 	    idx2 = indices[neighborOffset + idx2];
 
-	    if (selfComparison && idx2 <= idx1)
+	    if (idx1 == idx2 || (selfComparison && idx2 < idx1))
 		continue;
 	    
 	    double wrappedComponent = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
@@ -752,9 +758,10 @@ void cubble::findBubblePairs(double *x,
 		// Set the smaller index to idx1 and larger to idx2
 		id = idx1;
 		idx1 = idx1 > idx2 ? idx2 : idx1;
-		idx2 = idx1 == idx2 ? idx1 : idx2;
+		idx2 = idx1 == idx2 ? id : idx2;
 		    
 		id = atomicAdd(numLocalPairs, 2);
+		DEVICE_ASSERT(id < numComparisons * 2);
 		localPairs[id] = idx1;
 		localPairs[id + 1] = idx2;
 	    }
@@ -872,7 +879,10 @@ void cubble::calculateVelocityAndGasExchange(double *x,
     {
 	const int idx1 = firstIndices[tid];
 	const int idx2 = secondIndices[tid];
-	
+
+	DEVICE_ASSERT(idx1 < numBubbles);
+	DEVICE_ASSERT(idx2 < numBubbles);
+
 	double velX = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
 	velX *= velX;
 	double magnitude = velX;
@@ -887,38 +897,38 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 	velZ *= velZ;
         magnitude += velZ;
 #endif
+
+	DEVICE_ASSERT(magnitude > 0);
 	magnitude = sqrt(magnitude);
+
 	double generalVariable = r[idx1] + r[idx2];
-	double invMagnitude = 0.0;
+	double invRadii = 1.0 / generalVariable;
 
 	if (calculateEnergy)
 	{
-	    invMagnitude = 1.0 / generalVariable;
-	    generalVariable -= magnitude;
+	    generalVariable = generalVariable - magnitude;
 	    generalVariable *= generalVariable;
-	    generalVariable *= invMagnitude;
+	    generalVariable *= invRadii;
 
-	    atomicAdd(energy[idx1], generalVariable);
-	    atomicAdd(energy[idx2], generalVariable);
-	    
-	    generalVariable = invMagnitude;
+	    atomicAdd(&energy[idx1], generalVariable);
+	    atomicAdd(&energy[idx2], generalVariable);
 	}
-	
-	invMagnitude = 1.0 / magnitude;
-        generalVariable = fZeroPerMuZero * (invMagnitude - generalVariable);
+
+        double invMagnitude = 1.0 / magnitude;
+        generalVariable = fZeroPerMuZero * (invMagnitude - invRadii);
 	
         velX *= generalVariable;
 	velY *= generalVariable;
 	velZ *= generalVariable;
 
-	atomicAdd(dxdt[idx1], velX);
-	atomicAdd(dxdt[idx2], -velX);
+	atomicAdd(&dxdt[idx1], velX);
+	atomicAdd(&dxdt[idx2], -velX);
 	
-	atomicAdd(dydt[idx1], velY);
-	atomicAdd(dydt[idx2], -velY);
+	atomicAdd(&dydt[idx1], velY);
+	atomicAdd(&dydt[idx2], -velY);
 #if (NUM_DIM == 3)
-	atomicAdd(dzdt[idx1], velZ);
-	atomicAdd(dzdt[idx2], -velZ);
+	atomicAdd(&dzdt[idx1], velZ);
+	atomicAdd(&dzdt[idx2], -velZ);
 #endif
 
 	if (useGasExchange)
@@ -942,13 +952,13 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 	    // N.B.: Need to divide by area later.
 	    velZ = 2.0 * sqrt(velZ);
 #endif
-	    atomicAdd(freeArea[idx1], velZ);
-	    atomicAdd(freeArea[idx2], velZ);
+	    atomicAdd(&freeArea[idx1], velZ);
+	    atomicAdd(&freeArea[idx2], velZ);
 	    
 	    velZ *= 1.0 / velY - 1.0 / velX;
 	    
-	    atomicAdd(drdt[idx1], velZ);
-	    atomicAdd(drdt[idx2], -velZ);
+	    atomicAdd(&drdt[idx1], velZ);
+	    atomicAdd(&drdt[idx2], -velZ);
 	}
     }
 }

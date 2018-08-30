@@ -41,6 +41,7 @@ void CubbleApp::setupSimulation()
     std::cout << "======\nSetup\n======" << std::endl;
     
     simulator->setupSimulation();
+    saveSnapshotToFile();
     
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
