@@ -23,7 +23,10 @@ CubbleApp::CubbleApp(const std::string &inF,
 }
 
 CubbleApp::~CubbleApp()
-{}
+{
+    CUDA_CALL(cudaDeviceSynchronize());
+    CUDA_CALL(cudaDeviceReset());
+}
 
 void CubbleApp::run()
 {

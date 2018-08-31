@@ -20,7 +20,7 @@
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 32,
     "NumBubblesExpl" : "Total number of bubbles to simulate.",
-    "NumBubbles" : 1e3,
+    "NumBubbles" : 1e4,
     "SnapshotFilenameExpl" : "The stem of the filename where to save the snap shots to.",
     "SnapshotFilename" : "snapshot",
     "NumStepsToRelaxExpl" : "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",

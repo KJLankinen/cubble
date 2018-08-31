@@ -271,7 +271,9 @@ namespace cubble
 			 int *numPairs,
 			 int numCells,
 			 int numBubbles,
-			 dvec interval);
+			 dvec interval,
+			 int maxNumSharedVals,
+			 int maxNumPairs);
     
     __global__
     void predict(double *x,
