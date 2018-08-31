@@ -365,9 +365,11 @@ void cubble::Simulator::updateCellsAndNeighbors()
 					      domainDim,
 					      numBubbles);
     NVTX_RANGE_POP();
-    
+
+    NVTX_RANGE_PUSH_A("AssertGridSize");
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
     assertGridSizeBelowLimit(gridSize);
+    NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("MaxNumCellRed");
     int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
