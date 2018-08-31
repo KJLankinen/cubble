@@ -291,7 +291,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
-    if (deleteSmallBubbles() || integrationStep % 100)
+    if (deleteSmallBubbles() || integrationStep % 100 == 0)
 	updateCellsAndNeighbors();
 
     NVTX_RANGE_POP();
