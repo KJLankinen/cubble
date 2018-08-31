@@ -7,7 +7,7 @@
     "MaxDeltaEnergy": 0.0001,
     "MinNumBubbles": 300,
     "MuZero": 1.0,
-    "NumBubbles": 1000,
+    "NumBubbles": 100000,
     "NumBubblesPerCell": 32,
     "NumStepsToRelax": 1000,
     "PhiTarget": 0.9,
@@ -16,5 +16,5 @@
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.06847723204741012
+    "TimeStep": 0.10071469841613576
 }
