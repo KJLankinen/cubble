@@ -236,6 +236,7 @@ namespace cubble
 	FixedSizeDeviceArray<char> cubTemporaryStorage;
         
 	std::vector<double> hostData;
+	std::vector<int> hostSizes;
     };
     
     // ******************************

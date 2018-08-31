@@ -372,7 +372,21 @@ void cubble::Simulator::updateCellsAndNeighbors()
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("MaxNumCellRed");
-    int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+    //int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+    if (hostSizes.size() < numCells)
+	hostSizes.resize(numCells);
+    CUDA_CALL(cudaMemcpy(
+		  static_cast<void*>(hostSizes.data()),
+		  static_cast<void*>(sizes),
+		  sizeof(int) * numCells,
+		  cudaMemcpyDeviceToHost));
+    
+    int sharedMemSizeInBytes = -1;
+    for (size_t i = 0; i < hostSizes.size(); ++i)
+    {
+	int currentVal = hostSizes[i];
+        sharedMemSizeInBytes = currentVal > sharedMemSizeInBytes ? currentVal : sharedMemSizeInBytes;
+    }
     NVTX_RANGE_POP();
 
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
