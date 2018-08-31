@@ -322,43 +322,56 @@ void cubble::Simulator::generateBubbles()
 void cubble::Simulator::updateCellsAndNeighbors()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
-
-    //std::cout << "Updating cells and neighbors!" << std::endl;
     
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
-    const size_t numThreads = 128;
+    const size_t numThreads = 256;
     size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
 
+    NVTX_RANGE_PUSH_A("Memsets");
     cellData.setBytesToZero();
     indicesPerCell.setBytesToZero();
     neighborPairIndices.setBytesToZero();
     numPairs.setBytesToZero();
+    NVTX_RANGE_POP();
     
+    NVTX_RANGE_PUSH_A("GetPtrs");
     double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
     double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
     double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
-
+    NVTX_RANGE_POP();
+    
+    NVTX_RANGE_PUSH_A("Offsets");
     calculateOffsets<<<numBlocks, numThreads>>>(x, y, z, sizes, domainDim, numBubbles, numCells);
+    NVTX_RANGE_POP();
 
+    NVTX_RANGE_PUSH_A("Exclusive sum");
     cubScan<int*, int*>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
-    CUDA_CALL(cudaMemset(static_cast<void*>(sizes), 0, sizeof(int) * numCells));
+    NVTX_RANGE_POP();
 
+    NVTX_RANGE_PUSH_A("Memset sizes");
+    CUDA_CALL(cudaMemset(static_cast<void*>(sizes), 0, sizeof(int) * numCells));
+    NVTX_RANGE_POP();
+
+    NVTX_RANGE_PUSH_A("Bubbles2Cells");
     bubblesToCells<<<numBlocks, numThreads>>>(x, y, z,
 					      indicesPerCell.getDataPtr(),
 					      offsets,
 					      sizes,
 					      domainDim,
 					      numBubbles);
+    NVTX_RANGE_POP();
     
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
     assertGridSizeBelowLimit(gridSize);
 
+    NVTX_RANGE_PUSH_A("MaxNumCellRed");
     int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+    NVTX_RANGE_POP();
 
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
@@ -367,27 +380,31 @@ void cubble::Simulator::updateCellsAndNeighbors()
     assertMemBelowLimit(sharedMemSizeInBytes);
     assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
 
+    NVTX_RANGE_PUSH_A("find");
     findBubblePairs<<<gridSize, numThreads, sharedMemSizeInBytes>>>(x, y, z, r,
 								    indicesPerCell.getDataPtr(),
 								    offsets,
 								    sizes,
-								    neighborPairIndices.getRowPtr(2),
-								    neighborPairIndices.getRowPtr(3),
+								    neighborPairIndices.getRowPtr(0),
+								    neighborPairIndices.getRowPtr(1),
 								    numPairs.getDataPtr(),
 								    numCells,
 								    numBubbles,
 								    env->getTfr() - env->getLbb(),
 								    sharedMemSizeInBytes / sizeof(int),
 								    neighborPairIndices.getWidth());
+    NVTX_RANGE_POP();
 
+    NVTX_RANGE_PUSH_A("mecpy numpairs");
     CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void*>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
+    NVTX_RANGE_POP();
 
-    cubSortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
-			   neighborPairIndices.getRowPtr(0),
-			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
-			   neighborPairIndices.getRowPtr(1),
-			   hostNumPairs);
+    //cubSortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+//			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
+//			   neighborPairIndices.getRowPtr(0),
+//			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
+//			   neighborPairIndices.getRowPtr(1),
+//			   hostNumPairs);
     
     NVTX_RANGE_POP();
 }
@@ -480,8 +497,6 @@ bool cubble::Simulator::deleteSmallBubbles()
 #endif
 
 	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier);
-	CUDA_CALL(cudaPeekAtLastError());
-	CUDA_CALL(cudaDeviceSynchronize());
 	
 	NVTX_RANGE_POP();
 	
@@ -517,11 +532,7 @@ double cubble::Simulator::getVolumeOfBubbles()
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
     calculateVolumes<<<numBlocks, numThreads>>>(r, volPtr, numBubbles, env->getPi());
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
     double volume = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
     
     NVTX_RANGE_POP();
     
@@ -534,8 +545,6 @@ double cubble::Simulator::getAverageRadius()
     
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     double avgRad = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
-    CUDA_CALL(cudaPeekAtLastError());
-    CUDA_CALL(cudaDeviceSynchronize());
     avgRad/= numBubbles;
     
     NVTX_RANGE_POP();

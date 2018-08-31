@@ -8,6 +8,7 @@
 #include "FixedSizeDeviceArray.h"
 
 #include <cuda_runtime.h>
+#include <nvToolsExt.h>
 #include <memory>
 #include <vector>
 
@@ -77,20 +78,34 @@ namespace cubble
 		       InputIterT deviceInputData,
 		       int numValues)
 	{
+	    NVTX_RANGE_PUSH_A("CubReductionTemplateFunc");
 	    assert(deviceInputData != nullptr);
 
+	    NVTX_RANGE_PUSH_A("RedOutputDataCheck");
 	    if (sizeof(T) > cubOutputData.getSizeInBytes())
 	        cubOutputData = FixedSizeDeviceArray<char>(sizeof(T), 1);
+	    NVTX_RANGE_POP();
 
+	    
+	    NVTX_RANGE_PUSH_A("StaticCast");
 	    void *rawOutputPtr = static_cast<void*>(cubOutputData.getDataPtr());
 	    OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
-	    
+	    NVTX_RANGE_POP();
+
+
+	    NVTX_RANGE_PUSH_A("TempSizeFetch");
 	    size_t tempStorageBytes = 0;
 	    (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    NVTX_RANGE_POP();
 
+
+	    NVTX_RANGE_PUSH_A("TempResize");
 	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
 		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+	    NVTX_RANGE_POP();
 
+
+	    NVTX_RANGE_PUSH_A("Reduce");
 	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
 	    (*func)(tempStoragePtr,
 		    tempStorageBytes,
@@ -99,9 +114,15 @@ namespace cubble
 		    numValues,
 		    0,
 		    false);
-	    
+	    NVTX_RANGE_POP();
+
+
+    	    NVTX_RANGE_PUSH_A("MemcpyBackToHost");
 	    T hostOutputData;
-	    cudaMemcpy(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
+	    cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
+	    NVTX_RANGE_POP();
+
+	    NVTX_RANGE_POP();
 
 	    return hostOutputData;
 	}
