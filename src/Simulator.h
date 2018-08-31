@@ -34,16 +34,17 @@ namespace cubble
 	DYDT_PRD,
 	DZDT_PRD,
 	DRDT_PRD,
+
+	ENERGY,
+	FREE_AREA,
 	
 	DXDT_OLD,
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
 	
-	ENERGY,
 	ERROR,
 	VOLUME,
-	FREE_AREA,
 	
 	NUM_VALUES
     };

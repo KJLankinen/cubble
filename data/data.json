@@ -14,7 +14,7 @@
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
     "TimeStep" : 1e-5,
     "RngSeedExpl" : "The seed for the RNG.",
-    "RngSeed" : 246353258,
+    "RngSeed" : 2426358,
     "ScaleAmountExpl" : "How much to scale the side length(s) of the simulation box per scaling iteration.",
     "ScaleAmount" : 1e-4,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",

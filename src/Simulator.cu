@@ -102,22 +102,26 @@ void cubble::Simulator::setupSimulation()
     const double minRad = env->getMinRad();
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+    const size_t numBlocksAcc = (size_t)std::ceil(hostNumPairs / (float)numThreads);
 
     double timeStep = env->getTimeStep();
+    
+    size_t numBytesToReset = sizeof(double) * 6 * bubbleData.getWidth();
+    CUDA_CALL(cudaMemset(static_cast<void*>(energies), 0, numBytesToReset));
 
-    calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(x, y, z, r,
-							       dxdtOld, dydtOld, dzdtOld, drdtOld,
-							       energies,
-							       freeArea,
-							       firstIndices,
-							       secondIndices,
-							       numBubbles,
-							       hostNumPairs,
-							       env->getFZeroPerMuZero(),
-							       env->getPi(),
-							       tfr - lbb,
-							       false,
-							       false);
+    calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(x, y, z, r,
+								  dxdtOld, dydtOld, dzdtOld, drdtOld,
+								  energies,
+								  freeArea,
+								  firstIndices,
+								  secondIndices,
+								  numBubbles,
+								  hostNumPairs,
+								  env->getFZeroPerMuZero(),
+								  env->getPi(),
+								  tfr - lbb,
+								  false,
+								  false);
     
     eulerIntegration<<<numBlocks, numThreads>>>(x, y, z, r,
 						dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -125,20 +129,22 @@ void cubble::Simulator::setupSimulation()
 
     if (deleteSmallBubbles())
 	updateCellsAndNeighbors();
+
+    CUDA_CALL(cudaMemset(static_cast<void*>(energies), 0, numBytesToReset));
     
-    calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(x, y, z, r,
-							       dxdtOld, dydtOld, dzdtOld, drdtOld,
-							       energies,
-							       freeArea,
-							       firstIndices,
-							       secondIndices,
-							       numBubbles,
-							       hostNumPairs,
-							       env->getFZeroPerMuZero(),
-							       env->getPi(),
-							       env->getTfr() - env->getLbb(),
-							       false,
-							       false);
+    calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(x, y, z, r,
+								  dxdtOld, dydtOld, dzdtOld, drdtOld,
+								  energies,
+								  freeArea,
+								  firstIndices,
+								  secondIndices,
+								  numBubbles,
+								  hostNumPairs,
+								  env->getFZeroPerMuZero(),
+								  env->getPi(),
+								  env->getTfr() - env->getLbb(),
+								  false,
+								  false);
     
     NVTX_RANGE_POP();
 }
@@ -152,7 +158,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     const double minRad = env->getMinRad();
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
-    const size_t numBlocksForAcc = (size_t)std::ceil(numBubbles * neighborStride / (float)numThreads);
+    const size_t numBlocksAcc = (size_t)std::ceil(hostNumPairs / (float)numThreads);
 
     double timeStep = env->getTimeStep();
     double error = 0;
@@ -198,19 +204,23 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
 
-	calculateVelocityAndGasExchange<<<numBlocks, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
-								   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-								   energies,
-								   freeArea,
-								   firstIndices,
-								   secondIndices,
-								   numBubbles,
-								   hostNumPairs,
-								   env->getFZeroPerMuZero(),
-								   env->getPi(),
-								   env->getTfr() - env->getLbb(),
-								   calculateEnergy,
-								   useGasExchange);
+	// Using atomicAdd, so these need to be reset to 0 every time before use.
+	size_t numBytesToReset = sizeof(double) * 6 * bubbleData.getWidth();
+	CUDA_CALL(cudaMemset(static_cast<void*>(dxdtPrd), 0, numBytesToReset));
+
+	calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
+								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
+								      energies,
+								      freeArea,
+								      firstIndices,
+								      secondIndices,
+								      numBubbles,
+								      hostNumPairs,
+								      env->getFZeroPerMuZero(),
+								      env->getPi(),
+								      env->getTfr() - env->getLbb(),
+								      calculateEnergy,
+								      useGasExchange);
 
 	if (useGasExchange)
 	{
@@ -739,16 +749,13 @@ void cubble::findBubblePairs(double *x,
 		continue;
 	    
 	    double wrappedComponent = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
-	    wrappedComponent *= wrappedComponent;
-	    double magnitude = wrappedComponent;
+	    double magnitude = wrappedComponent * wrappedComponent;
 	    
 	    wrappedComponent = getWrappedCoordinate(y[idx1], y[idx2], interval.y);
-	    wrappedComponent *= wrappedComponent;
-	    magnitude += wrappedComponent;
+	    magnitude += wrappedComponent * wrappedComponent;
 	    
 	    wrappedComponent = getWrappedCoordinate(z[idx1], z[idx2], interval.z);
-	    wrappedComponent *= wrappedComponent;
-	    magnitude += wrappedComponent;
+	    magnitude += wrappedComponent * wrappedComponent;
 	    
 	    wrappedComponent = r[idx1] + r[idx2];
 	    wrappedComponent *= wrappedComponent;
@@ -882,26 +889,25 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 
 	DEVICE_ASSERT(idx1 < numBubbles);
 	DEVICE_ASSERT(idx2 < numBubbles);
+	DEVICE_ASSERT(idx1 != idx2);
 
 	double velX = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
-	velX *= velX;
-	double magnitude = velX;
+	double magnitude = velX * velX;
 	
 	double velY = getWrappedCoordinate(y[idx1], y[idx2], interval.y);
-        velY *= velY;
-        magnitude += velY;
+        magnitude += velY * velY;
 
 	double velZ = 0;
 #if (NUM_DIM == 3)
         velZ = getWrappedCoordinate(z[idx1], z[idx2], interval.z);
-	velZ *= velZ;
-        magnitude += velZ;
+        magnitude += velZ * velZ;
 #endif
 
 	DEVICE_ASSERT(magnitude > 0);
 	magnitude = sqrt(magnitude);
 
 	double generalVariable = r[idx1] + r[idx2];
+	DEVICE_ASSERT(generalVariable > 0);
 	double invRadii = 1.0 / generalVariable;
 
 	if (calculateEnergy)
@@ -935,9 +941,7 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 	{
 	    velX = r[idx1];
 	    velY = r[idx2];
-	    
 	    DEVICE_ASSERT(magnitude > velX && magnitude > velY);
-	    
 	    generalVariable = velY * velY;
 	    velZ = 0.5 * (generalVariable - velX * velX + magnitude * magnitude) * invMagnitude;
 	    velZ *= velZ;
@@ -949,7 +953,6 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 #if (NUM_DIM == 3)
 	    velZ *= pi;
 #else
-	    // N.B.: Need to divide by area later.
 	    velZ = 2.0 * sqrt(velZ);
 #endif
 	    atomicAdd(&freeArea[idx1], velZ);
@@ -1140,16 +1143,6 @@ void cubble::eulerIntegration(double *x,
 // ******************************
 
 __forceinline__ __device__
-double cubble::getWrappedCoordinate(double val1, double val2, double multiplier)
-{
-    double magnitude = val1 - val2;
-    val2 = magnitude < -0.5 ? val2 - 1.0 : (magnitude > 0.5 ? val2 + 1.0 : val2);
-    val2 = val1 - val2;
-    
-    return val2 * multiplier;
-}
-
-__forceinline__ __device__
 int cubble::getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
     // Switch statements and ifs that diverge inside one warp/block are
@@ -1227,6 +1220,18 @@ int cubble::getGlobalTid()
     int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
 
     return tid;
+}
+
+__forceinline__ __device__
+double cubble::getWrappedCoordinate(double val1, double val2, double multiplier)
+{
+    DEVICE_ASSERT(val1 <= 1.0 && val2 <= 1.0);
+    DEVICE_ASSERT(val1 >= 0.0 && val2 >= 0.0);
+    double difference = val1 - val2;
+    val2 = difference < -0.5 ? val2 - 1.0 : (difference > 0.5 ? val2 + 1.0 : val2);
+    val2 = val1 - val2;
+    
+    return val2 * multiplier;
 }
 
 __forceinline__ __device__
