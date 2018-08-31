@@ -268,7 +268,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
-    if (deleteSmallBubbles() || integrationStep % 100)
+    if (deleteSmallBubbles() || integrationStep % 100 == 0)
 	updateCellsAndNeighbors();
 
     NVTX_RANGE_POP();
@@ -322,7 +322,7 @@ void cubble::Simulator::generateBubbles()
 void cubble::Simulator::updateCellsAndNeighbors()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
-    
+
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
@@ -372,21 +372,7 @@ void cubble::Simulator::updateCellsAndNeighbors()
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("MaxNumCellRed");
-    //int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
-    if (hostSizes.size() < numCells)
-	hostSizes.resize(numCells);
-    CUDA_CALL(cudaMemcpy(
-		  static_cast<void*>(hostSizes.data()),
-		  static_cast<void*>(sizes),
-		  sizeof(int) * numCells,
-		  cudaMemcpyDeviceToHost));
-    
-    int sharedMemSizeInBytes = -1;
-    for (size_t i = 0; i < hostSizes.size(); ++i)
-    {
-	int currentVal = hostSizes[i];
-        sharedMemSizeInBytes = currentVal > sharedMemSizeInBytes ? currentVal : sharedMemSizeInBytes;
-    }
+    int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
     NVTX_RANGE_POP();
 
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
@@ -401,8 +387,8 @@ void cubble::Simulator::updateCellsAndNeighbors()
 								    indicesPerCell.getDataPtr(),
 								    offsets,
 								    sizes,
-								    neighborPairIndices.getRowPtr(0),
-								    neighborPairIndices.getRowPtr(1),
+								    neighborPairIndices.getRowPtr(2),
+								    neighborPairIndices.getRowPtr(3),
 								    numPairs.getDataPtr(),
 								    numCells,
 								    numBubbles,
@@ -415,12 +401,12 @@ void cubble::Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void*>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
     NVTX_RANGE_POP();
 
-    //cubSortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-//			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
-//			   neighborPairIndices.getRowPtr(0),
-//			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
-//			   neighborPairIndices.getRowPtr(1),
-//			   hostNumPairs);
+    cubSortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
+			   neighborPairIndices.getRowPtr(0),
+			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
+			   neighborPairIndices.getRowPtr(1),
+			   hostNumPairs);
     
     NVTX_RANGE_POP();
 }
