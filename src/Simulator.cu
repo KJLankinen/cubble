@@ -318,7 +318,14 @@ void cubble::Simulator::generateBubbles()
     const size_t numBlocks = (size_t)std::ceil((float)numBubbles / (float)numThreads);
     assignDataToBubbles<<<numBlocks, numThreads>>>(x, y, z,
 						   xPrd, yPrd, zPrd,
-						   r, w, givenNumBubblesPerDim, tfr, lbb, avgRad, numBubbles);
+						   r, w,
+						   aboveMinRadFlags.getRowPtr(0),
+						   givenNumBubblesPerDim,
+						   tfr,
+						   lbb,
+						   avgRad,
+						   env->getMinRad(),
+						   numBubbles);
     NVTX_RANGE_POP();
 }
 
@@ -437,8 +444,10 @@ void cubble::Simulator::updateData()
 bool cubble::Simulator::deleteSmallBubbles()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
+
+    int *flag = aboveMinRadFlags.getRowPtr(0);
     const int numBubblesAboveMinRad = cubReduction<int, int*, int*>(&cub::DeviceReduce::Sum,
-								    aboveMinRadFlags,
+								    flag,
 								    numBubbles);
 
     bool atLeastOneBubbleDeleted = numBubblesAboveMinRad < numBubbles;
@@ -479,7 +488,16 @@ bool cubble::Simulator::deleteSmallBubbles()
 	double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
 	double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
 
-	int *flag = aboveMinRadFlags.getRowPtr(0);
+	double *volumeMultiplier = errors + numBubblesAboveMinRad;
+	cudaMemset(static_cast<void*>(volumeMultiplier), 0, sizeof(double));
+	
+	calculateRedistributedGasVolume<<<numBlocks, numThreads>>>(volumes,
+								   r,
+								   flag,
+								   volumeMultiplier,
+								   env->getPi(),
+								   numBubbles);
+
 	int *newIdx = aboveMinRadFlags.getRowPtr(1);
 	cubScan<int*, int*>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
@@ -500,17 +518,8 @@ bool cubble::Simulator::deleteSmallBubbles()
 	CUDA_CALL(cudaMemcpyAsync(dzdtOld, errors, numBytesToCopy, cudaMemcpyDeviceToDevice));
 	
 	numBubbles = numBubblesAboveMinRad;
-	double *volumeMultipier = errors + numBubbles;
-	cudaMemset(static_cast<void*>(volumeMultiplier), 0, sizeof(double));
-	
-	calculateRedistributedGasVolume<<<numBlocks, numThreads>>>(volumes,
-								   r,
-								   flag,
-								   volumeMultiplier,
-								   env->getPi(),
-								   numBubbles);
 	const double invTotalVolume = 1.0 / getVolumeOfBubbles();
-	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier, invTotalVolume);
+	addVolume<<<numBlocks, numThreads>>>(r, volumeMultiplier, numBubbles, invTotalVolume);
 	
 	NVTX_RANGE_POP();
     }
@@ -623,10 +632,12 @@ void cubble::assignDataToBubbles(double *x,
 				 double *zPrd,
 				 double *r,
 				 double *w,
+				 int *aboveMinRadFlags,
 				 int givenNumBubblesPerDim,
 				 dvec tfr,
 				 dvec lbb,
 				 double avgRad,
+				 double minRad,
 				 int numBubbles)
 {
     int tid = getGlobalTid();
@@ -660,6 +671,7 @@ void cubble::assignDataToBubbles(double *x,
 	double radius = r[tid];
 	r[tid] = radius > 0 ? radius : -radius;
 	w[tid] = r[tid];
+	aboveMinRadFlags[tid] = radius < minRad ? 0 : 1;
     }
 }
 
@@ -1132,6 +1144,8 @@ void cubble::correct(double *x,
 	    rPrd[tid] = radius;
 	    aboveMinRadFlags[tid] = radius < minRad ? 0 : 1;
 	}
+	else
+	    aboveMinRadFlags[tid] = 1;
 
 	double error = (pos - posPrd).getAbsolute().getMaxComponent();
 	error = error > radError ? error : radError;
@@ -1144,12 +1158,12 @@ void cubble::correct(double *x,
 }
 
 __global__
-void cubble::addVolume(double *r, int numBubbles, double volumeMultiplier, double invTotalVolume)
+void cubble::addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
     {
-        double multiplier = volumeMultiplier * invTotalVolume;
+        double multiplier = volumeMultiplier[0] * invTotalVolume;
 	multiplier += 1.0;
 
 #if (NUM_DIM == 3)
@@ -1227,39 +1241,39 @@ void cubble::calculateRedistributedGasVolume(double *volume,
 }
 
 __global__
-void removeSmallBubbles(double *x,
-			double *y,
-			double *z,
-			double *r,
+void cubble::removeSmallBubbles(double *x,
+				double *y,
+				double *z,
+				double *r,
 			
-			double *xTemp,
-			double *yTemp,
-			double *zTemp,
-			double *rTemp,
+				double *xTemp,
+				double *yTemp,
+				double *zTemp,
+				double *rTemp,
 			
-			double *dxdt,
-			double *dydt,
-			double *dzdt,
-			double *drdt,
+				double *dxdt,
+				double *dydt,
+				double *dzdt,
+				double *drdt,
 			
-			double *dxdtTemp,
-			double *dydtTemp,
-			double *dzdtTemp,
-			double *drdtTemp,
+				double *dxdtTemp,
+				double *dydtTemp,
+				double *dzdtTemp,
+				double *drdtTemp,
 			
-			double *dxdtOld,
-			double *dydtOld,
-			double *dzdtOld,
-			double *drdtOld,
+				double *dxdtOld,
+				double *dydtOld,
+				double *dzdtOld,
+				double *drdtOld,
 			
-			double *dxdtOldTemp,
-			double *dydtOldTemp,
-			double *dzdtOldTemp,
-			double *drdtOldTemp,
+				double *dxdtOldTemp,
+				double *dydtOldTemp,
+				double *dzdtOldTemp,
+				double *drdtOldTemp,
 			
-			int *newIdx,
-			int *flag,
-			int numBubbles)
+				int *newIdx,
+				int *flag,
+				int numBubbles)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles && flag[tid] == 1)

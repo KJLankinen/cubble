@@ -255,10 +255,12 @@ namespace cubble
 			     double *zPrd,
 			     double *r,
 			     double *w,
+			     int *aboveMinRadFlags,
 			     int givenNumBubblesPerDim,
 			     dvec tfr,
 			     dvec lbb,
 			     double avgRad,
+			     double minRad,
 			     int numBubbles);
 
     __global__
@@ -393,7 +395,7 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void addVolume(double *r, int numBubbles, double volumeMultiplier, double invTotalVolume);
+    void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume);
 
     __global__
     void eulerIntegration(double *x,
