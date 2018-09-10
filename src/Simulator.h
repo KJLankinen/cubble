@@ -205,6 +205,8 @@ namespace cubble
 		    0,
 		    false);
 	}
+
+        
 	    
 	void generateBubbles();
 	void updateCellsAndNeighbors();
@@ -227,6 +229,7 @@ namespace cubble
 	std::shared_ptr<Env> env;
 
 	FixedSizeDeviceArray<double> bubbleData;
+        FixedSizeDeviceArray<int> aboveMinRadFlags;
 	FixedSizeDeviceArray<int> cellData;
 	FixedSizeDeviceArray<int> indicesPerCell;
         FixedSizeDeviceArray<int> neighborPairIndices;
@@ -383,6 +386,8 @@ namespace cubble
 		 double *drdtPrd,
 		 
 		 double *errors,
+		 int *aboveMinRadFlags,
+		 double minRad,
 		 dvec tfr,
 		 dvec lbb,
 		 double timeStep,
@@ -390,7 +395,7 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void addVolume(double *r, int numBubbles, double volumeMultiplier);
+    void addVolume(double *r, int numBubbles, double volumeMultiplier, double invTotalVolume);
 
     __global__
     void eulerIntegration(double *x,
@@ -407,6 +412,14 @@ namespace cubble
 			  dvec lbb,
 			  double timeStep,
 			  int numBubbles);
+
+    __global__
+    void calculateRedistributedGasVolume(double *volume,
+					 double *r,
+					 int *aboveMinRadFlags,
+					 double *volumeMultiplier,
+					 double pi,
+					 int numBubbles);
     
 
     // ******************************

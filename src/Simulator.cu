@@ -37,8 +37,9 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     env->setTfr(tfr);
 
     bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BubbleProperty::NUM_VALUES);
-
+    aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 1);
     indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
+
     // TODO: Figure out a more sensible value for this.
     const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
     neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 4);
@@ -244,6 +245,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
 					   errors,
+					   aboveMinRadFlags.getRowPtr(0),
+					   env->getMinRad(),
 					   tfr,
 					   lbb,
 					   timeStep,
@@ -438,71 +441,32 @@ bool cubble::Simulator::deleteSmallBubbles()
     const size_t numThreads = 128;
     const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
     
+    double *volumeMultiplier = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
+    double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-    double minRadius = cubReduction<double, double*, double*>(&cub::DeviceReduce::Min, r, numBubbles);
+    const int numBubblesAboveMinRad = cubReduction<int, int*, int*>(&cub::DeviceReduce::Sum,
+								    aboveMinRadFlags,
+								    numBubbles);
 
-    bool atLeastOneBubbleDeleted = false;
-    
-    if (minRadius < env->getMinRad())
+    bool atLeastOneBubbleDeleted = numBubblesAboveMinRad < numBubbles;
+    if (atLeastOneBubbleDeleted)
     {
 	NVTX_RANGE_PUSH_A("BubbleRemoval");
 	
-	CUDA_CALL(cudaMemcpyAsync(hostData.data(),
-				  bubbleData.getDataPtr(),
-				  bubbleData.getSizeInBytes(),
-				  cudaMemcpyDeviceToHost));
+	cudaMemset(static_cast<void*>(volumeMultiplier), 0, sizeof(double));
+	calculateRedistributedGasVolume<<<numBlocks, numThreads>>>(volPtr,
+								   r,
+								   aboveMinRadFlags,
+								   volumeMultiplier,
+								   env->getPi(),
+								   numBubbles);
+	// Delete smalls
 	
-	minRadius = env->getMinRad();
-	size_t memoryStride = bubbleData.getWidth();
-	size_t rIdx = (size_t)(size_t)BubbleProperty::R;
-	std::vector<int> idxVec;
-	
-	for (size_t i = 0; i < (size_t)BubbleProperty::NUM_VALUES; ++i)
-	    idxVec.push_back(i);
 
-	// Synchronize if memcpy not done yet.
-	CUDA_CALL(cudaDeviceSynchronize());
-
-	double volumeMultiplier = 0;
-	for (int i = (int)numBubbles - 1; i > -1; --i)
-	{
-	    double radius = hostData[rIdx * memoryStride + i];
-	    assert(radius > 0 && "Radius is negative!");
-	    if (radius < minRadius)
-	    {
-		double volume = 0;
-	        volume = radius * radius;
-#if (NUM_DIM == 3)
-		volume *= 1.333333333333333333333333 * radius;
-#endif
-		volume *= env->getPi();
-	        volumeMultiplier += volume;
-		
-		for (size_t j = 0; j < idxVec.size(); ++j)
-		    hostData[j * memoryStride + i] = hostData[j * memoryStride + (numBubbles - 1)];
-		--numBubbles;
-	    }
-	}
-
-	CUDA_CALL(cudaMemcpy(bubbleData.getDataPtr(),
-			     hostData.data(),
-			     bubbleData.getSizeInBytes(),
-			     cudaMemcpyHostToDevice));
-
-        volumeMultiplier /= getVolumeOfBubbles();
-	volumeMultiplier += 1.0;
-
-#if (NUM_DIM == 3)
-	volumeMultiplier = std::cbrt(volumeMultiplier);
-#else
-	volumeMultiplier = std::sqrt(volumeMultiplier);
-#endif
-
-	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier);
+	const double invTotalVolume = 1.0 / getVolumeOfBubbles();
+	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier, invTotalVolume);
 	
 	NVTX_RANGE_POP();
-	
-	atLeastOneBubbleDeleted = true;
     }
     
     NVTX_RANGE_POP();
@@ -1075,6 +1039,8 @@ void cubble::correct(double *x,
 		     double *drdtPrd,
 		     
 		     double *errors,
+		     int *aboveMinRadFlags,
+		     double minRad,
 		     dvec tfr,
 		     dvec lbb,
 		     double timeStep,
@@ -1118,6 +1084,7 @@ void cubble::correct(double *x,
 	    radError = radError < 0 ? -radError : radError;
 
 	    rPrd[tid] = radius;
+	    aboveMinRadFlags[tid] = radius < minRad ? 0 : 1;
 	}
 
 	double error = (pos - posPrd).getAbsolute().getMaxComponent();
@@ -1131,11 +1098,21 @@ void cubble::correct(double *x,
 }
 
 __global__
-void cubble::addVolume(double *r, int numBubbles, double volumeMultiplier)
+void cubble::addVolume(double *r, int numBubbles, double volumeMultiplier, double invTotalVolume)
 {
     const int tid = getGlobalTid();
     if (tid < numBubbles)
-	r[tid] = r[tid] * volumeMultiplier;
+    {
+        double multiplier = volumeMultiplier * invTotalVolume;
+	multiplier += 1.0;
+
+#if (NUM_DIM == 3)
+	multiplier = cbrt(multiplier);
+#else
+	multiplier = sqrt(multiplier);
+#endif
+	r[tid] = r[tid] * multiplier;
+    }
 }
 
 __global__
@@ -1177,6 +1154,29 @@ void cubble::eulerIntegration(double *x,
 	y[tid] = pos.y;
 	z[tid] = pos.z;
 	r[tid] = r[tid] + timeStep * drdt[tid];
+    }
+}
+
+ __global__
+void cubble::calculateRedistributedGasVolume(double *volume,
+	                                     double *r,
+	                                     int *aboveMinRadFlags,
+	                                     double *volumeMultiplier,
+	                                     double pi,
+                        	             int numBubbles)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubbles)
+    {
+        const double radius = r[tid];
+        double vol = pi * radius * radius;
+#if (NUM_DIM == 3)
+	vol *= 1.333333333333333333333333 * radius;
+#endif
+	volume[tid] = vol;
+
+	if (aboveMinRadFlags[tid] == 0)
+	    atomicAdd(volumeMultiplier, vol);
     }
 }
 

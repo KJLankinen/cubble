@@ -66,7 +66,7 @@ namespace cubble
 	    assert(MuZero > 0);
 	    FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
 
-	    MinRad = 0.01 * AvgRad;
+	    MinRad = 0.1 * AvgRad;
 	}
 	
 	void writeParameters() {readWriteParameters(false); }
