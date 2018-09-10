@@ -8,6 +8,7 @@
 #include "FixedSizeDeviceArray.h"
 
 #include <cuda_runtime.h>
+#include <nvToolsExt.h>
 #include <memory>
 #include <vector>
 
@@ -34,28 +35,17 @@ namespace cubble
 	DYDT_PRD,
 	DZDT_PRD,
 	DRDT_PRD,
+
+	ENERGY,
+	FREE_AREA,
 	
 	DXDT_OLD,
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
 	
-	ENERGY,
 	ERROR,
 	VOLUME,
-	FREE_AREA,
-	
-	NUM_VALUES
-    };
-    
-    enum class BubblePairProperty
-    {
-	ACCELERATION_X,
-	ACCELERATION_Y,
-	ACCELERATION_Z,
-	ACCELERATION_R,
-	ENERGY,
-	OVERLAP_AREA,
 	
 	NUM_VALUES
     };
@@ -67,17 +57,9 @@ namespace cubble
 	
 	NUM_VALUES
     };
-
-    enum class MiscIntProperty
-    {
-	NUM_NEIGHBORS,
-	INDEX,
-	
-	NUM_VALUES
-    };
     
     class Simulator
-    {
+    {	
 	CUBBLE_PROP(double, SimulationTime, 0)
 	CUBBLE_PROP(double, ElasticEnergy, 0)
     public:
@@ -94,22 +76,36 @@ namespace cubble
 	template<typename T, typename InputIterT, typename OutputIterT>
         T cubReduction(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		       InputIterT deviceInputData,
-		       size_t numValues)
+		       int numValues)
 	{
+	    NVTX_RANGE_PUSH_A("CubReductionTemplateFunc");
 	    assert(deviceInputData != nullptr);
 
+	    NVTX_RANGE_PUSH_A("RedOutputDataCheck");
 	    if (sizeof(T) > cubOutputData.getSizeInBytes())
 	        cubOutputData = FixedSizeDeviceArray<char>(sizeof(T), 1);
+	    NVTX_RANGE_POP();
 
+	    
+	    NVTX_RANGE_PUSH_A("StaticCast");
 	    void *rawOutputPtr = static_cast<void*>(cubOutputData.getDataPtr());
 	    OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
-	    
+	    NVTX_RANGE_POP();
+
+
+	    NVTX_RANGE_PUSH_A("TempSizeFetch");
 	    size_t tempStorageBytes = 0;
 	    (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, 0, false);
+	    NVTX_RANGE_POP();
 
+
+	    NVTX_RANGE_PUSH_A("TempResize");
 	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
 		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+	    NVTX_RANGE_POP();
 
+
+	    NVTX_RANGE_PUSH_A("Reduce");
 	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
 	    (*func)(tempStoragePtr,
 		    tempStorageBytes,
@@ -118,9 +114,15 @@ namespace cubble
 		    numValues,
 		    0,
 		    false);
-	    
+	    NVTX_RANGE_POP();
+
+
+    	    NVTX_RANGE_PUSH_A("MemcpyBackToHost");
 	    T hostOutputData;
-	    cudaMemcpy(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
+	    cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost);
+	    NVTX_RANGE_POP();
+
+	    NVTX_RANGE_POP();
 
 	    return hostOutputData;
 	}
@@ -129,7 +131,7 @@ namespace cubble
 	void cubScan(cudaError_t (* func)(void*, size_t&, InputIterT, OutputIterT, int, cudaStream_t, bool),
 		     InputIterT deviceInputData,
 		     OutputIterT deviceOutputData,
-		     size_t numValues)
+		     int numValues)
 	{
 	    assert(deviceInputData != nullptr);
 	    assert(deviceOutputData != nullptr);
@@ -140,7 +142,7 @@ namespace cubble
 	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
 		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 	 
-	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());   
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
 	    (*func)(tempStoragePtr,
 		    tempStorageBytes,
 		    deviceInputData,
@@ -149,7 +151,61 @@ namespace cubble
 		    0,
 		    false);
 	}
+
+	template<typename KeyT, typename ValueT>
+	void cubSortPairs(cudaError_t (*func)(
+			      void*,
+			      size_t&,
+			      const KeyT*,
+			      KeyT*,
+			      const ValueT*,
+			      ValueT*,
+			      int,
+			      int,
+			      int,
+			      cudaStream_t,
+			      bool),
+			  const KeyT *keysIn,
+			  KeyT *keysOut,
+			  const ValueT *valuesIn,
+			  ValueT *valuesOut,
+			  int numValues)
+	{
+	    assert(keysIn != nullptr);
+	    assert(keysOut != nullptr);
+	    assert(valuesIn != nullptr);
+	    assert(valuesOut != nullptr);
+
+	    size_t tempStorageBytes = 0;
+	    (*func)(NULL,
+		    tempStorageBytes,
+		    keysIn,
+		    keysOut,
+		    valuesIn,
+		    valuesOut,
+		    numValues,
+		    0,
+		    sizeof(KeyT) * 8,
+		    0,
+		    false);
+
+	    if (tempStorageBytes > cubTemporaryStorage.getSizeInBytes())
+		cubTemporaryStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 	    
+	    void *tempStoragePtr = static_cast<void*>(cubTemporaryStorage.getDataPtr());
+	    (*func)(tempStoragePtr,
+		    tempStorageBytes,
+		    keysIn,
+		    keysOut,
+		    valuesIn,
+		    valuesOut,
+		    numValues,
+		    0,
+		    sizeof(KeyT) * 8,
+		    0,
+		    false);
+	}
+   
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
@@ -158,8 +214,11 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
+        int hostNumPairs = 0;
+
 	const static int neighborStride = 32;
 	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
+
 	size_t integrationStep = 0;
 
 	cudaEvent_t start = 0;
@@ -168,10 +227,11 @@ namespace cubble
 	std::shared_ptr<Env> env;
 
 	FixedSizeDeviceArray<double> bubbleData;
-	FixedSizeDeviceArray<double> bubblePairData;
+        FixedSizeDeviceArray<int> aboveMinRadFlags;
 	FixedSizeDeviceArray<int> cellData;
-	FixedSizeDeviceArray<int> miscData;
-        FixedSizeDeviceArray<int> neighborIndices;
+	FixedSizeDeviceArray<int> indicesPerCell;
+        FixedSizeDeviceArray<int> neighborPairIndices;
+	FixedSizeDeviceArray<int> numPairs;
 	
 	FixedSizeDeviceArray<char> cubOutputData;
 	FixedSizeDeviceArray<char> cubTemporaryStorage;
@@ -195,10 +255,12 @@ namespace cubble
 			     double *zPrd,
 			     double *r,
 			     double *w,
+			     int *aboveMinRadFlags,
 			     int givenNumBubblesPerDim,
 			     dvec tfr,
 			     dvec lbb,
 			     double avgRad,
+			     double minRad,
 			     int numBubbles);
 
     __global__
@@ -221,21 +283,21 @@ namespace cubble
 			int numBubbles);
 
     __global__
-    void findNeighbors(double *x,
-		       double *y,
-		       double *z,
-		       double *r,
-		       int *indices,
-		       int *offsets,
-		       int *sizes,
-		       int *numNeighbors,
-		       int *neighborIndices,
-		       dvec tfr,
-		       dvec lbb,
-		       int numBubbles,
-		       int numDomains,
-		       int numCells,
-		       int neighborStride);
+    void findBubblePairs(double *x,
+			 double *y,
+			 double *z,
+			 double *r,
+			 int *indices,
+			 int *offsets,
+			 int *sizes,
+			 int *firstIndices,
+			 int *secondIndices,
+			 int *numPairs,
+			 int numCells,
+			 int numBubbles,
+			 dvec interval,
+			 int maxNumSharedVals,
+			 int maxNumPairs);
     
     __global__
     void predict(double *x,
@@ -265,48 +327,29 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void createAccelerationArray(double *x,
-				 double *y,
-				 double *z,
-				 double *r,
-				 
-				 double *ax,
-				 double *ay,
-				 double *az,
-				 double *ar,
-				 double *e,
-				 double *areaOverlap,
-				 
-				 int *numberOfNeighbors,
-				 int *neighborIndices,
-				 dvec interval,
-				 int numBubbles,
-				 int neighborStride,
-				 double pi,
-				 bool useGasExchange,
-				 bool calculateEnergy);
-
-    __global__
-    void calculateVelocityFromAccelerations(double *ax,
-					    double *ay,
-					    double *az,
-					    double *ar,
-					    double *e,
-					    double *areaOverlap,
-					    
-					    double *dxdt,
-					    double *dydt,
-					    double *dzdt,
-					    double *drdt,
-					    
-					    double *freeArea,
-					    double *energies,
-					    
-					    int numBubbles,
-					    int neighborStride,
-					    double fZeroPerMuZero,
-					    bool calculateEnergy,
-					    bool useGasExchange);
+    void calculateVelocityAndGasExchange(double *x,
+					 double *y,
+					 double *z,
+					 double *r,
+					 
+					 double *dxdt,
+					 double *dydt,
+					 double *dzdt,
+					 double *drdt,
+					 
+					 double *energy,
+					 double *freeArea,
+					 
+					 int *firstIndices,
+					 int *secondIndices,
+					 
+					 int numBubbles,
+					 int numPairs,
+					 double fZeroPerMuZero,
+					 double pi,
+					 dvec interval,
+					 bool calculateEnergy,
+					 bool useGasExchange);
 
     __global__
     void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, double pi, int numBubbles);
@@ -343,6 +386,8 @@ namespace cubble
 		 double *drdtPrd,
 		 
 		 double *errors,
+		 int *aboveMinRadFlags,
+		 double minRad,
 		 dvec tfr,
 		 dvec lbb,
 		 double timeStep,
@@ -350,7 +395,7 @@ namespace cubble
 		 bool useGasExchange);
 
     __global__
-    void addVolume(double *r, int numBubbles, double volumeMultiplier);
+    void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume);
 
     __global__
     void eulerIntegration(double *x,
@@ -367,34 +412,63 @@ namespace cubble
 			  dvec lbb,
 			  double timeStep,
 			  int numBubbles);
+
+    __global__
+    void calculateRedistributedGasVolume(double *volume,
+					 double *r,
+					 int *aboveMinRadFlags,
+					 double *volumeMultiplier,
+					 double pi,
+					 int numBubbles);
+
+    __global__
+    void removeSmallBubbles(double *x,
+			    double *y,
+			    double *z,
+			    double *r,
+			    
+			    double *xTemp,
+			    double *yTemp,
+			    double *zTemp,
+			    double *rTemp,
+			    
+			    double *dxdt,
+			    double *dydt,
+			    double *dzdt,
+			    double *drdt,
+			    
+			    double *dxdtTemp,
+			    double *dydtTemp,
+			    double *dzdtTemp,
+			    double *drdtTemp,
+			    
+			    double *dxdtOld,
+			    double *dydtOld,
+			    double *dzdtOld,
+			    double *drdtOld,
+			    
+			    double *dxdtOldTemp,
+			    double *dydtOldTemp,
+			    double *dzdtOldTemp,
+			    double *drdtOldTemp,
+			    
+			    int *newIdx,
+			    int *flag,
+			    int numBubbles);
     
 
     // ******************************
     // Device functions
     // ******************************
+
+    __device__
+    double getWrappedCoordinate(double val1, double val2, double multiplier);
     
     __device__
     int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-
-    __device__
-    void getDomainOffsetsAndIntervals(int numBubbles,
-				      int numDomains,
-				      int numCells,
-				      ivec cellIdxVec,
-				      ivec boxDim,
-				      int *offsets,
-				      int *sizes,
-				      int &outXBegin,
-				      int &outXInterval,
-				      int &outYBegin,
-				      int &outYInterval,
-				      bool &outIsOwnCell);
     
     __device__
     int getGlobalTid();
-
-    __device__
-    dvec getShortestWrappedNormalizedVec(dvec pos1, dvec pos2);
 
     __device__
     dvec getWrappedPos(dvec pos);
