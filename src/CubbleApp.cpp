@@ -104,13 +104,17 @@ void CubbleApp::stabilizeSimulation()
 	}
 
 	double energy2 = simulator->getElasticEnergy();
-	double deltaEnergy = energy1 == 0 ? 0 : std::abs(energy2 - energy1) / (energy1 * time);
+	double deltaEnergy = energy1 == 0 ? 1000 : std::abs(energy2 - energy1) / time;
+        deltaEnergy *= 0.5 * env->getSigmaZero();
 
 	if (deltaEnergy < env->getMaxDeltaEnergy())
 	{
 	    std::cout << "Final delta energy " << deltaEnergy
-		      << " after " << numSteps * env->getNumStepsToRelax()
+		      << " after " << (numSteps + 1) * env->getNumStepsToRelax()
 		      << " steps."
+		      << " Energy before: " << energy1
+		      << ", energy after: " << energy2
+                      << ", time: " << time
 		      << std::endl;
 	    break;
 	}
@@ -124,8 +128,10 @@ void CubbleApp::stabilizeSimulation()
 	}
 	else
 	    std::cout << "Number of simulation steps relaxed: "
-		      << numSteps * env->getNumStepsToRelax()
+		      << (numSteps + 1) * env->getNumStepsToRelax()
 		      << ", delta energy: " << deltaEnergy
+		      << ", energy before: " << energy1
+		      << ", energy after: " << energy2
 		      << std::endl;
 
 	++numSteps;
@@ -171,17 +177,17 @@ void CubbleApp::runSimulation()
 	double scaledTime = simulator->getSimulationTime() * env->getKParameter()
 	    / (env->getAvgRad() * env->getAvgRad());
 	
+
 	if ((int)scaledTime >= timesPrinted)
 	{
-	    double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
 	    double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
+	    double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
+	    dataStream << scaledTime << " " << relativeRadius << "\n";
 	    
 	    std::cout << "t*: " << scaledTime
 		      << " <R>/<R_in>: " << relativeRadius
 		      << " phi: " << phi
 		      << std::endl;
-	    
-	    dataStream << scaledTime << " " << relativeRadius << "\n";
 
 	    // Only write snapshots when t* is a power of 2.
 	    if ((timesPrinted & (timesPrinted - 1)) == 0)

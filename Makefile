@@ -4,13 +4,13 @@
 
 # The compiled code is different for different dimensions,
 # so this can't be given as a normal program parameter.
-NUM_DIM := 2
+NUM_DIM := 3
 
 
 # -----------------------------------------------------
 # Profile or not?
 # -----------------------------------------------------
-USE_PROFILING := 1
+USE_PROFILING := 0
 
 
 # -----------------------------------------------------

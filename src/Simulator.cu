@@ -207,7 +207,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
 
 	// Using atomicAdd, so these need to be reset to 0 every time before use.
-	size_t numBytesToReset = sizeof(double) * 6 * bubbleData.getWidth();
+	size_t numBytesToReset = sizeof(double) * 7 * bubbleData.getWidth();
 	CUDA_CALL(cudaMemset(static_cast<void*>(dxdtPrd), 0, numBytesToReset));
 
 	calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
@@ -268,7 +268,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (calculateEnergy)
 	ElasticEnergy = cubReduction<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
-    if (deleteSmallBubbles() || integrationStep % 100 == 0)
+    if (deleteSmallBubbles() || integrationStep % 50 == 0)
 	updateCellsAndNeighbors();
 
     NVTX_RANGE_POP();
@@ -791,7 +791,7 @@ void cubble::findBubblePairs(double *x,
 	    wrappedComponent = r[idx1] + r[idx2];
 	    wrappedComponent *= wrappedComponent;
 
-	    if (magnitude < wrappedComponent)
+	    if (magnitude < 1.1 * wrappedComponent)
 	    {
 		// Set the smaller index to idx1 and larger to idx2
 		id = idx1;
@@ -943,62 +943,70 @@ void cubble::calculateVelocityAndGasExchange(double *x,
 	DEVICE_ASSERT(magnitude > 0);
 	magnitude = sqrt(magnitude);
 
-	double generalVariable = r[idx1] + r[idx2];
-	DEVICE_ASSERT(generalVariable > 0);
-	double invRadii = 1.0 / generalVariable;
-
-	if (calculateEnergy)
+	const double radii = r[idx1] + r[idx2];
+	if (magnitude <= radii)
 	{
-	    generalVariable = generalVariable - magnitude;
-	    generalVariable *= generalVariable;
-	    generalVariable *= invRadii;
+	    DEVICE_ASSERT(radii > 0);
+	    const double invRadii = 1.0 / radii;
 
-	    atomicAdd(&energy[idx1], generalVariable);
-	    atomicAdd(&energy[idx2], generalVariable);
-	}
+	    if (calculateEnergy)
+	    {
+	    	double potentialEnergy = radii - magnitude;
+	    	potentialEnergy *= potentialEnergy;
+	    	atomicAdd(&energy[idx1], potentialEnergy);
+	    	atomicAdd(&energy[idx2], potentialEnergy);
+	    }
 
-        double invMagnitude = 1.0 / magnitude;
-        generalVariable = fZeroPerMuZero * (invMagnitude - invRadii);
+            const double invMagnitude = 1.0 / magnitude;
+            double generalVariable = fZeroPerMuZero * (radii - magnitude) * invRadii * invMagnitude;
 	
-        velX *= generalVariable;
-	velY *= generalVariable;
-	velZ *= generalVariable;
+            velX *= generalVariable;
+	    velY *= generalVariable;
+	    velZ *= generalVariable;
 
-	atomicAdd(&dxdt[idx1], velX);
-	atomicAdd(&dxdt[idx2], -velX);
+	    atomicAdd(&dxdt[idx1], velX);
+	    atomicAdd(&dxdt[idx2], -velX);
 	
-	atomicAdd(&dydt[idx1], velY);
-	atomicAdd(&dydt[idx2], -velY);
+	    atomicAdd(&dydt[idx1], velY);
+	    atomicAdd(&dydt[idx2], -velY);
 #if (NUM_DIM == 3)
-	atomicAdd(&dzdt[idx1], velZ);
-	atomicAdd(&dzdt[idx2], -velZ);
+	    atomicAdd(&dzdt[idx1], velZ);
+	    atomicAdd(&dzdt[idx2], -velZ);
 #endif
 
-	if (useGasExchange)
-	{
-	    velX = r[idx1];
-	    velY = r[idx2];
-	    DEVICE_ASSERT(magnitude > velX && magnitude > velY);
-	    generalVariable = velY * velY;
-	    velZ = 0.5 * (generalVariable - velX * velX + magnitude * magnitude) * invMagnitude;
-	    velZ *= velZ;
-	    velZ = generalVariable - velZ;
-	    DEVICE_ASSERT(velZ > -0.0001);
-	    velZ = velZ < 0 ? -velZ : velZ;
-	    DEVICE_ASSERT(velZ >= 0);
+	    if (useGasExchange)
+	    {
+	    	velX = r[idx1];
+	    	velY = r[idx2];
+		if (magnitude < velX || magnitude < velY)
+		{
+		    velZ = velX < velY ? velX : velY;
+		    velZ *= velZ;
+		}
+		else
+		{
+		    generalVariable = velY * velY;
+		    velZ = 0.5 * (generalVariable - velX * velX + magnitude * magnitude) * invMagnitude;
+		    velZ *= velZ;
+		    velZ = generalVariable - velZ;
+		    DEVICE_ASSERT(velZ > -0.0001);
+		    velZ = velZ < 0 ? -velZ : velZ;
+		    DEVICE_ASSERT(velZ >= 0);
+		}
 	    
 #if (NUM_DIM == 3)
-	    velZ *= pi;
+	    	velZ *= pi;
 #else
-	    velZ = 2.0 * sqrt(velZ);
+	    	velZ = 2.0 * sqrt(velZ);
 #endif
-	    atomicAdd(&freeArea[idx1], velZ);
-	    atomicAdd(&freeArea[idx2], velZ);
+	    	atomicAdd(&freeArea[idx1], velZ);
+	    	atomicAdd(&freeArea[idx2], velZ);
 	    
-	    velZ *= 1.0 / velY - 1.0 / velX;
+	    	velZ *= 1.0 / velY - 1.0 / velX;
 	    
-	    atomicAdd(&drdt[idx1], velZ);
-	    atomicAdd(&drdt[idx2], -velZ);
+	    	atomicAdd(&drdt[idx1], velZ);
+	    	atomicAdd(&drdt[idx2], -velZ);
+	    }
 	}
     }
 }
@@ -1032,15 +1040,13 @@ void cubble::calculateFinalRadiusChangeRate(double *drdt,
     const int tid = getGlobalTid();
     if (tid < numBubbles)
     {
-	double vr = kappa * freeArea[tid] * (invRho - 1.0 / r[tid]);
+	double invRadius = 1.0 / r[tid];
+	double vr = kappa * freeArea[tid] * (invRho - invRadius);
 	vr += drdt[tid];
 	
+        vr *= 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
-	vr *= 0.25 * invPi;
-	vr /= r[tid] * r[tid];
-#else
-	vr *= 0.5 * invPi;
-	vr /= r[tid];
+	vr *= 0.5 * invRadius;
 #endif
 	
 	drdt[tid] = kParam * vr;
