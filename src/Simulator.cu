@@ -37,7 +37,7 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     env->setTfr(tfr);
 
     bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BubbleProperty::NUM_VALUES);
-    aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 1);
+    aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 2);
     indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
 
     // TODO: Figure out a more sensible value for this.
@@ -437,13 +437,6 @@ void cubble::Simulator::updateData()
 bool cubble::Simulator::deleteSmallBubbles()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
-    
-    const size_t numThreads = 128;
-    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
-    
-    double *volumeMultiplier = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
-    double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     const int numBubblesAboveMinRad = cubReduction<int, int*, int*>(&cub::DeviceReduce::Sum,
 								    aboveMinRadFlags,
 								    numBubbles);
@@ -452,17 +445,70 @@ bool cubble::Simulator::deleteSmallBubbles()
     if (atLeastOneBubbleDeleted)
     {
 	NVTX_RANGE_PUSH_A("BubbleRemoval");
+    
+	const size_t numThreads = 128;
+	const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+
+	double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
+	double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
+	double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
+	double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
 	
+	double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
+	double *yPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Y_PRD);
+	double *zPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Z_PRD);
+	double *rPrd = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
+	
+	double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
+	double *dydt = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT);
+	double *dzdt = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT);
+	double *drdt = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT);
+	
+	double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
+	double *dydtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_PRD);
+	double *dzdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_PRD);
+	double *drdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_PRD);
+	
+	double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
+	double *dydtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_OLD);
+	double *dzdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_OLD);
+	double *drdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_OLD);
+	
+	double *energies = bubbleData.getRowPtr((size_t)BubbleProperty::ENERGY);
+	double *errors = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
+	double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
+	double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
+
+	int *flag = aboveMinRadFlags.getRowPtr(0);
+	int *newIdx = aboveMinRadFlags.getRowPtr(1);
+	cubScan<int*, int*>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
+
+	removeSmallBubbles<<<numBlocks, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
+						      x, y, z, r,
+						      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
+						      dxdt, dydt, dzdt, drdt,
+						      energies, freeArea, errors, volumes,
+						      dxdtOld, dydtOld, dzdtOld, drdtOld,
+						      newIdx,
+						      flag,
+						      numBubbles);
+        
+	const size_t numBytesToCopy = 2 * sizeof(double) * bubbleData.getWidth();
+	CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
+	CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
+	CUDA_CALL(cudaMemcpyAsync(dxdtOld, energies, numBytesToCopy, cudaMemcpyDeviceToDevice));
+	CUDA_CALL(cudaMemcpyAsync(dzdtOld, errors, numBytesToCopy, cudaMemcpyDeviceToDevice));
+	
+	numBubbles = numBubblesAboveMinRad;
+	double *volumeMultipier = errors + numBubbles;
 	cudaMemset(static_cast<void*>(volumeMultiplier), 0, sizeof(double));
-	calculateRedistributedGasVolume<<<numBlocks, numThreads>>>(volPtr,
+	
+	calculateRedistributedGasVolume<<<numBlocks, numThreads>>>(volumes,
 								   r,
-								   aboveMinRadFlags,
+								   flag,
 								   volumeMultiplier,
 								   env->getPi(),
 								   numBubbles);
-	// Delete smalls
-	
-
 	const double invTotalVolume = 1.0 / getVolumeOfBubbles();
 	addVolume<<<numBlocks, numThreads>>>(r, numBubbles, volumeMultiplier, invTotalVolume);
 	
@@ -1180,6 +1226,61 @@ void cubble::calculateRedistributedGasVolume(double *volume,
     }
 }
 
+__global__
+void removeSmallBubbles(double *x,
+			double *y,
+			double *z,
+			double *r,
+			
+			double *xTemp,
+			double *yTemp,
+			double *zTemp,
+			double *rTemp,
+			
+			double *dxdt,
+			double *dydt,
+			double *dzdt,
+			double *drdt,
+			
+			double *dxdtTemp,
+			double *dydtTemp,
+			double *dzdtTemp,
+			double *drdtTemp,
+			
+			double *dxdtOld,
+			double *dydtOld,
+			double *dzdtOld,
+			double *drdtOld,
+			
+			double *dxdtOldTemp,
+			double *dydtOldTemp,
+			double *dzdtOldTemp,
+			double *drdtOldTemp,
+			
+			int *newIdx,
+			int *flag,
+			int numBubbles)
+{
+    const int tid = getGlobalTid();
+    if (tid < numBubbles && flag[tid] == 1)
+    {
+	const int idx = newIdx[tid];
+	x[idx] = xTemp[tid];
+	y[idx] = yTemp[tid];
+	z[idx] = zTemp[tid];
+	r[idx] = rTemp[tid];
+	
+	dxdt[idx] = dxdtTemp[tid];
+	dydt[idx] = dydtTemp[tid];
+	dzdt[idx] = dzdtTemp[tid];
+	drdt[idx] = drdtTemp[tid];
+	
+	dxdtOld[idx] = dxdtOldTemp[tid];
+	dydtOld[idx] = dydtOldTemp[tid];
+	dzdtOld[idx] = dzdtOldTemp[tid];
+	drdtOld[idx] = drdtOldTemp[tid];
+    }
+}
 
 // ******************************
 // Device functions

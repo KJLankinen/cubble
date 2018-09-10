@@ -205,9 +205,7 @@ namespace cubble
 		    0,
 		    false);
 	}
-
-        
-	    
+   
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
@@ -420,6 +418,41 @@ namespace cubble
 					 double *volumeMultiplier,
 					 double pi,
 					 int numBubbles);
+
+    __global__
+    void removeSmallBubbles(double *x,
+			    double *y,
+			    double *z,
+			    double *r,
+			    
+			    double *xTemp,
+			    double *yTemp,
+			    double *zTemp,
+			    double *rTemp,
+			    
+			    double *dxdt,
+			    double *dydt,
+			    double *dzdt,
+			    double *drdt,
+			    
+			    double *dxdtTemp,
+			    double *dydtTemp,
+			    double *dzdtTemp,
+			    double *drdtTemp,
+			    
+			    double *dxdtOld,
+			    double *dydtOld,
+			    double *dzdtOld,
+			    double *drdtOld,
+			    
+			    double *dxdtOldTemp,
+			    double *dydtOldTemp,
+			    double *dzdtOldTemp,
+			    double *drdtOldTemp,
+			    
+			    int *newIdx,
+			    int *flag,
+			    int numBubbles);
     
 
     // ******************************
