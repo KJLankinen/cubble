@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --mem=1G
-#SBATCH --time=04:00:00						## wallclock time hh:mm:ss
+#SBATCH --time=24:00:00						## wallclock time hh:mm:ss
 #SBATCH --gres=gpu:1 --constraint='pascal'		## use K80 or P100
 #SBATCH --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL
 
