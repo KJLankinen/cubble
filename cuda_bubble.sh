@@ -9,6 +9,6 @@ module purge
 module load goolfc/triton-2017a					## toolchain
 
 srun make clean
-srun make
+srun make final
 ##srun --gres=gpu:1 nvprof --profile-from-start off --print-gpu-trace bin/cubble data.json save.json
 srun --gres=gpu:1 bin/cubble data.json save.json
