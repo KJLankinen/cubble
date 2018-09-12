@@ -1,4 +1,4 @@
-PhiTarget 0.7
+PhiTarget 0.7 AvgRad 0.07 Kappa 0.02
 PhiTarget 0.71
 PhiTarget 0.72
 PhiTarget 0.73
