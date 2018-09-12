@@ -1,3 +1,9 @@
-PhiTarget 0.7 AvgRad 0.07 Kappa 0.02
-PhiTarget 0.71
-AvgRad 0.05
+PhiTarget 0.7
+PhiTarget 0.725
+PhiTarget 0.75
+PhiTarget 0.775
+PhiTarget 0.8
+PhiTarget 0.825
+PhiTarget 0.85
+PhiTarget 0.875
+PhiTarget 0.9
