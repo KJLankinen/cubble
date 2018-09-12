@@ -7,9 +7,15 @@
 # ====================================================================================================
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+PROJECT_ROOT_DIR="$WRKDIR/cuda_bubble"
+MUL_RUN_DIR="$PROJECT_ROOT_DIR/multiple_runs_data"
+SELF_DIR="$MUL_RUN_DIR/$SLURM_ARRAY_ID_TASK"
+BINARY="$PROJECT_ROOT_DIR/bin/cubble"
+INPUT_DATA_FILE="input_data.json"
+
 module purge
 module load goolfc/triton-2017a
 
-cd $WRKDIR/cuda_bubble/multiple_runs_data/$SLURM_ARRAY_ID_TASK/
-cat data/input_data.json
-echo "srun --gres=gpu:1 $WRKDIR/cuda_bubble/bin/cubble input_data.json save.json"
+cd $SELF_DIR
+cat "$SELF_DIR/data/INPUT_DATA_FILE"
+echo "srun $BINARY $INPUT_DATA_FILE save.json"
