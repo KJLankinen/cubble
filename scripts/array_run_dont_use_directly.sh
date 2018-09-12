@@ -18,7 +18,8 @@ module load goolfc/triton-2017a
 
 RUN_DIR=run_$SLURM_ARRAY_TASK_ID
 
-echo "mkdir $RUN_DIR $RUN_DIR/data"
-echo "cp $WRKDIR/cuda_bubble/data/input_data.json $RUN_DIR/data/."
-echo "cd $RUN_DIR"
+cd $WRKDIR/cuda_bubble/
+mkdir $RUN_DIR $RUN_DIR/data
+cp $WRKDIR/cuda_bubble/data/input_data.json $RUN_DIR/data/.
+cd $RUN_DIR
 echo "srun --gres=gpu:1 $WRKDIR/cuda_bubble/bin/cubble input_data.json save.json"

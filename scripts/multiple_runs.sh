@@ -11,4 +11,4 @@ module load goolfc/triton-2017a
 cd $WRKDIR/cuda_bubble/
 srun make clean
 srun make final
-sbatch array_run_dont_use_directly.sh
+sbatch scripts/array_run_dont_use_directly.sh
