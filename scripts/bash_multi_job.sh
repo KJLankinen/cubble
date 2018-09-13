@@ -3,7 +3,6 @@
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # RUN THIS SCRIPT WITH BASH, NOT WITH SBATCH
-# i.e. 'bash script_name.sh'
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -63,7 +62,7 @@ make clean
 
 while read LINE
 do
-  JQ_FILTER=''
+  JQ_FILTER=""
   JQ_ARGS=''
   i=0
   
@@ -72,7 +71,7 @@ do
     if [ $((i % 2)) == 0 ]
     then
       JQ_ARGS="$JQ_ARGS --argjson $WORD"
-      JQ_FILTER="$JQ_FILTER .$WORD = \$$WORD | "
+      JQ_FILTER="$JQ_FILTER.$WORD = \$$WORD | "
     else
       JQ_ARGS="$JQ_ARGS $WORD"
     fi
@@ -85,21 +84,23 @@ do
   NUM_RUNS=$((NUM_RUNS + 1))
 
   mkdir -p $MUL_RUN_DIR/$NUM_RUNS/data
-  jq $JQ_ARGS '"$JQ_FILTER"' $PROJECT_ROOT_DIR/data/$INPUT_DATA > $MUL_RUN_DIR/$NUM_RUNS/data/$INPUT_DATA
+  jq $JQ_ARGS "$JQ_FILTER" $PROJECT_ROOT_DIR/data/$INPUT_DATA > $MUL_RUN_DIR/$NUM_RUNS/data/$INPUT_DATA
 
 done < $PARAMS_FILE
 
 
 #==============================================================
 # Create temporary shell scripts for submitting the runs with sbatch.
+#
+# Build script builds the binary.
+# Array script launches an array of jobs, but only after build job
+# has finished successfully. Number of jobs on array depends on the
+# number of lines in the parameter file, as mentioned above.
 #==============================================================
 
 NEWLINE=$'\n'
 BUILD_SCRIPT="#!/bin/sh"${NEWLINE}"module purge"${NEWLINE}"module load goolfc/triton-2017a"${NEWLINE}"cd $PROJECT_ROOT_DIR"${NEWLINE}"srun make final"${NEWLINE}
-ARRAY_SCRIPT="#!/bin/sh"${NEWLINE}"module purge"${NEWLINE}"module load goolfc/triton-2017a"${NEWLINE}"cd $MUL_RUN_DIR/\$SLURM_ARRAY_TASK_ID"${NEWLINE}"cat data/$INPUT_DATA"${NEWLINE}
-#"srun $BINARY $INPUT_DATA $SAVE_DATA"${NEWLINE}
-
-#printf "$ARRAY_SCRIPT"
+ARRAY_SCRIPT="#!/bin/sh"${NEWLINE}"module purge"${NEWLINE}"module load goolfc/triton-2017a"${NEWLINE}"cd $MUL_RUN_DIR/\$SLURM_ARRAY_TASK_ID"${NEWLINE}"srun $BINARY $INPUT_DATA $SAVE_DATA"${NEWLINE}
 
 BUILD_JOB_ID=$(printf "$BUILD_SCRIPT" | sbatch --mem=1G --time=04:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL | tail -1 | awk -v N=4 '{print $N}')
-printf "$ARRAY_SCRIPT" | sbatch --mem=1G --time=04:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL --dependency=aftercorr:"$BUILD_JOB_ID" --array=0-$NUM_RUNS
+printf "$ARRAY_SCRIPT" | sbatch --mem=1G --time=24:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL --dependency=aftercorr:"$BUILD_JOB_ID" --array=0-$NUM_RUNS
