@@ -103,4 +103,4 @@ BUILD_SCRIPT="#!/bin/sh"${NEWLINE}"module purge"${NEWLINE}"module load goolfc/tr
 ARRAY_SCRIPT="#!/bin/sh"${NEWLINE}"module purge"${NEWLINE}"module load goolfc/triton-2017a"${NEWLINE}"cd $MUL_RUN_DIR/\$SLURM_ARRAY_TASK_ID"${NEWLINE}"srun $BINARY $INPUT_DATA $SAVE_DATA"${NEWLINE}
 
 BUILD_JOB_ID=$(printf "$BUILD_SCRIPT" | sbatch --mem=1G --time=04:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL | tail -1 | awk -v N=4 '{print $N}')
-printf "$ARRAY_SCRIPT" | sbatch --mem=1G --time=04:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL --dependency=aftercorr:"$BUILD_JOB_ID" --array=0-$NUM_RUNS
+printf "$ARRAY_SCRIPT" | sbatch --mem=1G --time=24:00:00 --gres=gpu:1 --constraint=pascal --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL --dependency=aftercorr:"$BUILD_JOB_ID" --array=0-$NUM_RUNS
