@@ -64,39 +64,40 @@ def fit_to_data(xdata, ydata):
 
     plt.show()
 
-def asd(x, y):
-
-    alpha = 0.498
-    tau = 24.0
-    plot_label_str = r"$(\frac{t^*}{\tau_c})^{\alpha}, \alpha = $" + str(alpha) + r"$, \tau_c = $" + str(tau)
-    line_y = pow(x / tau, alpha)
+def asd(data_loc, ax, plot_label):
+    data = np.loadtxt(data_loc)
+    x = data[:, 0]
+    y = data[:, 1]
+    
+    ax.loglog(x, y, '.', linewidth=2.5, label=plot_label)
+    
+def main():
+    alpha = 0.5
+    xlim = 4000
 
     fig = plt.figure()
     ax = fig.add_subplot(111) # nrows, ncols, index
+    
     ax.xaxis.label.set_fontsize(20)
     ax.yaxis.label.set_fontsize(20)
-        
-    ax.semilogx(x, y, 'r+', linewidth=2.0, label="data")
-    ax.semilogx(x[30:], line_y[30:], 'k--', linewidth=2.0, label=plot_label_str)
-
-    ax.set_xlim(1, 1000)
-    
-    ax.set_xlabel(r"$t^*$")
+    ax.set_xlim(1, xlim)
+    ax.set_ylim(0.65, 10)
+    ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
-    #ax.patch.set_facecolor((0.3, 0.3, 1.0))
-    
     ax.grid(1)
-    ax.legend(loc=2, prop={'size' : 20})
-    
-    plt.show()
-    
-def main():
-    data = np.loadtxt("data/collected_data.dat")
-    x = data[:, 0]
-    y = data[:, 1]
 
-    #fit_to_data(x, y)
-    asd(x, y)
+    asd("data/8/data/collected_data.dat", ax, r"$\phi=$" + str(0.9) + r", $\kappa=$" + str(0.01))
+    asd("data/7/data/collected_data.dat", ax, r"$\phi=$" + str(0.875) + r", $\kappa=$" + str(0.01))
+    asd("data/6/data/collected_data.dat", ax, r"$\phi=$" + str(0.85) + r", $\kappa=$" + str(0.01))
+    asd("data/5/data/collected_data.dat", ax, r"$\phi=$" + str(0.825) + r", $\kappa=$" + str(0.01))
+    asd("data/4/data/collected_data.dat", ax, r"$\phi=$" + str(0.8) + r", $\kappa=$" + str(0.01))
+    asd("data/3/data/collected_data.dat", ax, r"$\phi=$" + str(0.775) + r", $\kappa=$" + str(0.01))
+    asd("data/2/data/collected_data.dat", ax, r"$\phi=$" + str(0.75) + r", $\kappa=$" + str(0.01))
+
+    ax.loglog(np.linspace(15, 700), pow(np.linspace(15, 700) / 15.0, alpha), 'k--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha))
+    ax.legend(loc=2, prop={'size' : 20})
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
