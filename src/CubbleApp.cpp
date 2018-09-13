@@ -104,7 +104,7 @@ void CubbleApp::stabilizeSimulation()
 	}
 
 	double energy2 = simulator->getElasticEnergy();
-	double deltaEnergy = energy1 == 0 ? 1000 : std::abs(energy2 - energy1) / time;
+	double deltaEnergy = std::abs(energy2 - energy1) / time;
         deltaEnergy *= 0.5 * env->getSigmaZero();
 
 	if (deltaEnergy < env->getMaxDeltaEnergy())
