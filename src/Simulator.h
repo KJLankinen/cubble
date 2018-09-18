@@ -38,13 +38,13 @@ namespace cubble
 
 	ENERGY,
 	FREE_AREA,
+	ERROR,
 	
 	DXDT_OLD,
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
 	
-	ERROR,
 	VOLUME,
 	
 	NUM_VALUES

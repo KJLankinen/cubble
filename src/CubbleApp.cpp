@@ -58,7 +58,6 @@ void CubbleApp::setupSimulation()
 	};
 
     printPhi(phi, phiTarget);
-    saveSnapshotToFile();
 
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
@@ -68,7 +67,8 @@ void CubbleApp::setupSimulation()
 	env->setTfr(env->getTfr() - scaleAmount);
 	
 	simulator->integrate();
-	
+
+	bubbleVolume = simulator->getVolumeOfBubbles();
 	phi = bubbleVolume / env->getSimulationBoxVolume();
 	
 	if (numSteps % 1000 == 0)
