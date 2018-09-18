@@ -1,12 +1,17 @@
-PhiTarget 0.7
-PhiTarget 0.675
-PhiTarget 0.65
-PhiTarget 0.625
-PhiTarget 0.6
-PhiTarget 0.575
-PhiTarget 0.55
-PhiTarget 0.525
-PhiTarget 0.475
-PhiTarget 0.45
-PhiTarget 0.425
-PhiTarget 0.4
+PhiTarget 0.900 RngSeed 4818
+PhiTarget 0.875 RngSeed 15777
+PhiTarget 0.850 RngSeed 6904
+PhiTarget 0.825 RngSeed 6643
+PhiTarget 0.800 RngSeed 22379
+PhiTarget 0.775 RngSeed 25902
+PhiTarget 0.750 RngSeed 28526
+PhiTarget 0.725 RngSeed 8213
+PhiTarget 0.700 RngSeed 21378
+PhiTarget 0.675 RngSeed 9459
+PhiTarget 0.650 RngSeed 19992
+PhiTarget 0.625 RngSeed 7159
+PhiTarget 0.600 RngSeed 3515
+PhiTarget 0.575 RngSeed 9921
+PhiTarget 0.550 RngSeed 29582
+PhiTarget 0.525 RngSeed 11085
+PhiTarget 0.500 RngSeed 31035
