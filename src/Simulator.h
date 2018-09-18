@@ -214,15 +214,8 @@ namespace cubble
 
 	size_t givenNumBubblesPerDim = 0;
 	size_t numBubbles = 0;
-        int hostNumPairs = 0;
-
-	const static int neighborStride = 32;
-	static_assert(neighborStride % 4 == 0, "Neigbor stride must be divisible by 4.");
-
 	size_t integrationStep = 0;
-
-	cudaEvent_t start = 0;
-	cudaEvent_t stop = 0;
+        int hostNumPairs = 0;
 
 	std::shared_ptr<Env> env;
 

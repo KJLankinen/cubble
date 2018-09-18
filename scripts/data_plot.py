@@ -73,7 +73,7 @@ def asd(data_loc, ax, plot_label):
     
 def main():
     alpha = 0.5
-    xlim = 4000
+    xlim = 50000
 
     fig = plt.figure()
     ax = fig.add_subplot(111) # nrows, ncols, index
@@ -86,15 +86,13 @@ def main():
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
     ax.grid(1)
 
-    asd("data/8/data/collected_data.dat", ax, r"$\phi=$" + str(0.9) + r", $\kappa=$" + str(0.01))
-    asd("data/7/data/collected_data.dat", ax, r"$\phi=$" + str(0.875) + r", $\kappa=$" + str(0.01))
-    asd("data/6/data/collected_data.dat", ax, r"$\phi=$" + str(0.85) + r", $\kappa=$" + str(0.01))
-    asd("data/5/data/collected_data.dat", ax, r"$\phi=$" + str(0.825) + r", $\kappa=$" + str(0.01))
-    asd("data/4/data/collected_data.dat", ax, r"$\phi=$" + str(0.8) + r", $\kappa=$" + str(0.01))
-    asd("data/3/data/collected_data.dat", ax, r"$\phi=$" + str(0.775) + r", $\kappa=$" + str(0.01))
-    asd("data/2/data/collected_data.dat", ax, r"$\phi=$" + str(0.75) + r", $\kappa=$" + str(0.01))
+    ax.loglog(np.linspace(15, 20000, 10000), pow(np.linspace(15, 20000, 10000) / 15.0, alpha), 'k--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha))
+    
+    for i in range(17):
+        path = "multiple_runs_data/" + str(i) + "/data/collected_data.dat"
+        label_str = r"$\phi=$" + str(0.900 - i * 0.025) + r", $\kappa=$" + str(0.01)
+        asd(path, ax, label_str)
 
-    ax.loglog(np.linspace(15, 700), pow(np.linspace(15, 700) / 15.0, alpha), 'k--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha))
     ax.legend(loc=2, prop={'size' : 20})
 
     plt.show()

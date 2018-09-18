@@ -55,16 +55,9 @@ cubble::Simulator::Simulator(std::shared_ptr<Env> e)
     hostData.resize(bubbleData.getSize(), 0);
     
     printRelevantInfoOfCurrentDevice();
-
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
 }
 
-cubble::Simulator::~Simulator()
-{
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-}
+cubble::Simulator::~Simulator() {}
 
 void cubble::Simulator::setupSimulation()
 {
@@ -346,14 +339,12 @@ void cubble::Simulator::updateCellsAndNeighbors()
     numPairs.setBytesToZero();
     NVTX_RANGE_POP();
     
-    NVTX_RANGE_PUSH_A("GetPtrs");
     double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
     double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
     double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
-    NVTX_RANGE_POP();
     
     NVTX_RANGE_PUSH_A("Offsets");
     calculateOffsets<<<numBlocks, numThreads>>>(x, y, z, sizes, domainDim, numBubbles, numCells);
@@ -376,10 +367,8 @@ void cubble::Simulator::updateCellsAndNeighbors()
 					      numBubbles);
     NVTX_RANGE_POP();
 
-    NVTX_RANGE_PUSH_A("AssertGridSize");
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
     assertGridSizeBelowLimit(gridSize);
-    NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("MaxNumCellRed");
     int sharedMemSizeInBytes = cubReduction<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
