@@ -79,13 +79,9 @@ def plot_data_loglog(data_file, json_file, ax):
     kappa = decoded_json["Kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '.', linewidth=1.0, label=label_str)
+    ax.loglog(x, y, '+', linewidth=1.0, label=label_str)
 
-def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name):
-    alpha1 = 0.47
-    alpha2 = 0.5
-    alpha3 = 0.57
-    alpha4 = 0.62
+def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
     xlim = 3000
     
     ax.xaxis.label.set_fontsize(20)
@@ -94,17 +90,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name):
     ax.set_ylim(0.65, 20)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
+    #ax.set_axis_bgcolor((97 / 255.0, 138 / 255.0, 204 / 255.0))
     ax.grid(1)
-
-    line_x1 = np.linspace(10, 600)
-    #line_x2 = np.linspace(10, 600)
-    #line_x3 = np.linspace(10, 600)
-    line_x4 = np.linspace(10, 600)
-    
-    ax.loglog(line_x1, pow(line_x1 / 11.5, alpha1), 'k--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha1))
-    #ax.loglog(line_x2, pow(line_x2 / 12.5, alpha2), 'r--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha2))
-    #ax.loglog(line_x3, pow(line_x3 / 16., alpha3), 'g--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha3))
-    ax.loglog(line_x4, pow(line_x4 / 19.0, alpha4), 'r--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha4))
 
     child_dirs = [name for name in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, name))]
     json_files = []
@@ -140,8 +127,23 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name):
     data_files = [data_files[idx] for idx in indices]
 
     # Plot
-    for i in range(len(data_files)):
+    for i in range(min(len(data_files), max(num_plots, 0))):
         plot_data_loglog(data_files[i], json_files[i], ax)
+
+    alpha1 = 0.48
+    alpha2 = 0.5
+    alpha3 = 0.57
+    alpha4 = 0.62
+    
+    line_x1 = np.linspace(10, 600)
+    #line_x2 = np.linspace(10, 600)
+    #line_x3 = np.linspace(10, 600)
+    line_x4 = np.linspace(10, 600)
+    
+    ax.loglog(line_x1, pow(0.0825 * line_x1, alpha1), '--', color='red', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha1))
+    #ax.loglog(line_x2, pow(line_x2 / 12.5, alpha2), 'r--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha2))
+    #ax.loglog(line_x3, pow(line_x3 / 16., alpha3), 'g--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha3))
+    ax.loglog(line_x4, pow(0.05 * line_x4, alpha4), '--', color='red', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha4))
 
     ax.legend(loc=2, prop={'size' : 20})
 
@@ -149,16 +151,22 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name):
     
 def main():
     arguments = sys.argv
-    data_file_name = ""
-    json_file_name = ""
+    data_file_name = "collected_data.dat"
+    json_file_name = "save.json"
+    num_plots = 999
     
     if len(arguments) < 2:
-        print("Too few arguments given. Give:\n\tthe parent folder of data files\n\tname of data file\n\tname of saved json file\nas arguments.")
+        print("Too few arguments given. Give:\n\tthe parent folder of data files\n\t# of plots\n\tname of data file\n\tname of saved json file\nas arguments.")
         sys.exit(1)
     elif len(arguments) < 3:
-        data_file_name = "collected_data.dat"
-        json_file_name = "save.json"
-        print("Using default names for data and json files, \"" + data_file_name + "\" and \"" + json_file_name + "\" respectively.")
+        print("Using default names for data and json files, \"" + data_file_name + "\" and \"" + json_file_name + "\" respectively and plotting all data files.")
+    elif len(arguments) < 4:
+        num_plots = int(arguments[2])
+        print("Using default names for data and json files, \"" + data_file_name + "\" and \"" + json_file_name + "\" respectively and plotting " + str(num_plots) + " data files.")
+    elif len(arguments) < 5:
+        num_plots = arguments[2]
+        data_file_name = arguments[3]
+        print("Using default name for json file: \"" + json_file_name + "\" and plotting " + str(num_plots) + " data files.")
     elif not os.path.exists(arguments[1]):
         print("Give a proper path name to the parent directory of the data files you want to use for plotting.")
         print("You gave \"" + str(arguments[1]) + "\", which is not a proper path name.")
@@ -170,12 +178,13 @@ def main():
         print("Json file name can't be an empty string. The string you gave is \"" + arguments[3] + "\".")
         sys.exit(1)
     else:
-        data_file_name = arguments[2]
-        json_file_name = arguments[3]
+        num_plots = arguments[2]
+        data_file_name = arguments[3]
+        json_file_name = arguments[4]
     
     fig = plt.figure()
     ax = fig.add_subplot(111) # nrows, ncols, index
-    plot_relative_radius(ax, arguments[1], data_file_name, json_file_name)
+    plot_relative_radius(ax, arguments[1], data_file_name, json_file_name, num_plots)
 
 if __name__ == "__main__":
     main()
