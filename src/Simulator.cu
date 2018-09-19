@@ -100,7 +100,7 @@ void cubble::Simulator::setupSimulation()
 
     double timeStep = env->getTimeStep();
     
-    size_t numBytesToReset = sizeof(double) * 6 * bubbleData.getWidth();
+    size_t numBytesToReset = sizeof(double) * 7 * bubbleData.getWidth();
     CUDA_CALL(cudaMemset(static_cast<void*>(energies), 0, numBytesToReset));
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
@@ -192,6 +192,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
 
+    size_t numLoopsDone = 0;
     do
     {
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
@@ -248,10 +249,18 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         
         error = cubReduction<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
 
-	if (error < env->getErrorTolerance() / 10 && timeStep < 0.1)
+	if (error < env->getErrorTolerance() && timeStep < 0.1)
 	    timeStep *= 1.9;
 	else if (error > env->getErrorTolerance())
 	    timeStep *= 0.5;
+
+        ++numLoopsDone;
+	
+	if (numLoopsDone > 1000)
+	{
+	    std::cout << "Done " << numLoopsDone << " loops, and error is " << error << std::endl;
+	    throw std::runtime_error("Error.");
+	}
     }
     while (error > env->getErrorTolerance());
 

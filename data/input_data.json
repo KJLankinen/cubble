@@ -1,6 +1,6 @@
 {
     "PhiTargetExpl" : "The target volume fraction.", 
-    "PhiTarget" : 0.9,
+    "PhiTarget" : 0.4,
     "MuZeroExpl" : "The viscosity of the fluid",
     "MuZero" : 1.0,
     "SigmaZeroExpl" : "The surface tension (spring constant) of the fluid.",
@@ -14,7 +14,7 @@
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
     "TimeStep" : 1e-5,
     "RngSeedExpl" : "The seed for the RNG.",
-    "RngSeed" : 46267326,
+    "RngSeed" : 678126,
     "ScaleAmountExpl" : "How much to scale the side length(s) of the simulation box per scaling iteration.",
     "ScaleAmount" : 1e-4,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
