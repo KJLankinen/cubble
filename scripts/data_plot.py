@@ -68,6 +68,7 @@ def fit_to_data(xdata, ydata):
     plt.show()
 
 def plot_data_loglog(data_file, json_file, ax):
+    print("Plotting data from \"" + str(data_file) + "\" using \"" + str(json_file) + "\" for some parameters.")
     data = np.loadtxt(data_file)
     x = data[:, 0]
     y = data[:, 1]
@@ -79,18 +80,17 @@ def plot_data_loglog(data_file, json_file, ax):
     kappa = decoded_json["Kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '+', linewidth=1.0, label=label_str)
+    ax.loglog(x, y, '-', linewidth=1.5, label=label_str)
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
-    xlim = 3000
     
     ax.xaxis.label.set_fontsize(20)
     ax.yaxis.label.set_fontsize(20)
-    ax.set_xlim(1, xlim)
-    ax.set_ylim(0.65, 20)
+    ax.set_xlim(1, 2300)
+    ax.set_ylim(0.65, 10)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
-    #ax.set_axis_bgcolor((97 / 255.0, 138 / 255.0, 204 / 255.0))
+    #ax.set_axis_bgcolor((160 / 255.0, 198 / 255.0, 255 / 255.0))
     ax.grid(1)
 
     child_dirs = [name for name in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, name))]
@@ -130,22 +130,44 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     for i in range(min(len(data_files), max(num_plots, 0))):
         plot_data_loglog(data_files[i], json_files[i], ax)
 
-    alpha1 = 0.48
-    alpha2 = 0.5
-    alpha3 = 0.57
-    alpha4 = 0.62
+    alpha1 = 0.62
+    alpha2 = 0.48
+    alpha3 = 0.5
+    alpha4 = 0.39
     
-    line_x1 = np.linspace(10, 600)
-    #line_x2 = np.linspace(10, 600)
-    #line_x3 = np.linspace(10, 600)
-    line_x4 = np.linspace(10, 600)
+    x1 = np.linspace(10, 600)
+    y1 = pow(0.05 * x1, alpha1)
     
-    ax.loglog(line_x1, pow(0.0825 * line_x1, alpha1), '--', color='red', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha1))
-    #ax.loglog(line_x2, pow(line_x2 / 12.5, alpha2), 'r--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha2))
-    #ax.loglog(line_x3, pow(line_x3 / 16., alpha3), 'g--', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha3))
-    ax.loglog(line_x4, pow(0.05 * line_x4, alpha4), '--', color='red', linewidth=2.0, label=r"$a\tau^b, b=$" + str(alpha4))
+    x2 = np.linspace(10, 600)
+    y2 = pow(0.0825 * x2, alpha2)
+    
+    x3 = np.linspace(10, 1800)
+    y3 = pow(0.0138 * x3, alpha3)
+    
+    x4 = np.linspace(10, 1800)
+    y4 = pow(0.0175 * x4, alpha4)
 
-    ax.legend(loc=2, prop={'size' : 20})
+    line_color = (0, 0, 0)
+    arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
+    arrow_props_down=dict(arrowstyle='-', connectionstyle="angle,angleA=-90,angleB=180,rad=0")
+    
+    ax.loglog(x1, y1, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha1), xy=(x1[11], y1[15]))
+    ax.annotate("", xy=(x1[13], y1[13]), xycoords='data', xytext=(x1[15], y1[15]), textcoords='data', arrowprops=arrow_props_up)
+    
+    ax.loglog(x2, y2, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha2), xy=(x2[2], y2[3]))
+    ax.annotate("", xy=(x2[2], y2[2]), xycoords='data', xytext=(x2[3], y2[3]), textcoords='data', arrowprops=arrow_props_up)
+    
+    ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha3), xy=(x3[11], y3[15]))
+    ax.annotate("", xy=(x3[13], y3[13]), xycoords='data', xytext=(x3[15], y3[15]), textcoords='data', arrowprops=arrow_props_up)
+    
+    ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha4), xy=(x4[2], y4[3]))
+    ax.annotate("", xy=(x4[2], y4[2]), xycoords='data', xytext=(x4[3], y4[3]), textcoords='data', arrowprops=arrow_props_up)
+
+    ax.legend()
 
     plt.show()
     
