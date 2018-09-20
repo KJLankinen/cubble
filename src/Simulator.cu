@@ -1145,7 +1145,7 @@ void cubble::correct(double *x,
 	else
 	    aboveMinRadFlags[tid] = 1;
 
-	double error = (pos - posPrd).getAbsolute().getMaxComponent();
+	double error = ((pos - posPrd) * interval).getAbsolute().getMaxComponent();
 	error = error > radError ? error : radError;
 	errors[tid] = error;
 
