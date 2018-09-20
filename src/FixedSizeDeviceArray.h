@@ -57,6 +57,7 @@ namespace cubble
 	size_t getSize() const { return width * height * depth; }
 	size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
 
+	// Strictly speaking this should only be allowed when T is an integer type...
 	void setBytesToZero() { cudaMemset(static_cast<void*>(dataPtr.get()), 0, getSizeInBytes()); }
 
 	void operator=(FixedSizeDeviceArray<T> &&o)

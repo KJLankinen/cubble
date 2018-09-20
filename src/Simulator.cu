@@ -99,9 +99,13 @@ void cubble::Simulator::setupSimulation()
     const size_t numBlocksAcc = (size_t)std::ceil(hostNumPairs / (float)numThreads);
 
     double timeStep = env->getTimeStep();
-    
-    size_t numBytesToReset = sizeof(double) * 7 * bubbleData.getWidth();
-    CUDA_CALL(cudaMemset(static_cast<void*>(energies), 0, numBytesToReset));
+
+    pointersToArrays.resize(4);
+    pointersToArrays[0] = dxdtOld;
+    pointersToArrays[1] = dydtOld;
+    pointersToArrays[2] = dzdtOld;
+    pointersToArrays[3] = drdtOld;
+    resetValues();
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
@@ -126,7 +130,7 @@ void cubble::Simulator::setupSimulation()
     if (deleteSmallBubbles())
 	updateCellsAndNeighbors();
 
-    CUDA_CALL(cudaMemset(static_cast<void*>(energies), 0, numBytesToReset));
+    resetValues();
     
     calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(x, y, z, r,
 								  dxdtOld, dydtOld, dzdtOld, drdtOld,
@@ -141,6 +145,16 @@ void cubble::Simulator::setupSimulation()
 								  env->getTfr() - env->getLbb(),
 								  false,
 								  false);
+
+    
+    pointersToArrays.resize(7);
+    pointersToArrays[0] = dxdtPrd;
+    pointersToArrays[1] = dydtPrd;
+    pointersToArrays[2] = dzdtPrd;
+    pointersToArrays[3] = drdtPrd;
+    pointersToArrays[4] = energies;
+    pointersToArrays[5] = freeArea;
+    pointersToArrays[6] = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
     
     NVTX_RANGE_POP();
 }
@@ -195,15 +209,21 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     size_t numLoopsDone = 0;
     do
     {
+	pointersToValues.resize(7);
+	pointersToValues[0] = dxdtPrd;
+	pointersToValues[1] = dydtPrd;
+	pointersToValues[2] = dzdtPrd;
+	pointersToValues[3] = drdtPrd;
+	pointersToValues[4] = freeArea;
+	pointersToValues[5] = energies;
+	pointersToValues[6] = errors;
+	resetValues();
+	
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
 					   xPrd, yPrd, zPrd, rPrd,
 					   dxdt, dydt, dzdt, drdt,
 					   dxdtOld, dydtOld, dzdtOld, drdtOld,
 					   tfr, lbb, timeStep, numBubbles, useGasExchange);
-
-	// Using atomicAdd, so these need to be reset to 0 every time before use.
-	size_t numBytesToReset = sizeof(double) * 7 * bubbleData.getWidth();
-	CUDA_CALL(cudaMemset(static_cast<void*>(dxdtPrd), 0, numBytesToReset));
 
 	calculateVelocityAndGasExchange<<<numBlocksAcc, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 								      dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
@@ -279,6 +299,29 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     NVTX_RANGE_POP();
 
     return numBubbles > env->getMinNumBubbles();
+}
+
+void cubble::Simulator::resetValues()
+{
+    NVTX_RANGE_PUSH_A(__FUNCTION__);
+    // Using atomicAdd, so these need to be reset to 0 every time before use.
+    // cudaMemset would be faster but it's not safe to assume that setting all bytes
+    // of a double to zero means the double equals zero.
+    // Some sort of preprocessing test might be possible to determine whether or not
+    // cudaMemset(static_cast<void*>(doublePtr), 0, numBytesToReset) means double is actually zero.
+
+    const size_t numThreads = 128;
+    const size_t numBlocks = (size_t)std::ceil(numBubbles / (float)numThreads);
+    
+    for (size_t i = 0; i < pointersToArrays.size(); ++i)
+    {
+	cudaStream_t stream;
+	CUDA_CALL(cudaStreamCreate(&stream));
+	resetDoubleArrayToValue<<<numBlocks, numThreads, 0, stream>>>(pointersToArrays[i], 0.0, numValuesPerArray);
+	CUDA_CALL(cudaStreamDestroy(s));
+    }
+
+    NVTX_RANGE_POP();
 }
 
 void cubble::Simulator::generateBubbles()
@@ -431,10 +474,16 @@ void cubble::Simulator::updateData()
     double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
     double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
     double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
+
+    cudaStream_t stream1, stream2;
+    CUDA_CALL(cudaStreamCreate(&stream1));
+    CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice), stream);
+    CUDA_CALL(cudaStreamDestroy(stream1));
     
-    CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaStreamCreate(&stream2));
+    CUDA_CALL(cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
+    CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
+    CUDA_CALL(cudaStreamDestroy(stream2));
 
     NVTX_RANGE_POP();
 }
@@ -486,6 +535,7 @@ bool cubble::Simulator::deleteSmallBubbles()
 	double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
 	double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
 
+	// HACK: This is potentially very dangerous, if the used space is decreased in the future.
 	double *volumeMultiplier = errors + numBubblesAboveMinRad;
 	cudaMemset(static_cast<void*>(volumeMultiplier), 0, sizeof(double));
 	
@@ -509,11 +559,20 @@ bool cubble::Simulator::deleteSmallBubbles()
 						      flag,
 						      numBubbles);
         
-	const size_t numBytesToCopy = 2 * sizeof(double) * bubbleData.getWidth();
-	CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
-	CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
-	CUDA_CALL(cudaMemcpyAsync(dxdtOld, energies, numBytesToCopy, cudaMemcpyDeviceToDevice));
-	CUDA_CALL(cudaMemcpyAsync(dzdtOld, errors, numBytesToCopy, cudaMemcpyDeviceToDevice));
+	const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
+	cudaStream_t stream1, stream2, stream3;
+	CUDA_CALL(cudaStreamCreate(&stream1));
+	CUDA_CALL(cudaStreamCreate(&stream2));
+	CUDA_CALL(cudaStreamCreate(&stream3));
+	CUDA_CALL(cudaDeviceSynchronize());
+	
+	CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream1));
+	CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
+	CUDA_CALL(cudaMemcpyAsync(dxdtOld, energies, numBytesToCopy, cudaMemcpyDeviceToDevice, stream3));
+
+	CUDA_CALL(cudaStreamDestroy(stream1));
+	CUDA_CALL(cudaStreamDestroy(stream2));
+	CUDA_CALL(cudaStreamDestroy(stream3));
 	
 	numBubbles = numBubblesAboveMinRad;
 	const double invTotalVolume = 1.0 / getVolumeOfBubbles();
@@ -604,6 +663,14 @@ void cubble::Simulator::getBubbles(std::vector<Bubble> &bubbles) const
 // ******************************
 // Kernels
 // ******************************
+
+__global__
+void cubble::resetDoubleArrayToValue(double *array, double value, int numValues)
+{
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+	array[tid] = value;
+}
 
 __global__
 void cubble::calculateVolumes(double *r, double *volumes, int numBubbles, double pi)

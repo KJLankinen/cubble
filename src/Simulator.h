@@ -35,16 +35,15 @@ namespace cubble
 	DYDT_PRD,
 	DZDT_PRD,
 	DRDT_PRD,
-
-	ENERGY,
-	FREE_AREA,
-	ERROR,
 	
 	DXDT_OLD,
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
-	
+
+	ENERGY,
+	FREE_AREA,
+	ERROR,
 	VOLUME,
 	
 	NUM_VALUES
@@ -205,7 +204,8 @@ namespace cubble
 		    0,
 		    false);
 	}
-   
+
+	void resetValues();
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
@@ -230,12 +230,15 @@ namespace cubble
 	FixedSizeDeviceArray<char> cubTemporaryStorage;
         
 	std::vector<double> hostData;
+	std::vector<double*> pointersToArrays;
     };
     
     // ******************************
     // Kernels
     // ******************************
-
+    __global__
+    void resetDoubleArrayToValue(double *array, double value, int numValues);
+    
     __global__
     void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
     
