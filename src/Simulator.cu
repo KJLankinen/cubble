@@ -147,15 +147,6 @@ void cubble::Simulator::setupSimulation()
 								  false);
 
     
-    pointersToArrays.resize(7);
-    pointersToArrays[0] = dxdtPrd;
-    pointersToArrays[1] = dydtPrd;
-    pointersToArrays[2] = dzdtPrd;
-    pointersToArrays[3] = drdtPrd;
-    pointersToArrays[4] = energies;
-    pointersToArrays[5] = freeArea;
-    pointersToArrays[6] = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
-    
     NVTX_RANGE_POP();
 }
 
@@ -209,14 +200,14 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     size_t numLoopsDone = 0;
     do
     {
-	pointersToValues.resize(7);
-	pointersToValues[0] = dxdtPrd;
-	pointersToValues[1] = dydtPrd;
-	pointersToValues[2] = dzdtPrd;
-	pointersToValues[3] = drdtPrd;
-	pointersToValues[4] = freeArea;
-	pointersToValues[5] = energies;
-	pointersToValues[6] = errors;
+	pointersToArrays.resize(7);
+	pointersToArrays[0] = dxdtPrd;
+	pointersToArrays[1] = dydtPrd;
+	pointersToArrays[2] = dzdtPrd;
+	pointersToArrays[3] = drdtPrd;
+	pointersToArrays[4] = freeArea;
+	pointersToArrays[5] = energies;
+	pointersToArrays[6] = errors;
 	resetValues();
 	
 	predict<<<numBlocks, numThreads>>>(x, y, z, r,
@@ -317,8 +308,8 @@ void cubble::Simulator::resetValues()
     {
 	cudaStream_t stream;
 	CUDA_CALL(cudaStreamCreate(&stream));
-	resetDoubleArrayToValue<<<numBlocks, numThreads, 0, stream>>>(pointersToArrays[i], 0.0, numValuesPerArray);
-	CUDA_CALL(cudaStreamDestroy(s));
+	resetDoubleArrayToValue<<<numBlocks, numThreads, 0, stream>>>(pointersToArrays[i], 0.0, numBubbles);
+	CUDA_CALL(cudaStreamDestroy(stream));
     }
 
     NVTX_RANGE_POP();
@@ -477,7 +468,7 @@ void cubble::Simulator::updateData()
 
     cudaStream_t stream1, stream2;
     CUDA_CALL(cudaStreamCreate(&stream1));
-    CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice), stream);
+    CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream1));
     CUDA_CALL(cudaStreamDestroy(stream1));
     
     CUDA_CALL(cudaStreamCreate(&stream2));
