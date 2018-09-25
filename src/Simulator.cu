@@ -231,8 +231,8 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 	if (useGasExchange)
 	{
 	    calculateFreeAreaPerRadius<<<numBlocks, numThreads>>>(rPrd, freeArea, errors, env->getPi(), numBubbles);
-	    double invRho = cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
-	    invRho /= cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
+	    double invRho = cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, errors, numBubbles);
+	    invRho /= cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
 	    calculateFinalRadiusChangeRate<<<numBlocks, numThreads>>>(drdtPrd,
 								      rPrd,
 								      freeArea,
@@ -256,7 +256,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 					   numBubbles,
 					   useGasExchange);
         
-        error = cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
+        error = cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Max, errors, numBubbles);
 
 	if (error < env->getErrorTolerance() && timeStep < 0.1)
 	    timeStep *= 1.9;
@@ -280,7 +280,7 @@ bool cubble::Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     SimulationTime += timeStep;
 
     if (calculateEnergy)
-	ElasticEnergy = cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
+	ElasticEnergy = cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, energies, numBubbles);
     
     if (deleteSmallBubbles() || integrationStep % 50 == 0)
 	updateCellsAndNeighbors();
@@ -392,7 +392,7 @@ void cubble::Simulator::updateCellsAndNeighbors()
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("Exclusive sum");
-    cubWrapper::scan<int*, int*>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
+    cubWrapper->scan<int*, int*>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("Memset sizes");
@@ -412,7 +412,7 @@ void cubble::Simulator::updateCellsAndNeighbors()
     assertGridSizeBelowLimit(gridSize);
 
     NVTX_RANGE_PUSH_A("MaxNumCellRed");
-    int sharedMemSizeInBytes = cubWrapper::reduce<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
+    int sharedMemSizeInBytes = cubWrapper->reduce<int, int*, int*>(&cub::DeviceReduce::Max, sizes, numCells);
     NVTX_RANGE_POP();
 
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
@@ -441,7 +441,7 @@ void cubble::Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void*>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
     NVTX_RANGE_POP();
 
-    cubWrapper::sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+    cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
 			   const_cast<const int*>(neighborPairIndices.getRowPtr(2)),
 			   neighborPairIndices.getRowPtr(0),
 			   const_cast<const int*>(neighborPairIndices.getRowPtr(3)),
@@ -482,7 +482,7 @@ bool cubble::Simulator::deleteSmallBubbles()
     NVTX_RANGE_PUSH_A(__FUNCTION__);
 
     int *flag = aboveMinRadFlags.getRowPtr(0);
-    const int numBubblesAboveMinRad = cubWrapper::reduce<int, int*, int*>(&cub::DeviceReduce::Sum,
+    const int numBubblesAboveMinRad = cubWrapper->reduce<int, int*, int*>(&cub::DeviceReduce::Sum,
 								    flag,
 								    numBubbles);
 
@@ -536,7 +536,7 @@ bool cubble::Simulator::deleteSmallBubbles()
 								   numBubbles);
 
 	int *newIdx = aboveMinRadFlags.getRowPtr(1);
-	cubWrapper::scan<int*, int*>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
+	cubWrapper->scan<int*, int*>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
 	removeSmallBubbles<<<numBlocks, numThreads>>>(xPrd, yPrd, zPrd, rPrd,
 						      x, y, z, r,
@@ -599,7 +599,7 @@ double cubble::Simulator::getVolumeOfBubbles()
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
     calculateVolumes<<<numBlocks, numThreads>>>(r, volPtr, numBubbles, env->getPi());
-    double volume = cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
+    double volume = cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
     
     NVTX_RANGE_POP();
     
@@ -611,7 +611,7 @@ double cubble::Simulator::getAverageRadius()
     NVTX_RANGE_PUSH_A(__FUNCTION__);
     
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-    double avgRad = cubWrapper::reduce<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
+    double avgRad = cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad/= numBubbles;
     
     NVTX_RANGE_POP();
