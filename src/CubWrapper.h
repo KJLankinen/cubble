@@ -17,7 +17,7 @@ class CubWrapper
     CubWrapper(std::shared_ptr<Env> e, size_t numBubbles)
     {
         env = e;
-    
+
         outData = FixedSizeDeviceArray<char>(sizeof(double), 1);
         tempStorage = FixedSizeDeviceArray<char>(numBubbles * sizeof(double), 1);
     }
