@@ -90,5 +90,5 @@ class CubWrapper
     std::shared_ptr<Env> env;
     FixedSizeDeviceArray<char> outData;
     FixedSizeDeviceArray<char> tempStorage;
-}
+};
 } // namespace cubble
