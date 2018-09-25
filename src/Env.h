@@ -7,7 +7,7 @@
 #include <iostream>
 
 #ifndef __CUDACC__
-  #include "json.hpp"
+#include "json.hpp"
 #endif
 
 #include "Macros.h"
@@ -16,15 +16,15 @@
 
 namespace cubble
 {
-    class Env
-    {	
+class Env
+{
 	// See Macros.h for details of this macro
 	CUBBLE_CONST_PROP(int, NumBubblesPerCell, 0)
 	CUBBLE_CONST_PROP(int, RngSeed, 0)
 	CUBBLE_CONST_PROP(int, NumStepsToRelax, 0)
 	CUBBLE_CONST_PROP(int, NumBubbles, 0)
 	CUBBLE_CONST_PROP(int, MinNumBubbles, 0)
-	
+
 	CUBBLE_CONST_PROP(double, AvgRad, 0)
 	CUBBLE_CONST_PROP(double, StdDevRad, 0)
 	CUBBLE_CONST_PROP(double, MinRad, 0)
@@ -38,97 +38,96 @@ namespace cubble
 	CUBBLE_CONST_PROP(double, KParameter, 0)
 	CUBBLE_CONST_PROP(double, Kappa, 0)
 	CUBBLE_PROP(double, TimeStep, 0)
-	
+
 	CUBBLE_CONST_PROP(std::string, DataPath, "")
 	CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
 	CUBBLE_CONST_PROP(std::string, DataFilename, "")
 
 	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
 	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
-	
-    public:
+
+  public:
 	Env(const std::string &inF,
-	    const std::string &saveF)
+		const std::string &saveF)
 	{
-	    DataPath = CUBBLE_XSTRINGIFY(DATA_PATH);
-	    inputFile = std::string(DataPath + inF);
-	    saveFile = std::string(DataPath + saveF);
+		DataPath = CUBBLE_XSTRINGIFY(DATA_PATH);
+		inputFile = std::string(DataPath + inF);
+		saveFile = std::string(DataPath + saveF);
 	}
-	
+
 	~Env() {}
-	
-#ifndef __CUDACC__   	
+
+#ifndef __CUDACC__
 	void readParameters()
 	{
-	    readWriteParameters(true);
-	    
-	    // Calculate 'derived' parameters after reading.
-	    assert(MuZero > 0);
-	    FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
+		readWriteParameters(true);
 
-	    MinRad = 0.1 * AvgRad;
+		// Calculate 'derived' parameters after reading.
+		assert(MuZero > 0);
+		FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
+
+		MinRad = 0.1 * AvgRad;
 	}
-	
-	void writeParameters() {readWriteParameters(false); }
+
+	void writeParameters() { readWriteParameters(false); }
 #endif
 
 	double getSimulationBoxVolume() const
 	{
-	    dvec temp = Tfr - Lbb;
+		dvec temp = Tfr - Lbb;
 #if NUM_DIM == 3
-	    return temp.x * temp.y * temp.z;
+		return temp.x * temp.y * temp.z;
 #else
-	    return temp.x * temp.y;
+		return temp.x * temp.y;
 #endif
 	}
 
 	double getPi() const { return 3.1415926535897932384626433832795028841971693993; }
-	
-    private:
-	
-#ifndef __CUDACC__   
+
+  private:
+#ifndef __CUDACC__
 	void readWriteParameters(bool read)
 	{
-	    std::string msg = read
-		? "\nReading parameters from file " + inputFile
-		: "\nSaving parameters to file " + saveFile;
-	    
-	    std::cout << msg << std::endl;
-	    nlohmann::json params;
-	    
-	    if (read)
-		fileio::readFileToJSON(inputFile, params);
-	    
-	    // When adding new parameters, be sure to add them to the input .json as well
-	    // and with the exact same name as here.
-	    
-	    CUBBLE_IO_PARAMETER(read, params, PhiTarget);
-	    CUBBLE_IO_PARAMETER(read, params, MuZero);
-	    CUBBLE_IO_PARAMETER(read, params, SigmaZero);
-	    CUBBLE_IO_PARAMETER(read, params, AvgRad);
-	    CUBBLE_IO_PARAMETER(read, params, StdDevRad);
-	    CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
-	    CUBBLE_IO_PARAMETER(read, params, TimeStep);
-	    CUBBLE_IO_PARAMETER(read, params, RngSeed);
-	    CUBBLE_IO_PARAMETER(read, params, ScaleAmount);
-	    CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
-	    CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
-	    CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
-	    CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
-	    CUBBLE_IO_PARAMETER(read, params, KParameter);
-	    CUBBLE_IO_PARAMETER(read, params, NumBubbles);
-	    CUBBLE_IO_PARAMETER(read, params, Kappa);
-	    CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
-	    CUBBLE_IO_PARAMETER(read, params, DataFilename);
-	    
-	    if (!read)
-		fileio::writeJSONToFile(saveFile, params);
+		std::string msg = read
+							  ? "\nReading parameters from file " + inputFile
+							  : "\nSaving parameters to file " + saveFile;
+
+		std::cout << msg << std::endl;
+		nlohmann::json params;
+
+		if (read)
+			fileio::readFileToJSON(inputFile, params);
+
+		// When adding new parameters, be sure to add them to the input .json as well
+		// and with the exact same name as here.
+
+		CUBBLE_IO_PARAMETER(read, params, PhiTarget);
+		CUBBLE_IO_PARAMETER(read, params, MuZero);
+		CUBBLE_IO_PARAMETER(read, params, SigmaZero);
+		CUBBLE_IO_PARAMETER(read, params, AvgRad);
+		CUBBLE_IO_PARAMETER(read, params, StdDevRad);
+		CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
+		CUBBLE_IO_PARAMETER(read, params, TimeStep);
+		CUBBLE_IO_PARAMETER(read, params, RngSeed);
+		CUBBLE_IO_PARAMETER(read, params, ScaleAmount);
+		CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
+		CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
+		CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);
+		CUBBLE_IO_PARAMETER(read, params, MaxDeltaEnergy);
+		CUBBLE_IO_PARAMETER(read, params, KParameter);
+		CUBBLE_IO_PARAMETER(read, params, NumBubbles);
+		CUBBLE_IO_PARAMETER(read, params, Kappa);
+		CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
+		CUBBLE_IO_PARAMETER(read, params, DataFilename);
+
+		if (!read)
+			fileio::writeJSONToFile(saveFile, params);
 	}
 #endif
-        
+
 	std::string inputFile;
 	std::string saveFile;
-	
+
 	double integrationTime = 0.0;
-    };
 };
+}; // namespace cubble

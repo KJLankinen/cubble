@@ -8,463 +8,412 @@
 #include <cuda_runtime.h>
 
 #ifndef __CUDACC__
-  #include "json.hpp"
+#include "json.hpp"
 #endif
 
 #include "Util.h"
 
 namespace cubble
 {
-    template <typename T>
-    class vec
-    {
-    public:
+template <typename T>
+class vec
+{
+  public:
 	__host__ __device__
 	vec()
-	{}
+	{
+	}
 
 	__host__ __device__
 	vec(T x)
-	    : x(x)
-	    , y(x)
-	    , z(x)
-	{}
-	
+		: x(x), y(x), z(x)
+	{
+	}
+
 	template <typename T2>
 	__host__ __device__
 	vec(const vec<T2> &o)
 	{
-	    x = (T)o.x;
-	    y = (T)o.y;
-	    z = (T)o.z;
+		x = (T)o.x;
+		y = (T)o.y;
+		z = (T)o.z;
 	}
 
 	__host__ __device__
 	vec(T x, T y, T z)
-	    : x(x)
-	    , y(y)
-	    , z(z)
-	{}
-	
-	__host__ __device__
-	~vec() {}
-
-	__host__ __device__
-	T getSquaredLength() const
+		: x(x), y(y), z(z)
 	{
-	    T temp = 0;
+	}
 
-	    temp += x * x;
-	    temp += y * y;
-	    temp += z * z;
-	    
-	    return temp;
+	__host__ __device__ ~vec() {}
+
+	__host__ __device__
+		T
+		getSquaredLength() const
+	{
+		T temp = 0;
+
+		temp += x * x;
+		temp += y * y;
+		temp += z * z;
+
+		return temp;
 	}
 
 	__host__ __device__
-	T getLength() const { return std::sqrt(getSquaredLength()); }
+		T
+		getLength() const { return std::sqrt(getSquaredLength()); }
 
 	__host__ __device__
-	vec<T> getAbsolute() const
+		vec<T>
+		getAbsolute() const
 	{
-	    vec<T> v;
-	    v.x = x < 0 ? -x : x;
-	    v.y = y < 0 ? -y : y;
-	    v.z = z < 0 ? -z : z;
+		vec<T> v;
+		v.x = x < 0 ? -x : x;
+		v.y = y < 0 ? -y : y;
+		v.z = z < 0 ? -z : z;
 
-	    return v;
+		return v;
+	}
+
+	__host__ __device__ static vec<T> normalize(vec<T> &v)
+	{
+		return v / v.getLength();
+	}
+
+	__host__ __device__ static vec<T> normalize(const vec<T> &v)
+	{
+		return v / v.getLength();
 	}
 
 	__host__ __device__
-	static vec<T> normalize(vec<T> &v)
+		T
+		getMaxComponent() const
 	{
-	    return v / v.getLength();
-	}
-	
-	__host__ __device__
-	static vec<T> normalize(const vec<T> &v)
-	{
-	    return v / v.getLength();
-	}  
-
-	__host__ __device__
-	T getMaxComponent() const
-	{
-	    return x > y ? (x > z ? x : z) : (y > z ? y : z);
+		return x > y ? (x > z ? x : z) : (y > z ? y : z);
 	}
 
 	__host__ __device__
-	T getMinComponent() const
+		T
+		getMinComponent() const
 	{
-	    return x < y ? (x < z ? x : z) : (y < z ? y : z);
+		return x < y ? (x < z ? x : z) : (y < z ? y : z);
 	}
 
 	template <typename T2>
 	__host__ __device__
-	vec<T2> asType() const
+		vec<T2>
+		asType() const
 	{
-	    vec<T2> v(*this);
+		vec<T2> v(*this);
 
-	    return v;
+		return v;
 	}
 
-	// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + 
-	__host__ __device__
-	friend vec<T> operator+(vec<T> copy, const vec<T> &o)
+	// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
+	__host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &o)
 	{
-	    copy += o;
-	    return copy;
+		copy += o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator+(vec<T> copy, const vec<T> &&o)
+	__host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &&o)
 	{
-	    copy += o;
-	    return copy;
+		copy += o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator+(vec<T> copy, T s)
+	__host__ __device__ friend vec<T> operator+(vec<T> copy, T s)
 	{
-	    copy += s;
-	    return copy;
+		copy += s;
+		return copy;
 	}
 
-
-	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-	__host__ __device__
-	friend vec<T> operator-(vec<T> copy, const vec<T> &o)
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	__host__ __device__ friend vec<T> operator-(vec<T> copy, const vec<T> &o)
 	{
-	    copy -= o;
-	    return copy;
+		copy -= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator-(vec<T> copy, const vec<T> &&o)
+	__host__ __device__ friend vec<T> operator-(vec<T> copy, const vec<T> &&o)
 	{
-	    copy -= o;
-	    return copy;
+		copy -= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator-(vec<T> copy, T s)
+	__host__ __device__ friend vec<T> operator-(vec<T> copy, T s)
 	{
-	    copy -= s;
-	    return copy;
+		copy -= s;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator-(vec<T> copy)
+	__host__ __device__ friend vec<T> operator-(vec<T> copy)
 	{
-	    copy -= (T)2 * copy;
-	    return copy;
+		copy -= (T)2 * copy;
+		return copy;
 	}
 
-	
-	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
-	__host__ __device__
-	friend vec<T> operator*(vec<T> copy, const vec<T> &o)
+	// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+	__host__ __device__ friend vec<T> operator*(vec<T> copy, const vec<T> &o)
 	{
-	    copy *= o;
-	    return copy;
-	}
-	
-	__host__ __device__
-	friend vec<T> operator*(vec<T> copy, const vec<T> &&o)
-	{
-	    copy *= o;
-	    return copy;
+		copy *= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator*(vec<T> copy, T s)
+	__host__ __device__ friend vec<T> operator*(vec<T> copy, const vec<T> &&o)
 	{
-	    copy *= s;
-	    return copy;
-	}
-	
-	__host__ __device__
-	friend vec<T> operator*(T s, vec<T> copy)
-	{
-	    copy *= s;
-	    return copy;
+		copy *= o;
+		return copy;
 	}
 
-	
+	__host__ __device__ friend vec<T> operator*(vec<T> copy, T s)
+	{
+		copy *= s;
+		return copy;
+	}
+
+	__host__ __device__ friend vec<T> operator*(T s, vec<T> copy)
+	{
+		copy *= s;
+		return copy;
+	}
+
 	// / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
-	__host__ __device__
-	friend vec<T> operator/(vec<T> copy, const vec<T> &o)
+	__host__ __device__ friend vec<T> operator/(vec<T> copy, const vec<T> &o)
 	{
-	    copy /= o;
-	    return copy;
+		copy /= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator/(vec<T> copy, const vec<T> &&o)
+	__host__ __device__ friend vec<T> operator/(vec<T> copy, const vec<T> &&o)
 	{
-	    copy /= o;
-	    return copy;
+		copy /= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator/(vec<T> copy, T s)
+	__host__ __device__ friend vec<T> operator/(vec<T> copy, T s)
 	{
-	    copy /= s;
-	    return copy;
+		copy /= s;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator/(T s, vec<T> copy)
+	__host__ __device__ friend vec<T> operator/(T s, vec<T> copy)
 	{
-	    copy = vec<T>(s / copy.x, s / copy.y, s / copy.z);
-	    return copy;
+		copy = vec<T>(s / copy.x, s / copy.y, s / copy.z);
+		return copy;
 	}
 
-	
 	// % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-	__host__ __device__
-	friend vec<T> operator%(vec<T> copy, const vec<T> &o)
+	__host__ __device__ friend vec<T> operator%(vec<T> copy, const vec<T> &o)
 	{
-	    copy %= o;
-	    return copy;
-	}
-	
-	__host__ __device__
-	friend vec<T> operator%(vec<T> copy, const vec<T> &&o)
-	{
-	    copy %= o;
-	    return copy;
+		copy %= o;
+		return copy;
 	}
 
-	__host__ __device__
-	friend vec<T> operator%(vec<T> copy, T s)
+	__host__ __device__ friend vec<T> operator%(vec<T> copy, const vec<T> &&o)
 	{
-	    copy %= s;
-	    return copy;
+		copy %= o;
+		return copy;
 	}
 
-	
+	__host__ __device__ friend vec<T> operator%(vec<T> copy, T s)
+	{
+		copy %= s;
+		return copy;
+	}
+
 	// += += += += += += += += += += += += += += += += += += += += += +=
-	__host__ __device__
-	friend void operator+=(vec<T> &t, const vec<T> &o)
+	__host__ __device__ friend void operator+=(vec<T> &t, const vec<T> &o)
 	{
-	    t.x += o.x;
-	    t.y += o.y;
-	    t.z += o.z;
-	}
-	
-	__host__ __device__
-	friend void operator+=(vec<T> &t, const vec<T> &&o)
-	{
-	    t.x += o.x;
-	    t.y += o.y;
-	    t.z += o.z;
+		t.x += o.x;
+		t.y += o.y;
+		t.z += o.z;
 	}
 
-	__host__ __device__
-	friend void operator+=(vec<T> &t, T s)
+	__host__ __device__ friend void operator+=(vec<T> &t, const vec<T> &&o)
 	{
-	    t.x += s;
-	    t.y += s;
-	    t.z += s;
+		t.x += o.x;
+		t.y += o.y;
+		t.z += o.z;
 	}
 
-
-	// -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= 
-	__host__ __device__
-	friend void operator-=(vec<T> &t, const vec<T> &o)
+	__host__ __device__ friend void operator+=(vec<T> &t, T s)
 	{
-	    t.x -= o.x;
-	    t.y -= o.y;
-	    t.z -= o.z;
+		t.x += s;
+		t.y += s;
+		t.z += s;
 	}
 
-	__host__ __device__
-	friend void operator-=(vec<T> &t, const vec<T> &&o)
+	// -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -=
+	__host__ __device__ friend void operator-=(vec<T> &t, const vec<T> &o)
 	{
-	    t.x -= o.x;
-	    t.y -= o.y;
-	    t.z -= o.z;
+		t.x -= o.x;
+		t.y -= o.y;
+		t.z -= o.z;
 	}
 
-	__host__ __device__
-	friend void operator-=(vec<T> &t, T s)
+	__host__ __device__ friend void operator-=(vec<T> &t, const vec<T> &&o)
 	{
-	    t.x -= s;
-	    t.y -= s;
-	    t.z -= s;
+		t.x -= o.x;
+		t.y -= o.y;
+		t.z -= o.z;
 	}
 
-
-	// *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= 
-	__host__ __device__
-	friend void operator*=(vec<T> &t, const vec<T> &o)
+	__host__ __device__ friend void operator-=(vec<T> &t, T s)
 	{
-	    t.x *= o.x;
-	    t.y *= o.y;
-	    t.z *= o.z;
+		t.x -= s;
+		t.y -= s;
+		t.z -= s;
 	}
 
-	__host__ __device__
-	friend void operator*=(vec<T> &t, const vec<T> &&o)
+	// *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *=
+	__host__ __device__ friend void operator*=(vec<T> &t, const vec<T> &o)
 	{
-	    t.x *= o.x;
-	    t.y *= o.y;
-	    t.z *= o.z;
+		t.x *= o.x;
+		t.y *= o.y;
+		t.z *= o.z;
 	}
 
-	__host__ __device__
-	friend void operator*=(vec<T> &t, T s)
+	__host__ __device__ friend void operator*=(vec<T> &t, const vec<T> &&o)
 	{
-	    t.x *= s;
-	    t.y *= s;
-	    t.z *= s;
+		t.x *= o.x;
+		t.y *= o.y;
+		t.z *= o.z;
 	}
 
-
-	// /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= 
-	__host__ __device__
-	friend void operator/=(vec<T> &t, const vec<T> &o)
+	__host__ __device__ friend void operator*=(vec<T> &t, T s)
 	{
-	    t.x /= o.x;
-	    t.y /= o.y;
-	    t.z /= o.z;
+		t.x *= s;
+		t.y *= s;
+		t.z *= s;
 	}
 
-	__host__ __device__
-	friend void operator/=(vec<T> &t, const vec<T> &&o)
+	// /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /=
+	__host__ __device__ friend void operator/=(vec<T> &t, const vec<T> &o)
 	{
-	    t.x /= o.x;
-	    t.y /= o.y;
+		t.x /= o.x;
+		t.y /= o.y;
+		t.z /= o.z;
+	}
+
+	__host__ __device__ friend void operator/=(vec<T> &t, const vec<T> &&o)
+	{
+		t.x /= o.x;
+		t.y /= o.y;
 #if (NUM_DIM == 3)
-	    t.z /= o.z;
+		t.z /= o.z;
 #endif
 	}
 
-	__host__ __device__
-	friend void operator/=(vec<T> &t, T s)
+	__host__ __device__ friend void operator/=(vec<T> &t, T s)
 	{
-	    t.x /= s;
-	    t.y /= s;
-	    t.z /= s;
+		t.x /= s;
+		t.y /= s;
+		t.z /= s;
 	}
 
-
-	// %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= 
-	__host__ __device__
-	friend void operator%=(vec<T> &t, vec<T> &o)
+	// %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %=
+	__host__ __device__ friend void operator%=(vec<T> &t, vec<T> &o)
 	{
-	    t.x %= o.x;
-	    t.y %= o.y;
-	    t.z %= o.z;
+		t.x %= o.x;
+		t.y %= o.y;
+		t.z %= o.z;
 	}
 
-	__host__ __device__
-	friend void operator%=(vec<T> &t, vec<T> &&o)
+	__host__ __device__ friend void operator%=(vec<T> &t, vec<T> &&o)
 	{
-	    t.x %= o.x;
-	    t.y %= o.y;
-	    t.z %= o.z;
+		t.x %= o.x;
+		t.y %= o.y;
+		t.z %= o.z;
 	}
 
-	__host__ __device__
-	friend void operator%=(vec<T> &t, T s)
+	__host__ __device__ friend void operator%=(vec<T> &t, T s)
 	{
-	    t.x %= s;
-	    t.y %= s;
-	    t.z %= s;
+		t.x %= s;
+		t.y %= s;
+		t.z %= s;
 	}
 
-	
 	// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-	__host__ __device__
-	void operator=(vec<T> copy)
+	__host__ __device__ void operator=(vec<T> copy)
 	{
-	    x = copy.x;
-	    y = copy.y;
-	    z = copy.z;
+		x = copy.x;
+		y = copy.y;
+		z = copy.z;
 	}
 
-	
-	// == == == == == == == == == == == == == == == == == == == == == == 
-	__host__ __device__
-	friend bool operator==(const vec<T> &t, const vec<T> &o)
+	// == == == == == == == == == == == == == == == == == == == == == ==
+	__host__ __device__ friend bool operator==(const vec<T> &t, const vec<T> &o)
 	{
-	    bool equal = true;
-	    equal &= t.x - (T)CUBBLE_EPSILON <= o.x && t.x + (T)CUBBLE_EPSILON >= o.x;
-	    equal &= t.y - (T)CUBBLE_EPSILON <= o.y && t.y + (T)CUBBLE_EPSILON >= o.y;
-	    equal &= t.z - (T)CUBBLE_EPSILON <= o.z && t.z + (T)CUBBLE_EPSILON >= o.z;
-	    
-	    return equal;
+		bool equal = true;
+		equal &= t.x - (T)CUBBLE_EPSILON <= o.x && t.x + (T)CUBBLE_EPSILON >= o.x;
+		equal &= t.y - (T)CUBBLE_EPSILON <= o.y && t.y + (T)CUBBLE_EPSILON >= o.y;
+		equal &= t.z - (T)CUBBLE_EPSILON <= o.z && t.z + (T)CUBBLE_EPSILON >= o.z;
+
+		return equal;
 	}
 
-	
-	// != != != != != != != != != != != != != != != != != != != != != != 
-	__host__ __device__
-	friend bool operator!=(const vec<T> &t, const vec<T> &o)
+	// != != != != != != != != != != != != != != != != != != != != != !=
+	__host__ __device__ friend bool operator!=(const vec<T> &t, const vec<T> &o)
 	{
-	    return !(t == o);
+		return !(t == o);
 	}
 
-	
-	// << << << << << << << << << << << << << << << << << << << << << << 
-	friend std::ostream& operator<<(std::ostream &os, const vec<T> &v)
+	// << << << << << << << << << << << << << << << << << << << << << <<
+	friend std::ostream &operator<<(std::ostream &os, const vec<T> &v)
 	{
-	    os << v.x << ", " << v.y << ", " << v.z;
-	    
-	    return os;
+		os << v.x << ", " << v.y << ", " << v.z;
+
+		return os;
 	}
 
-	
 	// min min min min min min min min min min min min min min min min min min
-	__host__ __device__
-	friend vec<T> min(const vec<T> &v1, const vec<T> &v2)
+	__host__ __device__ friend vec<T> min(const vec<T> &v1, const vec<T> &v2)
 	{
-	    vec<T> retVec;
-	    retVec.x = v1.x < v2.x ? v1.x : v2.x;
-	    retVec.y = v1.y < v2.y ? v1.y : v2.y;
-	    retVec.z = v1.z < v2.z ? v1.z : v2.z;
-	    
-	    return retVec;
+		vec<T> retVec;
+		retVec.x = v1.x < v2.x ? v1.x : v2.x;
+		retVec.y = v1.y < v2.y ? v1.y : v2.y;
+		retVec.z = v1.z < v2.z ? v1.z : v2.z;
+
+		return retVec;
 	}
 
-	
 	// max max max max max max max max max max max max max max max max max max
-	__host__ __device__
-	friend vec<T> max(const vec<T> &v1, const vec<T> &v2)
+	__host__ __device__ friend vec<T> max(const vec<T> &v1, const vec<T> &v2)
 	{
-	    vec<T> retVec;
-	    retVec.x = v1.x > v2.x ? v1.x : v2.x;
-	    retVec.y = v1.y > v2.y ? v1.y : v2.y;
-	    retVec.z = v1.z > v2.z ? v1.z : v2.z;
-	    
-	    return retVec;
+		vec<T> retVec;
+		retVec.x = v1.x > v2.x ? v1.x : v2.x;
+		retVec.y = v1.y > v2.y ? v1.y : v2.y;
+		retVec.z = v1.z > v2.z ? v1.z : v2.z;
+
+		return retVec;
 	}
-	
+
 #ifndef __CUDACC__
 	// .json .json .json .json .json .json .json .json .json .json .json
 	friend void to_json(nlohmann::json &j, const vec<T> &v)
 	{
-	    j["x"] = v.x;
-	    j["y"] = v.y;
-	    j["z"] = v.z;
+		j["x"] = v.x;
+		j["y"] = v.y;
+		j["z"] = v.z;
 	}
-        
+
 	friend void from_json(const nlohmann::json &j, vec<T> &v)
 	{
-	    v.x = j["x"];
-	    v.y = j["y"];
-	    v.z = j["z"];
+		v.x = j["x"];
+		v.y = j["y"];
+		v.z = j["z"];
 	}
 #endif
-        
-        T x = 0;
+
+	T x = 0;
 	T y = 0;
 	T z = 0;
-    };
+};
 
-    typedef vec<float> fvec;
-    typedef vec<double> dvec;
-    typedef vec<int> ivec;
-    typedef vec<size_t> uvec;
-}
+typedef vec<float> fvec;
+typedef vec<double> dvec;
+typedef vec<int> ivec;
+typedef vec<size_t> uvec;
+} // namespace cubble

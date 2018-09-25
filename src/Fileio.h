@@ -11,112 +11,112 @@
 #include <assert.h>
 
 #ifndef __CUDACC__
-  #include "json.hpp"
+#include "json.hpp"
 #endif
 
 namespace cubble
 {
-    namespace fileio
-    {
-	struct FileWrapper
-	{
-	    // A filestream wrapper that handles opening and closing files safely.
-	private:
-	    FileWrapper(const std::string &filename, bool isInput)
+namespace fileio
+{
+struct FileWrapper
+{
+	// A filestream wrapper that handles opening and closing files safely.
+  private:
+	FileWrapper(const std::string &filename, bool isInput)
 		: filename(filename)
-	    {
+	{
 		assert(!filename.empty());
 		std::ios_base::openmode mode = isInput ? std::ios::in : std::ios::out;
 		file.open(filename, mode);
-		
+
 		if (!file.is_open())
 		{
-		    perror(("Error while opening file " + filename).c_str());
-		    throw std::runtime_error("");
+			perror(("Error while opening file " + filename).c_str());
+			throw std::runtime_error("");
 		}
-	    }
-	    
-	    ~FileWrapper()
-	    {
+	}
+
+	~FileWrapper()
+	{
 		if (file.is_open())
-		    file.close();
-		
+			file.close();
+
 		if (file.bad())
 		{
-		    perror(("Error while reading file " + filename).c_str());
-		    throw std::runtime_error("");
-		}	
-	    }
+			perror(("Error while reading file " + filename).c_str());
+			throw std::runtime_error("");
+		}
+	}
 
-	    void operator>>(nlohmann::json &j)
-	    {
+	void operator>>(nlohmann::json &j)
+	{
 		file >> j;
-	    }
-	    
-	    void operator<<(const nlohmann::json &j)
-	    {
+	}
+
+	void operator<<(const nlohmann::json &j)
+	{
 		file << std::setw(4) << j;
-	    }
-	    
-	    template <typename T>
-	    void operator<<(const T &val)
-	    {
+	}
+
+	template <typename T>
+	void operator<<(const T &val)
+	{
 		file << val << "\n";
-	    }
-	    
-	    std::string filename;
-	    std::fstream file;
-	    
-	    // Only friend functions listed here are allowed to use this implementation.
-	    friend void readFileToJSON(const std::string&, nlohmann::json&);
-	    friend void writeJSONToFile(const std::string&, const nlohmann::json&);
-
-	    friend void writeStringToFile(const std::string&, const std::string&);
-	    
-	    template <typename T>
-	    friend void writeVectorToFile(const std::string&, const std::vector<T>&);
-	    template <typename T>
-	    friend void writeVectorToFile(const std::string&, const std::vector<T*>&);
-	};
-	
-	inline void readFileToJSON(const std::string &filename, nlohmann::json &j)
-	{
-	    FileWrapper file(filename, true);
-	    file >> j;
-	}
-	
-	inline void writeJSONToFile(const std::string &filename,
-				    const nlohmann::json &j)
-	{
-	    FileWrapper file(filename, false);
-	    file << j;
 	}
 
-	inline void writeStringToFile(const std::string &filename,
-				      const std::string &str)
-	{
-	    FileWrapper file(filename, false);
-	    file << str;
-	}
-	
+	std::string filename;
+	std::fstream file;
+
+	// Only friend functions listed here are allowed to use this implementation.
+	friend void readFileToJSON(const std::string &, nlohmann::json &);
+	friend void writeJSONToFile(const std::string &, const nlohmann::json &);
+
+	friend void writeStringToFile(const std::string &, const std::string &);
+
 	template <typename T>
-	void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
-	{
-	    FileWrapper file(filename, false);
-	    for (const auto &val : v)
+	friend void writeVectorToFile(const std::string &, const std::vector<T> &);
+	template <typename T>
+	friend void writeVectorToFile(const std::string &, const std::vector<T *> &);
+};
+
+inline void readFileToJSON(const std::string &filename, nlohmann::json &j)
+{
+	FileWrapper file(filename, true);
+	file >> j;
+}
+
+inline void writeJSONToFile(const std::string &filename,
+							const nlohmann::json &j)
+{
+	FileWrapper file(filename, false);
+	file << j;
+}
+
+inline void writeStringToFile(const std::string &filename,
+							  const std::string &str)
+{
+	FileWrapper file(filename, false);
+	file << str;
+}
+
+template <typename T>
+void writeVectorToFile(const std::string &filename, const std::vector<T> &v)
+{
+	FileWrapper file(filename, false);
+	for (const auto &val : v)
 		file << val;
-	}
+}
 
-	template <typename T>
-	void writeVectorToFile(const std::string &filename, const std::vector<T*> &v)
+template <typename T>
+void writeVectorToFile(const std::string &filename, const std::vector<T *> &v)
+{
+	FileWrapper file(filename, false);
+	for (const auto *val : v)
 	{
-	    FileWrapper file(filename, false);
-	    for (const auto *val : v)
-	    {
 		assert(val);
 		file << *val;
-	    }
 	}
-    }
 }
+} // namespace fileio
+} // namespace cubble
 #endif

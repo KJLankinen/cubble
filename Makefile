@@ -42,7 +42,7 @@ OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
-GPU_OBJ_NAMES := Simulator.o
+GPU_OBJ_NAMES := Kernel.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.
@@ -99,7 +99,7 @@ all : $(EXEC)
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) data.json save.json
+	$(EXEC) input_data.json save.json
 
 # -----------------------------------------------------
 # Debug build, slow with all safety nets at place.
