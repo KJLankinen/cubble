@@ -104,11 +104,11 @@ void Simulator::setupSimulation()
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
-    cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
+    cubble::cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
                firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
 
-    cudaLaunch(defaultPolicy, eulerIntegration,
+    cubble::cudaLaunch(defaultPolicy, eulerIntegration,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles);
 
     if (deleteSmallBubbles())
@@ -116,7 +116,7 @@ void Simulator::setupSimulation()
 
     resetValues();
 
-    cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
+    cubble::cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
                firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
 
@@ -182,24 +182,24 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         pointersToArrays[6] = errors;
         resetValues();
 
-        cudaLaunch(defaultPolicy, predict, x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles, useGasExchange);
+        cubble::cudaLaunch(defaultPolicy, predict, x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles, useGasExchange);
 
-        cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
+        cubble::cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                    xPrd, yPrd, zPrd, rPrd, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
                    energies, freeArea, firstIndices, secondIndices, numBubbles,
                    hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), env->getTfr() - env->getLbb(), calculateEnergy, useGasExchange);
 
         if (useGasExchange)
         {
-            cudaLaunch(defaultPolicy, calculateFreeAreaPerRadius,
+            cubble::cudaLaunch(defaultPolicy, calculateFreeAreaPerRadius,
                        rPrd, freeArea, errors, env->getPi(), numBubbles);
             double invRho = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, errors, numBubbles);
             invRho /= cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
-            cudaLaunch(defaultPolicy, calculateFinalRadiusChangeRate,
+            cubble::cudaLaunch(defaultPolicy, calculateFinalRadiusChangeRate,
                        drdtPrd, rPrd, freeArea, numBubbles, invRho, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
         }
 
-        cudaLaunch(defaultPolicy, correct,
+        cubble::cudaLaunch(defaultPolicy, correct,
                    x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
                    errors, aboveMinRadFlags.getRowPtr(0), env->getMinRad(), tfr, lbb, timeStep, numBubbles, useGasExchange);
 
@@ -252,7 +252,7 @@ void Simulator::resetValues()
         cudaStream_t stream;
         CUDA_CALL(cudaStreamCreate(&stream));
         defaultPolicy.stream = stream;
-        cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
+        cubble::cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
                    pointersToArrays[i], 0.0, numBubbles);
         CUDA_CALL(cudaStreamDestroy(stream));
     }
@@ -296,7 +296,7 @@ void Simulator::generateBubbles()
     CURAND_CALL(curandDestroyGenerator(generator));
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    cudaLaunch(defaultPolicy, assignDataToBubbles,
+    cubble::cudaLaunch(defaultPolicy, assignDataToBubbles,
                x, y, z, xPrd, yPrd, zPrd, r, w, aboveMinRadFlags.getRowPtr(0), givenNumBubblesPerDim, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
     NVTX_RANGE_POP();
 }
@@ -325,7 +325,7 @@ void Simulator::updateCellsAndNeighbors()
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
     NVTX_RANGE_PUSH_A("Offsets");
-    cudaLaunch(defaultPolicy, calculateOffsets,
+    cubble::cudaLaunch(defaultPolicy, calculateOffsets,
                x, y, z, sizes, domainDim, numBubbles, numCells);
     NVTX_RANGE_POP();
 
@@ -338,7 +338,7 @@ void Simulator::updateCellsAndNeighbors()
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("Bubbles2Cells");
-    cudaLaunch(defaultPolicy, bubblesToCells,
+    cubble::cudaLaunch(defaultPolicy, bubblesToCells,
                x, y, z, indicesPerCell.getDataPtr(), offsets, sizes, domainDim, numBubbles);
     NVTX_RANGE_POP();
 
@@ -359,7 +359,7 @@ void Simulator::updateCellsAndNeighbors()
     defaultPolicy.gridSize = gridSize;
     defaultPolicy.sharedMemBytes = sharedMemSizeInBytes;
     NVTX_RANGE_PUSH_A("find");
-    cudaLaunch(defaultPolicy, findBubblePairs,
+    cubble::cudaLaunch(defaultPolicy, findBubblePairs,
                x, y, z, r, indicesPerCell.getDataPtr(), offsets, sizes,
                neighborPairIndices.getRowPtr(2), neighborPairIndices.getRowPtr(3),
                numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
@@ -454,13 +454,13 @@ bool Simulator::deleteSmallBubbles()
         double *volumeMultiplier = errors + numBubblesAboveMinRad;
         cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
 
-        cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
+        cubble::cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
                    volumes, r, flag, volumeMultiplier, env->getPi(), numBubbles);
 
         int *newIdx = aboveMinRadFlags.getRowPtr(1);
         cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
-        cudaLaunch(defaultPolicy, removeSmallBubbles,
+        cubble::cudaLaunch(defaultPolicy, removeSmallBubbles,
                    xPrd, yPrd, zPrd, rPrd,
                    x, y, z, r,
                    dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
@@ -486,7 +486,7 @@ bool Simulator::deleteSmallBubbles()
 
         numBubbles = numBubblesAboveMinRad;
         const double invTotalVolume = 1.0 / getVolumeOfBubbles();
-        cudaLaunch(defaultPolicy, addVolume,
+        cubble::cudaLaunch(defaultPolicy, addVolume,
                    r, volumeMultiplier, numBubbles, invTotalVolume);
 
         NVTX_RANGE_POP();
@@ -518,7 +518,7 @@ double Simulator::getVolumeOfBubbles()
     ExecutionPolicy defaultPolicy(128, numBubbles);
     double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
     double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
-    cudaLaunch(defaultPolicy, calculateVolumes,
+    cubble::cudaLaunch(defaultPolicy, calculateVolumes,
                r, volPtr, numBubbles, env->getPi());
     double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
 

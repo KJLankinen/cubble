@@ -5,16 +5,16 @@
 namespace cubble
 {
 
-	template <typename... Arguments>
-	void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
-	{
-		f<<<f.gridSize, f.blockSize, p.sharedMemBytes, p.stream>>>(args...);
-	#ifndef NDEBUG
-		CUDA_CALL(cudaDeviceSynchronize());
-		CUDA_CALL(cudaPeekAtLastError());
-	#endif
-	}
-	
+template <typename... Arguments>
+void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
+{
+	f<<<f.gridSize, f.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+#ifndef NDEBUG
+	CUDA_CALL(cudaDeviceSynchronize());
+	CUDA_CALL(cudaPeekAtLastError());
+#endif
+}
+
 __forceinline__ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are
@@ -656,14 +656,14 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 }
 
 __global__void removeSmallBubbles(double *x, double *y, double *z, double *r,
-								   double *xTemp, double *yTemp, double *zTemp, double *rTemp,
-								   double *dxdt, double *dydt, double *dzdt, double *drdt,
-								   double *dxdtTemp, double *dydtTemp, double *dzdtTemp, double *drdtTemp,
-								   double *dxdtOld, double *dydtOld, double *dzdtOld, double *drdtOld,
-								   double *dxdtOldTemp, double *dydtOldTemp, double *dzdtOldTemp, double *drdtOldTemp,
-								   int *newIdx,
-								   int *flag,
-								   int numBubbles)
+								  double *xTemp, double *yTemp, double *zTemp, double *rTemp,
+								  double *dxdt, double *dydt, double *dzdt, double *drdt,
+								  double *dxdtTemp, double *dydtTemp, double *dzdtTemp, double *drdtTemp,
+								  double *dxdtOld, double *dydtOld, double *dzdtOld, double *drdtOld,
+								  double *dxdtOldTemp, double *dydtOldTemp, double *dzdtOldTemp, double *drdtOldTemp,
+								  int *newIdx,
+								  int *flag,
+								  int numBubbles)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles && flag[tid] == 1)
