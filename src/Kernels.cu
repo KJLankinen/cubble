@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "Kernels.h"
+#include "Kernels.cuh"
 
 namespace cubble
 {

@@ -1,10 +1,10 @@
 // -*- C++ -*-
 
-#include "Simulator.h"
+#include "Simulator.cuh"
 #include "Macros.h"
 #include "Vec.h"
 #include "Util.h"
-#include "Kernels.h"
+#include "Kernels.cuh"
 
 #include "cub/cub/cub.cuh"
 

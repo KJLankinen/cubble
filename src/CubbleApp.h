@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "Simulator.h"
+#include "Simulator.cuh"
 #include "Env.h"
 
 namespace cubble
