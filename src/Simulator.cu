@@ -352,6 +352,7 @@ void Simulator::updateCellsAndNeighbors()
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     sharedMemSizeInBytes *= sizeof(int);
+    const int maxNumSharedVals = sharedMemSizeInBytes / sizeof(int);
 
     assertMemBelowLimit(sharedMemSizeInBytes);
     assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
@@ -363,7 +364,7 @@ void Simulator::updateCellsAndNeighbors()
                x, y, z, r, indicesPerCell.getDataPtr(), offsets, sizes,
                neighborPairIndices.getRowPtr(2), neighborPairIndices.getRowPtr(3),
                numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
-               sharedMemSizeInBytes / sizeof(int), neighborPairIndices.getWidth());
+               maxNumSharedVals, (int)neighborPairIndices.getWidth());
     NVTX_RANGE_POP();
 
     NVTX_RANGE_PUSH_A("mecpy numpairs");
