@@ -489,6 +489,7 @@ bool Simulator::deleteSmallBubbles()
                    r, volumeMultiplier, numBubbles, invTotalVolume);
 
         CUDA_CALL(cudaStreamDestroy(radiusStream));
+        CUDA_CALL(cudaDeviceSynchronize());
 
         NVTX_RANGE_POP();
     }
