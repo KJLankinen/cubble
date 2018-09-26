@@ -14,6 +14,8 @@
 
 namespace cubble
 {
+enum class BubbleProperty;
+
 class Simulator
 {
 	CUBBLE_PROP(double, SimulationTime, 0)
@@ -54,7 +56,6 @@ class Simulator
 	std::vector<double> hostData;
 	std::vector<double *> pointersToArrays;
 	
-	enum class BubbleProperty;
 	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };
 
