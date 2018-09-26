@@ -20,6 +20,7 @@
 
 namespace cubble
 {
+    typedef BubbleProperty BP;
 Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
@@ -35,7 +36,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     const dvec tfr = env->getLbb() + env->getAvgRad() * (double)givenNumBubblesPerDim * 2;
     env->setTfr(tfr);
 
-    bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BubbleProperty::NUM_VALUES);
+    bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 2);
     indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
 
@@ -49,6 +50,22 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     cellData = FixedSizeDeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
     hostData.resize(bubbleData.getSize(), 0);
+
+    pairedProperties.resize(12);
+    pairedProperties[0] = std::pair<BubbleProperty, BubbleProperty>(BP::X, BP::X_PRD);
+    pairedProperties[1] = std::pair<BubbleProperty, BubbleProperty>(BP::Y, BP::Y_PRD);
+    pairedProperties[2] = std::pair<BubbleProperty, BubbleProperty>(BP::Z, BP::Z_PRD);
+    pairedProperties[3] = std::pair<BubbleProperty, BubbleProperty>(BP::R, BP::R_PRD);
+    
+    pairedProperties[4] = std::pair<BubbleProperty, BubbleProperty>(BP::DXDT, BP::DXDT_PRD);
+    pairedProperties[5] = std::pair<BubbleProperty, BubbleProperty>(BP::DYDT, BP::DYDT_PRD);
+    pairedProperties[6] = std::pair<BubbleProperty, BubbleProperty>(BP::DZDT, BP::DZDT_PRD);
+    pairedProperties[7] = std::pair<BubbleProperty, BubbleProperty>(BP::DRDT, BP::DRDT_PRD);
+
+    pairedProperties[8] = std::pair<BubbleProperty, BubbleProperty>(BP::DXDT_OLD, BP::ENERGY);
+    pairedProperties[9] = std::pair<BubbleProperty, BubbleProperty>(BP::DYDT_OLD, BP::FREE_AREA);
+    pairedProperties[10] = std::pair<BubbleProperty, BubbleProperty>(BP::DZDT_OLD, BP::ERROR);
+    pairedProperties[11] = std::pair<BubbleProperty, BubbleProperty>(BP::DRDT_OLD, BP::VOLUME);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -66,23 +83,23 @@ void Simulator::setupSimulation()
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
 
-    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
-    double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
-    double *dydt = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT);
-    double *dzdt = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT);
-    double *drdt = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
-    double *dydtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_OLD);
-    double *dzdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_OLD);
-    double *drdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_OLD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
-    double *energies = bubbleData.getRowPtr((size_t)BubbleProperty::ENERGY);
-    double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
+    double *energies = bubbleData.getRowPtr((size_t)BP::ENERGY);
+    double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
@@ -136,35 +153,35 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double timeStep = env->getTimeStep();
     double error = 0;
 
-    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
-    double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
-    double *yPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Y_PRD);
-    double *zPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Z_PRD);
-    double *rPrd = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
-    double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
-    double *dydt = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT);
-    double *dzdt = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT);
-    double *drdt = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
-    double *dydtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_PRD);
-    double *dzdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_PRD);
-    double *drdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_PRD);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
+    double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
+    double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
 
-    double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
-    double *dydtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_OLD);
-    double *dzdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_OLD);
-    double *drdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_OLD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
-    double *energies = bubbleData.getRowPtr((size_t)BubbleProperty::ENERGY);
-    double *errors = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
-    double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
-    double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
+    double *energies = bubbleData.getRowPtr((size_t)BP::ENERGY);
+    double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
+    double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
+    double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
@@ -272,16 +289,16 @@ void Simulator::generateBubbles()
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
 
-    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
-    double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
 
-    double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
-    double *yPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Y_PRD);
-    double *zPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Z_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
 
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-    double *w = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *w = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -317,10 +334,10 @@ void Simulator::updateCellsAndNeighbors()
     numPairs.setBytesToZero();
     NVTX_RANGE_POP();
 
-    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
-    double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
@@ -388,11 +405,11 @@ void Simulator::updateData()
     // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
     size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
 
-    double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-    double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
-    double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
-    double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
-    double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
 
     cudaStream_t stream1, stream2;
     CUDA_CALL(cudaStreamCreate(&stream1));
@@ -421,11 +438,11 @@ bool Simulator::deleteSmallBubbles()
 
         ExecutionPolicy defaultPolicy(128, numBubbles);
 
-        double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-        double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
+        double *r = bubbleData.getRowPtr((size_t)BP::R);
+        double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
         // HACK: This is potentially very dangerous, if the used space is decreased in the future.
-        double *volumeMultiplier = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR) + numBubblesAboveMinRad;
+        double *volumeMultiplier = bubbleData.getRowPtr((size_t)BP::ERROR) + numBubblesAboveMinRad;
         cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
 
         cudaStream_t s1, s2;
@@ -446,7 +463,7 @@ bool Simulator::deleteSmallBubbles()
         CUDA_CALL(cudaDeviceSynchronize());
         for (auto pair : pairedProperties)
         {
-            if (pair.first == BubbleProperty::R || pair.first == BubbleProperty::R_PRD)
+            if (pair.first == BP::R || pair.first == BP::R_PRD)
                 continue;
 
             cudaStream_t stream;
@@ -462,8 +479,8 @@ bool Simulator::deleteSmallBubbles()
         cudaStream_t radiusStream;
         CUDA_CALL(cudaStreamCreate(&radiusStream));
         defaultPolicy.stream = radiusStream;
-        double *fromArray = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-        double *toArray = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
+        double *fromArray = bubbleData.getRowPtr((size_t)BP::R);
+        double *toArray = bubbleData.getRowPtr((size_t)BP::R_PRD);
         cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
         CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, radiusStream));
 
@@ -500,8 +517,8 @@ double Simulator::getVolumeOfBubbles()
     NVTX_RANGE_PUSH_A(__FUNCTION__);
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-    double *volPtr = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *volPtr = bubbleData.getRowPtr((size_t)BP::VOLUME);
     cudaLaunch(defaultPolicy, calculateVolumes,
                r, volPtr, numBubbles, env->getPi());
     double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
@@ -515,7 +532,7 @@ double Simulator::getAverageRadius()
 {
     NVTX_RANGE_PUSH_A(__FUNCTION__);
 
-    double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
     double avgRad = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad /= numBubbles;
 
@@ -532,7 +549,7 @@ void Simulator::getBubbles(std::vector<Bubble> &bubbles) const
     bubbles.resize(numBubbles);
 
     size_t memoryStride = bubbleData.getWidth();
-    double *devX = bubbleData.getRowPtr((size_t)BubbleProperty::X);
+    double *devX = bubbleData.getRowPtr((size_t)BP::X);
     std::vector<double> xyzr;
     xyzr.resize(memoryStride * 4);
 
