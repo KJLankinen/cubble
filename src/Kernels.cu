@@ -1,10 +1,20 @@
 // -*- C++ -*-
 
 #include "Kernels.h"
-#include "Vec.h"
 
 namespace cubble
 {
+
+	template <typename... Arguments>
+	void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
+	{
+		f<<<f.gridSize, f.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+	#ifndef NDEBUG
+		CUDA_CALL(cudaDeviceSynchronize());
+		CUDA_CALL(cudaPeekAtLastError());
+	#endif
+	}
+	
 __forceinline__ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are

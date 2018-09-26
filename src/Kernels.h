@@ -18,7 +18,7 @@ struct ExecutionPolicy
     ExecutionPolicy(size_t numThreadsPerBlock, size_t numTotalThreads)
     {
         blockSize = dim3(numThreadsPerBlock, 1, 1);
-        gridSize = dim3((size_t)std::ceil(numTotalThreads / (float)numThreads), 1, 1);
+        gridSize = dim3((size_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
         sharedMemBytes = 0;
         stream = 0;
     }
@@ -26,7 +26,7 @@ struct ExecutionPolicy
     ExecutionPolicy(size_t numThreadsPerBlock, size_t numTotalThreads, size_t bytes, cudaStream_t s)
     {
         blockSize = dim3(numThreadsPerBlock, 1, 1);
-        gridSize = dim3((size_t)std::ceil(numTotalThreads / (float)numThreads), 1, 1);
+        gridSize = dim3((size_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
         sharedMemBytes = bytes;
         stream = s;
     }
@@ -35,16 +35,6 @@ struct ExecutionPolicy
     dim3 blockSize;
     size_t sharedMemBytes;
     cudaStream_t stream;
-}
-
-template <typename... Arguments>
-void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
-{
-    f<<<f.gridSize, f.blockSize, p.sharedMemBytes, p.stream>>>(args...);
-#ifndef NDEBUG
-    CUDA_CALL(cudaDeviceSynchronize());
-    CUDA_CALL(cudaPeekAtLastError());
-#endif
 }
 
 __global__ void resetDoubleArrayToValue(double *array, double value, int numValues);
