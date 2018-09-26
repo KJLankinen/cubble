@@ -461,15 +461,15 @@ bool Simulator::deleteSmallBubbles()
         CUDA_CALL(cudaStreamDestroy(s2));
 
         CUDA_CALL(cudaDeviceSynchronize());
-        for (auto pair : pairedProperties)
+        for (const std::pair<BP, BP> &p : pairedProperties)
         {
-            if (pair.first == BP::R || pair.first == BP::R_PRD)
+            if (p.first == BP::R || p.first == BP::R_PRD)
                 continue;
 
             cudaStream_t stream;
             CUDA_CALL(cudaStreamCreate(&stream));
-            double *fromArray = bubbleData.getRowPtr((size_t)pair.first);
-            double *toArray = bubbleData.getRowPtr((size_t)pair.second);
+            double *fromArray = bubbleData.getRowPtr((size_t)p.first);
+            double *toArray = bubbleData.getRowPtr((size_t)p.second);
             defaultPolicy.stream = stream;
             cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
             CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, stream));
