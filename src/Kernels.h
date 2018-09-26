@@ -35,7 +35,7 @@ struct ExecutionPolicy
     dim3 blockSize;
     size_t sharedMemBytes;
     cudaStream_t stream;
-}
+};
 
 __global__ void resetDoubleArrayToValue(double *array, double value, int numValues);
 

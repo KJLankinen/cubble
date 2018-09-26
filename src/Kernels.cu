@@ -655,7 +655,7 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 	}
 }
 
-__global__void removeSmallBubbles(double *x, double *y, double *z, double *r,
+__global__ void removeSmallBubbles(double *x, double *y, double *z, double *r,
 								  double *xTemp, double *yTemp, double *zTemp, double *rTemp,
 								  double *dxdt, double *dydt, double *dzdt, double *drdt,
 								  double *dxdtTemp, double *dydtTemp, double *dzdtTemp, double *drdtTemp,
