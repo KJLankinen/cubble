@@ -421,74 +421,57 @@ bool Simulator::deleteSmallBubbles()
 
         ExecutionPolicy defaultPolicy(128, numBubbles);
 
-        double *x = bubbleData.getRowPtr((size_t)BubbleProperty::X);
-        double *y = bubbleData.getRowPtr((size_t)BubbleProperty::Y);
-        double *z = bubbleData.getRowPtr((size_t)BubbleProperty::Z);
         double *r = bubbleData.getRowPtr((size_t)BubbleProperty::R);
-
-        double *xPrd = bubbleData.getRowPtr((size_t)BubbleProperty::X_PRD);
-        double *yPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Y_PRD);
-        double *zPrd = bubbleData.getRowPtr((size_t)BubbleProperty::Z_PRD);
-        double *rPrd = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
-
-        double *dxdt = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT);
-        double *dydt = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT);
-        double *dzdt = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT);
-        double *drdt = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT);
-
-        double *dxdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_PRD);
-        double *dydtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_PRD);
-        double *dzdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_PRD);
-        double *drdtPrd = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_PRD);
-
-        double *dxdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DXDT_OLD);
-        double *dydtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DYDT_OLD);
-        double *dzdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DZDT_OLD);
-        double *drdtOld = bubbleData.getRowPtr((size_t)BubbleProperty::DRDT_OLD);
-
-        double *energies = bubbleData.getRowPtr((size_t)BubbleProperty::ENERGY);
-        double *errors = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR);
         double *volumes = bubbleData.getRowPtr((size_t)BubbleProperty::VOLUME);
-        double *freeArea = bubbleData.getRowPtr((size_t)BubbleProperty::FREE_AREA);
 
         // HACK: This is potentially very dangerous, if the used space is decreased in the future.
-        double *volumeMultiplier = errors + numBubblesAboveMinRad;
+        double *volumeMultiplier = bubbleData.getRowPtr((size_t)BubbleProperty::ERROR) + numBubblesAboveMinRad;
         cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
 
+        cudaStream_t s1, s2;
+        CUDA_CALL(cudaStreamCreate(&s1));
+        defaultPolicy.stream = s1;
         cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
                    volumes, r, flag, volumeMultiplier, env->getPi(), numBubbles);
+        
+        const double invTotalVolume = 1.0 / cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, volumes, numBubbles, s1);
+        CUDA_CALL(cudaStreamDestroy(s1));
 
+        CUDA_CALL(cudaStreamCreate(&s2));
+        defaultPolicy.stream = s2;
         int *newIdx = aboveMinRadFlags.getRowPtr(1);
-        cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
+        cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles, s2);
+        CUDA_CALL(cudaStreamDestroy(s2));
 
-        cudaLaunch(defaultPolicy, removeSmallBubbles,
-                   xPrd, yPrd, zPrd, rPrd,
-                   x, y, z, r,
-                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-                   dxdt, dydt, dzdt, drdt,
-                   energies, freeArea, errors, volumes,
-                   dxdtOld, dydtOld, dzdtOld, drdtOld,
-                   newIdx, flag, numBubbles);
-
-        const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
-        cudaStream_t stream1, stream2, stream3;
-        CUDA_CALL(cudaStreamCreate(&stream1));
-        CUDA_CALL(cudaStreamCreate(&stream2));
-        CUDA_CALL(cudaStreamCreate(&stream3));
         CUDA_CALL(cudaDeviceSynchronize());
+        for (auto pair : pairedProperties)
+        {
+            if (pair.first == BubbleProperty::R || pair.first == BubbleProperty::R_PRD)
+                continue;
 
-        CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream1));
-        CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
-        CUDA_CALL(cudaMemcpyAsync(dxdtOld, energies, numBytesToCopy, cudaMemcpyDeviceToDevice, stream3));
+            cudaStream_t stream;
+            CUDA_CALL(cudaStreamCreate(&stream));
+            double *fromArray = bubbleData.getRowPtr((size_t)pair.first);
+            double *toArray = bubbleData.getRowPtr((size_t)pair.second);
+            defaultPolicy.stream = stream;
+            cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
+            CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, stream));
+            CUDA_CALL(cudaStreamDestroy(stream));
+        }
 
-        CUDA_CALL(cudaStreamDestroy(stream1));
-        CUDA_CALL(cudaStreamDestroy(stream2));
-        CUDA_CALL(cudaStreamDestroy(stream3));
+        cudaStream_t radiusStream;
+        CUDA_CALL(cudaStreamCreate(&radiusStream));
+        defaultPolicy.stream = radiusStream;
+        double *fromArray = bubbleData.getRowPtr((size_t)BubbleProperty::R);
+        double *toArray = bubbleData.getRowPtr((size_t)BubbleProperty::R_PRD);
+        cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
+        CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, radiusStream));
 
         numBubbles = numBubblesAboveMinRad;
-        const double invTotalVolume = 1.0 / getVolumeOfBubbles();
         cudaLaunch(defaultPolicy, addVolume,
                    r, volumeMultiplier, numBubbles, invTotalVolume);
+
+        CUDA_CALL(cudaStreamDestroy(radiusStream));
 
         NVTX_RANGE_POP();
     }

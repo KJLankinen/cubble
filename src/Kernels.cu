@@ -637,41 +637,43 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 #if (NUM_DIM == 3)
 		vol *= 1.333333333333333333333333 * radius;
 #endif
-		volume[tid] = vol;
 
 		if (aboveMinRadFlags[tid] == 0)
+		{
 			atomicAdd(volumeMultiplier, vol);
+			volume[tid] = 0;
+		}
+		else
+			volume[tid] = vol;
 	}
 }
 
-__global__ void removeSmallBubbles(double *x, double *y, double *z, double *r,
-								  double *xTemp, double *yTemp, double *zTemp, double *rTemp,
-								  double *dxdt, double *dydt, double *dzdt, double *drdt,
-								  double *dxdtTemp, double *dydtTemp, double *dzdtTemp, double *drdtTemp,
-								  double *dxdtOld, double *dydtOld, double *dzdtOld, double *drdtOld,
-								  double *dxdtOldTemp, double *dydtOldTemp, double *dzdtOldTemp, double *drdtOldTemp,
-								  int *newIdx,
-								  int *flag,
-								  int numBubbles)
+__global__ void copyToIndex(double *fromArray, double *toArray, int *toIndex, int numValues)
 {
 	const int tid = getGlobalTid();
-	if (tid < numBubbles && flag[tid] == 1)
-	{
-		const int idx = newIdx[tid];
-		x[idx] = xTemp[tid];
-		y[idx] = yTemp[tid];
-		z[idx] = zTemp[tid];
-		r[idx] = rTemp[tid];
-
-		dxdt[idx] = dxdtTemp[tid];
-		dydt[idx] = dydtTemp[tid];
-		dzdt[idx] = dzdtTemp[tid];
-		drdt[idx] = drdtTemp[tid];
-
-		dxdtOld[idx] = dxdtOldTemp[tid];
-		dydtOld[idx] = dydtOldTemp[tid];
-		dzdtOld[idx] = dzdtOldTemp[tid];
-		drdtOld[idx] = drdtOldTemp[tid];
-	}
+	if (tid < numValues)
+		toArray[toIndex[tid]] = fromArray[tid];
 }
+
+__global__ void copyToIndexIfFlag(double *fromArray, double *toArray, int *toIndex, int *flags, int numValues)
+{
+	const int tid = getGlobalTid();
+	if (tid < numValues && flags[tid] == 1)
+		toArray[toIndex[tid]] = fromArray[tid];
+}
+
+__global__ void copyFromIndex(double *fromArray, double *toArray, int *fromIndex, int numValues)
+{
+	const int tid = getGlobalTid();
+	if (tid < numValues)
+		toArray[tid] = fromArray[fromIndex[tid]];
+}
+
+__global__ void copyFromIndexIfFlag(double *fromArray, double *toArray, int *fromIndex, int *flags, int numValues)
+{
+	const int tid = getGlobalTid();
+	if (tid < numValues && flags[tid] == 1)
+		toArray[tid] = fromArray[fromIndex[tid]];
+}
+
 } // namespace cubble

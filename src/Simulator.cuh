@@ -8,6 +8,7 @@
 #include "FixedSizeDeviceArray.h"
 #include "CubWrapper.h"
 
+#include <utility>
 #include <memory>
 #include <vector>
 
@@ -95,5 +96,6 @@ class Simulator
 
 	std::vector<double> hostData;
 	std::vector<double *> pointersToArrays;
+	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };
 }; // namespace cubble
