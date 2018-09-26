@@ -4,6 +4,7 @@
 
 #include <cuda_runtime_api.h>
 #include "Macros.h"
+#include "Vec.h"
 
 namespace cubble
 {
