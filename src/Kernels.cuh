@@ -37,6 +37,16 @@ struct ExecutionPolicy
     cudaStream_t stream;
 };
 
+template <typename... Arguments>
+void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
+{
+	f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+#ifndef NDEBUG
+	CUDA_CALL(cudaDeviceSynchronize());
+	CUDA_CALL(cudaPeekAtLastError());
+#endif
+}
+
 __global__ void resetDoubleArrayToValue(double *array, double value, int numValues);
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
