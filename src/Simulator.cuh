@@ -14,6 +14,50 @@
 
 namespace cubble
 {
+class Simulator
+{
+	CUBBLE_PROP(double, SimulationTime, 0)
+	CUBBLE_PROP(double, ElasticEnergy, 0)
+  public:
+	Simulator(std::shared_ptr<Env> e);
+	~Simulator();
+
+	void setupSimulation();
+	bool integrate(bool useGasExchange = false, bool calculateEnergy = false);
+	double getVolumeOfBubbles();
+	double getAverageRadius();
+	void getBubbles(std::vector<Bubble> &bubbles) const;
+
+  private:
+	void resetValues();
+	void generateBubbles();
+	void updateCellsAndNeighbors();
+	void updateData();
+	bool deleteSmallBubbles();
+	dim3 getGridSize();
+
+	int givenNumBubblesPerDim = 0;
+	int numBubbles = 0;
+	size_t integrationStep = 0;
+	int hostNumPairs = 0;
+
+	std::shared_ptr<Env> env;
+	std::shared_ptr<CubWrapper> cubWrapper;
+
+	FixedSizeDeviceArray<double> bubbleData;
+	FixedSizeDeviceArray<int> aboveMinRadFlags;
+	FixedSizeDeviceArray<int> cellData;
+	FixedSizeDeviceArray<int> indicesPerCell;
+	FixedSizeDeviceArray<int> neighborPairIndices;
+	FixedSizeDeviceArray<int> numPairs;
+
+	std::vector<double> hostData;
+	std::vector<double *> pointersToArrays;
+	
+	enum class BubbleProperty;
+	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
+};
+
 enum class BubbleProperty
 {
 	X,
@@ -55,47 +99,5 @@ enum class CellProperty
 	SIZE,
 
 	NUM_VALUES
-};
-
-class Simulator
-{
-	CUBBLE_PROP(double, SimulationTime, 0)
-	CUBBLE_PROP(double, ElasticEnergy, 0)
-  public:
-	Simulator(std::shared_ptr<Env> e);
-	~Simulator();
-
-	void setupSimulation();
-	bool integrate(bool useGasExchange = false, bool calculateEnergy = false);
-	double getVolumeOfBubbles();
-	double getAverageRadius();
-	void getBubbles(std::vector<Bubble> &bubbles) const;
-
-  private:
-	void resetValues();
-	void generateBubbles();
-	void updateCellsAndNeighbors();
-	void updateData();
-	bool deleteSmallBubbles();
-	dim3 getGridSize();
-
-	int givenNumBubblesPerDim = 0;
-	int numBubbles = 0;
-	size_t integrationStep = 0;
-	int hostNumPairs = 0;
-
-	std::shared_ptr<Env> env;
-	std::shared_ptr<CubWrapper> cubWrapper;
-
-	FixedSizeDeviceArray<double> bubbleData;
-	FixedSizeDeviceArray<int> aboveMinRadFlags;
-	FixedSizeDeviceArray<int> cellData;
-	FixedSizeDeviceArray<int> indicesPerCell;
-	FixedSizeDeviceArray<int> neighborPairIndices;
-	FixedSizeDeviceArray<int> numPairs;
-
-	std::vector<double> hostData;
-	std::vector<double *> pointersToArrays;
-	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };
 }; // namespace cubble
