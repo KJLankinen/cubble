@@ -8,6 +8,17 @@
 
 namespace cubble
 {
+
+enum class ReorganizeType
+{
+    COPY_FROM_INDEX,
+    COPY_TO_INDEX,
+    CONDITIONAL_FROM_INDEX,
+    CONDITIONAL_TO_INDEX,
+
+    NUM_VALUES
+};
+
 struct ExecutionPolicy
 {
     ExecutionPolicy(dim3 gridSize, dim3 blockSize, uint32_t sharedMemBytes, cudaStream_t stream)
@@ -40,10 +51,10 @@ struct ExecutionPolicy
 template <typename... Arguments>
 void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
 {
-	f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+    f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
 #ifndef NDEBUG
-	CUDA_CALL(cudaDeviceSynchronize());
-	CUDA_CALL(cudaPeekAtLastError());
+    CUDA_CALL(cudaDeviceSynchronize());
+    CUDA_CALL(cudaPeekAtLastError());
 #endif
 }
 
@@ -66,14 +77,14 @@ template <typename... Args>
 __global__ void resetKernel(double value, int numValues, Args... args)
 {
     const int tid = getGlobalTid();
-	if (tid < numValues)
-		resetDoubleArrayToValue(value, tid, args...);
+    if (tid < numValues)
+        resetDoubleArrayToValue(value, tid, args...);
 }
 
 template <typename T>
 __device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray)
 {
-	toArray[toIndex] = fromArray[fromIndex];
+    toArray[toIndex] = fromArray[fromIndex];
 }
 
 template <typename T, typename... Args>
@@ -86,8 +97,8 @@ __device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray, 
 template <typename T>
 __device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray)
 {
-	if (flag)
-		toArray[toIndex] = fromArray[fromIndex];
+    if (flag)
+        toArray[toIndex] = fromArray[fromIndex];
 }
 
 template <typename T, typename... Args>
@@ -100,7 +111,6 @@ __device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArr
     }
 }
 
-enum class ReorganizeType;
 template <typename... Args>
 __global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType, int *indices, int *flags, Args... args)
 {
@@ -109,20 +119,20 @@ __global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType, i
     {
         switch (reorganizeType)
         {
-            case ReorganizeType::COPY_FROM_INDEX:
-                copyValue(indices[tid], tid, args...);
-                break;
-            case ReorganizeType::COPY_TO_INDEX:
-                copyValue(tid, indices[tid], args...);
-                break;
-            case ReorganizeType::CONDITIONAL_FROM_INDEX:
-                copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
-                break;
-            case ReorganizeType::CONDITIONAL_TO_INDEX:
-                copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
-                break;
-            default:
-                break;
+        case ReorganizeType::COPY_FROM_INDEX:
+            copyValue(indices[tid], tid, args...);
+            break;
+        case ReorganizeType::COPY_TO_INDEX:
+            copyValue(tid, indices[tid], args...);
+            break;
+        case ReorganizeType::CONDITIONAL_FROM_INDEX:
+            copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
+            break;
+        case ReorganizeType::CONDITIONAL_TO_INDEX:
+            copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
+            break;
+        default:
+            break;
         }
     }
 }
@@ -149,12 +159,12 @@ __global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int nu
 __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles);
 
 __global__ void assignBubblesToCells(double *x,
-                                    double *y,
-                               double *z,
-                               int *cellIndices,
-                               int *bubbleIndices,
-                               ivec cellDim,
-                               int numBubbles);
+                                     double *y,
+                                     double *z,
+                                     int *cellIndices,
+                                     int *bubbleIndices,
+                                     ivec cellDim,
+                                     int numBubbles);
 
 __global__ void findBubblePairs(double *x,
                                 double *y,

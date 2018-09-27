@@ -15,7 +15,6 @@
 namespace cubble
 {
 enum class BubbleProperty;
-enum class ReorganizeType;
 
 class Simulator
 {
@@ -95,16 +94,6 @@ enum class BubbleProperty
 	FREE_AREA,
 	ERROR,
 	VOLUME,
-
-	NUM_VALUES
-};
-
-enum class ReorganizeType
-{
-	COPY_FROM_INDEX,
-	COPY_TO_INDEX,
-	CONDITIONAL_FROM_INDEX,
-	CONDITIONAL_TO_INDEX,
 
 	NUM_VALUES
 };
