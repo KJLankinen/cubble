@@ -224,7 +224,7 @@ template <typename... Arguments>
 void Simulator::reorganizeValues(Arguments... args)
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    cudaLaunch(defaultPolicy, reorganizeKernel, reorganizeType, numBubbles, args...);
+    cudaLaunch(defaultPolicy, reorganizeKernel, numBubbles, args...);
 }
 
 void Simulator::generateBubbles()
