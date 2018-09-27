@@ -111,8 +111,6 @@ __forceinline__ __device__ int getCellIdxFromPos(double x, double y, double z, i
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
 
-}
-
 __forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
 {
     array[tid] = value;
