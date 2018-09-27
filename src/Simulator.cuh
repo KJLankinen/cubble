@@ -36,7 +36,7 @@ class Simulator
 	void resetValues(Arguments... args);
 
 	template <typename... Arguments>
-	void reorganizeValues(ReorganizeType reorganizeType, Arguments... args);
+	void reorganizeValues(Arguments... args);
 
 	void generateBubbles();
 	void updateCellsAndNeighbors();
