@@ -67,28 +67,21 @@ __global__ void assignDataToBubbles(double *x,
                                     double minRad,
                                     int numBubbles);
 
-__global__ void calculateOffsets(double *x,
-                                 double *y,
-                                 double *z,
-                                 int *sizes,
-                                 dvec domainDim,
-                                 int numBubbles,
-                                 int numCells);
+__global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int numBubbles);
+__global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles);
 
-__global__ void bubblesToCells(double *x,
-                               double *y,
+__global__ void assignBubblesToCells(double *x,
+                                    double *y,
                                double *z,
-                               int *indices,
-                               int *offsets,
-                               int *sizes,
-                               dvec domainDim,
+                               int *cellIndices,
+                               int *bubbleIndices,
+                               ivec cellDim,
                                int numBubbles);
 
 __global__ void findBubblePairs(double *x,
                                 double *y,
                                 double *z,
                                 double *r,
-                                int *indices,
                                 int *offsets,
                                 int *sizes,
                                 int *firstIndices,

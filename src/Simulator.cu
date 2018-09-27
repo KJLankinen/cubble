@@ -38,7 +38,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 2);
-    indicesPerCell = FixedSizeDeviceArray<int>(numBubbles, 1);
+    bubbleCellIndices = FixedSizeDeviceArray<int>(numBubbles, 4);
 
     // TODO: Figure out a more sensible value for this.
     const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
@@ -324,15 +324,9 @@ void Simulator::updateCellsAndNeighbors()
 
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
-    const dvec domainDim(gridSize.x, gridSize.y, gridSize.z);
-    ExecutionPolicy defaultPolicy(256, numBubbles);
+    const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
-    NVTX_RANGE_PUSH_A("Memsets");
-    cellData.setBytesToZero();
-    indicesPerCell.setBytesToZero();
-    neighborPairIndices.setBytesToZero();
     numPairs.setBytesToZero();
-    NVTX_RANGE_POP();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
@@ -341,44 +335,65 @@ void Simulator::updateCellsAndNeighbors()
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
-    NVTX_RANGE_PUSH_A("Offsets");
-    cudaLaunch(defaultPolicy, calculateOffsets,
-               x, y, z, sizes, domainDim, numBubbles, numCells);
-    NVTX_RANGE_POP();
+    // Assign bubbles to cells
+    ExecutionPolicy defaultPolicy(128, numBubbles);
+    cudaLaunch(defaultPolicy, assignBubblesToCells,
+        x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), cellDim, numBubbles);
 
-    NVTX_RANGE_PUSH_A("Exclusive sum");
-    cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
-    NVTX_RANGE_POP();
+    int *cellIndices = bubbleCellIndices.getRowPtr(0);
+    int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
+    
+    cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+        const_cast<const int *>(bubbleCellIndices.getRowPtr(2)),
+        cellIndices,
+        const_cast<const int *>(bubbleCellIndices.getRowPtr(3)),
+        bubbleIndices,
+        numBubbles);
 
-    NVTX_RANGE_PUSH_A("Memset sizes");
-    CUDA_CALL(cudaMemset(static_cast<void *>(sizes), 0, sizeof(int) * numCells));
-    NVTX_RANGE_POP();
+    CUDA_CALL(cudaDeviceSynchronize());
+    
+    cudaStream_t stream;
+    CUDA_CALL(cudaStreamCreate(&stream));
+    defaultPolicy.stream = stream;
+    cudaLaunch(defaultPolicy, findOffsets,
+        cellIndices, offsets, numCells, numBubbles);
+    
+    cudaLaunch(defaultPolicy, findSizes,
+        offsets, sizes, numCells, numBubbles);
 
-    NVTX_RANGE_PUSH_A("Bubbles2Cells");
-    cudaLaunch(defaultPolicy, bubblesToCells,
-               x, y, z, indicesPerCell.getDataPtr(), offsets, sizes, domainDim, numBubbles);
-    NVTX_RANGE_POP();
-
-    gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
-    assertGridSizeBelowLimit(gridSize);
-
-    NVTX_RANGE_PUSH_A("MaxNumCellRed");
-    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
-    NVTX_RANGE_POP();
-
+    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells, defaultPolicy.stream);
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     sharedMemSizeInBytes *= sizeof(int);
     const int maxNumSharedVals = sharedMemSizeInBytes / sizeof(int);
-
     assertMemBelowLimit(sharedMemSizeInBytes);
     assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
 
-    defaultPolicy.gridSize = gridSize;
-    defaultPolicy.sharedMemBytes = sharedMemSizeInBytes;
+    CUDA_CALL(cudaStreamDestroy(stream));
+
+    for (const std::pair<BP, BP> &p : pairedProperties)
+    {
+        cudaStream_t s;
+        CUDA_CALL(cudaStreamCreate(&s));
+        defaultPolicy.stream = s;
+        double *fromArray = bubbleData.getRowPtr((size_t)p.first);
+        double *toArray = bubbleData.getRowPtr((size_t)p.second);
+        cudaLaunch(defaultPolicy, copyFromIndex,
+            fromArray, toArray, bubbleIndices, numBubbles);
+        CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, defaultPolicy.stream));
+        CUDA_CALL(cudaStreamDestroy(s));
+    }
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
+    assertGridSizeBelowLimit(gridSize);
+
+    ExecutionPolicy findPolicy(256, numBubbles);
+    findPolicy.gridSize = gridSize;
+    findPolicy.sharedMemBytes = sharedMemSizeInBytes;
     NVTX_RANGE_PUSH_A("find");
-    cudaLaunch(defaultPolicy, findBubblePairs,
-               x, y, z, r, indicesPerCell.getDataPtr(), offsets, sizes,
+    cudaLaunch(findPolicy, findBubblePairs,
+               x, y, z, r, offsets, sizes,
                neighborPairIndices.getRowPtr(2), neighborPairIndices.getRowPtr(3),
                numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());

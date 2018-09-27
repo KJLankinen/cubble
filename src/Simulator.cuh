@@ -49,7 +49,7 @@ class Simulator
 	FixedSizeDeviceArray<double> bubbleData;
 	FixedSizeDeviceArray<int> aboveMinRadFlags;
 	FixedSizeDeviceArray<int> cellData;
-	FixedSizeDeviceArray<int> indicesPerCell;
+	FixedSizeDeviceArray<int> bubbleCellIndices;
 	FixedSizeDeviceArray<int> neighborPairIndices;
 	FixedSizeDeviceArray<int> numPairs;
 

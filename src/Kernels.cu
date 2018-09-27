@@ -102,6 +102,15 @@ __forceinline__ __device__ dvec getWrappedPos(dvec pos)
 	return pos;
 }
 
+__forceinline__ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim)
+{
+	const int xid = floor(cellDim.x * x);
+	const int yid = floor(cellDim.y * y);
+	const int zid = floor(cellDim.z * z);
+
+	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
+}
+
 __global__ void resetDoubleArrayToValue(double *array, double value, int numValues)
 {
 	const int tid = getGlobalTid();
@@ -171,43 +180,44 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 	}
 }
 
-__global__ void calculateOffsets(double *x, double *y, double *z, int *sizes, dvec domainDim, int numBubbles, int numCells)
+__global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int numBubbles)
 {
-	int tid = getGlobalTid();
+	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		dvec pos = dvec(0, 0, 0);
-		pos.x = x[tid];
-		pos.y = y[tid];
-		pos.z = z[tid];
-
-		const ivec indexVec = (pos * domainDim).asType<int>();
-		const int index = domainDim.x * domainDim.y * indexVec.z + domainDim.x * indexVec.y + indexVec.x;
-		DEVICE_ASSERT(index < numCells);
-
-		atomicAdd(&sizes[index], 1);
+		if (tid == 0)
+			offsets[0] = 0;
+		else
+		{
+			const int cellIdx = cellIndices[tid];
+			if (cellIdx > cellIndices[tid - 1])
+				offsets[cellIdx] = tid;
+		}
 	}
 }
 
-__global__ void bubblesToCells(double *x, double *y, double *z, int *indices, int *offsets, int *sizes, dvec domainDim, int numBubbles)
+__global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles)
+{
+	const int tid = getGlobalTid();
+	if (tid < numCells)
+	{
+		const int nextOffset = tid < numCells - 1 ? offsets[tid + 1] : numBubbles;
+		sizes[tid] = nextOffset - offsets[tid];
+	}
+}
+
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, ivec cellDim, int numBubbles)
 {
 	int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		dvec pos = dvec(0, 0, 0);
-		pos.x = x[tid];
-		pos.y = y[tid];
-		pos.z = z[tid];
-
-		const ivec indexVec = (pos * domainDim).asType<int>();
-		const int index = domainDim.x * domainDim.y * indexVec.z + domainDim.x * indexVec.y + indexVec.x;
-		const int offset = offsets[index] + atomicAdd(&sizes[index], 1);
-		indices[offset] = tid;
+		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], cellDim);
+		cellIndices[tid] = cellIdx;
+		bubbleIndices[tid] = tid;
 	}
 }
 
 __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
-								int *indices,
 								int *offsets,
 								int *sizes,
 								int *firstIndices,
@@ -267,8 +277,8 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 			DEVICE_ASSERT(selfOffset + idx1 < numBubbles);
 			DEVICE_ASSERT(neighborOffset + idx2 < numBubbles);
 
-			idx1 = indices[selfOffset + idx1];
-			idx2 = indices[neighborOffset + idx2];
+			idx1 = selfOffset + idx1;
+			idx2 = neighborOffset + idx2;
 
 			if (idx1 == idx2 || (selfComparison && idx2 < idx1))
 				continue;
