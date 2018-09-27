@@ -34,5 +34,7 @@
     "MinNumBubblesExpl" : "The simulation runs as long as there are at least this many bubbles.",
     "MinNumBubbles" : 900,
     "DataFilenameExpl" : "Name of the file where all sorts of data is written to.",
-    "DataFilename" : "collected_data.dat"
+    "DataFilename" : "collected_data.dat",
+    "BoxRelativeDimensionsExpl" : "The relative dimension of the box.",
+    "BoxRelativeDimensions" : {"x" : 1.0 , "y" : 1.0, "z" : 1.0}
 }

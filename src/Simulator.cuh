@@ -43,7 +43,6 @@ class Simulator
 	bool deleteSmallBubbles();
 	dim3 getGridSize();
 
-	int givenNumBubblesPerDim = 0;
 	int numBubbles = 0;
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;

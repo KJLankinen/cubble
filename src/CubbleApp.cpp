@@ -62,7 +62,7 @@ void CubbleApp::setupSimulation()
     const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
-        env->setTfr(env->getTfr() - scaleAmount);
+        env->setTfr(env->getTfr() - scaleAmount * env->getTfr());
 
         simulator->integrate();
 
@@ -223,7 +223,7 @@ void CubbleApp::saveSnapshotToFile()
        << "\n# left bottom back"
        << "\n# top front right"
        << "\n#"
-       << "\n# bubble data: normalized position (x, y, z), unnormalized radius"
+       << "\n# bubble data: (x, y, z, r)"
        << "\n#--------------------------------------------------";
 
     // Add the new things here.

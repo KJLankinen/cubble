@@ -82,31 +82,28 @@ __device__ int getGlobalTid()
 
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
 {
-	DEVICE_ASSERT(val1 <= 1.0 && val2 <= 1.0);
-	DEVICE_ASSERT(val1 >= 0.0 && val2 >= 0.0);
 	double difference = val1 - val2;
-	val2 = difference < -0.5 ? val2 - 1.0 : (difference > 0.5 ? val2 + 1.0 : val2);
+	val2 = difference < -0.5 * multiplier ? val2 - multiplier : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
 	val2 = val1 - val2;
 
 	return val2 * multiplier;
 }
 
-__device__ dvec getWrappedPos(dvec pos)
+__device__ dvec getWrappedPos(dvec pos, dvec tfr, dvec lbb)
 {
-	// ASSUMPTION: Using normalized position
-	// ASSUMPTION: Position never smaller/greater than -1/1
-	pos.x = pos.x < 0 ? pos.x + 1.0 : (pos.x > 1 ? pos.x - 1.0 : pos.x);
-	pos.y = pos.y < 0 ? pos.y + 1.0 : (pos.y > 1 ? pos.y - 1.0 : pos.y);
-	pos.z = pos.z < 0 ? pos.z + 1.0 : (pos.z > 1 ? pos.z - 1.0 : pos.z);
+	const dvec interval = tfr - lbb;
+	pos.x = pos.x < lbb.x ? pos.x + interval.x : (pos.x > tfr.x ? pos.x - interval.x : pos.x);
+	pos.y = pos.y < lbb.y ? pos.y + interval.y : (pos.y > tfr.y ? pos.y - interval.y : pos.y);
+	pos.z = pos.z < lbb.z ? pos.z + interval.z : (pos.z > tfr.z ? pos.z - interval.z : pos.z);
 
 	return pos;
 }
 
-__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim)
+__device__ int getCellIdxFromPos(double x, double y, double z, dvec interval, ivec cellDim)
 {
-	const int xid = floor(cellDim.x * x);
-	const int yid = floor(cellDim.y * y);
-	const int zid = floor(cellDim.z * z);
+	const int xid = floor(cellDim.x * x / interval.x);
+	const int yid = floor(cellDim.y * y / interval.y);
+	const int zid = floor(cellDim.z * z / interval.z);
 
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
@@ -136,32 +133,29 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 									double *r,
 									double *w,
 									int *aboveMinRadFlags,
-									int givenNumBubblesPerDim,
+									ivec bubblesPerDim,
 									dvec tfr,
 									dvec lbb,
 									double avgRad,
 									double minRad,
 									int numBubbles)
 {
-	int tid = getGlobalTid();
+	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		int xid = tid % givenNumBubblesPerDim;
-		int yid = (tid / givenNumBubblesPerDim) % givenNumBubblesPerDim;
+		dvec pos;
+		pos.x = tid % bubblesPerDim.x;
+		pos.y = (tid / bubblesPerDim.x) % bubblesPerDim.y;
+		pos.z = tid / (bubblesPerDim.x * bubblesPerDim.y);
+		pos /= bubblesPerDim.asType<double>();
+		pos *= tfr - lbb;
 
 		dvec randomOffset(x[tid], y[tid], 0);
-		dvec pos(0, 0, 0);
-		pos.x = xid / (double)givenNumBubblesPerDim;
-		pos.y = yid / (double)givenNumBubblesPerDim;
 #if (NUM_DIM == 3)
-		int zid = tid / (givenNumBubblesPerDim * givenNumBubblesPerDim);
-		pos.z = zid / (double)givenNumBubblesPerDim;
 		randomOffset.z = z[tid];
 #endif
-
 		randomOffset = dvec::normalize(randomOffset) * avgRad * w[tid];
-		randomOffset = (randomOffset - lbb) / (tfr - lbb);
-		pos = getWrappedPos(pos + randomOffset);
+		pos = getWrappedPos(pos + randomOffset, tfr, lbb);
 
 		x[tid] = pos.x;
 		y[tid] = pos.y;
@@ -204,12 +198,12 @@ __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles
 	}
 }
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, ivec cellDim, int numBubbles)
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec interval, ivec cellDim, int numBubbles)
 {
 	int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], cellDim);
+		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], interval, cellDim);
 		cellIndices[tid] = cellIdx;
 		bubbleIndices[tid] = tid;
 	}
@@ -349,8 +343,6 @@ __global__ void predict(double *x, double *y, double *z, double *r,
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		// Measure if it's faster to calculate these per component...
-		const dvec interval = (tfr - lbb);
 		dvec pos, vel, velOld;
 		pos.x = x[tid];
 		pos.y = y[tid];
@@ -364,10 +356,8 @@ __global__ void predict(double *x, double *y, double *z, double *r,
 		velOld.y = dydtOld[tid];
 		velOld.z = dzdtOld[tid];
 
-		pos = lbb + pos * interval;
 		pos += 0.5 * timeStep * (3.0 * vel - velOld);
-		pos = (pos - lbb) / interval;
-		pos = getWrappedPos(pos);
+		pos = getWrappedPos(pos, tfr, lbb);
 
 		xPrd[tid] = pos.x;
 		yPrd[tid] = pos.y;
@@ -537,8 +527,6 @@ __global__ void correct(double *x, double *y, double *z, double *r,
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		// Measure if it's faster to calculate these per component...
-		const dvec interval = (tfr - lbb);
 		dvec pos, posPrd, vel, velPrd;
 		pos.x = x[tid];
 		pos.y = y[tid];
@@ -556,10 +544,8 @@ __global__ void correct(double *x, double *y, double *z, double *r,
 		velPrd.y = dydtPrd[tid];
 		velPrd.z = dzdtPrd[tid];
 
-		pos = lbb + pos * interval;
 		pos += 0.5 * timeStep * (vel + velPrd);
-		pos = (pos - lbb) / interval;
-		pos = getWrappedPos(pos);
+		pos = getWrappedPos(pos, tfr, lbb);
 
 		double radError = 0;
 		if (useGasExchange)
@@ -575,7 +561,7 @@ __global__ void correct(double *x, double *y, double *z, double *r,
 		else
 			aboveMinRadFlags[tid] = 1;
 
-		double error = ((pos - posPrd) * interval).getAbsolute().getMaxComponent();
+		double error = (pos - posPrd).getAbsolute().getMaxComponent();
 		error = error > radError ? error : radError;
 		errors[tid] = error;
 
@@ -612,7 +598,6 @@ __global__ void eulerIntegration(double *x, double *y, double *z, double *r,
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		dvec interval = tfr - lbb;
 		dvec pos(0, 0, 0);
 		pos.x = x[tid];
 		pos.y = y[tid];
@@ -623,10 +608,8 @@ __global__ void eulerIntegration(double *x, double *y, double *z, double *r,
 		vel.y = dydt[tid];
 		vel.z = dzdt[tid];
 
-		pos = lbb + pos * interval;
 		pos += timeStep * vel;
-		pos = (pos - lbb) / interval;
-		pos = getWrappedPos(pos);
+		pos = getWrappedPos(pos, tfr, lbb);
 
 		x[tid] = pos.x;
 		y[tid] = pos.y;

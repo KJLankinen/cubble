@@ -45,6 +45,7 @@ class Env
 
 	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
 	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
+	CUBBLE_PROP(dvec, BoxRelativeDimensions, dvec(0, 0, 0))
 
   public:
 	Env(const std::string &inF,
@@ -64,6 +65,9 @@ class Env
 
 		// Calculate 'derived' parameters after reading.
 		assert(MuZero > 0);
+		assert(BoxRelativeDimensions.x > 0);
+		assert(BoxRelativeDimensions.y > 0);
+		assert(BoxRelativeDimensions.z > 0);
 		FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
 
 		MinRad = 0.1 * AvgRad;
@@ -119,6 +123,7 @@ class Env
 		CUBBLE_IO_PARAMETER(read, params, Kappa);
 		CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
 		CUBBLE_IO_PARAMETER(read, params, DataFilename);
+		CUBBLE_IO_PARAMETER(read, params, BoxRelativeDimensions);
 
 		if (!read)
 			fileio::writeJSONToFile(saveFile, params);

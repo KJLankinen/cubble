@@ -24,25 +24,32 @@ typedef BubbleProperty BP;
 Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
-
+    dvec relDim = env->getBoxRelativeDimensions();
+    relDim /= relDim.x;
+    const float d = 2 * env->getAvgRad();
 #if (NUM_DIM == 3)
-    givenNumBubblesPerDim = std::ceil(std::cbrt((float)env->getNumBubbles()));
-    numBubbles = givenNumBubblesPerDim * givenNumBubblesPerDim * givenNumBubblesPerDim;
+    const float x = std::cbrt(env->getNumBubbles() * d * d * d / (relDim.y * relDim.z));
+    dvec tfr = relDim * x;
+    const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), std::ceil(tfr.z / d));
+    numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
 #else
-    givenNumBubblesPerDim = std::ceil(std::sqrt((float)env->getNumBubbles()));
-    numBubbles = givenNumBubblesPerDim * givenNumBubblesPerDim;
+    const float x = std::sqrt(env->getNumBubbles() * d * d / relDim.y);
+    dvec tfr = relDim * x;
+    tfr.z = 0;
+    const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
+    numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
-    cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
-    const dvec tfr = env->getLbb() + env->getAvgRad() * (double)givenNumBubblesPerDim * 2;
-    env->setTfr(tfr);
+    tfr = d * bubblesPerDim.asType<double>();
+    env->setTfr(tfr + env->getLbb());
 
+    cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
     bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 2);
     bubbleCellIndices = FixedSizeDeviceArray<int>(numBubbles, 4);
 
     // TODO: Figure out a more sensible value for this.
     const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
-    neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 4);
+    neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 2);
     numPairs = FixedSizeDeviceArray<int>(1, 1);
 
     const dim3 gridSize = getGridSize();
@@ -172,6 +179,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         {
             cudaLaunch(defaultPolicy, calculateFreeAreaPerRadius,
                        rPrd, freeArea, errors, env->getPi(), numBubbles);
+
+            // If the GPU-CPU copy could be removed from here, this'd be a lot faster.
             double invRho = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, errors, numBubbles);
             invRho /= cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
             cudaLaunch(defaultPolicy, calculateFinalRadiusChangeRate,
@@ -282,7 +291,7 @@ void Simulator::updateCellsAndNeighbors()
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
-               x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), cellDim, numBubbles);
+               x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getTfr() - env->getLbb(), cellDim, numBubbles);
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
@@ -337,13 +346,6 @@ void Simulator::updateCellsAndNeighbors()
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
     CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
-
-    //cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-     //                               const_cast<const int *>(neighborPairIndices.getRowPtr(2)),
-      //                              neighborPairIndices.getRowPtr(0),
-       //                             const_cast<const int *>(neighborPairIndices.getRowPtr(3)),
-        //                            neighborPairIndices.getRowPtr(1),
-         //                           hostNumPairs);
 }
 
 void Simulator::updateData()
@@ -362,6 +364,7 @@ void Simulator::updateData()
 bool Simulator::deleteSmallBubbles()
 {
     int *flag = aboveMinRadFlags.getRowPtr(0);
+    // This one copy is what keep this from going...
     const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numBubbles);
 
     bool atLeastOneBubbleDeleted = numBubblesAboveMinRad < numBubbles;
