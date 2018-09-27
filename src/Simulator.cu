@@ -332,18 +332,18 @@ void Simulator::updateCellsAndNeighbors()
     findPolicy.sharedMemBytes = sharedMemSizeInBytes;
     cudaLaunch(findPolicy, findBubblePairs,
                x, y, z, r, offsets, sizes,
-               neighborPairIndices.getRowPtr(2), neighborPairIndices.getRowPtr(3),
+               neighborPairIndices.getRowPtr(0), neighborPairIndices.getRowPtr(1),
                numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
     CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
 
-    cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-                                    const_cast<const int *>(neighborPairIndices.getRowPtr(2)),
-                                    neighborPairIndices.getRowPtr(0),
-                                    const_cast<const int *>(neighborPairIndices.getRowPtr(3)),
-                                    neighborPairIndices.getRowPtr(1),
-                                    hostNumPairs);
+    //cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+     //                               const_cast<const int *>(neighborPairIndices.getRowPtr(2)),
+      //                              neighborPairIndices.getRowPtr(0),
+       //                             const_cast<const int *>(neighborPairIndices.getRowPtr(3)),
+        //                            neighborPairIndices.getRowPtr(1),
+         //                           hostNumPairs);
 }
 
 void Simulator::updateData()
