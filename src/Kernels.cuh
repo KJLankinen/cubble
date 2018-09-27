@@ -52,11 +52,7 @@ __device__ int getGlobalTid();
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ dvec getWrappedPos(dvec pos);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
-
-__device__ void resetDoubleArrayToValue(double value, int tid, double *array)
-{
-    array[tid] = value;
-}
+__device__ void resetDoubleArrayToValue(double value, int tid, double *array);
 
 template<typename... Args>
 __device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)

@@ -111,6 +111,11 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim)
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
 
+__device__ void resetDoubleArrayToValue(double value, int tid, double *array)
+{
+    array[tid] = value;
+}
+
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
 {
 	int tid = getGlobalTid();
