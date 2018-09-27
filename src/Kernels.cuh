@@ -47,10 +47,8 @@ void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... 
 #endif
 }
 
-__global__ void resetDoubleArrayToValue(double value, int numValues, double *array);
-
 template<typename... Args>
-__global__ void resetDoubleArrayToValue(double value, int numValues, double *array, Args... args);
+__global__ void resetKernel(Args... args)
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
 

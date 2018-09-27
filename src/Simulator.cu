@@ -233,7 +233,7 @@ template <typename... Arguments>
 void Simulator::resetValues(Arguments... args)
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
+    cudaLaunch(defaultPolicy, resetKernel,
         0.0, numBubbles, args...);
 }
 
