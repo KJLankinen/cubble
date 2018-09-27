@@ -123,7 +123,6 @@ __global__ void resetDoubleArrayToValue(double value, int numValues, double *arr
 template<typename... Args>
 __global__ void resetDoubleArrayToValue(double value, int numValues, double *array, Args... args)
 {
-    static_assert();
     const int tid = getGlobalTid();
     resetDoubleArrayToValue(value, numValues, args...);
     if (tid < numValues)
