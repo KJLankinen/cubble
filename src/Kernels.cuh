@@ -96,7 +96,7 @@ __device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArr
     if (flag)
     {
         toArray[toIndex] = fromArray[fromIndex];
-        copyValueIfSet(fromIndex, toIndex, args...);
+        copyValueIfSet(fromIndex, toIndex, flag, args...);
     }
 }
 
