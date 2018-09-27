@@ -47,6 +47,8 @@ void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... 
 #endif
 }
 
+__device__ int getGlobalTid();
+
 __forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
 {
     array[tid] = value;
