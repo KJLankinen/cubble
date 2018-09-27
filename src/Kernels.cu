@@ -655,33 +655,4 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 			volume[tid] = vol;
 	}
 }
-
-__global__ void copyToIndex(double *fromArray, double *toArray, int *toIndex, int numValues)
-{
-	const int tid = getGlobalTid();
-	if (tid < numValues)
-		toArray[toIndex[tid]] = fromArray[tid];
-}
-
-__global__ void copyToIndexIfFlag(double *fromArray, double *toArray, int *toIndex, int *flags, int numValues)
-{
-	const int tid = getGlobalTid();
-	if (tid < numValues && flags[tid] == 1)
-		toArray[toIndex[tid]] = fromArray[tid];
-}
-
-__global__ void copyFromIndex(double *fromArray, double *toArray, int *fromIndex, int numValues)
-{
-	const int tid = getGlobalTid();
-	if (tid < numValues)
-		toArray[tid] = fromArray[fromIndex[tid]];
-}
-
-__global__ void copyFromIndexIfFlag(double *fromArray, double *toArray, int *fromIndex, int *flags, int numValues)
-{
-	const int tid = getGlobalTid();
-	if (tid < numValues && flags[tid] == 1)
-		toArray[tid] = fromArray[fromIndex[tid]];
-}
-
 } // namespace cubble
