@@ -116,6 +116,17 @@ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
     array[tid] = value;
 }
 
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray)
+{
+	toArray[toIndex] = fromArray[fromIndex];
+}
+
+__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray)
+{
+	if (flag)
+		toArray[toIndex] = fromArray[fromIndex];
+}
+
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
 {
 	int tid = getGlobalTid();

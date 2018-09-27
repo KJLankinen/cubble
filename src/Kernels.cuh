@@ -52,21 +52,70 @@ __device__ int getGlobalTid();
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ dvec getWrappedPos(dvec pos);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
+
 __device__ void resetDoubleArrayToValue(double value, int tid, double *array);
 
-template<typename... Args>
+template <typename... Args>
 __device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)
 {
     array[tid] = value;
     resetDoubleArrayToValue(value, tid, args...);
 }
 
-template<typename... Args>
+template <typename... Args>
 __global__ void resetKernel(double value, int numValues, Args... args)
 {
     const int tid = getGlobalTid();
 	if (tid < numValues)
 		resetDoubleArrayToValue(value, tid, args...);
+}
+
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray);
+
+template <typename T, typename... Args>
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray, Args... args)
+{
+    toArray[toIndex] = fromArray[fromIndex];
+    copyValue(fromIndex, toIndex, args...);
+}
+
+__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray);
+
+template <typename T, typename... Args>
+__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray, Args... args)
+{
+    if (flag)
+    {
+        toArray[toIndex] = fromArray[fromIndex];
+        copyValueIfSet(fromIndex, toIndex, args...);
+    }
+}
+
+enum class ReorganizeType;
+template <typename... Args>
+__global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType, int *indices, int *flags, Args... args)
+{
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+    {
+        switch (reorganizeType)
+        {
+            case ReorganizeType::COPY_FROM_INDEX:
+                copyValue(indices[tid], tid, args...);
+                break;
+            case ReorganizeType::COPY_TO_INDEX:
+                copyValue(tid, indices[tid], args...);
+                break;
+            case ReorganizeType::CONDITIONAL_FROM_INDEX:
+                copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
+                break;
+            case ReorganizeType::CONDITIONAL_TO_INDEX:
+                copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
+                break;
+            default:
+                break;
+        }
+    }
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
@@ -226,9 +275,4 @@ __global__ void calculateRedistributedGasVolume(double *volume,
                                                 double *volumeMultiplier,
                                                 double pi,
                                                 int numBubbles);
-
-__global__ void copyToIndex(double *fromArray, double *toArray, int *toIndex, int numValues);
-__global__ void copyToIndexIfFlag(double *fromArray, double *toArray, int *toIndex, int *flags, int numValues);
-__global__ void copyFromIndex(double *fromArray, double *toArray, int *fromIndex, int numValues);
-__global__ void copyFromIndexIfFlag(double *fromArray, double *toArray, int *fromIndex, int *flags, int numValues);
 } // namespace cubble

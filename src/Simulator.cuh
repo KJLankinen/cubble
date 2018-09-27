@@ -15,6 +15,7 @@
 namespace cubble
 {
 enum class BubbleProperty;
+enum class ReorganizeType;
 
 class Simulator
 {
@@ -33,6 +34,10 @@ class Simulator
   private:
 	template <typename... Arguments>
 	void resetValues(Arguments... args);
+
+	template <typename... Arguments>
+	void reorganizeValues(ReorganizeType reorganizeType, Arguments... args);
+
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
@@ -55,7 +60,7 @@ class Simulator
 	FixedSizeDeviceArray<int> numPairs;
 
 	std::vector<double> hostData;
-	
+
 	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };
 
@@ -66,30 +71,40 @@ enum class BubbleProperty
 	Z,
 	R,
 
-	X_PRD,
-	Y_PRD,
-	Z_PRD,
-	R_PRD,
-
 	DXDT,
 	DYDT,
 	DZDT,
 	DRDT,
-
-	DXDT_PRD,
-	DYDT_PRD,
-	DZDT_PRD,
-	DRDT_PRD,
 
 	DXDT_OLD,
 	DYDT_OLD,
 	DZDT_OLD,
 	DRDT_OLD,
 
+	X_PRD,
+	Y_PRD,
+	Z_PRD,
+	R_PRD,
+
+	DXDT_PRD,
+	DYDT_PRD,
+	DZDT_PRD,
+	DRDT_PRD,
+
 	ENERGY,
 	FREE_AREA,
 	ERROR,
 	VOLUME,
+
+	NUM_VALUES
+};
+
+enum class ReorganizeType
+{
+	COPY_FROM_INDEX,
+	COPY_TO_INDEX,
+	CONDITIONAL_FROM_INDEX,
+	CONDITIONAL_TO_INDEX,
 
 	NUM_VALUES
 };

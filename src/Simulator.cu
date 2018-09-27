@@ -20,7 +20,7 @@
 
 namespace cubble
 {
-    typedef BubbleProperty BP;
+typedef BubbleProperty BP;
 Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
@@ -50,22 +50,6 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     cellData = FixedSizeDeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
     hostData.resize(bubbleData.getSize(), 0);
-
-    pairedProperties.resize(12);
-    pairedProperties[0] = std::pair<BubbleProperty, BubbleProperty>(BP::X, BP::X_PRD);
-    pairedProperties[1] = std::pair<BubbleProperty, BubbleProperty>(BP::Y, BP::Y_PRD);
-    pairedProperties[2] = std::pair<BubbleProperty, BubbleProperty>(BP::Z, BP::Z_PRD);
-    pairedProperties[3] = std::pair<BubbleProperty, BubbleProperty>(BP::R, BP::R_PRD);
-    
-    pairedProperties[4] = std::pair<BubbleProperty, BubbleProperty>(BP::DXDT, BP::DXDT_PRD);
-    pairedProperties[5] = std::pair<BubbleProperty, BubbleProperty>(BP::DYDT, BP::DYDT_PRD);
-    pairedProperties[6] = std::pair<BubbleProperty, BubbleProperty>(BP::DZDT, BP::DZDT_PRD);
-    pairedProperties[7] = std::pair<BubbleProperty, BubbleProperty>(BP::DRDT, BP::DRDT_PRD);
-
-    pairedProperties[8] = std::pair<BubbleProperty, BubbleProperty>(BP::DXDT_OLD, BP::ENERGY);
-    pairedProperties[9] = std::pair<BubbleProperty, BubbleProperty>(BP::DYDT_OLD, BP::FREE_AREA);
-    pairedProperties[10] = std::pair<BubbleProperty, BubbleProperty>(BP::DZDT_OLD, BP::ERROR);
-    pairedProperties[11] = std::pair<BubbleProperty, BubbleProperty>(BP::DRDT_OLD, BP::VOLUME);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -233,8 +217,14 @@ template <typename... Arguments>
 void Simulator::resetValues(Arguments... args)
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    cudaLaunch(defaultPolicy, resetKernel,
-        0.0, numBubbles, args...);
+    cudaLaunch(defaultPolicy, resetKernel, 0.0, numBubbles, args...);
+}
+
+template <typename... Arguments>
+void Simulator::reorganizeValues(Arguments... args)
+{
+    ExecutionPolicy defaultPolicy(128, numBubbles);
+    cudaLaunch(defaultPolicy, reorganizeKernel, reorganizeType, numBubbles, args...);
 }
 
 void Simulator::generateBubbles()
@@ -292,30 +282,25 @@ void Simulator::updateCellsAndNeighbors()
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
-        x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), cellDim, numBubbles);
+               x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), cellDim, numBubbles);
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
-    
+
     cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-        const_cast<const int *>(bubbleCellIndices.getRowPtr(2)),
-        cellIndices,
-        const_cast<const int *>(bubbleCellIndices.getRowPtr(3)),
-        bubbleIndices,
-        numBubbles);
+                                    const_cast<const int *>(bubbleCellIndices.getRowPtr(2)),
+                                    cellIndices,
+                                    const_cast<const int *>(bubbleCellIndices.getRowPtr(3)),
+                                    bubbleIndices,
+                                    numBubbles);
 
-    CUDA_CALL(cudaDeviceSynchronize());
-    
-    cudaStream_t stream;
-    CUDA_CALL(cudaStreamCreate(&stream));
-    defaultPolicy.stream = stream;
     cudaLaunch(defaultPolicy, findOffsets,
-        cellIndices, offsets, numCells, numBubbles);
-    
-    cudaLaunch(defaultPolicy, findSizes,
-        offsets, sizes, numCells, numBubbles);
+               cellIndices, offsets, numCells, numBubbles);
 
-    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells, defaultPolicy.stream);
+    cudaLaunch(defaultPolicy, findSizes,
+               offsets, sizes, numCells, numBubbles);
+
+    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     sharedMemSizeInBytes *= sizeof(int);
@@ -323,21 +308,21 @@ void Simulator::updateCellsAndNeighbors()
     assertMemBelowLimit(sharedMemSizeInBytes);
     assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
 
-    CUDA_CALL(cudaStreamDestroy(stream));
-
-    for (const std::pair<BP, BP> &p : pairedProperties)
-    {
-        cudaStream_t s;
-        CUDA_CALL(cudaStreamCreate(&s));
-        defaultPolicy.stream = s;
-        double *fromArray = bubbleData.getRowPtr((size_t)p.first);
-        double *toArray = bubbleData.getRowPtr((size_t)p.second);
-        cudaLaunch(defaultPolicy, copyFromIndex,
-            fromArray, toArray, bubbleIndices, numBubbles);
-        CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, defaultPolicy.stream));
-        CUDA_CALL(cudaStreamDestroy(s));
-    }
-    CUDA_CALL(cudaDeviceSynchronize());
+    reorganizeValues(ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
+                     bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
+                     bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
+                     bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
+                     bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
+                     bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+                     bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+                     bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+                     bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+                     bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
+                     bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+                     bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
+                     bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
+                              static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
 
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
     assertGridSizeBelowLimit(gridSize);
@@ -363,24 +348,15 @@ void Simulator::updateCellsAndNeighbors()
 
 void Simulator::updateData()
 {
-    // x, y, z, r are in memory continuously, so we can just make three copies with 4x the data of one component.
-    size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
+    const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
     double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
-    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
     double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
 
-    cudaStream_t stream1, stream2;
-    CUDA_CALL(cudaStreamCreate(&stream1));
-    CUDA_CALL(cudaMemcpyAsync(x, xPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream1));
-    CUDA_CALL(cudaStreamDestroy(stream1));
-
-    CUDA_CALL(cudaStreamCreate(&stream2));
-    CUDA_CALL(cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
-    CUDA_CALL(cudaMemcpyAsync(dxdt, dxdtPrd, numBytesToCopy, cudaMemcpyDeviceToDevice, stream2));
-    CUDA_CALL(cudaStreamDestroy(stream2));
+    CUDA_CALL(cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
 }
 
 bool Simulator::deleteSmallBubbles()
@@ -401,51 +377,33 @@ bool Simulator::deleteSmallBubbles()
         double *volumeMultiplier = bubbleData.getRowPtr((size_t)BP::ERROR) + numBubblesAboveMinRad;
         cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
 
-        cudaStream_t s1, s2;
-        CUDA_CALL(cudaStreamCreate(&s1));
-        defaultPolicy.stream = s1;
         cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
                    volumes, r, flag, volumeMultiplier, env->getPi(), numBubbles);
-        
-        const double invTotalVolume = 1.0 / cubWrapper->reduce<double, double*, double*>(&cub::DeviceReduce::Sum, volumes, numBubbles, s1);
-        CUDA_CALL(cudaStreamDestroy(s1));
 
-        CUDA_CALL(cudaStreamCreate(&s2));
-        defaultPolicy.stream = s2;
+        const double invTotalVolume = 1.0 / cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, numBubbles);
+
         int *newIdx = aboveMinRadFlags.getRowPtr(1);
-        cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles, s2);
-        CUDA_CALL(cudaStreamDestroy(s2));
+        cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
-        CUDA_CALL(cudaDeviceSynchronize());
-        for (const std::pair<BP, BP> &p : pairedProperties)
-        {
-            if (p.first == BP::R || p.first == BP::R_PRD)
-                continue;
-
-            cudaStream_t stream;
-            CUDA_CALL(cudaStreamCreate(&stream));
-            double *fromArray = bubbleData.getRowPtr((size_t)p.first);
-            double *toArray = bubbleData.getRowPtr((size_t)p.second);
-            defaultPolicy.stream = stream;
-            cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
-            CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, stream));
-            CUDA_CALL(cudaStreamDestroy(stream));
-        }
-
-        cudaStream_t radiusStream;
-        CUDA_CALL(cudaStreamCreate(&radiusStream));
-        defaultPolicy.stream = radiusStream;
-        double *fromArray = bubbleData.getRowPtr((size_t)BP::R);
-        double *toArray = bubbleData.getRowPtr((size_t)BP::R_PRD);
-        cudaLaunch(defaultPolicy, copyToIndexIfFlag, fromArray, toArray, newIdx, flag, numBubbles);
-        CUDA_CALL(cudaMemcpyAsync(fromArray, toArray, sizeof(double) * bubbleData.getWidth(), cudaMemcpyDeviceToDevice, radiusStream));
+        reorganizeValues(ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, flag,
+                         bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
+                         bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
+                         bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
+                         bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
+                         bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+                         bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+                         bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+                         bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+                         bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
+                         bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+                         bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
+                         bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
+        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
+                                  static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
 
         numBubbles = numBubblesAboveMinRad;
         cudaLaunch(defaultPolicy, addVolume,
                    r, volumeMultiplier, numBubbles, invTotalVolume);
-
-        CUDA_CALL(cudaStreamDestroy(radiusStream));
-        CUDA_CALL(cudaDeviceSynchronize());
 
         NVTX_RANGE_POP();
     }
