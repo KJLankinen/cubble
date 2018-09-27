@@ -229,6 +229,14 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     return numBubbles > env->getMinNumBubbles();
 }
 
+template <typename... Arguments>
+void resetValues(Arguments... args)
+{
+    ExecutionPolicy defaultPolicy(128, numBubbles);
+    cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
+        0.0, numBubbles, args...);
+}
+
 void Simulator::generateBubbles()
 {
     std::cout << "Starting to generate data for bubbles." << std::endl;

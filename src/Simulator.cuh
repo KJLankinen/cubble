@@ -7,7 +7,6 @@
 #include "Vec.h"
 #include "FixedSizeDeviceArray.h"
 #include "CubWrapper.h"
-#include "Kernels.cuh"
 
 #include <utility>
 #include <memory>
@@ -33,12 +32,7 @@ class Simulator
 
   private:
 	template <typename... Arguments>
-	void resetValues(Arguments... args)
-	{
-		ExecutionPolicy defaultPolicy(128, numBubbles);
-		cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
-			0.0, numBubbles, args...);
-	}
+	void resetValues(Arguments... args);
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
