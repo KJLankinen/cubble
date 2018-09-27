@@ -230,7 +230,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 }
 
 template <typename... Arguments>
-void resetValues(Arguments... args)
+void Simulator::resetValues(Arguments... args)
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
     cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
