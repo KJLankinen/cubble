@@ -70,7 +70,11 @@ __global__ void resetKernel(double value, int numValues, Args... args)
 		resetDoubleArrayToValue(value, tid, args...);
 }
 
-__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray);
+template <typename T>
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray)
+{
+	toArray[toIndex] = fromArray[fromIndex];
+}
 
 template <typename T, typename... Args>
 __device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray, Args... args)
@@ -79,7 +83,12 @@ __device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray, 
     copyValue(fromIndex, toIndex, args...);
 }
 
-__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray);
+template <typename T>
+__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray)
+{
+	if (flag)
+		toArray[toIndex] = fromArray[fromIndex];
+}
 
 template <typename T, typename... Args>
 __device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag, T *fromArray, T *toArray, Args... args)
