@@ -7,6 +7,7 @@
 #include "Vec.h"
 #include "FixedSizeDeviceArray.h"
 #include "CubWrapper.h"
+#include "Kernels.cuh"
 
 #include <utility>
 #include <memory>
