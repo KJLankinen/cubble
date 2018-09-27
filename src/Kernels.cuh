@@ -47,8 +47,25 @@ void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... 
 #endif
 }
 
+__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
+{
+    array[tid] = value;
+}
+
 template<typename... Args>
-__global__ void resetKernel(double value, int numValues, Args... args);
+__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)
+{
+    array[tid] = value;
+    resetDoubleArrayToValue(value, tid, args...);
+}
+
+template<typename... Args>
+__global__ void resetKernel(double value, int numValues, Args... args)
+{
+    const int tid = getGlobalTid();
+	if (tid < numValues)
+		resetDoubleArrayToValue(value, tid, args...);
+}
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
 
