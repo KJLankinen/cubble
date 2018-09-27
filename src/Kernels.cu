@@ -113,26 +113,24 @@ __forceinline__ __device__ int getCellIdxFromPos(double x, double y, double z, i
 
 }
 
-__device__ void resetDoubleArrayToValue(double value, int numValues, double *array)
+__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
 {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        array[tid] = value;
+    array[tid] = value;
 }
 
 template<typename... Args>
-__device__ void resetDoubleArrayToValue(double value, int numValues, double *array, Args... args)
+__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)
 {
-    const int tid = getGlobalTid();
-    resetDoubleArrayToValue(value, numValues, args...);
-    if (tid < numValues)
-        array[tid] = value;
+    array[tid] = value;
+    resetDoubleArrayToValue(value, tid, args...);
 }
 
 template<typename... Args>
-__global__ void resetKernel(Args... args)
+__global__ void resetKernel(double value, int numValues, Args... args)
 {
-	resetDoubleArrayToValue(args...);
+    const int tid = getGlobalTid();
+	if (tid < numValues)
+		resetDoubleArrayToValue(value, tid, args...);
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
