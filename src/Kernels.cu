@@ -4,7 +4,7 @@
 
 namespace cubble
 {
-__forceinline__ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
+__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are
 	// detrimental for performance. However, this should never diverge,
@@ -68,7 +68,7 @@ __forceinline__ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int 
 	return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
 }
 
-__forceinline__ __device__ int getGlobalTid()
+__device__ int getGlobalTid()
 {
 	// Simple helper function for calculating a 1D coordinate
 	// from 1, 2 or 3 dimensional coordinates.
@@ -80,7 +80,7 @@ __forceinline__ __device__ int getGlobalTid()
 	return tid;
 }
 
-__forceinline__ __device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
+__device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
 {
 	DEVICE_ASSERT(val1 <= 1.0 && val2 <= 1.0);
 	DEVICE_ASSERT(val1 >= 0.0 && val2 >= 0.0);
@@ -91,7 +91,7 @@ __forceinline__ __device__ double getWrappedCoordinate(double val1, double val2,
 	return val2 * multiplier;
 }
 
-__forceinline__ __device__ dvec getWrappedPos(dvec pos)
+__device__ dvec getWrappedPos(dvec pos)
 {
 	// ASSUMPTION: Using normalized position
 	// ASSUMPTION: Position never smaller/greater than -1/1
@@ -102,7 +102,7 @@ __forceinline__ __device__ dvec getWrappedPos(dvec pos)
 	return pos;
 }
 
-__forceinline__ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim)
+__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim)
 {
 	const int xid = floor(cellDim.x * x);
 	const int yid = floor(cellDim.y * y);

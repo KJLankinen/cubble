@@ -47,15 +47,19 @@ void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... 
 #endif
 }
 
+__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ int getGlobalTid();
+__device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
+__device__ dvec getWrappedPos(dvec pos);
+__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 
-__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array)
+__device__ void resetDoubleArrayToValue(double value, int tid, double *array)
 {
     array[tid] = value;
 }
 
 template<typename... Args>
-__forceinline__ __device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)
+__device__ void resetDoubleArrayToValue(double value, int tid, double *array, Args... args)
 {
     array[tid] = value;
     resetDoubleArrayToValue(value, tid, args...);
