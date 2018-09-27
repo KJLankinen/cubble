@@ -320,6 +320,7 @@ void Simulator::generateBubbles()
 
 void Simulator::updateCellsAndNeighbors()
 {
+    CUDA_PROFILER_START();
     NVTX_RANGE_PUSH_A(__FUNCTION__);
 
     dim3 gridSize = getGridSize();
@@ -411,6 +412,7 @@ void Simulator::updateCellsAndNeighbors()
                                     hostNumPairs);
 
     NVTX_RANGE_POP();
+    CUDA_PROFILER_STOP();
 }
 
 void Simulator::updateData()
