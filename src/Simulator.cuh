@@ -31,7 +31,13 @@ class Simulator
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 
   private:
-	void resetValues();
+	template <typename... Arguments>
+	void resetValues(Arguments... args)
+	{
+		ExecutionPolicy defaultPolicy(128, numBubbles);
+		cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
+			0.0, numBubbles, args...);
+	}
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
@@ -54,7 +60,6 @@ class Simulator
 	FixedSizeDeviceArray<int> numPairs;
 
 	std::vector<double> hostData;
-	std::vector<double *> pointersToArrays;
 	
 	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };

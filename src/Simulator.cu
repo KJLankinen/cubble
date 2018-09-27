@@ -109,14 +109,7 @@ void Simulator::setupSimulation()
     ExecutionPolicy accPolicy(128, hostNumPairs);
 
     double timeStep = env->getTimeStep();
-
-    pointersToArrays.resize(4);
-    pointersToArrays[0] = dxdtOld;
-    pointersToArrays[1] = dydtOld;
-    pointersToArrays[2] = dzdtOld;
-    pointersToArrays[3] = drdtOld;
-    resetValues();
-
+    resetValues(dxdtOld, dydtOld, dzdtOld, drdtOld);
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
@@ -129,7 +122,7 @@ void Simulator::setupSimulation()
     if (deleteSmallBubbles())
         updateCellsAndNeighbors();
 
-    resetValues();
+    resetValues(dxdtOld, dydtOld, dzdtOld, drdtOld);
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
@@ -183,16 +176,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     size_t numLoopsDone = 0;
     do
     {
-        pointersToArrays.resize(7);
-        pointersToArrays[0] = dxdtPrd;
-        pointersToArrays[1] = dydtPrd;
-        pointersToArrays[2] = dzdtPrd;
-        pointersToArrays[3] = drdtPrd;
-        pointersToArrays[4] = freeArea;
-        pointersToArrays[5] = energies;
-        pointersToArrays[6] = errors;
-        resetValues();
-
+        resetValues(dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies, errors);
         cudaLaunch(defaultPolicy, predict, x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles, useGasExchange);
 
         cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
@@ -243,27 +227,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         updateCellsAndNeighbors();
 
     return numBubbles > env->getMinNumBubbles();
-}
-
-void Simulator::resetValues()
-{
-    // Using atomicAdd, so these need to be reset to 0 every time before use.
-    // cudaMemset would be faster but it's not safe to assume that setting all bytes
-    // of a double to zero means the double equals zero.
-    // Some sort of preprocessing test might be possible to determine whether or not
-    // cudaMemset(static_cast<void*>(doublePtr), 0, numBytesToReset) means double is actually zero.
-
-    ExecutionPolicy defaultPolicy(128, numBubbles);
-
-    for (size_t i = 0; i < pointersToArrays.size(); ++i)
-    {
-        cudaStream_t stream;
-        CUDA_CALL(cudaStreamCreate(&stream));
-        defaultPolicy.stream = stream;
-        cudaLaunch(defaultPolicy, resetDoubleArrayToValue,
-                   pointersToArrays[i], 0.0, numBubbles);
-        CUDA_CALL(cudaStreamDestroy(stream));
-    }
 }
 
 void Simulator::generateBubbles()
@@ -475,7 +438,7 @@ bool Simulator::deleteSmallBubbles()
 
         CUDA_CALL(cudaStreamDestroy(radiusStream));
         CUDA_CALL(cudaDeviceSynchronize());
-        
+
         NVTX_RANGE_POP();
     }
 

@@ -111,11 +111,6 @@ __forceinline__ __device__ int getCellIdxFromPos(double x, double y, double z, i
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
 
-__global__ void resetDoubleArrayToValue(double *array, double value, int numValues)
-{
-	const int tid = getGlobalTid();
-	if (tid < numValues)
-		array[tid] = value;
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
