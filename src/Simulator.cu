@@ -102,9 +102,9 @@ void Simulator::setupSimulation()
     double timeStep = env->getTimeStep();
     resetValues(dxdtOld, dydtOld, dzdtOld, drdtOld);
     std::cout << "Calculating some initial values as a part of setup."
-        << " Num bubbles: " << numBubbles
-        << ", host num pairs: " << hostNumPairs
-        << std::endl;
+              << " Num bubbles: " << numBubbles
+              << ", host num pairs: " << hostNumPairs
+              << std::endl;
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
@@ -234,7 +234,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    zPrd, lbb.z, tfr.z);
 
         cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel,
-                   numBubbles, rPrd, aboveMinRadFlags.getRowPtr(0), env->getMinRad());
+                   numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
 
         if (error < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
