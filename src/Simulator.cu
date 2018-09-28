@@ -326,7 +326,10 @@ void Simulator::updateCellsAndNeighbors()
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
-    cudaMemset(&deviceNumPairs, 0, sizeof(int));
+    void *dnp = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&dnp, deviceNumPairs));
+    assert(dnp != nullptr);
+    cudaMemset(dnp, 0, sizeof(int));
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
@@ -392,9 +395,6 @@ void Simulator::updateCellsAndNeighbors()
                numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
-    void *dnp = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&dnp, deviceNumPairs));
-    assert(dnp != nullptr);
     CUDA_CALL(cudaMemcpy(&hostNumPairs, dnp, sizeof(int), cudaMemcpyDeviceToHost));
 }
 
