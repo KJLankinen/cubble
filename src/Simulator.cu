@@ -261,7 +261,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    numBubbles, flag, rPrd, env->getMinRad());
 
         cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *>(dnp), numBubbles);
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(numBubblesAboveMinRad), dnp, sizeof(int), cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(&numBubblesAboveMinRad), dnp, sizeof(int), cudaMemcpyDeviceToHost));
         CUDA_CALL(cudaMemcpy(static_cast<void *>(&maxError), dme, sizeof(double), cudaMemcpyDeviceToHost));
 
         if (maxError < env->getErrorTolerance() && timeStep < 0.1)
@@ -346,7 +346,7 @@ void Simulator::generateBubbles()
                x, y, z, xPrd, yPrd, zPrd, r, w, flag, bubblesPerDimAtStart, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
 
     cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *>(dnp), numBubbles);
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(numBubblesAboveMinRad), dnp, sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(&numBubblesAboveMinRad), dnp, sizeof(int), cudaMemcpyDeviceToHost));
 }
 
 void Simulator::updateCellsAndNeighbors()
