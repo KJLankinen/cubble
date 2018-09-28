@@ -86,7 +86,7 @@ __device__ double getWrappedCoordinate(double val1, double val2, double multipli
 	val2 = difference < -0.5 * multiplier ? val2 - multiplier : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
 	val2 = val1 - val2;
 
-	return val2 * multiplier;
+	return val2;
 }
 
 __device__ dvec getWrappedPos(dvec pos, dvec tfr, dvec lbb)
