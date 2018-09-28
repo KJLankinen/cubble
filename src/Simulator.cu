@@ -176,6 +176,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     size_t numLoopsDone = 0;
     do
     {
+        NVTX_RANGE_PUSH_A("Integration step");
         resetValues(dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies, errors);
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
@@ -248,6 +249,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
             std::cout << "Done " << numLoopsDone << " loops, and error is " << error << std::endl;
             throw std::runtime_error("Error.");
         }
+        NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
 
     updateData();
