@@ -295,7 +295,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (shouldDelete)
         deleteSmallBubbles();
 
-    if (shouldDelete || integrationStep % 50 == 0)
+    if (shouldDelete || integrationStep % 50 == 0)
         updateCellsAndNeighbors();
 
     return numBubbles > env->getMinNumBubbles();
