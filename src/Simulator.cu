@@ -4,7 +4,9 @@
 #include "Macros.h"
 #include "Vec.h"
 #include "Util.h"
-#include "Kernels.cuh"
+#include "BubbleKernels.cuh"
+#include "UtilityKernels.cuh"
+#include "IntegrationKernels.cuh"
 
 #include "cub/cub/cub.cuh"
 

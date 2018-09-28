@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-#include "Kernels.cuh"
+#include "BubbleKernels.cuh"
 
 namespace cubble
 {
@@ -99,47 +99,12 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tf
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
 
-__device__ void resetDoubleArrayToValue(double value, int idx, double *array)
-{
-	array[idx] = value;
-}
-
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *y, double *f, double *fPrevious)
-{
-	yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
-}
-
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext)
-{
-	const double yTemp = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
-	double e = yTemp - yNext[idx];
-	e = e < 0 ? -e : e;
-	yNext[idx] = yTemp;
-
-	return e;
-}
-
-__device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
-{
-	y[idx] += f[idx] * timeStep;
-}
-
 __device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue)
 {
 	const double interval = maxValue - minValue;
 	double value = coordinate[idx];
 	value = value < minValue ? value + interval : (value > maxValue ? value - interval : value);
 	coordinate[idx] = value;
-}
-
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values, double constant)
-{
-	flags[idx] = values[idx] < constant ? 1 : 0;
-}
-
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values, double constant)
-{
-	flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)

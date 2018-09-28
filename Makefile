@@ -37,14 +37,14 @@ INCL = -Iinclude/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o CubbleApp.o Simulator.o Kernels.o
+OBJ_NAMES := Main.o CubbleApp.o Simulator.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
 # These are only related to linking, compiling is done automatically
 # based on the file extension (.cpp vs. .cu)
-GPU_OBJ_NAMES := Kernels.o Simulator.o
+GPU_OBJ_NAMES := BubbleKernels.o Simulator.o UtilityKernels.o IntegrationKernels.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.
