@@ -300,7 +300,7 @@ void Simulator::updateCellsAndNeighbors()
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
-               x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getTfr() - env->getLbb(), cellDim, numBubbles);
+               x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);

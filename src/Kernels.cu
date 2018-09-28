@@ -99,11 +99,12 @@ __device__ dvec getWrappedPos(dvec pos, dvec tfr, dvec lbb)
 	return pos;
 }
 
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec interval, ivec cellDim)
+__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim)
 {
-	const int xid = floor(cellDim.x * x / interval.x);
-	const int yid = floor(cellDim.y * y / interval.y);
-	const int zid = floor(cellDim.z * z / interval.z);
+	const dvec interval = tfr - lbb;
+	const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
+	const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+	const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
 
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
@@ -197,12 +198,12 @@ __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles
 	}
 }
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec interval, ivec cellDim, int numBubbles)
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles)
 {
 	int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], interval, cellDim);
+		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], lbb, tfr, cellDim);
 		cellIndices[tid] = cellIdx;
 		bubbleIndices[tid] = tid;
 	}

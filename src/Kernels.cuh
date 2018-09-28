@@ -62,7 +62,7 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ int getGlobalTid();
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ dvec getWrappedPos(dvec pos, dvec tfr, dvec lbb);
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec interval, ivec cellDim);
+__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim);
 
 __device__ void resetDoubleArrayToValue(double value, int tid, double *array);
 
@@ -158,14 +158,7 @@ __global__ void assignDataToBubbles(double *x,
 __global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int numBubbles);
 __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles);
 
-__global__ void assignBubblesToCells(double *x,
-                                     double *y,
-                                     double *z,
-                                     int *cellIndices,
-                                     int *bubbleIndices,
-                                     dvec interval,
-                                     ivec cellDim,
-                                     int numBubbles);
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles);
 
 __global__ void findBubblePairs(double *x,
                                 double *y,
