@@ -249,7 +249,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        yPrd, y, dydt, dydtPrd,
                        zPrd, z, dzdt, dzdtPrd);
 
-        cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, errors, static_cast<double *>(de), numBubbles);
+        cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, errors, static_cast<double *>(dme), numBubbles);
 
         cudaLaunch(defaultPolicy, boundaryWrapKernel,
                    numBubbles,
@@ -262,7 +262,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *>(dnp), numBubbles);
         CUDA_CALL(cudaMemcpy(static_cast<void *>(numBubblesAboveMinRad), dnp, sizeof(int), cudaMemcpyDeviceToHost));
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(&maxError), de, sizeof(double), cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(&maxError), dme, sizeof(double), cudaMemcpyDeviceToHost));
 
         if (maxError < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
@@ -287,8 +287,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
     if (calculateEnergy)
     {
-        cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, static_cast<double *>(de), numBubbles);
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(&ElasticEnergy), de, sizeof(double), cudaMemcpyDeviceToHost));
+        cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, static_cast<double *>(dme), numBubbles);
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(&ElasticEnergy), dme, sizeof(double), cudaMemcpyDeviceToHost));
     }
 
     const bool shouldDelete = numBubblesAboveMinRad < numBubbles;

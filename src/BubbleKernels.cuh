@@ -101,7 +101,7 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt,
                                                double kappa,
                                                double kParam);
 
-__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume);
+__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles);
 
 __global__ void calculateRedistributedGasVolume(double *volume,
                                                 double *r,

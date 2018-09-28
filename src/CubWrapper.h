@@ -22,8 +22,8 @@ class CubWrapper
     ~CubWrapper() {}
 
     template <typename T, typename InputIterT, typename OutputIterT>
-    T reduce(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
-             InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0, bool debug = false)
+    void reduce(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
+                InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0, bool debug = false)
     {
         assert(deviceInputData != nullptr);
         assert(deviceOutputData != nullptr);
