@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime_api.h>
+#include "UtilityKernels.cuh"
 
 namespace cubble
 {
