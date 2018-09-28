@@ -17,23 +17,16 @@ class CubWrapper
     CubWrapper(std::shared_ptr<Env> e, size_t numBubbles)
     {
         env = e;
-
-        outData = FixedSizeDeviceArray<char>(sizeof(double), 1);
         tempStorage = FixedSizeDeviceArray<char>(numBubbles * sizeof(double), 1);
     }
     ~CubWrapper() {}
 
     template <typename T, typename InputIterT, typename OutputIterT>
     T reduce(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
-             InputIterT deviceInputData, int numValues, cudaStream_t stream = 0, bool debug = false)
+             InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0, bool debug = false)
     {
         assert(deviceInputData != nullptr);
-
-        if (sizeof(T) > outData.getSizeInBytes())
-            outData = FixedSizeDeviceArray<char>(sizeof(T), 1);
-
-        void *rawOutputPtr = static_cast<void *>(outData.getDataPtr());
-        OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
+        assert(deviceOutputData != nullptr);
 
         size_t tempStorageBytes = 0;
         (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
@@ -43,11 +36,6 @@ class CubWrapper
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
-
-        T hostOutputData;
-        cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost, stream);
-
-        return hostOutputData;
     }
 
     template <typename InputIterT, typename OutputIterT>
@@ -88,7 +76,6 @@ class CubWrapper
 
   private:
     std::shared_ptr<Env> env;
-    FixedSizeDeviceArray<char> outData;
     FixedSizeDeviceArray<char> tempStorage;
 };
 } // namespace cubble

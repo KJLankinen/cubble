@@ -6,6 +6,9 @@
 namespace cubble
 {
 __device__ int deviceNumPairs;
+__device__ double deviceTotalFreeArea;
+__device__ double deviceTotalFreeAreaPerRadius;
+__device__ double deviceTotalVolume;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
@@ -441,12 +444,13 @@ __global__ void calculateFreeAreaPerRadius(double *r, double *freeArea, double *
 	}
 }
 
-__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invRho, double invPi, double kappa, double kParam)
+__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		double invRadius = 1.0 / r[tid];
+		const double invRho = deviceTotalFreeAreaPerRadius / deviceTotalFreeArea;
+		const double invRadius = 1.0 / r[tid];
 		double vr = kappa * freeArea[tid] * (invRho - invRadius);
 		vr += drdt[tid];
 
@@ -459,12 +463,12 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *
 	}
 }
 
-__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume)
+__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		double multiplier = volumeMultiplier[0] * invTotalVolume;
+		double multiplier = volumeMultiplier[0] / deviceTotalVolume;
 		multiplier += 1.0;
 
 #if (NUM_DIM == 3)
