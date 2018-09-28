@@ -102,7 +102,10 @@ void Simulator::setupSimulation()
 
     double timeStep = env->getTimeStep();
     resetValues(dxdtOld, dydtOld, dzdtOld, drdtOld);
-    std::cout << "Calculating some initial values as a part of setup." << std::endl;
+    std::cout << "Calculating some initial values as a part of setup."
+        << " Num bubbles: " << numBubbles
+        << ", host num pairs: " << hostNumPairs
+        << std::endl;
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
