@@ -69,11 +69,13 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     CUDA_CALL(cudaGetSymbolAddress(&dtfapr, deviceTotalFreeAreaPerRadius));
     CUDA_CALL(cudaGetSymbolAddress(&dme, deviceMaxError));
     CUDA_CALL(cudaGetSymbolAddress(&dtv, deviceTotalVolume));
+    CUDA_CALL(cudaGetSymbolAddress(&dvm, deviceVolumeMultiplier));
     assert(dnp != nullptr);
     assert(dtfa != nullptr);
     assert(dtfapr != nullptr);
     assert(dme != nullptr);
     assert(dtv != nullptr);
+    assert(dvm != nullptr);
 }
 
 Simulator::~Simulator() {}
@@ -81,7 +83,8 @@ Simulator::~Simulator() {}
 void Simulator::setupSimulation()
 {
     generateBubbles();
-    deleteSmallBubbles();
+    if (numBubblesAboveMinRad < numBubbles)
+        deleteSmallBubbles();
     updateCellsAndNeighbors();
 
     // Calculate some initial values which are needed
@@ -446,13 +449,10 @@ void Simulator::deleteSmallBubbles()
     int *flag = aboveMinRadFlags.getRowPtr(0);
     double *r = bubbleData.getRowPtr((size_t)BP::R);
     double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
-
-    // HACK: This is potentially very dangerous, if the used space is decreased in the future.
-    double *volumeMultiplier = bubbleData.getRowPtr((size_t)BP::ERROR) + numBubblesAboveMinRad;
-    cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
+    cudaMemset(dvm, 0, sizeof(double));
 
     cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
-               volumes, r, flag, volumeMultiplier, env->getPi(), numBubbles);
+               volumes, r, flag, env->getPi(), numBubbles);
 
     cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, static_cast<double *>(dtv), numBubbles);
 
@@ -477,8 +477,7 @@ void Simulator::deleteSmallBubbles()
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
 
     numBubbles = numBubblesAboveMinRad;
-    cudaLaunch(defaultPolicy, addVolume,
-               r, volumeMultiplier, numBubbles);
+    cudaLaunch(defaultPolicy, addVolume, r, numBubbles);
 
     NVTX_RANGE_POP();
 }

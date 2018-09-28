@@ -9,6 +9,7 @@ __device__ int deviceNumPairs;
 __device__ double deviceTotalFreeArea;
 __device__ double deviceTotalFreeAreaPerRadius;
 __device__ double deviceTotalVolume;
+__device__ double deviceVolumeMultiplier;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
@@ -463,12 +464,12 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *
 	}
 }
 
-__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles)
+__global__ void addVolume(double *r, int numBubbles)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		double multiplier = volumeMultiplier[0] / deviceTotalVolume;
+		double multiplier = deviceVolumeMultiplier / deviceTotalVolume;
 		multiplier += 1.0;
 
 #if (NUM_DIM == 3)
@@ -480,7 +481,7 @@ __global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles)
 	}
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double *volumeMultiplier, double pi, int numBubbles)
+__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numBubbles)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
@@ -493,7 +494,7 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 
 		if (aboveMinRadFlags[tid] == 0)
 		{
-			atomicAdd(volumeMultiplier, vol);
+			atomicAdd(&deviceVolumeMultiplier, vol);
 			volume[tid] = 0;
 		}
 		else

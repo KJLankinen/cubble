@@ -49,6 +49,7 @@ class Simulator
 	void *dnp = nullptr;
 	void *dme = nullptr;
 	void *dtv = nullptr;
+	void *dvm = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;

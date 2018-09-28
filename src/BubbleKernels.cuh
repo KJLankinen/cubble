@@ -10,6 +10,7 @@ extern __device__ int deviceNumPairs;
 extern __device__ double deviceTotalFreeArea;
 extern __device__ double deviceTotalFreeAreaPerRadius;
 extern __device__ double deviceTotalVolume;
+extern __device__ double deviceVolumeMultiplier;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
@@ -101,12 +102,11 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt,
                                                double kappa,
                                                double kParam);
 
-__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles);
+__global__ void addVolume(double *r, int numBubbles);
 
 __global__ void calculateRedistributedGasVolume(double *volume,
                                                 double *r,
                                                 int *aboveMinRadFlags,
-                                                double *volumeMultiplier,
                                                 double pi,
                                                 int numBubbles);
 } // namespace cubble
