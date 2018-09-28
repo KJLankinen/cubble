@@ -37,7 +37,7 @@ INCL = -Iinclude/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o CubbleApp.o Simulator.o UtilityKernels.o BubbleKernels.o
+OBJ_NAMES := Main.o CubbleApp.o Simulator.o UtilityKernels.o BubbleKernels.o IntegrationKernels.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
