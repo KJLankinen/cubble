@@ -300,7 +300,7 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 	__syncthreads();
 
 	if (threadIdx.x == 0)
-		numLocalPairs[0] = atomicAdd(deviceNumPairs, numComparisons);
+		numLocalPairs[0] = atomicAdd(&deviceNumPairs, numComparisons);
 
 	__syncthreads();
 
