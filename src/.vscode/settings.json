@@ -1,7 +1,11 @@
 {
     "files.associations": {
+        "*.cu": "cpp",
+        "*.cuh": "cpp",
         "ratio": "cpp",
         "system_error": "cpp",
         "type_traits": "cpp"
-    }
+    },
+    "editor.formatOnSave": true,
+    "editor.minimap.maxColumn": 60
 }

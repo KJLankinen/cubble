@@ -96,7 +96,6 @@ void Simulator::setupSimulation()
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
-    const double minRad = env->getMinRad();
     ExecutionPolicy defaultPolicy(128, numBubbles);
     ExecutionPolicy accPolicy(128, hostNumPairs);
 
@@ -108,11 +107,17 @@ void Simulator::setupSimulation()
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
                firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
 
-    cudaLaunch(defaultPolicy, eulerIntegration,
-               x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles);
+    cudaLaunch(defaultPolicy, eulerKernel,
+               numBubbles, timeStep,
+               x, dxdtOld,
+               y, dydtOld,
+               z, dzdtOld);
 
-    if (deleteSmallBubbles())
-        updateCellsAndNeighbors();
+    cudaLaunch(defaultPolicy, boundaryWrapKernel,
+               numBubbles,
+               x, lbb.x, tfr.x,
+               y, lbb.y, tfr.y,
+               z, lbb.z, tfr.z);
 
     resetValues(dxdtOld, dydtOld, dzdtOld, drdtOld);
 
@@ -169,7 +174,21 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     do
     {
         resetValues(dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies, errors);
-        cudaLaunch(defaultPolicy, predict, x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtOld, dydtOld, dzdtOld, drdtOld, tfr, lbb, timeStep, numBubbles, useGasExchange);
+
+        //HACK:  This is REALLY stupid, but doing it temporarily.
+        if (useGasExchange)
+            cudaLaunch(defaultPolicy, predictKernel,
+                       numBubbles, timeStep,
+                       xPrd, x, dxdt, dxdtOld,
+                       yPrd, y, dydt, dydtOld,
+                       zPrd, z, dzdt, dzdtOld,
+                       rPrd, r, drdt, drdtOld);
+        else
+            cudaLaunch(defaultPolicy, predictKernel,
+                       numBubbles, timeStep,
+                       xPrd, x, dxdt, dxdtOld,
+                       yPrd, y, dydt, dydtOld,
+                       zPrd, z, dzdt, dzdtOld);
 
         cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                    xPrd, yPrd, zPrd, rPrd, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
@@ -188,11 +207,31 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        drdtPrd, rPrd, freeArea, numBubbles, invRho, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
         }
 
-        cudaLaunch(defaultPolicy, correct,
-                   x, y, z, r, xPrd, yPrd, zPrd, rPrd, dxdt, dydt, dzdt, drdt, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-                   errors, aboveMinRadFlags.getRowPtr(0), env->getMinRad(), tfr, lbb, timeStep, numBubbles, useGasExchange);
+        //HACK:  This is REALLY stupid, but doing it temporarily.
+        if (useGasExchange)
+            cudaLaunch(defaultPolicy, correctKernel,
+                       numBubbles, timeStep, errors,
+                       xPrd, x, dxdt, dxdtPrd,
+                       yPrd, y, dydt, dydtPrd,
+                       zPrd, z, dzdt, dzdtPrd,
+                       rPrd, r, drdt, drdtPrd);
+        else
+            cudaLaunch(defaultPolicy, correctKernel,
+                       numBubbles, timeStep, errors,
+                       xPrd, x, dxdt, dxdtPrd,
+                       yPrd, y, dydt, dydtPrd,
+                       zPrd, z, dzdt, dzdtPrd);
 
         error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, errors, numBubbles);
+
+        cudaLaunch(defaultPolicy, boundaryWrapKernel,
+                   numBubbles,
+                   xPrd, lbb.x, tfr.x,
+                   yPrd, lbb.y, tfr.y,
+                   zPrd, lbb.z, tfr.z);
+
+        cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel,
+                   numBubbles, rPrd, aboveMinRadFlags.getRowPtr(0), env->getMinRad());
 
         if (error < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;

@@ -89,16 +89,6 @@ __device__ double getWrappedCoordinate(double val1, double val2, double multipli
 	return val2 * multiplier;
 }
 
-__device__ dvec getWrappedPos(dvec pos, dvec tfr, dvec lbb)
-{
-	const dvec interval = tfr - lbb;
-	pos.x = pos.x < lbb.x ? pos.x + interval.x : (pos.x > tfr.x ? pos.x - interval.x : pos.x);
-	pos.y = pos.y < lbb.y ? pos.y + interval.y : (pos.y > tfr.y ? pos.y - interval.y : pos.y);
-	pos.z = pos.z < lbb.z ? pos.z + interval.z : (pos.z > tfr.z ? pos.z - interval.z : pos.z);
-
-	return pos;
-}
-
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec interval, ivec cellDim)
 {
 	const int xid = floor(cellDim.x * x / interval.x);
@@ -108,9 +98,47 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec interval, iv
 	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
 }
 
-__device__ void resetDoubleArrayToValue(double value, int tid, double *array)
+__device__ void resetDoubleArrayToValue(double value, int idx, double *array)
 {
-    array[tid] = value;
+	array[idx] = value;
+}
+
+__device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *y, double *f, double *fPrevious)
+{
+	yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
+}
+
+__device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext)
+{
+	const double yTemp = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
+	double e = yTemp - yNext[idx];
+	e = e < 0 ? -e : e;
+	yNext[idx] = yTemp;
+
+	return e;
+}
+
+__device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
+{
+	y[idx] += f[idx] * timeStep;
+}
+
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue)
+{
+	const double interval = maxValue - minValue;
+	double value = coordinate[idx];
+	value = value < minValue ? value + interval : (value > maxValue ? value - interval : value);
+	coordinate[idx] = value;
+}
+
+__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values, double constant)
+{
+	flags[idx] = values[idx] < constant ? 1 : 0;
+}
+
+__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values, double constant)
+{
+	flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
@@ -150,11 +178,11 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 		dvec randomOffset(x[tid], y[tid], 0);
 #if (NUM_DIM == 3)
 		randomOffset.z = z[tid];
-		pos.z = (tid / (bubblesPerDim.x * bubblesPerDim.y))  / (double)bubblesPerDim.z;
+		pos.z = (tid / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
 #endif
 		pos *= tfr - lbb;
 		randomOffset = dvec::normalize(randomOffset) * avgRad * w[tid];
-		pos = getWrappedPos(pos + randomOffset, tfr, lbb);
+		pos += randomOffset;
 
 		x[tid] = pos.x;
 		y[tid] = pos.y;
@@ -164,10 +192,17 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 		yPrd[tid] = pos.y;
 		zPrd[tid] = pos.z;
 
-		double radius = r[tid];
-		r[tid] = radius > 0 ? radius : -radius;
+		wrapAround(tid,
+				   x, lbb.x, tfr.x,
+				   y, lbb.y, tfr.y,
+				   z, lbb.z, tfr.z,
+				   xPrd, lbb.x, tfr.x,
+				   yPrd, lbb.y, tfr.y,
+				   zPrd, lbb.z, tfr.z);
+
+		r[tid] = r[tid] > 0 ? r[tid] : -r[tid];
 		w[tid] = r[tid];
-		aboveMinRadFlags[tid] = radius < minRad ? 0 : 1;
+		setFlagIfGreaterThanConstant(tid, aboveMinRadFlags, r, minRad);
 	}
 }
 
@@ -329,44 +364,6 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 	}
 }
 
-__global__ void predict(double *x, double *y, double *z, double *r,
-						double *xPrd, double *yPrd, double *zPrd, double *rPrd,
-						double *dxdt, double *dydt, double *dzdt, double *drdt,
-						double *dxdtOld, double *dydtOld, double *dzdtOld, double *drdtOld,
-						dvec tfr,
-						dvec lbb,
-						double timeStep,
-						int numBubbles,
-						bool useGasExchange)
-{
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
-	{
-		dvec pos, vel, velOld;
-		pos.x = x[tid];
-		pos.y = y[tid];
-		pos.z = z[tid];
-
-		vel.x = dxdt[tid];
-		vel.y = dydt[tid];
-		vel.z = dzdt[tid];
-
-		velOld.x = dxdtOld[tid];
-		velOld.y = dydtOld[tid];
-		velOld.z = dzdtOld[tid];
-
-		pos += 0.5 * timeStep * (3.0 * vel - velOld);
-		pos = getWrappedPos(pos, tfr, lbb);
-
-		xPrd[tid] = pos.x;
-		yPrd[tid] = pos.y;
-		zPrd[tid] = pos.z;
-
-		if (useGasExchange)
-			rPrd[tid] = r[tid] + 0.5 * timeStep * (3.0 * drdt[tid] - drdtOld[tid]);
-	}
-}
-
 __global__ void calculateVelocityAndGasExchange(double *x, double *y, double *z, double *r,
 												double *dxdt, double *dydt, double *dzdt, double *drdt,
 												double *energy,
@@ -510,66 +507,6 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *
 	}
 }
 
-__global__ void correct(double *x, double *y, double *z, double *r,
-						double *xPrd, double *yPrd, double *zPrd, double *rPrd,
-						double *dxdt, double *dydt, double *dzdt, double *drdt,
-						double *dxdtPrd, double *dydtPrd, double *dzdtPrd, double *drdtPrd,
-						double *errors,
-						int *aboveMinRadFlags,
-						double minRad,
-						dvec tfr,
-						dvec lbb,
-						double timeStep,
-						int numBubbles,
-						bool useGasExchange)
-{
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
-	{
-		dvec pos, posPrd, vel, velPrd;
-		pos.x = x[tid];
-		pos.y = y[tid];
-		pos.z = z[tid];
-
-		posPrd.x = xPrd[tid];
-		posPrd.y = yPrd[tid];
-		posPrd.z = zPrd[tid];
-
-		vel.x = dxdt[tid];
-		vel.y = dydt[tid];
-		vel.z = dzdt[tid];
-
-		velPrd.x = dxdtPrd[tid];
-		velPrd.y = dydtPrd[tid];
-		velPrd.z = dzdtPrd[tid];
-
-		pos += 0.5 * timeStep * (vel + velPrd);
-		pos = getWrappedPos(pos, tfr, lbb);
-
-		double radError = 0;
-		if (useGasExchange)
-		{
-			const double radius = r[tid] + 0.5 * timeStep * (drdt[tid] + drdtPrd[tid]);
-
-			radError = radius - rPrd[tid];
-			radError = radError < 0 ? -radError : radError;
-
-			rPrd[tid] = radius;
-			aboveMinRadFlags[tid] = radius < minRad ? 0 : 1;
-		}
-		else
-			aboveMinRadFlags[tid] = 1;
-
-		double error = (pos - posPrd).getAbsolute().getMaxComponent();
-		error = error > radError ? error : radError;
-		errors[tid] = error;
-
-		xPrd[tid] = pos.x;
-		yPrd[tid] = pos.y;
-		zPrd[tid] = pos.z;
-	}
-}
-
 __global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume)
 {
 	const int tid = getGlobalTid();
@@ -584,36 +521,6 @@ __global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles, d
 		multiplier = sqrt(multiplier);
 #endif
 		r[tid] = r[tid] * multiplier;
-	}
-}
-
-__global__ void eulerIntegration(double *x, double *y, double *z, double *r,
-								 double *dxdt, double *dydt, double *dzdt, double *drdt,
-								 dvec tfr,
-								 dvec lbb,
-								 double timeStep,
-								 int numBubbles)
-{
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
-	{
-		dvec pos(0, 0, 0);
-		pos.x = x[tid];
-		pos.y = y[tid];
-		pos.z = z[tid];
-
-		dvec vel(0, 0, 0);
-		vel.x = dxdt[tid];
-		vel.y = dydt[tid];
-		vel.z = dzdt[tid];
-
-		pos += timeStep * vel;
-		pos = getWrappedPos(pos, tfr, lbb);
-
-		x[tid] = pos.x;
-		y[tid] = pos.y;
-		z[tid] = pos.z;
-		r[tid] = r[tid] + timeStep * drdt[tid];
 	}
 }
 
