@@ -3,6 +3,7 @@
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include "Macros.h"
+#include "Util.h"
 
 namespace cubble
 {
