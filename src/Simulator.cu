@@ -321,8 +321,8 @@ void Simulator::updateCellsAndNeighbors()
     int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
+    const int maxNumSharedVals = sharedMemSizeInBytes;
     sharedMemSizeInBytes *= sizeof(int);
-    const int maxNumSharedVals = sharedMemSizeInBytes / sizeof(int);
     assertMemBelowLimit(sharedMemSizeInBytes);
     assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
 

@@ -266,17 +266,14 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 			int idx1 = id / neighborSize;
 			int idx2 = id % neighborSize;
 
-			DEVICE_ASSERT(selfOffset + idx1 < numBubbles);
-			DEVICE_ASSERT(neighborOffset + idx2 < numBubbles);
-
 			idx1 = selfOffset + idx1;
 			idx2 = neighborOffset + idx2;
 
-			if (idx1 == idx2 || (selfComparison && idx2 < idx1))
-				continue;
-
 			DEVICE_ASSERT(idx1 < numBubbles);
 			DEVICE_ASSERT(idx2 < numBubbles);
+
+			if (idx1 == idx2 || (selfComparison && idx2 < idx1))
+				continue;
 
 			double wrappedComponent = getWrappedCoordinate(x[idx1], x[idx2], interval.x);
 			double magnitude = wrappedComponent * wrappedComponent;
