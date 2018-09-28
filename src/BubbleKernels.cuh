@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 #include "Vec.h"
+#include "UtilityKernels.cuh"
 
 namespace cubble
 {
