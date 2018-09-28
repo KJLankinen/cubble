@@ -44,6 +44,7 @@ class Simulator
 	dim3 getGridSize();
 
 	int numBubbles = 0;
+	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
 

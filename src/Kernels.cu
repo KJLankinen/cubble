@@ -143,17 +143,16 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		dvec pos;
-		pos.x = tid % bubblesPerDim.x;
-		pos.y = (tid / bubblesPerDim.x) % bubblesPerDim.y;
-		pos.z = tid / (bubblesPerDim.x * bubblesPerDim.y);
-		pos /= bubblesPerDim.asType<double>();
-		pos *= tfr - lbb;
+		dvec pos(0, 0, 0);
+		pos.x = (tid % bubblesPerDim.x) / (double)bubblesPerDim.x;
+		pos.y = ((tid / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
 
 		dvec randomOffset(x[tid], y[tid], 0);
 #if (NUM_DIM == 3)
 		randomOffset.z = z[tid];
+		pos.z = (tid / (bubblesPerDim.x * bubblesPerDim.y))  / (double)bubblesPerDim.z;
 #endif
+		pos *= tfr - lbb;
 		randomOffset = dvec::normalize(randomOffset) * avgRad * w[tid];
 		pos = getWrappedPos(pos + randomOffset, tfr, lbb);
 

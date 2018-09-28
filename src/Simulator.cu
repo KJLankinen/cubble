@@ -39,6 +39,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
+    bubblePerDimAtStart = bubblesPerDim;
     tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
 
@@ -270,8 +271,13 @@ void Simulator::generateBubbles()
     CURAND_CALL(curandDestroyGenerator(generator));
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
+    assert(bubblesPerDimAtStart.x > 0);
+    assert(bubblesPerDimAtStart.y > 0);
+#if (NUM_DIM == 3)
+    assert(bubblesPerDimAtStart.z > 0);
+#endif
     cudaLaunch(defaultPolicy, assignDataToBubbles,
-               x, y, z, xPrd, yPrd, zPrd, r, w, aboveMinRadFlags.getRowPtr(0), givenNumBubblesPerDim, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
+               x, y, z, xPrd, yPrd, zPrd, r, w, aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
 }
 
 void Simulator::updateCellsAndNeighbors()
