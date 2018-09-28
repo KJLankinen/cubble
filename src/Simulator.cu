@@ -392,7 +392,10 @@ void Simulator::updateCellsAndNeighbors()
                numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
-    CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(&deviceNumPairs), sizeof(int), cudaMemcpyDeviceToHost));
+    void *dnp = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&dnp, deviceNumPairs));
+    assert(dnp != nullptr);
+    CUDA_CALL(cudaMemcpy(&hostNumPairs, dnp, sizeof(int), cudaMemcpyDeviceToHost));
 }
 
 void Simulator::updateData()

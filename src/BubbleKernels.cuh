@@ -6,6 +6,9 @@
 
 namespace cubble
 {
+
+__global__ int deviceNumPairs;
+
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim);

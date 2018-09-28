@@ -50,7 +50,6 @@ class Simulator
 	FixedSizeDeviceArray<int> cellData;
 	FixedSizeDeviceArray<int> bubbleCellIndices;
 	FixedSizeDeviceArray<int> neighborPairIndices;
-	__device__ int deviceNumPairs;
 
 	std::vector<double> hostData;
 
