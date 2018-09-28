@@ -31,12 +31,6 @@ class Simulator
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 
   private:
-	template <typename... Arguments>
-	void resetValues(Arguments... args);
-
-	template <typename... Arguments>
-	void reorganizeValues(Arguments... args);
-
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
