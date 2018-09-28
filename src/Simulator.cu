@@ -39,7 +39,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
-    bubblePerDimAtStart = bubblesPerDim;
+    bubblesPerDimAtStart = bubblesPerDim;
     tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
 
