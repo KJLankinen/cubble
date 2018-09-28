@@ -5,8 +5,6 @@
 
 namespace cubble
 {
-__global__ int deviceNumPairs;
-
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are
