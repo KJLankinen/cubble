@@ -1,6 +1,7 @@
 // -*- C++ -*-
 
 #include "BubbleKernels.cuh"
+#include "UtilityKernels.cuh"
 
 namespace cubble
 {
