@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 #include <stdint.h>
+#include "Macros.h"
 
 namespace cubble
 {
@@ -53,6 +54,8 @@ void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... 
     CUDA_CALL(cudaPeekAtLastError());
 #endif
 }
+
+__device__ int getGlobalTid();
 
 __device__ void resetDoubleArrayToValue(double value, int idx, double *array);
 

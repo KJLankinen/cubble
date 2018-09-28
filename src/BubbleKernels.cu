@@ -69,18 +69,6 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 	return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
 }
 
-__device__ int getGlobalTid()
-{
-	// Simple helper function for calculating a 1D coordinate
-	// from 1, 2 or 3 dimensional coordinates.
-	int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
-	int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x) + blockIdx.y * gridDim.x + blockIdx.x;
-	int threadsBefore = blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
-	int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
-
-	return tid;
-}
-
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
 {
 	double difference = val1 - val2;

@@ -1,15 +1,11 @@
-// -*- C++ -*-
-
 #pragma once
 
 #include <cuda_runtime_api.h>
-#include "Macros.h"
 #include "Vec.h"
 
 namespace cubble
 {
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-__device__ int getGlobalTid();
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim);
 
