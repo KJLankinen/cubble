@@ -41,7 +41,6 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
-    numBubblesAboveMinRad = numBubbles;
     bubblesPerDimAtStart = bubblesPerDim;
     tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
@@ -96,9 +95,9 @@ void Simulator::setupSimulation()
 {
     generateBubbles();
 
-    const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numBubbles);
+    const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), numBubbles);
     if (numBubblesAboveMinRad < numBubbles)
-        deleteSmallBubbles();
+        deleteSmallBubbles(numBubblesAboveMinRad);
 
     updateCellsAndNeighbors();
 
@@ -314,9 +313,10 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, numBubbles);
 
     CUDA_CALL(cudaEventSynchronize(asyncCopyDDEvent));
-    const bool shouldDeleteBubbles = pinnedInt.get()[0] < numBubbles;
+    const int numBubblesAboveMinRad = pinnedInt.get()[0];
+    const bool shouldDeleteBubbles = numBubblesAboveMinRad < numBubbles;
     if (shouldDeleteBubbles)
-        deleteSmallBubbles();
+        deleteSmallBubbles(numBubblesAboveMinRad);
 
     if (shouldDeleteBubbles || integrationStep % 50 == 0)
         updateCellsAndNeighbors();
@@ -344,7 +344,6 @@ void Simulator::generateBubbles()
 
     double *r = bubbleData.getRowPtr((size_t)BP::R);
     double *w = bubbleData.getRowPtr((size_t)BP::R_PRD);
-    int *flag = aboveMinRadFlags.getRowPtr(0);
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -475,7 +474,7 @@ void Simulator::updateData()
     CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
 }
 
-void Simulator::deleteSmallBubbles()
+void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
     ExecutionPolicy defaultPolicy(128, numBubbles);
