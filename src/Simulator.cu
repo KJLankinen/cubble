@@ -74,6 +74,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
 
     pinnedInt = PinnedHostArray<int>(1);
+    pinnedDouble = PinnedHostArray<double>(1);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -166,7 +167,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     ExecutionPolicy accPolicy(128, hostNumPairs);
 
     double timeStep = env->getTimeStep();
-    double error = 0;
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
@@ -256,7 +256,11 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        yPrd, y, dydt, dydtPrd,
                        zPrd, z, dzdt, dzdtPrd);
 
-        error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, errors, numBubbles);
+        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+        CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
+        cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
+        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
+        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
         cudaLaunch(defaultPolicy, boundaryWrapKernel,
                    numBubbles,
@@ -267,6 +271,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel,
                    numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
 
+        CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
+        const double error = pinnedDouble.get()[0];
         if (error < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
         else if (error > env->getErrorTolerance())

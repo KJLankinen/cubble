@@ -64,6 +64,7 @@ class Simulator
 	DeviceArray<int> numPairs;
 
 	PinnedHostArray<int> pinnedInt;
+	PinnedHostArray<double> pinnedDouble;
 
 	std::vector<double> hostData;
 
