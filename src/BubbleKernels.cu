@@ -203,6 +203,7 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 								int *sizes,
 								int *firstIndices,
 								int *secondIndices,
+								int *numPairs,
 								int numCells,
 								int numBubbles,
 								dvec interval,
@@ -298,7 +299,7 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 	__syncthreads();
 
 	if (threadIdx.x == 0)
-		numLocalPairs[0] = atomicAdd(deviceNumPairs, numComparisons);
+		numLocalPairs[0] = atomicAdd(numPairs, numComparisons);
 
 	__syncthreads();
 
@@ -322,6 +323,7 @@ __global__ void calculateVelocityAndGasExchange(double *x, double *y, double *z,
 												int *firstIndices,
 												int *secondIndices,
 												int numBubbles,
+												int numPairs,
 												double fZeroPerMuZero,
 												double pi,
 												dvec interval,
@@ -332,7 +334,7 @@ __global__ void calculateVelocityAndGasExchange(double *x, double *y, double *z,
 	// Pay attention to the last assignation of a variable.
 
 	const int tid = getGlobalTid();
-	if (tid < deviceNumPairs)
+	if (tid < numPairs)
 	{
 		const int idx1 = firstIndices[tid];
 		const int idx2 = secondIndices[tid];

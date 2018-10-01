@@ -53,6 +53,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     // TODO: Figure out a more sensible value for this.
     const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
     neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 2);
+    numPairs = FixedSizeDeviceArray<int>(1, 1);
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -113,7 +114,7 @@ void Simulator::setupSimulation()
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
-               firstIndices, secondIndices, numBubbles, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
+               firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
 
     cudaLaunch(defaultPolicy, eulerKernel,
                numBubbles, timeStep,
@@ -133,7 +134,7 @@ void Simulator::setupSimulation()
 
     cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
-               firstIndices, secondIndices, numBubbles, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
+               firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
 }
 
 bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
@@ -207,7 +208,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
                    xPrd, yPrd, zPrd, rPrd, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
                    energies, freeArea, firstIndices, secondIndices, numBubbles,
-                   env->getFZeroPerMuZero(), env->getPi(), env->getTfr() - env->getLbb(), calculateEnergy, useGasExchange);
+                   hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), env->getTfr() - env->getLbb(), calculateEnergy, useGasExchange);
 
         if (useGasExchange)
         {
@@ -326,7 +327,7 @@ void Simulator::updateCellsAndNeighbors()
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
-    cudaMemset(&deviceNumPairs, 0, sizeof(int));
+    numPairs.setBytesToZero();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
@@ -389,10 +390,10 @@ void Simulator::updateCellsAndNeighbors()
     cudaLaunch(findPolicy, findBubblePairs,
                x, y, z, r, offsets, sizes,
                neighborPairIndices.getRowPtr(0), neighborPairIndices.getRowPtr(1),
-               numCells, numBubbles, env->getTfr() - env->getLbb(),
+               numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
-    CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(&deviceNumPairs), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
 }
 
 void Simulator::updateData()
