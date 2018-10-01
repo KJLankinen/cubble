@@ -46,18 +46,18 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     env->setTfr(tfr + env->getLbb());
 
     cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
-    bubbleData = FixedSizeDeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
-    aboveMinRadFlags = FixedSizeDeviceArray<int>(numBubbles, 2);
-    bubbleCellIndices = FixedSizeDeviceArray<int>(numBubbles, 4);
+    bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
+    aboveMinRadFlags = DeviceArray<int>(numBubbles, 2);
+    bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
 
     // TODO: Figure out a more sensible value for this.
     const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
-    neighborPairIndices = FixedSizeDeviceArray<int>(maxNumPairs, 2);
-    numPairs = FixedSizeDeviceArray<int>(1, 1);
+    neighborPairIndices = DeviceArray<int>(maxNumPairs, 2);
+    numPairs = DeviceArray<int>(1, 1);
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
-    cellData = FixedSizeDeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
+    cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
     hostData.resize(bubbleData.getSize(), 0);
 

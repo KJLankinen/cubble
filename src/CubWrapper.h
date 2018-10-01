@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "Env.h"
-#include "FixedSizeDeviceArray.h"
+#include "DeviceArray.h"
 
 namespace cubble
 {
@@ -18,8 +18,8 @@ class CubWrapper
     {
         env = e;
 
-        outData = FixedSizeDeviceArray<char>(sizeof(double), 1);
-        tempStorage = FixedSizeDeviceArray<char>(numBubbles * sizeof(double), 1);
+        outData = DeviceArray<char>(sizeof(double), 1);
+        tempStorage = DeviceArray<char>(numBubbles * sizeof(double), 1);
     }
     ~CubWrapper() {}
 
@@ -30,7 +30,7 @@ class CubWrapper
         assert(deviceInputData != nullptr);
 
         if (sizeof(T) > outData.getSizeInBytes())
-            outData = FixedSizeDeviceArray<char>(sizeof(T), 1);
+            outData = DeviceArray<char>(sizeof(T), 1);
 
         void *rawOutputPtr = static_cast<void *>(outData.get());
         OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
@@ -39,7 +39,7 @@ class CubWrapper
         (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
         if (tempStorageBytes > tempStorage.getSizeInBytes())
-            tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+            tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
@@ -61,7 +61,7 @@ class CubWrapper
         (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
         if (tempStorageBytes > tempStorage.getSizeInBytes())
-            tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+            tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
@@ -78,7 +78,7 @@ class CubWrapper
         (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
         if (tempStorageBytes > tempStorage.getSizeInBytes())
-            tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+            tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
@@ -97,7 +97,7 @@ class CubWrapper
         (*func)(NULL, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
 
         if (tempStorageBytes > tempStorage.getSizeInBytes())
-            tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+            tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
@@ -105,7 +105,7 @@ class CubWrapper
 
   private:
     std::shared_ptr<Env> env;
-    FixedSizeDeviceArray<char> outData;
-    FixedSizeDeviceArray<char> tempStorage;
+    DeviceArray<char> outData;
+    DeviceArray<char> tempStorage;
 };
 } // namespace cubble

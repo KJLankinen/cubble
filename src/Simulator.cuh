@@ -5,7 +5,7 @@
 #include "Env.h"
 #include "Bubble.h"
 #include "Vec.h"
-#include "FixedSizeDeviceArray.h"
+#include "DeviceArray.h"
 #include "PinnedHostArray.h"
 #include "CubWrapper.h"
 
@@ -56,12 +56,12 @@ class Simulator
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
-	FixedSizeDeviceArray<double> bubbleData;
-	FixedSizeDeviceArray<int> aboveMinRadFlags;
-	FixedSizeDeviceArray<int> cellData;
-	FixedSizeDeviceArray<int> bubbleCellIndices;
-	FixedSizeDeviceArray<int> neighborPairIndices;
-	FixedSizeDeviceArray<int> numPairs;
+	DeviceArray<double> bubbleData;
+	DeviceArray<int> aboveMinRadFlags;
+	DeviceArray<int> cellData;
+	DeviceArray<int> bubbleCellIndices;
+	DeviceArray<int> neighborPairIndices;
+	DeviceArray<int> numPairs;
 
 	PinnedHostArray<int> pinnedInt;
 

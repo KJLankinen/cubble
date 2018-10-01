@@ -7,30 +7,32 @@
 #include <memory>
 #include <assert.h>
 #include <utility>
+#include <type_traits>
 
 namespace cubble
 {
 template <typename T>
-class FixedSizeDeviceArray
+class DeviceArray
 {
   public:
-	FixedSizeDeviceArray(size_t w, size_t h, size_t d)
+	DeviceArray(size_t w, size_t h, size_t d)
 		: width(w), height(h), depth(d), dataPtr(createDataPtr(w, h, d), destroyDataPtr)
 	{
-		cudaMemset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * getSize());
+		static_assert(std::is_arithmetic<T>::value, "Only arithmetic types supported for now.");
+		CUDA_CALL(cudaMemset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * getSize()));
 	}
 
-	FixedSizeDeviceArray(size_t w, size_t h)
-		: FixedSizeDeviceArray(w, h, 1)
+	DeviceArray(size_t w, size_t h)
+		: DeviceArray(w, h, 1)
 	{
 	}
 
-	FixedSizeDeviceArray()
-		: FixedSizeDeviceArray(1, 1, 1)
+	DeviceArray()
+		: DeviceArray(1, 1, 1)
 	{
 	}
 
-	~FixedSizeDeviceArray() {}
+	~DeviceArray() {}
 
 	T *get() const { return dataPtr.get(); }
 
@@ -57,9 +59,9 @@ class FixedSizeDeviceArray
 	size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
 
 	// Strictly speaking this should only be allowed when T is an integer type...
-	void setBytesToZero() { cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes()); }
+	void setBytesToZero() { CUDA_CALL(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
 
-	void operator=(FixedSizeDeviceArray<T> &&o)
+	void operator=(DeviceArray<T> &&o)
 	{
 		width = o.width;
 		height = o.height;
@@ -79,7 +81,7 @@ class FixedSizeDeviceArray
 	static void destroyDataPtr(T *t)
 	{
 		CUDA_CALL(cudaDeviceSynchronize());
-		CUDA_CALL(cudaFree(t));
+		CUDA_CALL(cudaFree(static_cast<void *>(t));
 	}
 
 	size_t width = 0;
