@@ -6,6 +6,7 @@
 #include "Bubble.h"
 #include "Vec.h"
 #include "FixedSizeDeviceArray.h"
+#include "PinnedHostArray.h"
 #include "CubWrapper.h"
 
 #include <utility>
@@ -42,8 +43,6 @@ class Simulator
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
 
-	int *pinnedInt = nullptr;
-
 	cudaEvent_t asyncCopyDDEvent;
 	cudaEvent_t asyncCopyDHEvent;
 	cudaStream_t asyncCopyDDStream;
@@ -63,6 +62,8 @@ class Simulator
 	FixedSizeDeviceArray<int> bubbleCellIndices;
 	FixedSizeDeviceArray<int> neighborPairIndices;
 	FixedSizeDeviceArray<int> numPairs;
+
+	PinnedHostArray<int> pinnedInt;
 
 	std::vector<double> hostData;
 
