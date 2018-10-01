@@ -354,6 +354,7 @@ void Simulator::updateCellsAndNeighbors()
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
+    ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, asyncCopyDDStream);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
                x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
 
@@ -383,7 +384,7 @@ void Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaMemcpyAsync((void *)&sharedMemSizeInBytes, mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
-    cudaLaunch(defaultPolicy, reorganizeKernel,
+    cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
                bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
