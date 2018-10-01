@@ -360,14 +360,6 @@ void Simulator::updateCellsAndNeighbors()
     cudaLaunch(defaultPolicy, findSizes,
                offsets, sizes, numCells, numBubbles);
 
-    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
-    sharedMemSizeInBytes *= sharedMemSizeInBytes;
-    sharedMemSizeInBytes *= 2;
-    const int maxNumSharedVals = sharedMemSizeInBytes;
-    sharedMemSizeInBytes *= sizeof(int);
-    assertMemBelowLimit(sharedMemSizeInBytes);
-    assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
-
     cudaLaunch(defaultPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
@@ -384,6 +376,14 @@ void Simulator::updateCellsAndNeighbors()
                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
+
+    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
+    sharedMemSizeInBytes *= sharedMemSizeInBytes;
+    sharedMemSizeInBytes *= 2;
+    const int maxNumSharedVals = sharedMemSizeInBytes;
+    sharedMemSizeInBytes *= sizeof(int);
+    assertMemBelowLimit(sharedMemSizeInBytes);
+    assert(sharedMemSizeInBytes > 0 && "Zero bytes of shared memory reserved!");
 
     gridSize.z *= CUBBLE_NUM_NEIGHBORS + 1;
     assertGridSizeBelowLimit(gridSize);
