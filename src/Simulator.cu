@@ -201,6 +201,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
 
+    double error = 100000;
     size_t numLoopsDone = 0;
     do
     {
@@ -272,7 +273,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
 
         CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
-        const double error = pinnedDouble.get()[0];
+        error = pinnedDouble.get()[0];
         if (error < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
         else if (error > env->getErrorTolerance())
