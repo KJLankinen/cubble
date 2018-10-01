@@ -39,7 +39,7 @@ class PinnedHostArray
     T *createDataPtr(size_t size)
     {
         T *t = nullptr;
-        CUDA_CALL(cudaHostMalloc((void **)&t, size * sizeof(T)));
+        CUDA_CALL(cudaMallocHost((void **)&t, size * sizeof(T)));
 
         return t;
     }
