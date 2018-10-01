@@ -42,6 +42,8 @@ class Simulator
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
 
+	int *pinnedInt = nullptr;
+
 	cudaEvent_t asyncCopyDDEvent;
 	cudaEvent_t asyncCopyDHEvent;
 	cudaStream_t asyncCopyDDStream;

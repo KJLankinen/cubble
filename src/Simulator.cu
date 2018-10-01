@@ -73,6 +73,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDDEvent, cudaEventBlockingSync));
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
 
+    CUDA_CALL(cudaMallocHost((void **)&pinnedInt, sizeof(int)));
+
     printRelevantInfoOfCurrentDevice();
 }
 
@@ -82,6 +84,7 @@ Simulator::~Simulator()
     CUDA_CALL(cudaStreamDestroy(asyncCopyDHStream));
     CUDA_CALL(cudaEventDestroy(asyncCopyDDEvent));
     CUDA_CALL(cudaEventDestroy(asyncCopyDHEvent));
+    CUDA_CALL(cudaFreeHost(static_cast<void *>(pinnedInt)));
 }
 
 void Simulator::setupSimulation()
@@ -379,9 +382,8 @@ void Simulator::updateCellsAndNeighbors()
 
     cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, mbpc, numCells);
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
-    int sharedMemSizeInBytes = 0;
     CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
-    CUDA_CALL(cudaMemcpyAsync((void *)&sharedMemSizeInBytes, mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
+    CUDA_CALL(cudaMemcpyAsync((void *)pinnedInt, mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
@@ -407,6 +409,7 @@ void Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 
     CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
+    int sharedMemSizeInBytes = *pinnedInt;
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     const int maxNumSharedVals = sharedMemSizeInBytes;
