@@ -61,6 +61,11 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     hostData.resize(bubbleData.getSize(), 0);
 
+    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfa), dTotalFreeArea));
+    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfapr), dTotalFreeAreaPerRadius));
+    assert(dtfa != nullptr);
+    assert(dtfapr != nullptr);
+
     printRelevantInfoOfCurrentDevice();
 }
 
@@ -215,11 +220,10 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
             cudaLaunch(defaultPolicy, calculateFreeAreaPerRadius,
                        rPrd, freeArea, errors, env->getPi(), numBubbles);
 
-            // If the GPU-CPU copy could be removed from here, this'd be a lot faster.
-            double invRho = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, errors, numBubbles);
-            invRho /= cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, numBubbles);
+            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles);
+            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles);
             cudaLaunch(defaultPolicy, calculateFinalRadiusChangeRate,
-                       drdtPrd, rPrd, freeArea, numBubbles, invRho, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
+                       drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
         }
 
         //HACK:  This is REALLY stupid, but doing it temporarily.

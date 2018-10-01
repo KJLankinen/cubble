@@ -50,6 +50,23 @@ class CubWrapper
         return hostOutputData;
     }
 
+    template <typename T, typename InputIterT, typename OutputIterT>
+    void reduceNoCopy(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
+                      InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0, bool debug = false)
+    {
+        assert(deviceInputData != nullptr);
+        assert(deviceOutputData != nullptr);
+
+        size_t tempStorageBytes = 0;
+        (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
+
+        if (tempStorageBytes > tempStorage.getSizeInBytes())
+            tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
+
+        void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
+        (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
+    }
+
     template <typename InputIterT, typename OutputIterT>
     void scan(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
               InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0, bool debug = false)

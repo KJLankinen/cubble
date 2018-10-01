@@ -42,6 +42,9 @@ class Simulator
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
 
+	double *dtfapr = nullptr;
+	double *dtfa = nullptr;
+
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;
 

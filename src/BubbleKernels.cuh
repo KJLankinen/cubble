@@ -6,6 +6,9 @@
 
 namespace cubble
 {
+extern __device__ double dTotalFreeArea;
+extern __device__ double dTotalFreeAreaPerRadius;
+
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim);
@@ -94,7 +97,6 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt,
                                                double *r,
                                                double *freeArea,
                                                int numBubbles,
-                                               double invRho,
                                                double invPi,
                                                double kappa,
                                                double kParam);

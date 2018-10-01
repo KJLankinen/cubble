@@ -5,6 +5,9 @@
 
 namespace cubble
 {
+__device__ double dTotalFreeArea;
+__device__ double dTotalFreeAreaPerRadius;
+
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are
@@ -441,12 +444,13 @@ __global__ void calculateFreeAreaPerRadius(double *r, double *freeArea, double *
 	}
 }
 
-__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invRho, double invPi, double kappa, double kParam)
+__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		double invRadius = 1.0 / r[tid];
+		const double invRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
+		const double invRadius = 1.0 / r[tid];
 		double vr = kappa * freeArea[tid] * (invRho - invRadius);
 		vr += drdt[tid];
 
