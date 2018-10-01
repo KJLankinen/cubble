@@ -23,6 +23,11 @@ class PinnedHostArray
         memset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * size);
     }
 
+    PinnedHostArray()
+        : PinnedHostArray(1)
+    {
+    }
+
     ~PinnedHostArray() {}
 
     T *get() const { return dataPtr.get(); }
