@@ -68,8 +68,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     CUDA_CALL(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
     assert(mbpc != nullptr);
 
-    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaNonBlocking));
-    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaNonBlocking));
+    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
+    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
 
