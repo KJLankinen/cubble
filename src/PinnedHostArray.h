@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <utility>
 #include <type_traits>
+#include <cuda_runtime_api.h>
 
 namespace cubble
 {
