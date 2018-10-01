@@ -372,7 +372,7 @@ void Simulator::updateCellsAndNeighbors()
     cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, mbpc, numCells);
     int sharedMemSizeInBytes = 0;
     CUDA_CALL(cudaMemcpyAsync((void *)&sharedMemSizeInBytes, mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyStream));
-    CUDA_CALL(cudaEventRecord(asyncCopyEvent));
+    CUDA_CALL(cudaEventRecord(asyncCopyEvent, asyncCopyStream));
 
     cudaLaunch(defaultPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
