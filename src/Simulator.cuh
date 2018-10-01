@@ -16,7 +16,6 @@ namespace cubble
 {
 enum class BubbleProperty;
 
-extern __device__ double deviceMaxError;
 class Simulator
 {
 	CUBBLE_PROP(double, SimulationTime, 0)
@@ -35,21 +34,13 @@ class Simulator
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
-	void deleteSmallBubbles();
+	bool deleteSmallBubbles();
 	dim3 getGridSize();
 
 	int numBubbles = 0;
-	int numBubblesAboveMinRad = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
-
-	void *dtfa = nullptr;
-	void *dtfapr = nullptr;
-	void *dnp = nullptr;
-	void *dme = nullptr;
-	void *dtv = nullptr;
-	void *dvm = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;
@@ -59,6 +50,7 @@ class Simulator
 	FixedSizeDeviceArray<int> cellData;
 	FixedSizeDeviceArray<int> bubbleCellIndices;
 	FixedSizeDeviceArray<int> neighborPairIndices;
+	__device__ int deviceNumPairs;
 
 	std::vector<double> hostData;
 

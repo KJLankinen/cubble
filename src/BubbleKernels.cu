@@ -5,12 +5,6 @@
 
 namespace cubble
 {
-__device__ int deviceNumPairs;
-__device__ double deviceTotalFreeArea;
-__device__ double deviceTotalFreeAreaPerRadius;
-__device__ double deviceTotalVolume;
-__device__ double deviceVolumeMultiplier;
-
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
 	// Switch statements and ifs that diverge inside one warp/block are
@@ -304,7 +298,7 @@ __global__ void findBubblePairs(double *x, double *y, double *z, double *r,
 	__syncthreads();
 
 	if (threadIdx.x == 0)
-		numLocalPairs[0] = atomicAdd(&deviceNumPairs, numComparisons);
+		numLocalPairs[0] = atomicAdd(deviceNumPairs, numComparisons);
 
 	__syncthreads();
 
@@ -445,13 +439,12 @@ __global__ void calculateFreeAreaPerRadius(double *r, double *freeArea, double *
 	}
 }
 
-__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
+__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invRho, double invPi, double kappa, double kParam)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		const double invRho = deviceTotalFreeAreaPerRadius / deviceTotalFreeArea;
-		const double invRadius = 1.0 / r[tid];
+		double invRadius = 1.0 / r[tid];
 		double vr = kappa * freeArea[tid] * (invRho - invRadius);
 		vr += drdt[tid];
 
@@ -464,12 +457,12 @@ __global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *
 	}
 }
 
-__global__ void addVolume(double *r, int numBubbles)
+__global__ void addVolume(double *r, double *volumeMultiplier, int numBubbles, double invTotalVolume)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		double multiplier = deviceVolumeMultiplier / deviceTotalVolume;
+		double multiplier = volumeMultiplier[0] * invTotalVolume;
 		multiplier += 1.0;
 
 #if (NUM_DIM == 3)
@@ -481,7 +474,7 @@ __global__ void addVolume(double *r, int numBubbles)
 	}
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numBubbles)
+__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double *volumeMultiplier, double pi, int numBubbles)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
@@ -494,7 +487,7 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
 
 		if (aboveMinRadFlags[tid] == 0)
 		{
-			atomicAdd(&deviceVolumeMultiplier, vol);
+			atomicAdd(volumeMultiplier, vol);
 			volume[tid] = 0;
 		}
 		else
