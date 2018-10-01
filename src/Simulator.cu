@@ -61,8 +61,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     hostData.resize(bubbleData.getSize(), 0);
 
-    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfa), dTotalFreeArea));
-    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfapr), dTotalFreeAreaPerRadius));
+    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfa), "dTotalFreeArea"));
+    CUDA_CALL(cudaGetSymbolAddress(&static_cast<void *>(dtfapr), "dTotalFreeAreaPerRadius"));
     assert(dtfa != nullptr);
     assert(dtfapr != nullptr);
 
