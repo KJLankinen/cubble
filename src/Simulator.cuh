@@ -35,7 +35,7 @@ class Simulator
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();
-	bool deleteSmallBubbles();
+	void deleteSmallBubbles();
 	dim3 getGridSize();
 
 	int numBubbles = 0;

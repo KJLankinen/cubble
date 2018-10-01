@@ -41,6 +41,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
+    numBubblesAboveMinRad = numBubbles;
     bubblesPerDimAtStart = bubblesPerDim;
     tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
@@ -94,7 +95,11 @@ Simulator::~Simulator()
 void Simulator::setupSimulation()
 {
     generateBubbles();
-    deleteSmallBubbles();
+
+    const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numBubbles);
+    if (numBubblesAboveMinRad < numBubbles)
+        deleteSmallBubbles();
+
     updateCellsAndNeighbors();
 
     // Calculate some initial values which are needed
@@ -204,6 +209,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
+    int *flag = aboveMinRadFlags.getRowPtr(0);
 
     double error = 100000;
     size_t numLoopsDone = 0;
@@ -273,8 +279,13 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    yPrd, lbb.y, tfr.y,
                    zPrd, lbb.z, tfr.z);
 
-        cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel,
-                   numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
+        cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel, numBubbles, flag, rPrd, env->getMinRad());
+
+        CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
+        CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
+        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numPairs.get(), numBubbles, asyncCopyDDStream);
+        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), static_cast<void *>(numPairs.get()), sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
+        CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 
         CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
         error = pinnedDouble.get()[0];
@@ -302,7 +313,12 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (calculateEnergy)
         ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, numBubbles);
 
-    if (deleteSmallBubbles() || integrationStep % 50 == 0)
+    CUDA_CALL(cudaEventSynchronize(asyncCopyDDEvent));
+    const bool shouldDeleteBubbles = pinnedInt.get()[0] < numBubbles;
+    if (shouldDeleteBubbles)
+        deleteSmallBubbles();
+
+    if (shouldDeleteBubbles || integrationStep % 50 == 0)
         updateCellsAndNeighbors();
 
     return numBubbles > env->getMinNumBubbles();
@@ -328,6 +344,7 @@ void Simulator::generateBubbles()
 
     double *r = bubbleData.getRowPtr((size_t)BP::R);
     double *w = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    int *flag = aboveMinRadFlags.getRowPtr(0);
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -458,56 +475,47 @@ void Simulator::updateData()
     CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
 }
 
-bool Simulator::deleteSmallBubbles()
+void Simulator::deleteSmallBubbles()
 {
+    NVTX_RANGE_PUSH_A("BubbleRemoval");
+    ExecutionPolicy defaultPolicy(128, numBubbles);
+
     int *flag = aboveMinRadFlags.getRowPtr(0);
-    // This one copy is what keep this from going...
-    const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numBubbles);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
-    bool atLeastOneBubbleDeleted = numBubblesAboveMinRad < numBubbles;
-    if (atLeastOneBubbleDeleted)
-    {
-        NVTX_RANGE_PUSH_A("BubbleRemoval");
-        ExecutionPolicy defaultPolicy(128, numBubbles);
+    CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
+    cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
+               volumes, r, flag, env->getPi(), numBubbles);
 
-        double *r = bubbleData.getRowPtr((size_t)BP::R);
-        double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
 
-        CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
-        cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
-                   volumes, r, flag, env->getPi(), numBubbles);
+    int *newIdx = aboveMinRadFlags.getRowPtr(1);
+    cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
-        cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
+    cudaLaunch(defaultPolicy, reorganizeKernel,
+               numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, flag,
+               bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
+               bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
+               bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
+               bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
+               bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
+               bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+               bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
+               bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
+                              static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
+                              sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              cudaMemcpyDeviceToDevice));
 
-        int *newIdx = aboveMinRadFlags.getRowPtr(1);
-        cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
+    numBubbles = numBubblesAboveMinRad;
+    cudaLaunch(defaultPolicy, addVolume, r, numBubbles);
 
-        cudaLaunch(defaultPolicy, reorganizeKernel,
-                   numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, flag,
-                   bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
-                   bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
-                   bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
-                   bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
-                   bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
-                   bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
-                   bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
-                   bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
-                   bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
-                   bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
-                   bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
-                   bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
-                                  static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
-                                  sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
-                                  cudaMemcpyDeviceToDevice));
-
-        numBubbles = numBubblesAboveMinRad;
-        cudaLaunch(defaultPolicy, addVolume, r, numBubbles);
-
-        NVTX_RANGE_POP();
-    }
-
-    return atLeastOneBubbleDeleted;
+    NVTX_RANGE_POP();
 }
 
 dim3 Simulator::getGridSize()
