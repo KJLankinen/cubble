@@ -81,7 +81,7 @@ class DeviceArray
 	static void destroyDataPtr(T *t)
 	{
 		CUDA_CALL(cudaDeviceSynchronize());
-		CUDA_CALL(cudaFree(static_cast<void *>(t));
+		CUDA_CALL(cudaFree(static_cast<void *>(t)));
 	}
 
 	size_t width = 0;
