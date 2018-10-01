@@ -42,6 +42,11 @@ class Simulator
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
 
+	cudaEvent_t asyncCopyEvent;
+	cudaStream_t asyncCopyStream;
+
+	// Host pointers to device global variables
+	int *mbpc = nullptr;
 	double *dtfapr = nullptr;
 	double *dtfa = nullptr;
 

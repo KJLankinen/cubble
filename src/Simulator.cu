@@ -62,14 +62,23 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     hostData.resize(bubbleData.getSize(), 0);
 
     CUDA_CALL(cudaGetSymbolAddress((void **)&dtfa, dTotalFreeArea));
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
     assert(dtfa != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
     assert(dtfapr != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
+    assert(mbpc != nullptr);
+
+    CUDA_CALL(cudaStreamCreate(&asyncCopyStream));
+    CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyEvent, cudaEventBlockingSync));
 
     printRelevantInfoOfCurrentDevice();
 }
 
-Simulator::~Simulator() {}
+Simulator::~Simulator()
+{
+    CUDA_CALL(cudaStreamDestroy(asyncCopyStream));
+    CUDA_CALL(cudaEventDestroy(asyncCopyEvent));
+}
 
 void Simulator::setupSimulation()
 {
@@ -360,6 +369,11 @@ void Simulator::updateCellsAndNeighbors()
     cudaLaunch(defaultPolicy, findSizes,
                offsets, sizes, numCells, numBubbles);
 
+    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, mbpc, numCells);
+    int sharedMemSizeInBytes = 0;
+    CUDA_CALL(cudaMemcpyAsync((void *)&sharedMemSizeInBytes, mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyStream));
+    CUDA_CALL(cudaEventRecord(asyncCopyEvent));
+
     cudaLaunch(defaultPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
@@ -375,9 +389,12 @@ void Simulator::updateCellsAndNeighbors()
                bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
-                              static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
+                              static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
+                              sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              cudaMemcpyDeviceToDevice,
+                              asyncCopyStream));
 
-    int sharedMemSizeInBytes = cubWrapper->reduce<int, int *, int *>(&cub::DeviceReduce::Max, sizes, numCells);
+    CUDA_CALL(cudaEventSynchronize(asyncCopyEvent));
     sharedMemSizeInBytes *= sharedMemSizeInBytes;
     sharedMemSizeInBytes *= 2;
     const int maxNumSharedVals = sharedMemSizeInBytes;
@@ -391,6 +408,8 @@ void Simulator::updateCellsAndNeighbors()
     ExecutionPolicy findPolicy(256, numBubbles);
     findPolicy.gridSize = gridSize;
     findPolicy.sharedMemBytes = sharedMemSizeInBytes;
+
+    CUDA_CALL(cudaStreamSynchronize(asyncCopyStream));
     cudaLaunch(findPolicy, findBubblePairs,
                x, y, z, r, offsets, sizes,
                neighborPairIndices.getRowPtr(0), neighborPairIndices.getRowPtr(1),

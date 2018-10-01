@@ -5,6 +5,7 @@
 
 namespace cubble
 {
+__device__ int dMaxBubblesPerCell;
 __device__ double dTotalFreeArea;
 __device__ double dTotalFreeAreaPerRadius;
 
