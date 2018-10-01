@@ -52,6 +52,8 @@ class Simulator
 	int *mbpc = nullptr;
 	double *dtfapr = nullptr;
 	double *dtfa = nullptr;
+	double *dvm = nullptr;
+	double *dtv = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;

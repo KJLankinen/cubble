@@ -67,6 +67,10 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(dtfapr != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
     assert(mbpc != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dvm, dVolumeMultiplier));
+    assert(dvm != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dtv, dTotalVolume));
+    assert(dtv != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDHStream, cudaStreamNonBlocking));
@@ -469,14 +473,11 @@ bool Simulator::deleteSmallBubbles()
         double *r = bubbleData.getRowPtr((size_t)BP::R);
         double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
-        // HACK: This is potentially very dangerous, if the used space is decreased in the future.
-        double *volumeMultiplier = bubbleData.getRowPtr((size_t)BP::ERROR) + numBubblesAboveMinRad;
-        cudaMemset(static_cast<void *>(volumeMultiplier), 0, sizeof(double));
-
+        CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
         cudaLaunch(defaultPolicy, calculateRedistributedGasVolume,
-                   volumes, r, flag, volumeMultiplier, env->getPi(), numBubbles);
+                   volumes, r, flag, env->getPi(), numBubbles);
 
-        const double invTotalVolume = 1.0 / cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, numBubbles);
+        cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
 
         int *newIdx = aboveMinRadFlags.getRowPtr(1);
         cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
@@ -496,11 +497,12 @@ bool Simulator::deleteSmallBubbles()
                    bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
                    bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
-                                  static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)), sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(), cudaMemcpyDeviceToDevice));
+                                  static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
+                                  sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                                  cudaMemcpyDeviceToDevice));
 
         numBubbles = numBubblesAboveMinRad;
-        cudaLaunch(defaultPolicy, addVolume,
-                   r, volumeMultiplier, numBubbles, invTotalVolume);
+        cudaLaunch(defaultPolicy, addVolume, r, numBubbles);
 
         NVTX_RANGE_POP();
     }
