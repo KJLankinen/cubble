@@ -70,7 +70,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDHStream, cudaStreamNonBlocking));
-    CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
+    CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDDEvent, cudaEventBlockingSync));
     CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
 
     printRelevantInfoOfCurrentDevice();
