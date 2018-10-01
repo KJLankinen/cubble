@@ -32,7 +32,7 @@ class FixedSizeDeviceArray
 
 	~FixedSizeDeviceArray() {}
 
-	T *getDataPtr() const { return dataPtr.get(); }
+	T *get() const { return dataPtr.get(); }
 
 	T *getRowPtr(size_t row, size_t slice = 0) const
 	{

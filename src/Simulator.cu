@@ -429,10 +429,10 @@ void Simulator::updateCellsAndNeighbors()
     cudaLaunch(findPolicy, findBubblePairs,
                x, y, z, r, offsets, sizes,
                neighborPairIndices.getRowPtr(0), neighborPairIndices.getRowPtr(1),
-               numPairs.getDataPtr(), numCells, numBubbles, env->getTfr() - env->getLbb(),
+               numPairs.get(), numCells, numBubbles, env->getTfr() - env->getLbb(),
                maxNumSharedVals, (int)neighborPairIndices.getWidth());
 
-    CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(numPairs.getDataPtr()), sizeof(int), cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(&hostNumPairs, static_cast<void *>(numPairs.get()), sizeof(int), cudaMemcpyDeviceToHost));
 }
 
 void Simulator::updateData()

@@ -32,7 +32,7 @@ class CubWrapper
         if (sizeof(T) > outData.getSizeInBytes())
             outData = FixedSizeDeviceArray<char>(sizeof(T), 1);
 
-        void *rawOutputPtr = static_cast<void *>(outData.getDataPtr());
+        void *rawOutputPtr = static_cast<void *>(outData.get());
         OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
 
         size_t tempStorageBytes = 0;
@@ -41,7 +41,7 @@ class CubWrapper
         if (tempStorageBytes > tempStorage.getSizeInBytes())
             tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 
-        void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
+        void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
         T hostOutputData;
@@ -63,7 +63,7 @@ class CubWrapper
         if (tempStorageBytes > tempStorage.getSizeInBytes())
             tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 
-        void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
+        void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
     }
 
@@ -80,7 +80,7 @@ class CubWrapper
         if (tempStorageBytes > tempStorage.getSizeInBytes())
             tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 
-        void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
+        void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
     }
 
@@ -99,7 +99,7 @@ class CubWrapper
         if (tempStorageBytes > tempStorage.getSizeInBytes())
             tempStorage = FixedSizeDeviceArray<char>(tempStorageBytes, 1);
 
-        void *tempStoragePtr = static_cast<void *>(tempStorage.getDataPtr());
+        void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
     }
 
