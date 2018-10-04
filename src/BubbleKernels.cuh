@@ -26,11 +26,11 @@ __device__ void comparePair(int idx1, int idx2, double *r, int neighborStride, i
     {
         int neighborIdx = 1 + atomicAdd(&neighbors[idx1 * neighborStride], 1);
         DEVICE_ASSERT(neighborIdx < neighborStride);
-        neighbors[neighbordIdx] = idx2;
+        neighbors[neighborIdx] = idx2;
 
         neighborIdx = 1 + atomicAdd(&neighbors[idx2 * neighborStride], 1);
         DEVICE_ASSERT(neighborIdx < neighborStride);
-        neighbors[neighbordIdx] = idx1;
+        neighbors[neighborIdx] = idx1;
     }
 }
 
