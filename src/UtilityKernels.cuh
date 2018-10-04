@@ -167,5 +167,7 @@ __device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool
 {
     double d = getDistanceSquared(idx1, idx2, multiplier, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
+
+    return d;
 }
 } // namespace cubble
