@@ -81,7 +81,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         neighborStreamVec.emplace_back();
-        neighborEventVec.emplace_bacl();
+        neighborEventVec.emplace_back();
         CUDA_CALL(cudaStreamCreateWithFlags(&neighborStreamVec[i], cudaStreamNonBlocking));
         CUDA_CALL(cudaEventCreate(&neighborEventVec[i]));
     }
@@ -459,7 +459,7 @@ void Simulator::updateCellsAndNeighbors()
                    interval.z, PBC_Z == 1, z
 #endif
         );
-        
+
         CUDA_CALL(cudaEventRecord(neighborEventVec[i], neighborStreamVec[i]));
         CUDA_CALL(cudaStreamWaitEvent(0, neighborEventVec[i], 0));
     }

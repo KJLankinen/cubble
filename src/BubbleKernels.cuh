@@ -106,8 +106,8 @@ __global__ void findNeighbors(int neighborCellNumber,
     if (cellIdx2 >= 0)
     {
         const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
-        DEVICE_ASSERT(celIdx1 < numCells);
-        DEVICE_ASSERT(celIdx2 < numCells);
+        DEVICE_ASSERT(cellIdx1 < numCells);
+        DEVICE_ASSERT(cellIdx2 < numCells);
 
         // Self comparison only loops the upper triangle of values (n * (n - 1)) / 2 comparisons instead of n^2.
         if (cellIdx1 == cellIdx2)
