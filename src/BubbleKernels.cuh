@@ -116,7 +116,7 @@ __global__ void findNeighbors(int neighborCellNumber,
             const int offset = offsets[cellIdx1];
             for (int k = threadIdx.x; k < (size * (size - 1)) / 2; k += blockDim.x)
             {
-                int idx1 = size - 2 - floor(sqrt(-8 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
+                int idx1 = size - 2 - (int)floor(sqrt(-8.0 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
                 const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 + (size - idx1) * ((size - idx1) - 1) / 2;
                 idx1 += offset;
 
