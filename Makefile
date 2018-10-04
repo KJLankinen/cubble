@@ -2,14 +2,21 @@
 # How many dimensions to simulate.
 # -----------------------------------------------------
 
-# The compiled code is different for different dimensions,
-# so this can't be given as a normal program parameter.
 NUM_DIM := 3
 
 
 # -----------------------------------------------------
+# Which dimensions use periodic boundary conditions?
+# -----------------------------------------------------
+
+PBC_X := 1
+PBC_Y := 1
+PBC_Z := 1
+
+# -----------------------------------------------------
 # Profile or not?
 # -----------------------------------------------------
+
 USE_PROFILING := 1
 
 
@@ -20,13 +27,13 @@ USE_PROFILING := 1
 # bin will be created when building the program.
 # Executable and the intermediate object files will be placed there.
 # 'make clean' will completely remove bin and its contents.
-BIN_PATH = bin/
+BIN_PATH := bin/
 
 # All the source files recide here.
-SRC_PATH = src/
+SRC_PATH := src/
 
 # All the data files recide here.
-DATA_PATH = data/
+DATA_PATH := data/
 
 # Included (external) headers
 INCL = -Iinclude/ 
@@ -76,7 +83,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING)
+DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
 
 
 # -----------------------------------------------------

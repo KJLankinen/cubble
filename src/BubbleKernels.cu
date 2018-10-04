@@ -13,10 +13,6 @@ __device__ double dTotalVolume;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
-	// Switch statements and ifs that diverge inside one warp/block are
-	// detrimental for performance. However, this should never diverge,
-	// as all the threads of one block should always be in the same cell
-	// going for the same neighbor.
 	ivec idxVec = cellIdx;
 	switch (neighborNum)
 	{
@@ -69,10 +65,31 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 		break;
 	}
 
-	idxVec += dim;
-	idxVec %= dim;
+#if (PBC_X == 1)
+	idxVec.x += dim.x;
+	idxVec.x %= dim.x;
+#else
+	if (idxVec.x < 0)
+		return -1;
+#endif
 
-	return idxVec.z * dim.y * dim.x + idxVec.y * dim.x + idxVec.x;
+#if (PBC_Y == 1)
+	idxVec.y += dim.y;
+	idxVec.y %= dim.y;
+#else
+	if (idxVec.y < 0)
+		return -1;
+#endif
+
+#if (PBC_Z == 1)
+	idxVec.z += dim.z;
+	idxVec.z %= dim.z;
+#else
+	if (idxVec.z < 0)
+		return -1;
+#endif
+
+	return get1DIdxFrom3DIdx(idxVec, dim);
 }
 
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
@@ -91,7 +108,21 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tf
 	const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
 	const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
 
-	return zid * cellDim.x * cellDim.y + yid * cellDim.x + xid;
+	return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
+}
+__device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim)
+{
+	return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
+}
+
+__device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
+{
+	ivec idxVec(0, 0, 0);
+	idxVec.x = idx % cellDim.x;
+	idxVec.y = (idx / cellDim.x) % cellDim.y;
+	idxVec.z = idx / (cellDim.x * cellDim.y);
+
+	return idxVec;
 }
 
 __device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue)

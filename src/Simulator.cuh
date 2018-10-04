@@ -16,6 +16,7 @@
 namespace cubble
 {
 enum class BubbleProperty;
+enum class NeighborType;
 
 class Simulator
 {

@@ -160,4 +160,26 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
     if (tid < numValues)
         setFlagIfGreaterThanConstant(tid, args...);
 }
+
+__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x1, double *x2)
+{
+    double val1 = x1[idx1];
+    double val2 = x2[idx2];
+    double distance = val1 - val2;
+
+    if (shouldWrap)
+    {
+        val2 = distance < -0.5 * multiplier ? val2 - multiplier : (distance > 0.5 * multiplier ? val2 + multiplier : val2);
+        distance = val1 - val2;
+    }
+
+    return distance * distance;
+}
+
+template <typename... Args>
+__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x1, double *x2, Args... args)
+{
+    double d = getDistanceSquared(idx1, idx2, multiplier, shouldWrap, x1, x2);
+    d += getDistanceSquared(idx1, idx2, args...);
+}
 } // namespace cubble
