@@ -163,9 +163,9 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
 
 __device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x1, double *x2);
 template <typename... Args>
-__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x1, double *x2, Args... args)
+__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x, Args... args)
 {
-    double d = getDistanceSquared(idx1, idx2, multiplier, shouldWrap, x1, x2);
+    double d = getDistanceSquared(idx1, idx2, multiplier, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
 }
 } // namespace cubble

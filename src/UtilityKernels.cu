@@ -28,10 +28,10 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x1, double *x2)
+__device__ double getDistanceSquared(int idx1, int idx2, double multiplier, bool shouldWrap, double *x)
 {
-    double val1 = x1[idx1];
-    double val2 = x2[idx2];
+    double val1 = x[idx1];
+    double val2 = x[idx2];
     double distance = val1 - val2;
 
     if (shouldWrap)

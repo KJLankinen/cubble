@@ -19,18 +19,18 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, double *r, int neighborStride, int *neighbors, Args... args)
+__device__ void comparePair(int idx1, int idx2, int neighborStride, int numValues, double *r, int *neighbors, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
     if (getDistanceSquared(idx1, idx2, args...) < 1.2 * radii * radii)
     {
-        int neighborIdx = 1 + atomicAdd(&neighbors[idx1 * neighborStride], 1);
-        DEVICE_ASSERT(neighborIdx < neighborStride);
-        neighbors[neighborIdx] = idx2;
+        int row = 1 + atomicAdd(&neighbors[idx1], 1);
+        DEVICE_ASSERT(row < neighborStride + 1);
+        neighbors[idx1 + row * numValues] = idx2;
 
-        neighborIdx = 1 + atomicAdd(&neighbors[idx2 * neighborStride], 1);
-        DEVICE_ASSERT(neighborIdx < neighborStride);
-        neighbors[neighborIdx] = idx1;
+        row = 1 + atomicAdd(&neighbors[idx2], 1);
+        DEVICE_ASSERT(row < neighborStride + 1);
+        neighbors[idx2 + row * numValues] = idx1;
     }
 }
 
@@ -89,7 +89,15 @@ __global__ void findBubblePairs(double *x,
                                 int maxNumPairs);
 
 template <typename... Args>
-__global__ void findNeighbors(int neighborCellNumber, int neighborStride, int *neighbors, int *offsets, int *sizes, double *r, Args... args)
+__global__ void findNeighbors(int neighborCellNumber,
+                              int neighborStride,
+                              int numValues,
+                              int numCells,
+                              int *neighbors,
+                              int *offsets,
+                              int *sizes,
+                              double *r,
+                              Args... args)
 {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
@@ -98,6 +106,8 @@ __global__ void findNeighbors(int neighborCellNumber, int neighborStride, int *n
     if (cellIdx2 >= 0)
     {
         const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
+        DEVICE_ASSERT(celIdx1 < numCells);
+        DEVICE_ASSERT(celIdx2 < numCells);
 
         // Self comparison only loops the upper triangle of values (n * (n - 1)) / 2 comparisons instead of n^2.
         if (cellIdx1 == cellIdx2)
@@ -109,7 +119,11 @@ __global__ void findNeighbors(int neighborCellNumber, int neighborStride, int *n
                 int idx1 = size - 2 - floor(sqrt(-8 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
                 const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 + (size - idx1) * ((size - idx1) - 1) / 2;
                 idx1 += offset;
-                comparePair(idx1, idx2, r, neighborStride, neighbors, args...);
+
+                DEVICE_ASSERT(idx1 < numValues);
+                DEVICE_ASSERT(idx2 < numValues);
+
+                comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
             }
         }
         else // Compare all values of one cell to all values of other cell, resulting in n1 * n2 comparisons.
@@ -122,7 +136,11 @@ __global__ void findNeighbors(int neighborCellNumber, int neighborStride, int *n
             {
                 const int idx1 = offset1 + k / size1;
                 const int idx2 = offset2 + k % size1;
-                comparePair(idx1, idx2, r, neighborStride, neighbors, args...);
+
+                DEVICE_ASSERT(idx1 < numValues);
+                DEVICE_ASSERT(idx2 < numValues);
+
+                comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
             }
         }
     }

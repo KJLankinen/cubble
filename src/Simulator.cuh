@@ -16,7 +16,6 @@
 namespace cubble
 {
 enum class BubbleProperty;
-enum class NeighborType;
 
 class Simulator
 {
@@ -40,6 +39,7 @@ class Simulator
 	dim3 getGridSize();
 
 	int numBubbles = 0;
+	const int neighborStride = 32;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 	int hostNumPairs = 0;
@@ -48,6 +48,9 @@ class Simulator
 	cudaEvent_t asyncCopyDHEvent;
 	cudaStream_t asyncCopyDDStream;
 	cudaStream_t asyncCopyDHStream;
+
+	std::vector<cudaStream_t> neighborStreamVec;
+	std::vector<cudaEvent_t> neighborEventVec;
 
 	// Host pointers to device global variables
 	int *mbpc = nullptr;
@@ -63,6 +66,8 @@ class Simulator
 	DeviceArray<int> aboveMinRadFlags;
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
+	DeviceArray<int> neighbors;
+
 	DeviceArray<int> neighborPairIndices;
 	DeviceArray<int> numPairs;
 
