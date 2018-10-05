@@ -162,10 +162,10 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
         setFlagIfGreaterThanConstant(tid, args...);
 }
 
-__forceinline__ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
+extern __forceinline__ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
 
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless);
+extern __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
+extern __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless);
 template <typename... Args>
 __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless, Args... args)
 {
