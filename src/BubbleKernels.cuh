@@ -136,8 +136,8 @@ __global__ void neighborSearch(int neighborCellNumber,
             const int offset2 = offsets[cellIdx2];
             for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x)
             {
-                const int idx1 = offset1 + k / size1;
-                const int idx2 = offset2 + k % size1;
+                const int idx1 = offset1 + k / size2;
+                const int idx2 = offset2 + k % size2;
 
                 DEVICE_ASSERT(idx1 < numValues);
                 DEVICE_ASSERT(idx2 < numValues);
