@@ -450,6 +450,7 @@ void Simulator::updateCellsAndNeighbors()
 
     cudaLaunch(defaultPolicy, findSizes,
                offsets, sizes, numCells, numBubbles);
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
@@ -481,6 +482,7 @@ void Simulator::updateCellsAndNeighbors()
     {
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
+        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDHEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
                    i, neighborStride, numBubbles, numCells, neighbors.get(), offsets, sizes, r,
                    interval.x, PBC_X == 1, x,
