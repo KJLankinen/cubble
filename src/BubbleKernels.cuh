@@ -124,6 +124,7 @@ __global__ void neighborSearch(int neighborCellNumber,
 
                 DEVICE_ASSERT(idx1 < numValues);
                 DEVICE_ASSERT(idx2 < numValues);
+                DEVICE_ASSERT(idx1 != idx2);
 
                 comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
             }
@@ -141,6 +142,7 @@ __global__ void neighborSearch(int neighborCellNumber,
 
                 DEVICE_ASSERT(idx1 < numValues);
                 DEVICE_ASSERT(idx2 < numValues);
+                DEVICE_ASSERT(idx1 != idx2);
 
                 comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
             }
