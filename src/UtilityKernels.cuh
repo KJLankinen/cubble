@@ -163,6 +163,7 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
 
 __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
 
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless);
 template <typename... Args>
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless, Args... args)
@@ -172,8 +173,6 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, boo
 
     return d;
 }
-
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
 template <typename... Args>
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, Args... args)
 {
