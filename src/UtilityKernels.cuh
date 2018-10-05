@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "Macros.h"
 #include "Util.h"
+#include "assert.h"
 
 namespace cubble
 {
