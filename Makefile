@@ -17,7 +17,7 @@ PBC_Z := 1
 # Profile or not?
 # -----------------------------------------------------
 
-USE_PROFILING := 1
+USE_PROFILING := 0
 
 
 # -----------------------------------------------------
@@ -84,6 +84,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # -----------------------------------------------------
 
 DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
+NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 
 # -----------------------------------------------------
@@ -169,8 +170,7 @@ $(BIN_PATH)%.o : $(SRC_PATH)%.cpp
 # GPU code
 $(BIN_PATH)%.o : $(SRC_PATH)%.cu
 	@mkdir -p $(BIN_PATH)
-	$(eval DEFINES += -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__)
-	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES))
+	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 
