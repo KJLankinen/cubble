@@ -216,7 +216,7 @@ __global__ void gasExchangeKernel(int numValues,
                 overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
                 overlapArea *= overlapArea;
                 overlapArea = r2 * r2 - overlapArea;
-                if (!(overlapArea > -0.0001))
+                if (!(overlapArea > -0.001))
                     printf("%f %d %d %f %f %f\n", overlapArea, tid, idx2, r1, r2, magnitude);
                 DEVICE_ASSERT(overlapArea > -0.001);
                 overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
