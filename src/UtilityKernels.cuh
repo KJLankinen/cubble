@@ -170,7 +170,6 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, boo
 {
     double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
-    DEVICE_ASSERT(d > 0);
 
     return d;
 }
@@ -179,7 +178,6 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, boo
 {
     double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
-    DEVICE_ASSERT(d > 0);
 
     return d;
 }

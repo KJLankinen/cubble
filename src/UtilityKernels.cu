@@ -46,6 +46,7 @@ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, boo
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
     const double distance = getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x);
+    DEVICE_ASSERT(distance * distance > 0);
     return distance * distance;
 }
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless)
