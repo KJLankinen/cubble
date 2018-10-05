@@ -483,6 +483,7 @@ void Simulator::updateCellsAndNeighbors()
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
+        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
                    i, neighborStride, numBubbles, numCells, neighbors.get(), offsets, sizes, r,
                    interval.x, PBC_X == 1, x,
