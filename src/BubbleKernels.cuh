@@ -55,7 +55,7 @@ __device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, doub
 {
     const double radii = r[idx1] + r[idx2];
     double multiplier = getDistanceSquared(idx1, idx2, args...);
-    if (radii * radii <= multiplier)
+    if (radii * radii >= multiplier)
     {
         multiplier = sqrt(multiplier);
         multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
