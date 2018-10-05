@@ -132,10 +132,9 @@ void Simulator::setupSimulation()
     double *energies = bubbleData.getRowPtr((size_t)BP::ENERGY);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
-    int *firstIndices = neighborPairIndices.getRowPtr(0);
-    int *secondIndices = neighborPairIndices.getRowPtr(1);
-
-    const dvec interval = env->getTfr() - env->getLbb();
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
     ExecutionPolicy defaultPolicy(128, numBubbles);
 
     double timeStep = env->getTimeStep();
@@ -226,11 +225,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
-    int *firstIndices = neighborPairIndices.getRowPtr(0);
-    int *secondIndices = neighborPairIndices.getRowPtr(1);
     int *flag = aboveMinRadFlags.getRowPtr(0);
-
-    dvec interval = env->getTfr() - env->getLbb();
+    const dvec interval = env->getTfr() - env->getLbb();
 
     double error = 100000;
     size_t numLoopsDone = 0;
@@ -319,7 +315,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
         CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
-        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *> mbpc, numBubbles, asyncCopyDDStream);
+        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *>(mbpc), numBubbles, asyncCopyDDStream);
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
         CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 

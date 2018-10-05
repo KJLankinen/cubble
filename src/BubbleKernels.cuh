@@ -201,7 +201,7 @@ __global__ void gasExchangeKernel(int numValues,
 
             double overlapArea = 0;
 
-            if (magnitude < r1 || magnitude < r2)
+            if (magnitude < r1 || magnitude < r2)
             {
                 overlapArea = r1 < r2 ? r1 : r2;
                 overlapArea *= overlapArea;
