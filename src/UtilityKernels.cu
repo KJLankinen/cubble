@@ -42,6 +42,10 @@ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, boo
 
     return distance;
 }
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless)
+{
+    return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+}
 
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
