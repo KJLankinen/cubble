@@ -146,7 +146,7 @@ void Simulator::setupSimulation()
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
     cudaLaunch(defaultPolicy, velocityKernel,
-               numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), r,
+               numBubbles, env->getFZeroPerMuZero(), neighbors.get(), r,
                interval.x, PBC_X == 1, x, dxdtOld,
                interval.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
@@ -176,7 +176,7 @@ void Simulator::setupSimulation()
                dxdtOld, dydtOld, dzdtOld, drdtOld);
 
     cudaLaunch(defaultPolicy, velocityKernel,
-               numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), r,
+               numBubbles, env->getFZeroPerMuZero(), neighbors.get(), r,
                interval.x, PBC_X == 1, x, dxdtOld,
                interval.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
@@ -250,7 +250,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        zPrd, z, dzdt, dzdtOld);
 
         cudaLaunch(defaultPolicy, velocityKernel,
-                   numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), rPrd,
+                   numBubbles, env->getFZeroPerMuZero(), neighbors.get(), rPrd,
                    interval.x, PBC_X == 1, xPrd, dxdtPrd,
                    interval.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
@@ -264,7 +264,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
             cudaLaunch(defaultPolicy, gasExchangeKernel,
                        numBubbles,
                        env->getPi(),
-                       neighborStride,
                        neighbors.get(),
                        rPrd,
                        drdtPrd,
@@ -346,7 +345,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     {
         cudaLaunch(defaultPolicy, potentialEnergyKernel,
                    numBubbles,
-                   neighborStride,
                    neighbors.get(),
                    r,
                    energies,

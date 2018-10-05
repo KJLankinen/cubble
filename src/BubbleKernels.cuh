@@ -151,19 +151,18 @@ __global__ void neighborSearch(int neighborCellNumber,
 }
 
 template <typename... Args>
-__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int neighborStride, int *neighbors, double *r, Args... args)
+__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *neighbors, double *r, Args... args)
 {
     const int tid = getGlobalTid();
     if (tid < numValues)
     {
         for (int i = 1; i <= neighbors[tid]; ++i)
-            forceBetweenPair(tid, neighbors[tid + neighborStride * i], fZeroPerMuZero, i == 1, r, args...);
+            forceBetweenPair(tid, neighbors[tid + numValues * i], fZeroPerMuZero, i == 1, r, args...);
     }
 }
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
-                                      int neighborStride,
                                       int *neighbors,
                                       double *r,
                                       double *energy,
@@ -176,7 +175,7 @@ __global__ void potentialEnergyKernel(int numValues,
         energy[tid] = 0;
         for (int i = 1; i <= neighbors[tid]; ++i)
         {
-            const int idx2 = neighbors[tid + neighborStride * i];
+            const int idx2 = neighbors[tid + numValues * i];
             const double e = r[tid] + r[idx2] - sqrt(getDistanceSquared(tid, idx2, args...));
             energy[tid] += e * e;
         }
@@ -186,7 +185,6 @@ __global__ void potentialEnergyKernel(int numValues,
 template <typename... Args>
 __global__ void gasExchangeKernel(int numValues,
                                   double pi,
-                                  int neighborStride,
                                   int *neighbors,
                                   double *r,
                                   double *drdt,
@@ -202,7 +200,7 @@ __global__ void gasExchangeKernel(int numValues,
         const double r1 = r[tid];
         for (int i = 1; i <= neighbors[tid]; ++i)
         {
-            const int idx2 = neighbors[tid + neighborStride * i];
+            const int idx2 = neighbors[tid + numValues * i];
             const double magnitude = sqrt(getDistanceSquared(tid, idx2, args...));
             const double r2 = r[idx2];
 
