@@ -51,11 +51,6 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
     neighbors = DeviceArray<int>(numBubbles, neighborStride + 1);
 
-    // TODO: Figure out a more sensible value for this.
-    const int maxNumPairs = (CUBBLE_NUM_NEIGHBORS + 1) * env->getNumBubblesPerCell() * numBubbles;
-    neighborPairIndices = DeviceArray<int>(maxNumPairs, 2);
-    numPairs = DeviceArray<int>(1, 1);
-
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
     cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
@@ -140,10 +135,8 @@ void Simulator::setupSimulation()
     int *firstIndices = neighborPairIndices.getRowPtr(0);
     int *secondIndices = neighborPairIndices.getRowPtr(1);
 
-    const dvec tfr = env->getTfr();
-    const dvec lbb = env->getLbb();
+    const dvec interval = env->getTfr() - env->getLbb();
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    ExecutionPolicy accPolicy(128, hostNumPairs);
 
     double timeStep = env->getTimeStep();
 
@@ -151,20 +144,27 @@ void Simulator::setupSimulation()
                0.0, numBubbles,
                dxdtOld, dydtOld, dzdtOld, drdtOld);
 
-    std::cout << "Calculating some initial values as a part of setup."
-              << " Num bubbles: " << numBubbles
-              << ", host num pairs: " << hostNumPairs
-              << std::endl;
+    std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
-    cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
-               x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
-               firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
+    cudaLaunch(defaultPolicy, velocityKernel,
+               numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), r,
+               interval.x, PBC_X == 1, x, dxdtOld,
+               interval.y, PBC_Y == 1, y, dydtOld
+#if (NUM_DIM == 3)
+               ,
+               interval.z, PBC_Z == 1, z, dzdtOld
+#endif
+    );
 
     cudaLaunch(defaultPolicy, eulerKernel,
                numBubbles, timeStep,
                x, dxdtOld,
-               y, dydtOld,
-               z, dzdtOld);
+               y, dydtOld
+#if (NUM_DIM == 3)
+               ,
+               z, dzdtOld
+#endif
+    );
 
     cudaLaunch(defaultPolicy, boundaryWrapKernel,
                numBubbles,
@@ -176,9 +176,15 @@ void Simulator::setupSimulation()
                0.0, numBubbles,
                dxdtOld, dydtOld, dzdtOld, drdtOld);
 
-    cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
-               x, y, z, r, dxdtOld, dydtOld, dzdtOld, drdtOld, energies, freeArea,
-               firstIndices, secondIndices, numBubbles, hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), tfr - lbb, false, false);
+    cudaLaunch(defaultPolicy, velocityKernel,
+               numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), r,
+               interval.x, PBC_X == 1, x, dxdtOld,
+               interval.y, PBC_Y == 1, y, dydtOld
+#if (NUM_DIM == 3)
+               ,
+               interval.z, PBC_Z == 1, z, dzdtOld
+#endif
+    );
 }
 
 bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
@@ -187,7 +193,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    ExecutionPolicy accPolicy(128, hostNumPairs);
 
     double timeStep = env->getTimeStep();
 
@@ -225,15 +230,13 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     int *secondIndices = neighborPairIndices.getRowPtr(1);
     int *flag = aboveMinRadFlags.getRowPtr(0);
 
+    dvec interval = env->getTfr() - env->getLbb();
+
     double error = 100000;
     size_t numLoopsDone = 0;
     do
     {
         NVTX_RANGE_PUSH_A("Integration step");
-
-        cudaLaunch(defaultPolicy, resetKernel,
-                   0.0, numBubbles,
-                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies, errors);
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
         if (useGasExchange)
@@ -250,15 +253,34 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        yPrd, y, dydt, dydtOld,
                        zPrd, z, dzdt, dzdtOld);
 
-        cudaLaunch(accPolicy, calculateVelocityAndGasExchange,
-                   xPrd, yPrd, zPrd, rPrd, dxdtPrd, dydtPrd, dzdtPrd, drdtPrd,
-                   energies, freeArea, firstIndices, secondIndices, numBubbles,
-                   hostNumPairs, env->getFZeroPerMuZero(), env->getPi(), env->getTfr() - env->getLbb(), calculateEnergy, useGasExchange);
+        cudaLaunch(defaultPolicy, velocityKernel,
+                   numBubbles, env->getFZeroPerMuZero(), neighborStride, neighbors.get(), rPrd,
+                   interval.x, PBC_X == 1, xPrd, dxdtPrd,
+                   interval.y, PBC_Y == 1, yPrd, dydtPrd
+#if (NUM_DIM == 3)
+                   ,
+                   interval.z, PBC_Z == 1, zPrd, dzdtPrd
+#endif
+        );
 
         if (useGasExchange)
         {
-            cudaLaunch(defaultPolicy, calculateFreeAreaPerRadius,
-                       rPrd, freeArea, errors, env->getPi(), numBubbles);
+            cudaLaunch(defaultPolicy, gasExchangeKernel,
+                       numBubbles,
+                       env->getPi(),
+                       neighborStride,
+                       neighbors.get(),
+                       rPrd,
+                       drdtPrd,
+                       freeArea,
+                       errors,
+                       interval.x, PBC_X == 1, xPrd, dxdtPrd,
+                       interval.y, PBC_Y == 1, yPrd, dydtPrd
+#if (NUM_DIM == 3)
+                       ,
+                       interval.z, PBC_Z == 1, zPrd, dzdtPrd
+#endif
+            );
 
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles);
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles);
@@ -297,8 +319,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
         CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
-        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, numPairs.get(), numBubbles, asyncCopyDDStream);
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), static_cast<void *>(numPairs.get()), sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
+        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *> mbpc, numBubbles, asyncCopyDDStream);
+        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
         CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 
         CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
@@ -325,7 +347,22 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     SimulationTime += timeStep;
 
     if (calculateEnergy)
+    {
+        cudaLaunch(defaultPolicy, potentialEnergyKernel,
+                   numBubbles,
+                   neighborStride,
+                   neighbors.get(),
+                   r,
+                   energy,
+                   interval.x, PBC_X == 1, x, dxdt,
+                   interval.y, PBC_Y == 1, y, dydt
+#if (NUM_DIM == 3)
+                   ,
+                   interval.z, PBC_Z == 1, z, dzdt
+#endif
+        );
         ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, numBubbles);
+    }
 
     CUDA_CALL(cudaEventSynchronize(asyncCopyDDEvent));
     const int numBubblesAboveMinRad = pinnedInt.get()[0];
@@ -450,7 +487,7 @@ void Simulator::updateCellsAndNeighbors()
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
-        cudaLaunch(findPolicy, findNeighbors,
+        cudaLaunch(findPolicy, neighborSearch,
                    i, neighborStride, numBubbles, numCells, neighbors.get(), offsets, sizes, r,
                    interval.x, PBC_X == 1, x,
                    interval.y, PBC_Y == 1, y

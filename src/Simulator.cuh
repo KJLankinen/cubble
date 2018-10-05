@@ -42,7 +42,6 @@ class Simulator
 	const int neighborStride = 32;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
-	int hostNumPairs = 0;
 
 	cudaEvent_t asyncCopyDDEvent;
 	cudaEvent_t asyncCopyDHEvent;
@@ -67,9 +66,6 @@ class Simulator
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
 	DeviceArray<int> neighbors;
-
-	DeviceArray<int> neighborPairIndices;
-	DeviceArray<int> numPairs;
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;

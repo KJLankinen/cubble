@@ -42,6 +42,23 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
     wrapAround(idx, args...);
 }
 
+__device__ void addVelocity(int idx1, int idx2, double multiplier, bool shouldReset, double maxDistance, bool shouldWrap, double *x, double *v);
+template <typename... Args>
+__device__ void addVelocity(int idx1, int idx2, double multiplier, bool shouldReset, double maxDistance, bool shouldWrap, double *x, double *v, Args... args)
+{
+    addVelocity(idx1, idx2, multiplier, shouldReset, maxDistance, shouldWrap, x, v);
+    addVelocity(idx1, idx2, multiplier, shouldReset, args...);
+}
+
+template <typename... Args>
+__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, bool shouldReset, double *r, Args... args)
+{
+    const double radii = r[idx1] + r[idx2];
+    double multiplier = sqrt(getDistanceSquared(idx1, idx2, args...));
+    multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
+    addVelocity(idx1, idx2, multiplier, shouldReset, args...);
+}
+
 template <typename... Args>
 __global__ void boundaryWrapKernel(int numValues, Args... args)
 {
@@ -73,31 +90,16 @@ __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles);
 
-__global__ void findBubblePairs(double *x,
-                                double *y,
-                                double *z,
-                                double *r,
-                                int *offsets,
-                                int *sizes,
-                                int *firstIndices,
-                                int *secondIndices,
-                                int *numPairs,
-                                int numCells,
-                                int numBubbles,
-                                dvec interval,
-                                int maxNumSharedVals,
-                                int maxNumPairs);
-
 template <typename... Args>
-__global__ void findNeighbors(int neighborCellNumber,
-                              int neighborStride,
-                              int numValues,
-                              int numCells,
-                              int *neighbors,
-                              int *offsets,
-                              int *sizes,
-                              double *r,
-                              Args... args)
+__global__ void neighborSearch(int neighborCellNumber,
+                               int neighborStride,
+                               int numValues,
+                               int numCells,
+                               int *neighbors,
+                               int *offsets,
+                               int *sizes,
+                               double *r,
+                               Args... args)
 {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
@@ -146,31 +148,90 @@ __global__ void findNeighbors(int neighborCellNumber,
     }
 }
 
-__global__ void calculateVelocityAndGasExchange(double *x,
-                                                double *y,
-                                                double *z,
-                                                double *r,
+template <typename... Args>
+__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int neighborStride, int *neighbors, double *r, Args... args)
+{
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+    {
+        for (int i = 1; i <= neighbors[tid]; ++i)
+            forceBetweenPair(tid, neighbors[tid + neighborStride * i], fZeroPerMuZero, i == 1, r, args...);
+    }
+}
 
-                                                double *dxdt,
-                                                double *dydt,
-                                                double *dzdt,
-                                                double *drdt,
+template <typename... Args>
+__global__ void potentialEnergyKernel(int numValues, int neighborStride, int *neighbors, double *r, double *energy, Args... args)
+{
+    // Note: This doesn't take into account the potential energy stored in a bubble that's pressed against a wall.
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+    {
+        energy[tid] = 0;
+        for (int i = 1; i <= neighbors[tid]; ++i)
+        {
+            const int idx2 = neighbors[tid + neighborStride * i];
+            const double e = r[tid] + r[idx2] - sqrt(getDistanceSquared(tid, idx2, args...));
+            energy[tid] += e * e;
+        }
+    }
+}
 
-                                                double *energy,
-                                                double *freeArea,
+template <typename... Args>
+__global__ void gasExchangeKernel(int numValues,
+                                  double pi,
+                                  int neighborStride,
+                                  int *neighbors,
+                                  double *r,
+                                  double *drdt,
+                                  double *freeArea,
+                                  double *freeAreaPerRadius,
+                                  Args... args)
+{
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+    {
+        double totalOverlapArea = 0;
+        drdt[tid] = 0;
+        const double r1 = r[tid];
+        for (int i = 1; i <= neighbors[tid]; ++i)
+        {
+            const int idx2 = neighbors[tid + neighborStride * i];
+            const double magnitude = sqrt(getDistanceSquared(tid, idx2, args...));
+            const double r2 = r[idx2];
 
-                                                int *firstIndices,
-                                                int *secondIndices,
+            double overlapArea = 0;
 
-                                                int numBubbles,
-                                                int numPairs,
-                                                double fZeroPerMuZero,
-                                                double pi,
-                                                dvec interval,
-                                                bool calculateEnergy,
-                                                bool useGasExchange);
+            if (magnitude < r1 || magnitude < r2)
+            {
+                overlapArea = r1 < r2 ? r1 : r2;
+                overlapArea *= overlapArea;
+            }
+            else
+            {
+                overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
+                overlapArea *= overlapArea;
+                overlapArea = r2 * r2 - overlapArea;
+                DEVICE_ASSERT(overlapArea > -0.0001);
+                overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+                DEVICE_ASSERT(overlapArea >= 0);
+            }
+#if (NUM_DIM == 3)
+            overlapArea *= pi;
+#else
+            overlapArea = 2.0 * sqrt(overlapArea);
+#endif
+            totalOverlapArea += overlapArea;
+            drdt[tid] += overlapArea * (1.0 / r2 - 1.0 / r1);
+        }
 
-__global__ void calculateFreeAreaPerRadius(double *r, double *freeArea, double *output, double pi, int numBubbles);
+        double area = 2.0 * pi * r1;
+#if (NUM_DIM == 3)
+        area *= 2.0 * r1;
+#endif
+        freeArea[tid] = area - totalOverlapArea;
+        freeAreaPerRadius[tid] = freeArea[tid] / r[tid];
+    }
+}
 
 __global__ void calculateFinalRadiusChangeRate(double *drdt,
                                                double *r,
