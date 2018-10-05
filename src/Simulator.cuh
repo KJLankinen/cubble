@@ -39,7 +39,7 @@ class Simulator
 	dim3 getGridSize();
 
 	int numBubbles = 0;
-	const int neighborStride = 32;
+	const int neighborStride = 128;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 

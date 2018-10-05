@@ -22,7 +22,7 @@ template <typename... Args>
 __device__ void comparePair(int idx1, int idx2, int neighborStride, int numValues, double *r, int *neighbors, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
-    if (getDistanceSquared(idx1, idx2, args...) < 1.2 * radii * radii)
+    if (getDistanceSquared(idx1, idx2, args...) < 1.1 * radii * radii)
     {
         int row = 1 + atomicAdd(&neighbors[idx1], 1);
         DEVICE_ASSERT(row < neighborStride + 1);
