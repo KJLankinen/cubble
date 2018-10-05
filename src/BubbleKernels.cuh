@@ -160,7 +160,12 @@ __global__ void velocityKernel(int numValues, double fZeroPerMuZero, int neighbo
 }
 
 template <typename... Args>
-__global__ void potentialEnergyKernel(int numValues, int neighborStride, int *neighbors, double *r, double *energy, Args... args)
+__global__ void potentialEnergyKernel(int numValues,
+                                      int neighborStride,
+                                      int *neighbors,
+                                      double *r,
+                                      double *energy,
+                                      Args... args)
 {
     // Note: This doesn't take into account the potential energy stored in a bubble that's pressed against a wall.
     const int tid = getGlobalTid();

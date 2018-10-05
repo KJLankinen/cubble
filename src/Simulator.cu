@@ -349,7 +349,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    neighborStride,
                    neighbors.get(),
                    r,
-                   energy,
+                   energies,
                    interval.x, PBC_X == 1, x, dxdt,
                    interval.y, PBC_Y == 1, y, dydt
 #if (NUM_DIM == 3)
