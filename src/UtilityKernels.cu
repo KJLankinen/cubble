@@ -28,7 +28,7 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__forceinline__ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
+__device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
     double val1 = x[idx1];
     double val2 = x[idx2];
@@ -43,13 +43,13 @@ __forceinline__ __device__ double getWrappedDistance(int idx1, int idx2, double 
     return distance;
 }
 
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
     const double distance = getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x);
     DEVICE_ASSERT(distance * distance > 0);
     return distance * distance;
 }
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless)
 {
     return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
 }

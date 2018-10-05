@@ -162,10 +162,10 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
         setFlagIfGreaterThanConstant(tid, args...);
 }
 
-extern __forceinline__ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
+__device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
 
-extern __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
-extern __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless);
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless);
 template <typename... Args>
 __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless, Args... args)
 {
@@ -175,7 +175,7 @@ __forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double 
     return d;
 }
 template <typename... Args>
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, Args... args)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, Args... args)
 {
     double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
