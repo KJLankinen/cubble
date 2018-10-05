@@ -42,21 +42,25 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
     wrapAround(idx, args...);
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, bool shouldReset, double maxDistance, bool shouldWrap, double *x, double *v);
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v);
 template <typename... Args>
-__device__ void addVelocity(int idx1, int idx2, double multiplier, bool shouldReset, double maxDistance, bool shouldWrap, double *x, double *v, Args... args)
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v, Args... args)
 {
-    addVelocity(idx1, idx2, multiplier, shouldReset, maxDistance, shouldWrap, x, v);
-    addVelocity(idx1, idx2, multiplier, shouldReset, args...);
+    addVelocity(idx1, idx2, multiplier, maxDistance, shouldWrap, x, v);
+    addVelocity(idx1, idx2, multiplier, args...);
 }
 
 template <typename... Args>
-__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, bool shouldReset, double *r, Args... args)
+__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, double *r, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
-    double multiplier = sqrt(getDistanceSquared(idx1, idx2, args...));
-    multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
-    addVelocity(idx1, idx2, multiplier, shouldReset, args...);
+    double multiplier = getDistanceSquared(idx1, idx2, args...);
+    if (radii * radii <= multiplier)
+    {
+        multiplier = sqrt(multiplier);
+        multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
+        addVelocity(idx1, idx2, multiplier, args...);
+    }
 }
 
 template <typename... Args>
@@ -157,7 +161,7 @@ __global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *neighb
     if (tid < numValues)
     {
         for (int i = 1; i <= neighbors[tid]; ++i)
-            forceBetweenPair(tid, neighbors[tid + numValues * i], fZeroPerMuZero, i == 1, r, args...);
+            forceBetweenPair(tid, neighbors[tid + numValues * i], fZeroPerMuZero, r, args...);
     }
 }
 

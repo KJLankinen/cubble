@@ -234,6 +234,10 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     {
         NVTX_RANGE_PUSH_A("Integration step");
 
+        cudaLaunch(defaultPolicy, resetKernel,
+                   0.0, numBubbles,
+                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd);
+
         //HACK:  This is REALLY stupid, but doing it temporarily.
         if (useGasExchange)
             cudaLaunch(defaultPolicy, predictKernel,

@@ -133,11 +133,8 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
 	coordinate[idx] = value;
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, bool shouldReset, double maxDistance, bool shouldWrap, double *x, double *v)
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v)
 {
-	if (shouldReset)
-		v[idx1] = 0;
-
 	v[idx1] += getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x) * multiplier;
 }
 
