@@ -331,11 +331,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         ++numLoopsDone;
 
-        if (numLoopsDone > 1000)
-        {
-            std::cout << "Done " << numLoopsDone << " loops, and error is " << error << std::endl;
-            throw std::runtime_error("Error.");
-        }
         NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
 

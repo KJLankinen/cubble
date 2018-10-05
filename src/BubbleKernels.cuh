@@ -127,6 +127,8 @@ __global__ void neighborSearch(int neighborCellNumber,
                 idx1 += offset;
 
                 DEVICE_ASSERT(idx1 < numValues);
+                if (!(idx2 < numValues))
+                    prinft("%d %d %d %d %d %d\n", idx1, idx2, offset, size, k, numValues);
                 DEVICE_ASSERT(idx2 < numValues);
                 DEVICE_ASSERT(idx1 != idx2);
 
