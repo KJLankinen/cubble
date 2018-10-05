@@ -204,31 +204,34 @@ __global__ void gasExchangeKernel(int numValues,
             const double magnitude = sqrt(getDistanceSquared(tid, idx2, args...));
             const double r2 = r[idx2];
 
-            double overlapArea = 0;
+            if (magnitude <= r1 + r2)
+            {
+                double overlapArea = 0;
 
-            if (magnitude < r1 || magnitude < r2)
-            {
-                overlapArea = r1 < r2 ? r1 : r2;
-                overlapArea *= overlapArea;
-            }
-            else
-            {
-                overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
-                overlapArea *= overlapArea;
-                overlapArea = r2 * r2 - overlapArea;
-                if (!(overlapArea > -0.001))
-                    printf("%f %d %d %f %f %f\n", overlapArea, tid, idx2, r1, r2, magnitude);
-                DEVICE_ASSERT(overlapArea > -0.001);
-                overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-                DEVICE_ASSERT(overlapArea >= 0);
-            }
+                if (magnitude < r1 || magnitude < r2)
+                {
+                    overlapArea = r1 < r2 ? r1 : r2;
+                    overlapArea *= overlapArea;
+                }
+                else
+                {
+                    overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
+                    overlapArea *= overlapArea;
+                    overlapArea = r2 * r2 - overlapArea;
+                    if (!(overlapArea > -0.0001))
+                        printf("%f %d %d %f %f %f\n", overlapArea, tid, idx2, r1, r2, magnitude);
+                    DEVICE_ASSERT(overlapArea > -0.0001);
+                    overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+                    DEVICE_ASSERT(overlapArea >= 0);
+                }
 #if (NUM_DIM == 3)
-            overlapArea *= pi;
+                overlapArea *= pi;
 #else
-            overlapArea = 2.0 * sqrt(overlapArea);
+                overlapArea = 2.0 * sqrt(overlapArea);
 #endif
-            totalOverlapArea += overlapArea;
-            drdt[tid] += overlapArea * (1.0 / r2 - 1.0 / r1);
+                totalOverlapArea += overlapArea;
+                drdt[tid] += overlapArea * (1.0 / r2 - 1.0 / r1);
+            }
         }
 
         double area = 2.0 * pi * r1;
