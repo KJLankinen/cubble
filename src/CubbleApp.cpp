@@ -200,6 +200,10 @@ void CubbleApp::runSimulation()
 
 void CubbleApp::saveSnapshotToFile()
 {
+#if (USE_PROFILING == 1)
+    return;
+#endif
+
     std::cout << "Writing a snapshot to a file." << std::endl;
     // This could easily be parallellized s.t. bubbles are fetched serially, but written to file parallelly.
 
@@ -228,11 +232,14 @@ void CubbleApp::saveSnapshotToFile()
        << "\n#--------------------------------------------------";
 
     // Add the new things here.
-    ss << "\n" << env->getLbb()
-       << "\n" << env->getTfr();
+    ss << "\n"
+       << env->getLbb()
+       << "\n"
+       << env->getTfr();
 
     for (const auto &bubble : tempVec)
-        ss << "\n" << bubble;
+        ss << "\n"
+           << bubble;
 
     fileio::writeStringToFile(filename, ss.str());
     ++numSnapshots;
