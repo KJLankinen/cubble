@@ -15,6 +15,11 @@ struct ExecutionPolicy
     {
     }
 
+    ExecutionPolicy()
+        : ExecutionPolicy(dim3(1, 1, 1), dim3(1, 1, 1), 0, 0)
+    {
+    }
+
     ExecutionPolicy(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
     {
         blockSize = dim3(numThreadsPerBlock, 1, 1);

@@ -201,7 +201,7 @@ __global__ void potentialEnergyKernel(int numValues,
     {
         const int idx1 = first[i];
         const int idx2 = second[i];
-        double e = r[idx1 + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
+        double e = r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
         e *= e;
         atomicAdd(&energy[idx1], e);
         atomicAdd(&energy[idx2], e);

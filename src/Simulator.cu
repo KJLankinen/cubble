@@ -302,11 +302,11 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
             );
 
             cudaLaunch(gasExchangePolicy, freeAreaKernel,
-                       env->getPi(), rPrd, freeArea, errors);
+                       numBubbles, env->getPi(), rPrd, freeArea, errors);
 
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
-            cudaLaunch(gasExchangePolicy, calculateFinalRadiusChangeRate,
+            cudaLaunch(gasExchangePolicy, finalRadiusChangeRateKernel,
                        drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
 
             CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
@@ -514,7 +514,7 @@ void Simulator::updateCellsAndNeighbors()
 
     CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
     CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
-    size_t sharedMemBytes = pinnedInt.get();
+    size_t sharedMemBytes = pinnedInt.get()[0];
     sharedMemBytes *= sharedMemBytes;
     sharedMemBytes *= 2;
     sharedMemBytes *= sizeof(int);
@@ -525,7 +525,7 @@ void Simulator::updateCellsAndNeighbors()
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
-                   i, neighborStride, numBubbles, numCells, offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                   i, numBubbles, numCells, pairs.getWidth(), offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                    interval.x, PBC_X == 1, x,
                    interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
