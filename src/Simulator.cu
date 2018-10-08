@@ -525,7 +525,8 @@ void Simulator::updateCellsAndNeighbors()
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
-                   i, numBubbles, numCells, pairs.getWidth(), offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                   i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
+                   offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                    interval.x, PBC_X == 1, x,
                    interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
