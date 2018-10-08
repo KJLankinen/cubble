@@ -192,6 +192,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
     ExecutionPolicy defaultPolicy(128, numBubbles);
+    ExecutionPolicy gasExchangePolicy(128, numBubbles);
+    gasExchangePolicy.stream = asyncCopyDHStream;
 
     double timeStep = env->getTimeStep();
 
@@ -265,7 +267,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         if (useGasExchange)
         {
-            cudaLaunch(defaultPolicy, gasExchangeKernel,
+            cudaLaunch(gasExchangePolicy, gasExchangeKernel,
                        numBubbles,
                        env->getPi(),
                        neighbors.get(),
@@ -281,10 +283,13 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 #endif
             );
 
-            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles);
-            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles);
-            cudaLaunch(defaultPolicy, calculateFinalRadiusChangeRate,
+            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
+            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
+            cudaLaunch(gasExchangePolicy, calculateFinalRadiusChangeRate,
                        drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
+            
+            CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
+            CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHEvent, 0, 0));
         }
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
