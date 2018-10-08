@@ -49,7 +49,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = DeviceArray<int>(numBubbles, 2);
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
-    pairs = DeviceArray<int>(5 * numBubbles, 4);
+    pairs = DeviceArray<int>(8 * numBubbles, 4);
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
