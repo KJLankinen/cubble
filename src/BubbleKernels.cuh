@@ -256,7 +256,7 @@ __global__ void gasExchangeKernel(int numValues,
             overlapArea *= (1.0 / r2 - 1.0 / r1);
 
             atomicAdd(&drdt[idx1], overlapArea);
-            atomicAdd(&drdt[idx2], overlapArea);
+            atomicAdd(&drdt[idx2], -overlapArea);
         }
     }
 }
