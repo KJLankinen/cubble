@@ -480,7 +480,7 @@ void Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
     CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
-    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, static_cast<int *>(mbpc), numBubbles, asyncCopyDHStream);
+    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, static_cast<int *>(mbpc), numCells, asyncCopyDHStream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
@@ -514,7 +514,7 @@ void Simulator::updateCellsAndNeighbors()
 
     CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
     CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
-    size_t sharedMemBytes = pinnedInt.get()[0];
+    uint32_t sharedMemBytes = pinnedInt.get()[0];
     sharedMemBytes *= sharedMemBytes;
     sharedMemBytes *= 2;
     sharedMemBytes *= sizeof(int);
