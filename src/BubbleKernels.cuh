@@ -26,7 +26,7 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *numLocalPairs, i
     if (getDistanceSquared(idx1, idx2, args...) < 1.1 * radii * radii)
     {
         // Set the smaller idx to idx1 and larger to idx2
-        int id = idx1 > idx2 ? idx2 : idx1;
+        int id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
