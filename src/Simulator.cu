@@ -540,12 +540,14 @@ void Simulator::updateCellsAndNeighbors()
         CUDA_CALL(cudaStreamWaitEvent(0, neighborEventVec[i], 0));
     }
 
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
+    int numPairs = pinnedInt.get()[0];
     cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
                                     const_cast<const int *>(pairs.getRowPtr(2)),
                                     pairs.getRowPtr(0),
                                     const_cast<const int *>(pairs.getRowPtr(3)),
                                     pairs.getRowPtr(1),
-                                    pairs.getWidth());
+                                    numPairs);
 }
 
 void Simulator::updateData()
