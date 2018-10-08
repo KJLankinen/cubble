@@ -518,6 +518,7 @@ void Simulator::updateCellsAndNeighbors()
     sharedMemBytes *= sharedMemBytes;
     sharedMemBytes *= 2;
     sharedMemBytes *= sizeof(int);
+    assertMemBelowLimit(sharedMemBytes);
     findPolicy.sharedMemBytes = sharedMemBytes;
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
