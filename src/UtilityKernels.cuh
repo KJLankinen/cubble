@@ -33,8 +33,8 @@ struct ExecutionPolicy
 
     dim3 gridSize;
     dim3 blockSize;
-    uint32_t sharedMemBytes;
-    cudaStream_t stream;
+    uint32_t sharedMemBytes = 0;
+    cudaStream_t stream = 0;
 };
 
 enum class ReorganizeType

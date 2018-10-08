@@ -7,6 +7,7 @@
 namespace cubble
 {
 extern __device__ int dMaxBubblesPerCell;
+extern __device__ int dNumPairs;
 extern __device__ double dTotalFreeArea;
 extern __device__ double dTotalFreeAreaPerRadius;
 extern __device__ double dVolumeMultiplier;
@@ -19,18 +20,19 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, int neighborStride, int numValues, double *r, int *neighbors, Args... args)
+__device__ void comparePair(int idx1, int idx2, double *r, int *numLocalPairs, int *localPairs, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
     if (getDistanceSquared(idx1, idx2, args...) < 1.1 * radii * radii)
     {
-        int row = 1 + atomicAdd(&neighbors[idx1], 1);
-        DEVICE_ASSERT(row < neighborStride + 1);
-        neighbors[idx1 + row * numValues] = idx2;
+        // Set the smaller idx to idx1 and larger to idx2
+        int id = idx1 > idx2 ? idx2 : idx1;
+        idx1 = idx1 < idx2 ? idx1 : idx2;
+        idx2 = id;
 
-        row = 1 + atomicAdd(&neighbors[idx2], 1);
-        DEVICE_ASSERT(row < neighborStride + 1);
-        neighbors[idx2 + row * numValues] = idx1;
+        id = atomicAdd(numLocalPairs, 2);
+        localPairs[id] = idx1;
+        localPairs[id + 1] = idx2;
     }
 }
 
@@ -96,15 +98,27 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 
 template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber,
-                               int neighborStride,
                                int numValues,
                                int numCells,
-                               int *neighbors,
+                               int numMaxPairs,
                                int *offsets,
                                int *sizes,
+                               int *first,
+                               int *second,
                                double *r,
                                Args... args)
 {
+    extern __shared__ int localPairs[];
+    __shared__ int numLocalPairs[2];
+
+    if (threadIdx.x == 0)
+    {
+        numLocalPairs[0] = 0;
+        numLocalPairs[1] = 0;
+    }
+
+    __syncthreads();
+
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 = getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
@@ -130,7 +144,7 @@ __global__ void neighborSearch(int neighborCellNumber,
                 DEVICE_ASSERT(idx2 < numValues);
                 DEVICE_ASSERT(idx1 != idx2);
 
-                comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
+                comparePair(idx1, idx2, r, numLocalPairs, localPairs, args...);
             }
         }
         else // Compare all values of one cell to all values of other cell, resulting in n1 * n2 comparisons.
@@ -148,110 +162,114 @@ __global__ void neighborSearch(int neighborCellNumber,
                 DEVICE_ASSERT(idx2 < numValues);
                 DEVICE_ASSERT(idx1 != idx2);
 
-                comparePair(idx1, idx2, neighborStride, numValues, r, neighbors, args...);
+                comparePair(idx1, idx2, r, numLocalPairs, localPairs, args...);
             }
+        }
+
+        __syncthreads();
+
+        if (threadIdx.x == 0)
+            numLocalPairs[1] = atomicAdd(&dNumPairs, numLocalPairs[0] / 2);
+
+        __syncthreads();
+
+        for (int k = threadIdx.x; k < numLocalPairs[0] / 2; k += blockDim.x)
+        {
+            DEVICE_ASSERT(numLocalPairs[1] + k < numMaxPairs);
+            first[numLocalPairs[1] + k] = localPairs[2 * k];
+            second[numLocalPairs[1] + k] = localPairs[2 * k + 1];
         }
     }
 }
 
 template <typename... Args>
-__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *neighbors, double *r, Args... args)
+__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
 {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-    {
-        for (int i = 1; i <= neighbors[tid]; ++i)
-            forceBetweenPair(tid, neighbors[tid + numValues * i], fZeroPerMuZero, r, args...);
-    }
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
+        forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
 }
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
-                                      int *neighbors,
+                                      int *first,
+                                      int *second,
                                       double *r,
                                       double *energy,
                                       Args... args)
 {
-    // Note: This doesn't take into account the potential energy stored in a bubble that's pressed against a wall.
-    const int tid = getGlobalTid();
-    if (tid < numValues)
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
     {
-        energy[tid] = 0;
-        for (int i = 1; i <= neighbors[tid]; ++i)
-        {
-            const int idx2 = neighbors[tid + numValues * i];
-            const double e = r[tid] + r[idx2] - sqrt(getDistanceSquared(tid, idx2, args...));
-            energy[tid] += e * e;
-        }
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        double e = r[idx1 + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
+        e *= e;
+        atomicAdd(&energy[idx1], e);
+        atomicAdd(&energy[idx2], e);
     }
 }
 
 template <typename... Args>
 __global__ void gasExchangeKernel(int numValues,
                                   double pi,
-                                  int *neighbors,
+                                  int *first,
+                                  int *second,
                                   double *r,
                                   double *drdt,
                                   double *freeArea,
-                                  double *freeAreaPerRadius,
                                   Args... args)
 {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
     {
-        double totalOverlapArea = 0;
-        drdt[tid] = 0;
-        const double r1 = r[tid];
-        for (int i = 1; i <= neighbors[tid]; ++i)
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+
+        const double magnitude = sqrt(getDistanceSquared(idx1, idx2, args...));
+        const double r1 = r[idx1];
+        const double r2 = r[idx2];
+
+        if (magnitude <= r1 + r2)
         {
-            const int idx2 = neighbors[tid + numValues * i];
-            const double magnitude = sqrt(getDistanceSquared(tid, idx2, args...));
-            const double r2 = r[idx2];
+            double overlapArea = 0;
 
-            if (magnitude <= r1 + r2)
+            if (magnitude < r1 || magnitude < r2)
             {
-                double overlapArea = 0;
-
-                if (magnitude < r1 || magnitude < r2)
-                {
-                    overlapArea = r1 < r2 ? r1 : r2;
-                    overlapArea *= overlapArea;
-                }
-                else
-                {
-                    overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
-                    overlapArea *= overlapArea;
-                    overlapArea = r2 * r2 - overlapArea;
-                    DEVICE_ASSERT(overlapArea > -0.0001);
-                    overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-                    DEVICE_ASSERT(overlapArea >= 0);
-                }
-#if (NUM_DIM == 3)
-                overlapArea *= pi;
-#else
-                overlapArea = 2.0 * sqrt(overlapArea);
-#endif
-                totalOverlapArea += overlapArea;
-                drdt[tid] += overlapArea * (1.0 / r2 - 1.0 / r1);
+                overlapArea = r1 < r2 ? r1 : r2;
+                overlapArea *= overlapArea;
             }
-        }
-
-        double area = 2.0 * pi * r1;
+            else
+            {
+                overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
+                overlapArea *= overlapArea;
+                overlapArea = r2 * r2 - overlapArea;
+                DEVICE_ASSERT(overlapArea > -0.0001);
+                overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+                DEVICE_ASSERT(overlapArea >= 0);
+            }
 #if (NUM_DIM == 3)
-        area *= 2.0 * r1;
+            overlapArea *= pi;
+#else
+            overlapArea = 2.0 * sqrt(overlapArea);
 #endif
-        freeArea[tid] = area - totalOverlapArea;
-        freeAreaPerRadius[tid] = freeArea[tid] / r[tid];
+            atomicAdd(&freeArea[idx1], overlapArea);
+            atomicAdd(&freeArea[idx2], overlapArea);
+
+            overlapArea *= (1.0 / r2 - 1.0 / r1);
+
+            atomicAdd(&drdt[idx1], overlapArea);
+            atomicAdd(&drdt[idx2], overlapArea);
+        }
     }
 }
 
-__global__ void calculateFinalRadiusChangeRate(double *drdt,
-                                               double *r,
-                                               double *freeArea,
-                                               int numBubbles,
-                                               double invPi,
-                                               double kappa,
-                                               double kParam);
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius);
+
+__global__ void finalRadiusChangeRateKernel(double *drdt,
+                                            double *r,
+                                            double *freeArea,
+                                            int numBubbles,
+                                            double invPi,
+                                            double kappa,
+                                            double kParam);
 
 __global__ void addVolume(double *r, int numBubbles);
 

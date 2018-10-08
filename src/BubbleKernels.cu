@@ -6,6 +6,7 @@
 namespace cubble
 {
 __device__ int dMaxBubblesPerCell;
+__device__ int dNumPairs;
 __device__ double dTotalFreeArea;
 __device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
@@ -135,7 +136,9 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
 
 __device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v)
 {
-	v[idx1] += getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x) * multiplier;
+	const double velocity = getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x) * multiplier;
+	atomicAdd(&v[idx1], velocity);
+	atomicAdd(&v[idx2], -velocity);
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
@@ -240,7 +243,21 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 	}
 }
 
-__global__ void calculateFinalRadiusChangeRate(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius)
+{
+	const int tid = getGlobalTid();
+	if (tid < numValues)
+	{
+		double area = 2.0 * pi * r[tid];
+#if (NUM_DIM == 3)
+		area *= 2.0 * r[tid];
+#endif
+		freeArea[tid] = area - freeArea[tid];
+		freeAreaPerRadius[tid] = freeArea[tid] / r[tid];
+	}
+}
+
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
 {
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)

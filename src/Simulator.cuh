@@ -39,7 +39,6 @@ class Simulator
 	dim3 getGridSize();
 
 	int numBubbles = 0;
-	const int neighborStride = 128;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 
@@ -53,6 +52,7 @@ class Simulator
 
 	// Host pointers to device global variables
 	int *mbpc = nullptr;
+	int *np = nullptr;
 	double *dtfapr = nullptr;
 	double *dtfa = nullptr;
 	double *dvm = nullptr;
@@ -65,7 +65,7 @@ class Simulator
 	DeviceArray<int> aboveMinRadFlags;
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
-	DeviceArray<int> neighbors;
+	DeviceArray<int> pairs;
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;

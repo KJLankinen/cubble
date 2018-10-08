@@ -49,7 +49,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = DeviceArray<int>(numBubbles, 2);
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
-    neighbors = DeviceArray<int>(numBubbles, neighborStride + 1);
+    pairs = DeviceArray<int>(10 * numBubbles, 2);
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -67,6 +67,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(dvm != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&dtv, dTotalVolume));
     assert(dtv != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&np, dNumPairs));
+    assert(np != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDHStream, cudaStreamNonBlocking));
@@ -136,6 +138,11 @@ void Simulator::setupSimulation()
     const dvec lbb = env->getLbb();
     const dvec interval = tfr - lbb;
     ExecutionPolicy defaultPolicy(128, numBubbles);
+    ExecutionPolicy pairPolicy;
+    pairPolicy.blockSize = dim3(128, 1, 1);
+    pairPolicy.stream = 0;
+    pairPolicy.gridSize = dim3(256, 1, 1);
+    pairPolicy.sharedMemBytes = 0;
 
     double timeStep = env->getTimeStep();
 
@@ -145,8 +152,8 @@ void Simulator::setupSimulation()
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
-    cudaLaunch(defaultPolicy, velocityKernel,
-               numBubbles, env->getFZeroPerMuZero(), neighbors.get(), r,
+    cudaLaunch(pairPolicy, velocityKernel,
+               numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                interval.x, PBC_X == 1, x, dxdtOld,
                interval.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
@@ -175,8 +182,8 @@ void Simulator::setupSimulation()
                0.0, numBubbles,
                dxdtOld, dydtOld, dzdtOld, drdtOld);
 
-    cudaLaunch(defaultPolicy, velocityKernel,
-               numBubbles, env->getFZeroPerMuZero(), neighbors.get(), r,
+    cudaLaunch(pairPolicy, velocityKernel,
+               numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                interval.x, PBC_X == 1, x, dxdtOld,
                interval.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
@@ -192,6 +199,13 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     const dvec lbb = env->getLbb();
     const double minRad = env->getMinRad();
     ExecutionPolicy defaultPolicy(128, numBubbles);
+
+    ExecutionPolicy pairPolicy;
+    pairPolicy.blockSize = dim3(128, 1, 1);
+    pairPolicy.stream = 0;
+    pairPolicy.gridSize = dim3(256, 1, 1);
+    pairPolicy.sharedMemBytes = 0;
+
     ExecutionPolicy gasExchangePolicy(128, numBubbles);
     gasExchangePolicy.stream = asyncCopyDHStream;
 
@@ -238,7 +252,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         cudaLaunch(defaultPolicy, resetKernel,
                    0.0, numBubbles,
-                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd);
+                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
         if (useGasExchange)
@@ -257,8 +271,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
-        cudaLaunch(defaultPolicy, velocityKernel,
-                   numBubbles, env->getFZeroPerMuZero(), neighbors.get(), rPrd,
+        cudaLaunch(pairPolicy, velocityKernel,
+                   numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
                    interval.x, PBC_X == 1, xPrd, dxdtPrd,
                    interval.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
@@ -269,15 +283,16 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         if (useGasExchange)
         {
+            pairPolicy.stream = gasExchangePolicy.stream;
             CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, asyncCopyDHEvent, 0));
-            cudaLaunch(gasExchangePolicy, gasExchangeKernel,
+            cudaLaunch(pairPolicy, gasExchangeKernel,
                        numBubbles,
                        env->getPi(),
-                       neighbors.get(),
+                       pairs.getRowPtr(0),
+                       pairs.getRowPtr(1),
                        rPrd,
                        drdtPrd,
                        freeArea,
-                       errors,
                        interval.x, PBC_X == 1, xPrd, dxdtPrd,
                        interval.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
@@ -286,13 +301,18 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 #endif
             );
 
+            cudaLaunch(gasExchangePolicy, freeAreaKernel,
+                       env->getPi(), rPrd, freeArea, errors);
+
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
             cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
             cudaLaunch(gasExchangePolicy, calculateFinalRadiusChangeRate,
                        drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
-            
+
             CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
             CUDA_CALL(cudaStreamWaitEvent(0, asyncCopyDHEvent, 0));
+
+            pairPolicy.stream = 0;
         }
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
@@ -350,9 +370,10 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
     if (calculateEnergy)
     {
-        cudaLaunch(defaultPolicy, potentialEnergyKernel,
+        cudaLaunch(pairPolicy, potentialEnergyKernel,
                    numBubbles,
-                   neighbors.get(),
+                   pairs.getRowPtr(0),
+                   pairs.getRowPtr(1),
                    r,
                    energies,
                    interval.x, PBC_X == 1, x, dxdt,
@@ -426,8 +447,6 @@ void Simulator::updateCellsAndNeighbors()
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
-    neighbors.setBytesToZero();
-
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
     double *z = bubbleData.getRowPtr((size_t)BP::Z);
@@ -460,6 +479,11 @@ void Simulator::updateCellsAndNeighbors()
                offsets, sizes, numCells, numBubbles);
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
+    CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
+    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, static_cast<int *>(mbpc), numBubbles, asyncCopyDHStream);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
+
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
@@ -482,17 +506,26 @@ void Simulator::updateCellsAndNeighbors()
 
     CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 
-    ExecutionPolicy findPolicy(128, numBubbles);
+    dvec interval = env->getTfr() - env->getLbb();
+
+    ExecutionPolicy findPolicy;
+    findPolicy.blockSize = dim3(128, 1, 1);
     findPolicy.gridSize = gridSize;
 
-    dvec interval = env->getTfr() - env->getLbb();
+    CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
+    CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
+    size_t sharedMemBytes = pinnedInt.get();
+    sharedMemBytes *= sharedMemBytes;
+    sharedMemBytes *= 2;
+    sharedMemBytes *= sizeof(int);
+    findPolicy.sharedMemBytes = sharedMemBytes;
+
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
-        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDHEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
-                   i, neighborStride, numBubbles, numCells, neighbors.get(), offsets, sizes, r,
+                   i, neighborStride, numBubbles, numCells, offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                    interval.x, PBC_X == 1, x,
                    interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
