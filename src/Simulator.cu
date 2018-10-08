@@ -289,7 +289,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
             
             CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
-            CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHEvent, 0, 0));
+            CUDA_CALL(cudaStreamWaitEvent(0, asyncCopyDHEvent, 0));
         }
 
         //HACK:  This is REALLY stupid, but doing it temporarily.
