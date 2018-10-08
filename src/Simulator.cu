@@ -255,6 +255,8 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        yPrd, y, dydt, dydtOld,
                        zPrd, z, dzdt, dzdtOld);
 
+        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+
         cudaLaunch(defaultPolicy, velocityKernel,
                    numBubbles, env->getFZeroPerMuZero(), neighbors.get(), rPrd,
                    interval.x, PBC_X == 1, xPrd, dxdtPrd,
@@ -267,6 +269,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         if (useGasExchange)
         {
+            CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, asyncCopyDHEvent, 0));
             cudaLaunch(gasExchangePolicy, gasExchangeKernel,
                        numBubbles,
                        env->getPi(),
