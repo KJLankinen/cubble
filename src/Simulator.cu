@@ -336,11 +336,23 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
         CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
         cudaLaunch(defaultPolicy, boundaryWrapKernel,
-                   numBubbles,
-                   xPrd, lbb.x, tfr.x,
-                   yPrd, lbb.y, tfr.y,
-                   zPrd, lbb.z, tfr.z);
+                   numBubbles
+#if (PBC_X == 1)
+                   ,
+                   xPrd, lbb.x, tfr.x
+#endif
+#if (PBC_Y == 1)
+                   ,
+                   yPrd, lbb.y, tfr.y
+#endif
+#if (PBC_Z == 1)
+                   ,
+                   zPrd, lbb.z, tfr.z
+#endif
+        );
+#endif
 
         cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel, numBubbles, flag, rPrd, env->getMinRad());
 
