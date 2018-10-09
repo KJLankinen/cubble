@@ -28,9 +28,21 @@ CubbleApp::~CubbleApp()
 
 void CubbleApp::run()
 {
-    setupSimulation();
-    stabilizeSimulation();
-    runSimulation();
+    try
+    {
+        setupSimulation();
+        stabilizeSimulation();
+        runSimulation();
+    }
+    catch (const std::runtime_error &err)
+    {
+        std::cout << "Runtime error encountered! Saving a final snapshot and parameters." << std::endl;
+        saveSnapshotToFile();
+        env->writeParameters();
+
+        throw err;
+    }
+
     saveSnapshotToFile();
     env->writeParameters();
 
