@@ -23,7 +23,7 @@ template <typename... Args>
 __device__ void comparePair(int idx1, int idx2, double *r, int *numLocalPairs, int *localPairs, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
-    if (getDistanceSquared(idx1, idx2, args...) < 1.1 * radii * radii)
+    if (getDistanceSquared(idx1, idx2, args...) < 1.5 * radii * radii)
     {
         // Set the smaller idx to idx1 and larger to idx2
         int id = idx1 > idx2 ? idx1 : idx2;
