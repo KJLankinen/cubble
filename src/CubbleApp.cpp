@@ -44,6 +44,12 @@ void CubbleApp::setupSimulation()
     simulator->setupSimulation();
     saveSnapshotToFile();
 
+    std::cout << "Settling bubbles after they've been created before scaling or stabilization." << std::endl;
+    for (size_t i = 0; i < 10; ++i)
+        simulator->integrate();
+
+    saveSnapshotToFile();
+
     int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
@@ -64,7 +70,7 @@ void CubbleApp::setupSimulation()
     {
         env->setTfr(env->getTfr() - scaleAmount * env->getTfr());
 
-        for (size_t i = 0; i < 10; ++i)
+        for (size_t i = 0; i < 100; ++i)
             simulator->integrate();
 
         bubbleVolume = simulator->getVolumeOfBubbles();
