@@ -197,6 +197,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 {
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
     const double minRad = env->getMinRad();
     ExecutionPolicy defaultPolicy(128, numBubbles);
 
@@ -242,9 +243,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
     int *flag = aboveMinRadFlags.getRowPtr(0);
-    const dvec lbb = env->getLbb();
-    const dvec tfr = env->getTfr();
-    const dvec interval = tfr - lbb;
 
     double error = 100000;
     size_t numLoopsDone = 0;
@@ -295,11 +293,11 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                        rPrd,
                        drdtPrd,
                        freeArea,
-                       interval.x, PBC_X == 1, xPrd, dxdtPrd,
-                       interval.y, PBC_Y == 1, yPrd, dydtPrd
+                       interval.x, PBC_X == 1, xPrd,
+                       interval.y, PBC_Y == 1, yPrd
 #if (NUM_DIM == 3)
                        ,
-                       interval.z, PBC_Z == 1, zPrd, dzdtPrd
+                       interval.z, PBC_Z == 1, zPrd
 #endif
             );
 
