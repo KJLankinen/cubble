@@ -150,10 +150,13 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
 	const double radius = r[idx];
 	const double distance1 = x[idx] - zeroPoint;
 	const double distance2 = x[idx] - (interval + zeroPoint);
-	double distance = distance1 < distance2 ? distance1 : distance2;
-	if (radius >= distance)
+	double distance = distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
+
+	if (radius * radius >= distance * distance)
 	{
-		const double velocity = distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
+		const double direction = distance < 0 ? -1.0 : 1.0;
+		distance *= direction;
+		const double velocity = direction * distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
 		atomicAdd(&v[idx], velocity);
 	}
 }
