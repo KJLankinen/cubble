@@ -70,7 +70,7 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 	idxVec.x += dim.x;
 	idxVec.x %= dim.x;
 #else
-	if (idxVec.x < 0 || idxVec.x > dim.x)
+	if (idxVec.x < 0 || idxVec.x >= dim.x)
 		return -1;
 #endif
 
@@ -78,7 +78,7 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 	idxVec.y += dim.y;
 	idxVec.y %= dim.y;
 #else
-	if (idxVec.y < 0 || idxVec.y > dim.y)
+	if (idxVec.y < 0 || idxVec.y >= dim.y)
 		return -1;
 #endif
 
@@ -86,7 +86,7 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 	idxVec.z += dim.z;
 	idxVec.z %= dim.z;
 #else
-	if (idxVec.z < 0 || idxVec.z > dim.z)
+	if (idxVec.z < 0 || idxVec.z >= dim.z)
 		return -1;
 #endif
 
