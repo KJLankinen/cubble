@@ -491,11 +491,6 @@ void Simulator::updateCellsAndNeighbors()
                offsets, sizes, numCells, numBubbles);
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
-    CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
-    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Max, sizes, static_cast<int *>(mbpc), numCells, asyncCopyDHStream);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDHStream));
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
-
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
@@ -523,20 +518,15 @@ void Simulator::updateCellsAndNeighbors()
     ExecutionPolicy findPolicy;
     findPolicy.blockSize = dim3(128, 1, 1);
     findPolicy.gridSize = gridSize;
+    findPolicy.sharedMemBytes = 0;
 
     CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
-    CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
-    uint32_t sharedMemBytes = pinnedInt.get()[0];
-    sharedMemBytes *= sharedMemBytes;
-    sharedMemBytes *= 2;
-    sharedMemBytes *= sizeof(int);
-    assertMemBelowLimit(sharedMemBytes);
-    findPolicy.sharedMemBytes = sharedMemBytes;
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
+        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDHEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
                    i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
                    offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,

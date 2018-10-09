@@ -20,7 +20,7 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, double *r, int *numLocalPairs, int *localPairs, Args... args)
+__device__ void comparePair(int idx1, int idx2, double *r, int *fist, int *second, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
     if (getDistanceSquared(idx1, idx2, args...) < 1.5 * radii * radii)
@@ -30,9 +30,9 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *numLocalPairs, i
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        id = atomicAdd(numLocalPairs, 2);
-        localPairs[id] = idx1;
-        localPairs[id + 1] = idx2;
+        id = atomicAdd(&dNumPairs, 1);
+        first[id] = idx1;
+        second[id] = idx2;
     }
 }
 
@@ -119,17 +119,6 @@ __global__ void neighborSearch(int neighborCellNumber,
                                double *r,
                                Args... args)
 {
-    extern __shared__ int localPairs[];
-    __shared__ int numLocalPairs[2];
-
-    if (threadIdx.x == 0)
-    {
-        numLocalPairs[0] = 0;
-        numLocalPairs[1] = 0;
-    }
-
-    __syncthreads();
-
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 = getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
@@ -155,7 +144,7 @@ __global__ void neighborSearch(int neighborCellNumber,
                 DEVICE_ASSERT(idx2 < numValues);
                 DEVICE_ASSERT(idx1 != idx2);
 
-                comparePair(idx1, idx2, r, numLocalPairs, localPairs, args...);
+                comparePair(idx1, idx2, r, first, second, args...);
             }
         }
         else // Compare all values of one cell to all values of other cell, resulting in n1 * n2 comparisons.
@@ -173,22 +162,8 @@ __global__ void neighborSearch(int neighborCellNumber,
                 DEVICE_ASSERT(idx2 < numValues);
                 DEVICE_ASSERT(idx1 != idx2);
 
-                comparePair(idx1, idx2, r, numLocalPairs, localPairs, args...);
+                comparePair(idx1, idx2, r, first, second, args...);
             }
-        }
-
-        __syncthreads();
-
-        if (threadIdx.x == 0)
-            numLocalPairs[1] = atomicAdd(&dNumPairs, numLocalPairs[0] / 2);
-
-        __syncthreads();
-
-        for (int k = threadIdx.x; k < numLocalPairs[0] / 2; k += blockDim.x)
-        {
-            DEVICE_ASSERT(numLocalPairs[1] + k < numMaxPairs);
-            first[numLocalPairs[1] + k] = localPairs[2 * k];
-            second[numLocalPairs[1] + k] = localPairs[2 * k + 1];
         }
     }
 }
