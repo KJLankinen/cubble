@@ -199,7 +199,7 @@ __global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *first,
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
 
-#if (PBC_X != 1 || PBC_Y != 1 || PBC_Z != 1)
+#if (PBC_X != 1 || PBC_Y != 1 || PBC_Z != 1)
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
         forceFromWalls(i, fZeroPerMuZero, r, args...);
 #endif
