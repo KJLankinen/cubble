@@ -376,11 +376,11 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
                    pairs.getRowPtr(1),
                    r,
                    energies,
-                   interval.x, PBC_X == 1, x, dxdt,
-                   interval.y, PBC_Y == 1, y, dydt
+                   interval.x, PBC_X == 1, x,
+                   interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
                    ,
-                   interval.z, PBC_Z == 1, z, dzdt
+                   interval.z, PBC_Z == 1, z
 #endif
         );
         ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, numBubbles);
