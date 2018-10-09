@@ -20,7 +20,7 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, double *r, int *fist, int *second, Args... args)
+__device__ void comparePair(int idx1, int idx2, double *r, int *first, int *second, Args... args)
 {
     const double radii = r[idx1] + r[idx2];
     if (getDistanceSquared(idx1, idx2, args...) < 1.5 * radii * radii)
