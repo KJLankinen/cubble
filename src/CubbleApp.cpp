@@ -44,8 +44,8 @@ void CubbleApp::setupSimulation()
     simulator->setupSimulation();
     saveSnapshotToFile();
 
-    std::cout << "Settling bubbles after they've been created before scaling or stabilization." << std::endl;
-    for (size_t i = 0; i < 10; ++i)
+    std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
+    for (size_t i = 0; i < 1000; ++i)
         simulator->integrate();
 
     saveSnapshotToFile();
