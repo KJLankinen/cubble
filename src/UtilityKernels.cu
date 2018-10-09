@@ -28,16 +28,13 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
+__device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap)
 {
-    double val1 = x[idx1];
-    double val2 = x[idx2];
-    double distance = val1 - val2;
-
+    double distance = x1 - x2;
     if (shouldWrap)
     {
-        val2 = distance < -0.5 * maxDistance ? val2 - maxDistance : (distance > 0.5 * maxDistance ? val2 + maxDistance : val2);
-        distance = val1 - val2;
+        x2 = distance < -0.5 * maxDistance ? x2 - maxDistance : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
+        distance = x1 - x2;
     }
 
     return distance;
@@ -45,11 +42,11 @@ __device__ double getWrappedDistance(int idx1, int idx2, double maxDistance, boo
 
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
-    const double distance = getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x);
+    const double distance = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
     DEVICE_ASSERT(distance * distance > 0);
     return distance * distance;
 }
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, double *useless)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap, double *x, double *useless)
 {
     return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
 }

@@ -44,11 +44,11 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
     wrapAround(idx, args...);
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v);
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v);
 template <typename... Args>
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v, Args... args)
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v, Args... args)
 {
-    addVelocity(idx1, idx2, multiplier, maxDistance, shouldWrap, x, v);
+    addVelocity(idx1, idx2, multiplier, maxDistance, minDistance, shouldWrap, x, v);
     addVelocity(idx1, idx2, multiplier, args...);
 }
 
@@ -63,6 +63,17 @@ __device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, doub
         multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
         addVelocity(idx1, idx2, multiplier, args...);
     }
+}
+
+__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
+                               double interval, double zeroPoint, bool shouldWrap, double *x, double *v);
+template <typename... Args>
+__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
+                               double interval, double zeroPoint, bool shouldWrap, double *x, double *v,
+                               Args... args)
+{
+    forceFromWalls(idx, fZeroPerMuZero, r, interval, zeroPoint, shouldWrap, x, v);
+    forceFromWalls(idx, fZeroPerMuZero, r, args...);
 }
 
 template <typename... Args>
@@ -187,6 +198,11 @@ __global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *first,
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
+
+#if (PBC_X != 1 || PBC_Y != 1 || PBC_Z != 1)
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
+        forceFromWalls(i, fZeroPerMuZero, r, args...);
+#endif
 }
 
 template <typename... Args>

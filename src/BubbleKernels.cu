@@ -134,11 +134,28 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
 	coordinate[idx] = value;
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, bool shouldWrap, double *x, double *v)
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v)
 {
-	const double velocity = getWrappedDistance(idx1, idx2, maxDistance, shouldWrap, x) * multiplier;
+	const double velocity = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
 	atomicAdd(&v[idx1], velocity);
 	atomicAdd(&v[idx2], -velocity);
+}
+
+__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
+							   double interval, double zeroPoint, bool shouldWrap, double *x, double *v)
+{
+	if (shouldWrap)
+		return;
+
+	const double radius = r[idx];
+	const double distance1 = x[idx] - zeroPoint;
+	const double distance2 = interval + zeroPoint - x[idx];
+	double distance = distance1 < distance2 ? distance1 : distance2;
+	if (radius >= distance)
+	{
+		const double velocity = distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
+		atomicAdd(&v[idx], -velocity);
+	}
 }
 
 __global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)

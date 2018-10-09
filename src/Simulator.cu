@@ -154,11 +154,11 @@ void Simulator::setupSimulation()
 
     cudaLaunch(pairPolicy, velocityKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-               interval.x, PBC_X == 1, x, dxdtOld,
-               interval.y, PBC_Y == 1, y, dydtOld
+               interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+               interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
                ,
-               interval.z, PBC_Z == 1, z, dzdtOld
+               interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
     );
 
@@ -184,11 +184,11 @@ void Simulator::setupSimulation()
 
     cudaLaunch(pairPolicy, velocityKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-               interval.x, PBC_X == 1, x, dxdtOld,
-               interval.y, PBC_Y == 1, y, dydtOld
+               interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+               interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
                ,
-               interval.z, PBC_Z == 1, z, dzdtOld
+               interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
     );
 }
@@ -242,7 +242,9 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
     int *flag = aboveMinRadFlags.getRowPtr(0);
-    const dvec interval = env->getTfr() - env->getLbb();
+    const dvec lbb = env->getLbb();
+    const dvec tfr = env->getTfr();
+    const dvec interval = tfr - lbb;
 
     double error = 100000;
     size_t numLoopsDone = 0;
@@ -273,11 +275,11 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         cudaLaunch(pairPolicy, velocityKernel,
                    numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
-                   interval.x, PBC_X == 1, xPrd, dxdtPrd,
-                   interval.y, PBC_Y == 1, yPrd, dydtPrd
+                   interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
+                   interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
                    ,
-                   interval.z, PBC_Z == 1, zPrd, dzdtPrd
+                   interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
         );
 
