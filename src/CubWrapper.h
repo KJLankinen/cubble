@@ -103,6 +103,23 @@ class CubWrapper
         (*func)(tempStoragePtr, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
     }
 
+    template <typename SampleIteratorT, typename CounterT, typename LevelT, typename OffsetT>
+    void histogram(cudaError_t (*func)(void *, size_t &, SampleIteratorT, CounterT *, int, LevelT, LevelT, OffsetT, cudaStream_t, bool),
+                   SampleIteratorT samples, CounterT *deviceOutHist, int numLevels, LevelT lowerLevel, LevelT upperLevel, OffsetT numSamples, cudaStream_t stream = 0, bool debug = false)
+    {
+        assert(deviceOutHist != nullptr);
+        assert(samples != nullptr);
+
+        size_t tempStorageBytes = 0;
+        (*func)(NULL, tempStorageBytes, samples, deviceOutHist, numLevels, lowerLevel, upperLevel, numSamples, stream, debug);
+
+        if (tempStorageBytes > tempStorage.getSizeInBytes())
+            tempStorage = DeviceArray<char>(tempStorageBytes, 1);
+
+        void *tempStoragePtr = static_cast<void *>(tempStorage.get());
+        (*func)(tempStoragePtr, tempStorageBytes, samples, deviceOutHist, numLevels, lowerLevel, upperLevel, numSamples, stream, debug);
+    }
+
   private:
     std::shared_ptr<Env> env;
     DeviceArray<char> outData;

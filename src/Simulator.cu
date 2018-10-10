@@ -489,12 +489,17 @@ void Simulator::updateCellsAndNeighbors()
     CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
     CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
 
-    cudaLaunch(defaultPolicy, findOffsets,
-               cellIndices, offsets, numCells, numBubbles);
+    cubWrapper->histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven,
+                                                bubbleCellIndices.getRowPtr(2),
+                                                sizes,
+                                                numCells + 1,
+                                                0,
+                                                numCells,
+                                                numBubbles,
+                                                asyncCopyDHStream);
 
-    cudaLaunch(defaultPolicy, findSizes,
-               offsets, sizes, numCells, numBubbles);
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+    cubWrapper->scan<int *, int *>(&cub::DevuceScan::ExclusiveSum, sizes, offsets, numCells, asyncCopyDHStream);
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,

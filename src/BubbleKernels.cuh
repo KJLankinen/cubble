@@ -102,9 +102,6 @@ __global__ void assignDataToBubbles(double *x,
                                     double minRad,
                                     int numBubbles);
 
-__global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int numBubbles);
-__global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles);
-
 __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles);
 
 template <typename... Args>
