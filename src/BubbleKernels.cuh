@@ -162,6 +162,8 @@ __global__ void neighborSearch(int neighborCellNumber,
 
                 DEVICE_ASSERT(idx1 < numValues);
                 DEVICE_ASSERT(idx2 < numValues);
+                if (!(idx1 != idx2))
+                    printf("%d %d %d\n%d %d %d\n\n", idx1, size1, offset1, idx2, size2, offset2);
                 DEVICE_ASSERT(idx1 != idx2);
 
                 comparePair(idx1, idx2, r, first, second, args...);
