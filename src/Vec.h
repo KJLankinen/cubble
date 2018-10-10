@@ -47,9 +47,7 @@ class vec
 
 	__host__ __device__ ~vec() {}
 
-	__host__ __device__
-		T
-		getSquaredLength() const
+	__host__ __device__ T getSquaredLength() const
 	{
 		T temp = 0;
 
@@ -60,13 +58,9 @@ class vec
 		return temp;
 	}
 
-	__host__ __device__
-		T
-		getLength() const { return std::sqrt(getSquaredLength()); }
+	__host__ __device__ T getLength() const { return std::sqrt(getSquaredLength()); }
 
-	__host__ __device__
-		vec<T>
-		getAbsolute() const
+	__host__ __device__ vec<T> getAbsolute() const
 	{
 		vec<T> v;
 		v.x = x < 0 ? -x : x;
@@ -86,28 +80,32 @@ class vec
 		return v / v.getLength();
 	}
 
-	__host__ __device__
-		T
-		getMaxComponent() const
+	__host__ __device__ T getMaxComponent() const
 	{
 		return x > y ? (x > z ? x : z) : (y > z ? y : z);
 	}
 
-	__host__ __device__
-		T
-		getMinComponent() const
+	__host__ __device__ T getMinComponent() const
 	{
 		return x < y ? (x < z ? x : z) : (y < z ? y : z);
 	}
 
 	template <typename T2>
-	__host__ __device__
-		vec<T2>
-		asType() const
+	__host__ __device__ vec<T2> asType() const
 	{
 		vec<T2> v(*this);
 
 		return v;
+	}
+
+	__host__ vec<int> ceil() const
+	{
+		return vec<int>(std::ceil(x), std::ceil(y), std::ceil(z));
+	}
+
+	__host__ vec<int> floor() const
+	{
+		return vec<int>(std::floor(x), std::floor(y), std::floor(z));
 	}
 
 	// + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +

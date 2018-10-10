@@ -619,16 +619,20 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
 dim3 Simulator::getGridSize()
 {
-    int numBubblesPerCell = env->getNumBubblesPerCell();
+    const int totalNumCells = std::ceil((float)numBubbles / env->getNumBubblesPerCell());
+    dvec interval = env->getTfr() - env->getLbb();
+    interval /= interval.x;
 #if (NUM_DIM == 3)
-    int numCellsPerDim = std::ceil(std::cbrt((float)numBubbles / numBubblesPerCell));
-    dim3 gridSize(numCellsPerDim, numCellsPerDim, numCellsPerDim);
+    float nx = std::cbrt((float)totalNumCells / (interval.y * interval.z));
 #else
-    int numCellsPerDim = std::ceil(std::sqrt((float)numBubbles / numBubblesPerCell));
-    dim3 gridSize(numCellsPerDim, numCellsPerDim, 1);
+    float nx = std::sqrt((float)totalNumCells / interval.y);
 #endif
+    ivec grid = (nx * interval).ceil();
+    assert(grid.x > 0);
+    assert(grid.y > 0);
+    assert(grid.z > 0);
 
-    return gridSize;
+    return dim3(grid.x, grid.y, grid.z);
 }
 
 double Simulator::getVolumeOfBubbles()
