@@ -126,6 +126,9 @@ __global__ void neighborSearch(int neighborCellNumber,
         DEVICE_ASSERT(cellIdx1 < numCells);
         DEVICE_ASSERT(cellIdx2 < numCells);
 
+        if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
+            return;
+
         // Self comparison only loops the upper triangle of values (n * (n - 1)) / 2 comparisons instead of n^2.
         if (cellIdx1 == cellIdx2)
         {
@@ -148,8 +151,6 @@ __global__ void neighborSearch(int neighborCellNumber,
         {
             const int size1 = sizes[cellIdx1];
             const int size2 = sizes[cellIdx2];
-            DEVICE_ASSERT(size1 != 0);
-            DEVICE_ASSERT(size2 != 0);
             const int offset1 = offsets[cellIdx1];
             const int offset2 = offsets[cellIdx2];
             for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x)
@@ -159,8 +160,6 @@ __global__ void neighborSearch(int neighborCellNumber,
 
                 DEVICE_ASSERT(idx1 < numValues);
                 DEVICE_ASSERT(idx2 < numValues);
-                if (!(idx1 != idx2))
-                    printf("%d %d %d\t%d\n%d %d %d\n\n", idx1, size1, offset1, k, idx2, size2, offset2);
                 DEVICE_ASSERT(idx1 != idx2);
 
                 comparePair(idx1, idx2, r, first, second, args...);
