@@ -253,12 +253,11 @@ __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles)
 {
-	int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numBubbles; i += gridDim.x * blockDim.x)
 	{
-		const int cellIdx = getCellIdxFromPos(x[tid], y[tid], z[tid], lbb, tfr, cellDim);
-		cellIndices[tid] = cellIdx;
-		bubbleIndices[tid] = tid;
+		const int cellIdx = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
+		cellIndices[i] = cellIdx;
+		bubbleIndices[i] = i;
 	}
 }
 

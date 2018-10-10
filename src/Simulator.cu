@@ -469,7 +469,9 @@ void Simulator::updateCellsAndNeighbors()
     cellData.setBytesToZero();
     bubbleCellIndices.setBytesToZero();
 
-    ExecutionPolicy defaultPolicy(128, numBubbles);
+    ExecutionPolicy defaultPolicy = {};
+    defaultPolicy.blockSize = dim3(128, 1, 1);
+    defaultPolicy.gridSize = dim3(256, 1, 1);
     ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, asyncCopyDDStream);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
                x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
