@@ -408,7 +408,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     bool continueSimulation = numBubbles > env->getMinNumBubbles();
 
 #if (NUM_DIM == 3)
-    pinnedDouble.get()[0] < interval.getMinComponent();
+    pinnedDouble.get()[0] < 0.5 * interval.getMinComponent();
 #endif
 
     return continueSimulation;
