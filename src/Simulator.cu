@@ -538,7 +538,7 @@ void Simulator::updateCellsAndNeighbors()
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDHEvent, 0));
         cudaLaunch(findPolicy, neighborSearch,
                    i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
-                   offsets, sizes, pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                   offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,
                    interval.x, PBC_X == 1, x,
                    interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
@@ -550,6 +550,15 @@ void Simulator::updateCellsAndNeighbors()
         CUDA_CALL(cudaEventRecord(neighborEventVec[i], neighborStreamVec[i]));
         CUDA_CALL(cudaStreamWaitEvent(0, neighborEventVec[i], 0));
     }
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
+    int numPairs = pinnedInt.get()[0];
+    cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
+                                    const_cast<const int *>(pairs.getRowPtr(2)),
+                                    pairs.getRowPtr(0),
+                                    const_cast<const int *>(pairs.getRowPtr(3)),
+                                    pairs.getRowPtr(1),
+                                    numPairs);
 }
 
 void Simulator::updateData()
