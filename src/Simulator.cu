@@ -242,8 +242,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
-    int *flag = aboveMinRadFlags.getRowPtr(0);
-
+    double maxRadius = -5;
     double error = 100000;
     size_t numLoopsDone = 0;
     do
@@ -336,32 +335,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
         CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
 
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-        cudaLaunch(defaultPolicy, boundaryWrapKernel,
-                   numBubbles
-#if (PBC_X == 1)
-                   ,
-                   xPrd, lbb.x, tfr.x
-#endif
-#if (PBC_Y == 1)
-                   ,
-                   yPrd, lbb.y, tfr.y
-#endif
-#if (PBC_Z == 1)
-                   ,
-                   zPrd, lbb.z, tfr.z
-#endif
-        );
-#endif
-
-        cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel, numBubbles, flag, rPrd, env->getMinRad());
-
-        CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
-        CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
-        cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, flag, static_cast<int *>(mbpc), numBubbles, asyncCopyDDStream);
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
-        CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
-
         CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
         error = pinnedDouble.get()[0];
         if (error < env->getErrorTolerance() && timeStep < 0.1)
@@ -373,6 +346,32 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 
         NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
+
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+    cudaLaunch(defaultPolicy, boundaryWrapKernel,
+               numBubbles
+#if (PBC_X == 1)
+               ,
+               xPrd, lbb.x, tfr.x
+#endif
+#if (PBC_Y == 1)
+               ,
+               yPrd, lbb.y, tfr.y
+#endif
+#if (PBC_Z == 1)
+               ,
+               zPrd, lbb.z, tfr.z
+#endif
+    );
+#endif
+
+    defaultPolicy.stream = asyncCopyDDStream;
+    cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel, numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
+    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, asyncCopyDDStream);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, asyncCopyDDStream));
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, rPrd, static_cast<double *>(dtfa), numBubbles, asyncCopyDDStream);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDDStream));
+    CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
 
     updateData();
 
@@ -407,7 +406,13 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     if (shouldDeleteBubbles || integrationStep % 50 == 0)
         updateCellsAndNeighbors();
 
-    return numBubbles > env->getMinNumBubbles();
+    bool continueSimulation = numBubbles > env->getMinNumBubbles();
+
+#if (NUM_DIM == 3)
+    pinnedDouble.get()[0] < interval.getMinComponent();
+#endif
+
+    return continueSimulation;
 }
 
 void Simulator::generateBubbles()
@@ -563,6 +568,7 @@ void Simulator::updateCellsAndNeighbors()
 
 void Simulator::updateData()
 {
+    CUDA_CALL(cudaStreamWaitEvent(0, asyncCopyDDEvent, 0));
     const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
