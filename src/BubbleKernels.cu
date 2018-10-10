@@ -228,27 +228,26 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 
 __global__ void findOffsets(int *cellIndices, int *offsets, int numCells, int numBubbles)
 {
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numBubbles; i += gridDim.x * blockDim.x)
 	{
-		if (tid == 0)
+		if (i == 0)
 			offsets[0] = 0;
 		else
 		{
-			const int cellIdx = cellIndices[tid];
-			if (cellIdx > cellIndices[tid - 1])
-				offsets[cellIdx] = tid;
+			const int cellIdx = cellIndices[i];
+			DEVICE_ASSERT(cellIdx < numCells);
+			if (cellIdx > cellIndices[i - 1])
+				offsets[cellIdx] = i;
 		}
 	}
 }
 
 __global__ void findSizes(int *offsets, int *sizes, int numCells, int numBubbles)
 {
-	const int tid = getGlobalTid();
-	if (tid < numCells)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numCells; i += gridDim.x * blockDim.x)
 	{
-		const int nextOffset = tid < numCells - 1 ? offsets[tid + 1] : numBubbles;
-		sizes[tid] = nextOffset - offsets[tid];
+		const int nextOffset = i < numCells - 1 ? offsets[i + 1] : numBubbles;
+		sizes[i] = nextOffset - offsets[i];
 	}
 }
 

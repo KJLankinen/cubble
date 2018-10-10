@@ -466,6 +466,7 @@ void Simulator::updateCellsAndNeighbors()
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
+    cellData.setBytesToZero();
     bubbleCellIndices.setBytesToZero();
 
     ExecutionPolicy defaultPolicy(128, numBubbles);
