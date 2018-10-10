@@ -47,6 +47,11 @@ class CubWrapper
         T hostOutputData;
         cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost, stream);
 
+#ifndef NDEBUG
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaPeekAtLastError());
+#endif
+
         return hostOutputData;
     }
 
@@ -65,6 +70,11 @@ class CubWrapper
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
+
+#ifndef NDEBUG
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaPeekAtLastError());
+#endif
     }
 
     template <typename InputIterT, typename OutputIterT>
@@ -82,6 +92,11 @@ class CubWrapper
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
+
+#ifndef NDEBUG
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaPeekAtLastError());
+#endif
     }
 
     template <typename KeyT, typename ValueT>
@@ -101,6 +116,11 @@ class CubWrapper
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
+
+#ifndef NDEBUG
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaPeekAtLastError());
+#endif
     }
 
     template <typename SampleIteratorT, typename CounterT, typename LevelT, typename OffsetT>
@@ -118,6 +138,11 @@ class CubWrapper
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, samples, deviceOutHist, numLevels, lowerLevel, upperLevel, numSamples, stream, debug);
+
+#ifndef NDEBUG
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaPeekAtLastError());
+#endif
     }
 
   private:
