@@ -498,6 +498,7 @@ void Simulator::updateCellsAndNeighbors()
                                                 numBubbles);
 
     cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
