@@ -466,6 +466,8 @@ void Simulator::updateCellsAndNeighbors()
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
+    bubbleCellIndices.setBytesToZero();
+
     ExecutionPolicy defaultPolicy(128, numBubbles);
     ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, asyncCopyDDStream);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
