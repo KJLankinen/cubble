@@ -475,8 +475,6 @@ void Simulator::updateCellsAndNeighbors()
     ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, asyncCopyDDStream);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
                x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
-    CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
@@ -497,11 +495,9 @@ void Simulator::updateCellsAndNeighbors()
                                                 numCells + 1,
                                                 0,
                                                 numCells,
-                                                numBubbles,
-                                                asyncCopyDHStream);
+                                                numBubbles);
 
-    cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells, asyncCopyDHStream);
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
+    cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
