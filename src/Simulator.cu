@@ -242,7 +242,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
-    double maxRadius = -5;
     double error = 100000;
     size_t numLoopsDone = 0;
     do
