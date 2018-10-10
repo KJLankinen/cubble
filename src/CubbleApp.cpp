@@ -82,13 +82,13 @@ void CubbleApp::setupSimulation()
     {
         env->setTfr(env->getTfr() - scaleAmount * env->getTfr());
 
-        for (size_t i = 0; i < 100; ++i)
+        for (size_t i = 0; i < 10; ++i)
             simulator->integrate();
 
         bubbleVolume = simulator->getVolumeOfBubbles();
         phi = bubbleVolume / env->getSimulationBoxVolume();
 
-        if (numSteps % 1000 == 0)
+        if (numSteps % 100 == 0)
             printPhi(phi, phiTarget);
 
         ++numSteps;
