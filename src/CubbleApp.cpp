@@ -77,7 +77,7 @@ void CubbleApp::setupSimulation()
 
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
-    const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1) * env->getTfr();
+    const dvec scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1) * env->getTfr();
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
         env->setTfr(env->getTfr() - scaleAmount);
