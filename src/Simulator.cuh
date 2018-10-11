@@ -36,8 +36,11 @@ class Simulator
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
 	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
-	void doGasExchange(ExecutionPolicy policy, double timeStep, const cudaEvent_t &eventToWaitOn);
-	void doVelocity(const ExecutionPolicy &policy, double timeStep);
+	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn);
+	void doVelocity(const ExecutionPolicy &policy);
+	void doReset(const ExecutionPolicy &policy);
+	double doError();
+	void doBoundaryWrap(const ExecutionPolicy &policy);
 
 	void generateBubbles();
 	void updateCellsAndNeighbors();

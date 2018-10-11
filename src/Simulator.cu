@@ -244,22 +244,14 @@ bool Simulator::integrate(bool useGasExchange)
     {
         NVTX_RANGE_PUSH_A("Integration step");
 
-        cudaLaunch(defaultPolicy, resetKernel,
-                   0.0, numBubbles,
-                   dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
-
+        doReset(defaultPolicy);
         doPrediction(defaultPolicy, timeStep, useGasExchange);
-        doVelocity(pairPolicy, timeStep);
+        doVelocity(pairPolicy);
         if (useGasExchange)
-            doGasExchange(pairPolicy, timeStep, asyncCopyDHEvent);
+            doGasExchange(pairPolicy, asyncCopyDHEvent);
         doCorrection(defaultPolicy, timeStep, useGasExchange);
 
-        cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
-        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
-
-        CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
-        error = pinnedDouble.get()[0];
+        error = doError();
         if (error < env->getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
         else if (error > env->getErrorTolerance())
@@ -270,23 +262,7 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
 
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    cudaLaunch(defaultPolicy, boundaryWrapKernel,
-               numBubbles
-#if (PBC_X == 1)
-               ,
-               xPrd, lbb.x, tfr.x
-#endif
-#if (PBC_Y == 1)
-               ,
-               yPrd, lbb.y, tfr.y
-#endif
-#if (PBC_Z == 1)
-               ,
-               zPrd, lbb.z, tfr.z
-#endif
-    );
-#endif
+    doBoundaryWrap(defaultPolicy);
 
     defaultPolicy.stream = asyncCopyDDStream;
     cudaLaunch(defaultPolicy, setFlagIfGreaterThanConstantKernel, numBubbles, aboveMinRadFlags.getRowPtr(0), rPrd, env->getMinRad());
@@ -401,7 +377,7 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
     CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
 }
 
-void Simulator::doGasExchange(ExecutionPolicy policy, double timeStep, const cudaEvent_t &eventToWaitOn)
+void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn)
 {
     ExecutionPolicy gasExchangePolicy(128, numBubbles);
     gasExchangePolicy.stream = asyncCopyDHStream;
@@ -452,7 +428,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, double timeStep, const cud
     CUDA_CALL(cudaStreamWaitEvent(stream, asyncCopyDHEvent, 0));
 }
 
-void Simulator::doVelocity(const ExecutionPolicy &policy, double timeStep)
+void Simulator::doVelocity(const ExecutionPolicy &policy)
 {
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -475,6 +451,56 @@ void Simulator::doVelocity(const ExecutionPolicy &policy, double timeStep)
                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
     );
+}
+
+void Simulator::doReset(const ExecutionPolicy &policy)
+{
+    cudaLaunch(policy, resetKernel,
+               0.0, numBubbles,
+               bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+               bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+               bubbleData.getRowPtr((size_t)BP::ENERGY));
+}
+
+double Simulator::doError()
+{
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
+    CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
+
+    return pinnedDouble.get()[0];
+}
+
+void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
+{
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+    cudaLaunch(policy, boundaryWrapKernel,
+               numBubbles
+#if (PBC_X == 1)
+               ,
+               xPrd, lbb.x, tfr.x
+#endif
+#if (PBC_Y == 1)
+               ,
+               yPrd, lbb.y, tfr.y
+#endif
+#if (PBC_Z == 1)
+               ,
+               zPrd, lbb.z, tfr.z
+#endif
+    );
+#endif
 }
 
 void Simulator::generateBubbles()
