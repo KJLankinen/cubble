@@ -35,6 +35,7 @@ class Simulator
 
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
+	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();

@@ -298,22 +298,9 @@ bool Simulator::integrate(bool useGasExchange)
             pairPolicy.stream = 0;
         }
 
-        //HACK:  This is REALLY stupid, but doing it temporarily.
-        if (useGasExchange)
-            cudaLaunch(defaultPolicy, correctKernel,
-                       numBubbles, timeStep, errors,
-                       xPrd, x, dxdt, dxdtPrd,
-                       yPrd, y, dydt, dydtPrd,
-                       zPrd, z, dzdt, dzdtPrd,
-                       rPrd, r, drdt, drdtPrd);
-        else
-            cudaLaunch(defaultPolicy, correctKernel,
-                       numBubbles, timeStep, errors,
-                       xPrd, x, dxdt, dxdtPrd,
-                       yPrd, y, dydt, dydtPrd,
-                       zPrd, z, dzdt, dzdtPrd);
+        doCorrection(defaultPolicy, timeStep, useGasExchange);
 
-        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, defaultPolicy.stream));
         CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
         cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
@@ -416,6 +403,45 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
                    xPrd, x, dxdt, dxdtOld,
                    yPrd, y, dydt, dydtOld,
                    zPrd, z, dzdt, dzdtOld);
+}
+
+void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange)
+{
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
+
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
+    double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
+    double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
+
+    double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
+
+    if (useGasExchange)
+        cudaLaunch(defaultPolicy, correctKernel,
+                   numBubbles, timeStep, errors,
+                   xPrd, x, dxdt, dxdtPrd,
+                   yPrd, y, dydt, dydtPrd,
+                   zPrd, z, dzdt, dzdtPrd,
+                   rPrd, r, drdt, drdtPrd);
+    else
+        cudaLaunch(defaultPolicy, correctKernel,
+                   numBubbles, timeStep, errors,
+                   xPrd, x, dxdt, dxdtPrd,
+                   yPrd, y, dydt, dydtPrd,
+                   zPrd, z, dzdt, dzdtPrd);
 }
 
 void Simulator::generateBubbles()
