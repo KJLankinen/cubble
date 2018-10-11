@@ -250,7 +250,7 @@ bool Simulator::integrate(bool useGasExchange)
     bool continueSimulation = numBubbles > env->getMinNumBubbles();
 
 #if (NUM_DIM == 3)
-    continueSimulation &= pinnedDouble.get()[0] < 0.5 * interval.getMinComponent();
+    continueSimulation &= pinnedDouble.get()[0] < 0.5 * (env->getTfr() - env->getLbb()).getMinComponent();
 #endif
 
     return continueSimulation;
