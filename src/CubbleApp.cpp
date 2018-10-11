@@ -108,11 +108,12 @@ void CubbleApp::stabilizeSimulation()
     const int failsafe = 500;
 
     simulator->integrate();
+    simulator->calculateEnergy();
+    double energy2 = simulator->getElasticEnergy();
 
     while (true)
     {
-        simulator->calculateEnergy();
-        double energy1 = simulator->getElasticEnergy();
+        double energy1 = energy2;
         double time = 0;
 
         for (int i = 0; i < env->getNumStepsToRelax(); ++i)
@@ -122,7 +123,7 @@ void CubbleApp::stabilizeSimulation()
         }
 
         simulator->calculateEnergy();
-        double energy2 = simulator->getElasticEnergy();
+        energy2 = simulator->getElasticEnergy();
         double deltaEnergy = std::abs(energy2 - energy1) / time;
         deltaEnergy *= 0.5 * env->getSigmaZero();
 
