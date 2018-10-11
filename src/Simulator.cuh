@@ -8,6 +8,7 @@
 #include "DeviceArray.h"
 #include "PinnedHostArray.h"
 #include "CubWrapper.h"
+#include "UtilityKernels.cuh"
 
 #include <utility>
 #include <memory>
