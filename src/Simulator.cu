@@ -206,9 +206,6 @@ bool Simulator::integrate(bool useGasExchange)
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    ExecutionPolicy gasExchangePolicy(128, numBubbles);
-    gasExchangePolicy.stream = asyncCopyDHStream;
-
     double timeStep = env->getTimeStep();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
@@ -252,7 +249,6 @@ bool Simulator::integrate(bool useGasExchange)
                    dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
 
         doPrediction(defaultPolicy, timeStep, useGasExchange);
-        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, defaultPolicy.stream));
 
         cudaLaunch(pairPolicy, velocityKernel,
                    numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
@@ -265,43 +261,10 @@ bool Simulator::integrate(bool useGasExchange)
         );
 
         if (useGasExchange)
-        {
-            pairPolicy.stream = gasExchangePolicy.stream;
-            CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, asyncCopyDHEvent, 0));
-            cudaLaunch(pairPolicy, gasExchangeKernel,
-                       numBubbles,
-                       env->getPi(),
-                       pairs.getRowPtr(0),
-                       pairs.getRowPtr(1),
-                       rPrd,
-                       drdtPrd,
-                       freeArea,
-                       interval.x, PBC_X == 1, xPrd,
-                       interval.y, PBC_Y == 1, yPrd
-#if (NUM_DIM == 3)
-                       ,
-                       interval.z, PBC_Z == 1, zPrd
-#endif
-            );
-
-            cudaLaunch(gasExchangePolicy, freeAreaKernel,
-                       numBubbles, env->getPi(), rPrd, freeArea, errors);
-
-            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
-            cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
-            cudaLaunch(gasExchangePolicy, finalRadiusChangeRateKernel,
-                       drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
-
-            CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
-            CUDA_CALL(cudaStreamWaitEvent(0, asyncCopyDHEvent, 0));
-
-            pairPolicy.stream = 0;
-        }
+            doGasExchange(pairPolicy, timeStep, asyncCopyDHEvent);
 
         doCorrection(defaultPolicy, timeStep, useGasExchange);
 
-        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, defaultPolicy.stream));
-        CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
         cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
         CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
@@ -403,6 +366,8 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
                    xPrd, x, dxdt, dxdtOld,
                    yPrd, y, dydt, dydtOld,
                    zPrd, z, dzdt, dzdtOld);
+
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, policy.stream));
 }
 
 void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange)
@@ -442,6 +407,53 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
                    xPrd, x, dxdt, dxdtPrd,
                    yPrd, y, dydt, dydtPrd,
                    zPrd, z, dzdt, dzdtPrd);
+
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, policy.stream));
+    CUDA_CALL(cudaStreamWaitEvent(asyncCopyDHStream, asyncCopyDHEvent, 0));
+}
+
+void Simulator::doGasExchange(ExecutionPolicy policy, double timeStep, const cudaEvent_t &eventToWaitOn)
+{
+    ExecutionPolicy gasExchangePolicy(128, numBubbles);
+    gasExchangePolicy.stream = asyncCopyDHStream;
+
+    cudaStream_t stream = policy.stream;
+    policy.stream = gasExchangePolicy.stream;
+
+    CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
+
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
+    double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
+    double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+
+    cudaLaunch(policy, gasExchangeKernel,
+               numBubbles,
+               env->getPi(),
+               pairs.getRowPtr(0),
+               pairs.getRowPtr(1),
+               rPrd,
+               drdtPrd,
+               freeArea,
+               interval.x, PBC_X == 1, xPrd,
+               interval.y, PBC_Y == 1, yPrd
+#if (NUM_DIM == 3)
+               ,
+               interval.z, PBC_Z == 1, zPrd
+#endif
+    );
+
+    cudaLaunch(gasExchangePolicy, freeAreaKernel,
+               numBubbles, env->getPi(), rPrd, freeArea, errors);
+
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
+
+    cudaLaunch(gasExchangePolicy, finalRadiusChangeRateKernel,
+               drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
+
+    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
+    CUDA_CALL(cudaStreamWaitEvent(stream, asyncCopyDHEvent, 0));
 }
 
 void Simulator::generateBubbles()
