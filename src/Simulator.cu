@@ -3,7 +3,6 @@
 #include "Simulator.cuh"
 #include "Macros.h"
 #include "Vec.h"
-#include "Util.h"
 #include "BubbleKernels.cuh"
 #include "UtilityKernels.cuh"
 #include "IntegrationKernels.cuh"
@@ -252,7 +251,7 @@ bool Simulator::integrate(bool useGasExchange)
                    0.0, numBubbles,
                    dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
 
-        doPrediction(defaultPolicy, useGasExchange);
+        doPrediction(defaultPolicy, timeStep, useGasExchange);
         CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, defaultPolicy.stream));
 
         cudaLaunch(pairPolicy, velocityKernel,
@@ -382,7 +381,7 @@ bool Simulator::integrate(bool useGasExchange)
     return continueSimulation;
 }
 
-void Simulator::doPrediction(const ExecutionPolicy &policy, bool useGasExchange)
+void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange)
 {
     double *x = bubbleData.getRowPtr((size_t)BP::X);
     double *y = bubbleData.getRowPtr((size_t)BP::Y);
@@ -406,14 +405,14 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, bool useGasExchange)
 
     if (useGasExchange)
         cudaLaunch(policy, predictKernel,
-                   numBubbles, env->getTimeStep(),
+                   numBubbles, timeStep,
                    xPrd, x, dxdt, dxdtOld,
                    yPrd, y, dydt, dydtOld,
                    zPrd, z, dzdt, dzdtOld,
                    rPrd, r, drdt, drdtOld);
     else
         cudaLaunch(policy, predictKernel,
-                   numBubbles, env->getTimeStep(),
+                   numBubbles, timeStep,
                    xPrd, x, dxdt, dxdtOld,
                    yPrd, y, dydt, dydtOld,
                    zPrd, z, dzdt, dzdtOld);
