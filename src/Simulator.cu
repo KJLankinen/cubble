@@ -430,14 +430,14 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
     double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
 
     if (useGasExchange)
-        cudaLaunch(defaultPolicy, correctKernel,
+        cudaLaunch(policy, correctKernel,
                    numBubbles, timeStep, errors,
                    xPrd, x, dxdt, dxdtPrd,
                    yPrd, y, dydt, dydtPrd,
                    zPrd, z, dzdt, dzdtPrd,
                    rPrd, r, drdt, drdtPrd);
     else
-        cudaLaunch(defaultPolicy, correctKernel,
+        cudaLaunch(policy, correctKernel,
                    numBubbles, timeStep, errors,
                    xPrd, x, dxdt, dxdtPrd,
                    yPrd, y, dydt, dydtPrd,
