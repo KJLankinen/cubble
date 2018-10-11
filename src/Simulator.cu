@@ -467,7 +467,7 @@ void Simulator::doReset(const ExecutionPolicy &policy)
 
 double Simulator::doError()
 {
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, bubbleData.getRowPtr((size_t)BP::ERROR), dtfa, numBubbles, asyncCopyDHStream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
     CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
