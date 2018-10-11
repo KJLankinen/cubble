@@ -193,7 +193,7 @@ void Simulator::setupSimulation()
     );
 }
 
-bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
+bool Simulator::integrate(bool useGasExchange)
 {
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
