@@ -396,7 +396,7 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     return continueSimulation;
 }
 
-void calculateEnergy()
+void Simulator::calculateEnergy()
 {
     ExecutionPolicy pairPolicy;
     pairPolicy.blockSize = dim3(128, 1, 1);
