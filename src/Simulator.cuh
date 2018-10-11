@@ -33,6 +33,7 @@ class Simulator
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 
   private:
+	void doPrediction(const ExecutionPolicy &policy, bool useGasExchange);
 	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void updateData();

@@ -252,22 +252,8 @@ bool Simulator::integrate(bool useGasExchange)
                    0.0, numBubbles,
                    dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
 
-        //HACK:  This is REALLY stupid, but doing it temporarily.
-        if (useGasExchange)
-            cudaLaunch(defaultPolicy, predictKernel,
-                       numBubbles, timeStep,
-                       xPrd, x, dxdt, dxdtOld,
-                       yPrd, y, dydt, dydtOld,
-                       zPrd, z, dzdt, dzdtOld,
-                       rPrd, r, drdt, drdtOld);
-        else
-            cudaLaunch(defaultPolicy, predictKernel,
-                       numBubbles, timeStep,
-                       xPrd, x, dxdt, dxdtOld,
-                       yPrd, y, dydt, dydtOld,
-                       zPrd, z, dzdt, dzdtOld);
-
-        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+        doPrediction(defaultPolicy, useGasExchange);
+        CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, defaultPolicy.stream));
 
         cudaLaunch(pairPolicy, velocityKernel,
                    numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
@@ -396,35 +382,41 @@ bool Simulator::integrate(bool useGasExchange)
     return continueSimulation;
 }
 
-void Simulator::calculateEnergy()
+void Simulator::doPrediction(const ExecutionPolicy &policy, bool useGasExchange)
 {
-    ExecutionPolicy pairPolicy;
-    pairPolicy.blockSize = dim3(128, 1, 1);
-    pairPolicy.stream = 0;
-    pairPolicy.gridSize = dim3(256, 1, 1);
-    pairPolicy.sharedMemBytes = 0;
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    const dvec tfr = env->getTfr();
-    const dvec lbb = env->getLbb();
-    const dvec interval = tfr - lbb;
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
-    cudaLaunch(pairPolicy, potentialEnergyKernel,
-               numBubbles,
-               pairs.getRowPtr(0),
-               pairs.getRowPtr(1),
-               bubbleData.getRowPtr((size_t)BP::R),
-               bubbleData.getRowPtr((size_t)BP::ENERGY),
-               interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
-               interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
-#if (NUM_DIM == 3)
-                                           ,
-               interval.z, PBC_Z == 1, bubbleData.getRowPtr((size_t)BP::Z)
-#endif
-    );
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                                   bubbleData.getRowPtr((size_t)BP::ENERGY),
-                                                                   numBubbles);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
+
+    if (useGasExchange)
+        cudaLaunch(policy, predictKernel,
+                   numBubbles, env->getTimeStep(),
+                   xPrd, x, dxdt, dxdtOld,
+                   yPrd, y, dydt, dydtOld,
+                   zPrd, z, dzdt, dzdtOld,
+                   rPrd, r, drdt, drdtOld);
+    else
+        cudaLaunch(policy, predictKernel,
+                   numBubbles, env->getTimeStep(),
+                   xPrd, x, dxdt, dxdtOld,
+                   yPrd, y, dydt, dydtOld,
+                   zPrd, z, dzdt, dzdtOld);
 }
 
 void Simulator::generateBubbles()
@@ -651,6 +643,37 @@ dim3 Simulator::getGridSize()
     assert(grid.z > 0);
 
     return dim3(grid.x, grid.y, grid.z);
+}
+
+void Simulator::calculateEnergy()
+{
+    ExecutionPolicy pairPolicy;
+    pairPolicy.blockSize = dim3(128, 1, 1);
+    pairPolicy.stream = 0;
+    pairPolicy.gridSize = dim3(256, 1, 1);
+    pairPolicy.sharedMemBytes = 0;
+
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
+
+    cudaLaunch(pairPolicy, potentialEnergyKernel,
+               numBubbles,
+               pairs.getRowPtr(0),
+               pairs.getRowPtr(1),
+               bubbleData.getRowPtr((size_t)BP::R),
+               bubbleData.getRowPtr((size_t)BP::ENERGY),
+               interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
+               interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
+#if (NUM_DIM == 3)
+                                           ,
+               interval.z, PBC_Z == 1, bubbleData.getRowPtr((size_t)BP::Z)
+#endif
+    );
+
+    ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                                   bubbleData.getRowPtr((size_t)BP::ENERGY),
+                                                                   numBubbles);
 }
 
 double Simulator::getVolumeOfBubbles()

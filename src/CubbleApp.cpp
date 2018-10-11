@@ -134,7 +134,7 @@ void CubbleApp::stabilizeSimulation()
                       << " steps."
                       << " Energy before: " << energy1
                       << ", energy after: " << energy2
-                      << ", time: " << time
+                      << ", time: " << time * env->getKParameter() / (env->getAvgRad() * env->getAvgRad())
                       << std::endl;
             break;
         }
