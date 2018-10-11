@@ -34,13 +34,14 @@ class Simulator
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 
   private:
-	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
-	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange);
-	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn);
+	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
+	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
+	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
 	void doVelocity(const ExecutionPolicy &policy);
 	void doReset(const ExecutionPolicy &policy);
 	double doError();
 	void doBoundaryWrap(const ExecutionPolicy &policy);
+	void doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark);
 
 	void generateBubbles();
 	void updateCellsAndNeighbors();
