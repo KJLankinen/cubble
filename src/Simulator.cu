@@ -378,24 +378,6 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
-    if (calculateEnergy)
-    {
-        cudaLaunch(pairPolicy, potentialEnergyKernel,
-                   numBubbles,
-                   pairs.getRowPtr(0),
-                   pairs.getRowPtr(1),
-                   r,
-                   energies,
-                   interval.x, PBC_X == 1, x,
-                   interval.y, PBC_Y == 1, y
-#if (NUM_DIM == 3)
-                   ,
-                   interval.z, PBC_Z == 1, z
-#endif
-        );
-        ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, energies, numBubbles);
-    }
-
     CUDA_CALL(cudaEventSynchronize(asyncCopyDDEvent));
     const int numBubblesAboveMinRad = pinnedInt.get()[0];
     const bool shouldDeleteBubbles = numBubblesAboveMinRad < numBubbles;
@@ -412,6 +394,37 @@ bool Simulator::integrate(bool useGasExchange, bool calculateEnergy)
 #endif
 
     return continueSimulation;
+}
+
+void calculateEnergy()
+{
+    ExecutionPolicy pairPolicy;
+    pairPolicy.blockSize = dim3(128, 1, 1);
+    pairPolicy.stream = 0;
+    pairPolicy.gridSize = dim3(256, 1, 1);
+    pairPolicy.sharedMemBytes = 0;
+
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
+
+    cudaLaunch(pairPolicy, potentialEnergyKernel,
+               numBubbles,
+               pairs.getRowPtr(0),
+               pairs.getRowPtr(1),
+               r,
+               bubbleData.getRowPtr((size_t)BP::ENERGY),
+               interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
+               interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
+#if (NUM_DIM == 3)
+                                           ,
+               interval.z, PBC_Z == 1, bubbleData.getRowPtr((size_t)BP::Z)
+#endif
+    );
+
+    ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                                   bubbleData.getRowPtr((size_t)BP::ENERGY),
+                                                                   numBubbles);
 }
 
 void Simulator::generateBubbles()

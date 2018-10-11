@@ -26,7 +26,8 @@ class Simulator
 	~Simulator();
 
 	void setupSimulation();
-	bool integrate(bool useGasExchange = false, bool calculateEnergy = false);
+	bool integrate(bool useGasExchange = false);
+	void calculateEnergy();
 	double getVolumeOfBubbles();
 	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
