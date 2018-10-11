@@ -249,20 +249,9 @@ bool Simulator::integrate(bool useGasExchange)
                    dxdtPrd, dydtPrd, dzdtPrd, drdtPrd, freeArea, energies);
 
         doPrediction(defaultPolicy, timeStep, useGasExchange);
-
-        cudaLaunch(pairPolicy, velocityKernel,
-                   numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
-                   interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
-                   interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
-#if (NUM_DIM == 3)
-                   ,
-                   interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
-#endif
-        );
-
+        doVelocity(pairPolicy, timeStep);
         if (useGasExchange)
             doGasExchange(pairPolicy, timeStep, asyncCopyDHEvent);
-
         doCorrection(defaultPolicy, timeStep, useGasExchange);
 
         cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, errors, dtfa, numBubbles, asyncCopyDHStream);
@@ -461,6 +450,31 @@ void Simulator::doGasExchange(ExecutionPolicy policy, double timeStep, const cud
 
     CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(stream, asyncCopyDHEvent, 0));
+}
+
+void Simulator::doVelocity(const ExecutionPolicy &policy, double timeStep)
+{
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
+
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
+    double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
+
+    cudaLaunch(policy, velocityKernel,
+               numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
+               interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
+               interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
+#if (NUM_DIM == 3)
+               ,
+               interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
+#endif
+    );
 }
 
 void Simulator::generateBubbles()
