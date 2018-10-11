@@ -422,10 +422,17 @@ void Simulator::doGasExchange(ExecutionPolicy policy, double timeStep, const cud
 
     CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
 
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
     double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
     double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
     double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
 
     cudaLaunch(policy, gasExchangeKernel,
                numBubbles,
