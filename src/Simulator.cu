@@ -412,7 +412,7 @@ void Simulator::calculateEnergy()
                numBubbles,
                pairs.getRowPtr(0),
                pairs.getRowPtr(1),
-               r,
+               bubbleData.getRowPtr((size_t)BP::R),
                bubbleData.getRowPtr((size_t)BP::ENERGY),
                interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
                interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
