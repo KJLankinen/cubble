@@ -77,18 +77,18 @@ void CubbleApp::setupSimulation()
 
     std::cout << "Starting the scaling of the simulation box." << std::endl;
     const bool shouldShrink = phi < phiTarget;
-    const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1);
+    const double scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1) * env->getTfr();
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
-        env->setTfr(env->getTfr() - scaleAmount * env->getTfr());
+        env->setTfr(env->getTfr() - scaleAmount);
 
-        for (size_t i = 0; i < 10; ++i)
+        for (size_t i = 0; i < 50; ++i)
             simulator->integrate();
 
         bubbleVolume = simulator->getVolumeOfBubbles();
         phi = bubbleVolume / env->getSimulationBoxVolume();
 
-        if (numSteps % 100 == 0)
+        if (numSteps % 50 == 0)
             printPhi(phi, phiTarget);
 
         ++numSteps;
