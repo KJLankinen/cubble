@@ -19,7 +19,7 @@ enum class ReorganizeType
 };
 
 template <typename... Arguments>
-void cudaLaunch(const char *kernelNameStr, const char *file, const char *line, void (*f)(Arguments...), const ExecutionPolicy &p, Arguments... args)
+void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)(Arguments...), const ExecutionPolicy &p, Arguments... args)
 {
 #ifndef NDEBUG
     assertMemBelowLimit(kernelNameStr, file, line, p.sharedMemBytes);

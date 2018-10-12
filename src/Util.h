@@ -142,7 +142,7 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 #endif
 }
 
-inline void assertMemBelowLimit(const char *kernelStr, const char *file, const char *line, int bytes, bool abort = true)
+inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes, bool abort = true)
 {
 #ifndef NDEBUG
 	int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
@@ -167,7 +167,7 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, const c
 #endif
 }
 
-inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, const char *line, dim3 blockSize, bool abort = true)
+inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 blockSize, bool abort = true)
 {
 #ifndef NDEBUG
 	dim3 temp;
@@ -200,7 +200,7 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, c
 #endif
 }
 
-inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, const char *line, dim3 gridSize, bool abort = true)
+inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 gridSize, bool abort = true)
 {
 #ifndef NDEBUG
 	dim3 temp;
