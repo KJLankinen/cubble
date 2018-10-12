@@ -179,7 +179,7 @@ inline void assertBlockSizeBelowLimit(dim3 blockSize, bool abort = true)
 		std::stringstream ss;
 		ss << "Block size exceeds the limitation of the current device"
 		   << " in at least one dimension."
-		   << "\Block size: (" << blockSize.x
+		   << "\nBlock size: (" << blockSize.x
 		   << ", " << blockSize.y
 		   << ", " << blockSize.z << ")"
 		   << "\nDevice limit: (" << temp.x
