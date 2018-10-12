@@ -142,7 +142,7 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 #endif
 }
 
-inline void assertMemBelowLimit(int bytes, bool abort = true)
+inline void assertMemBelowLimit(const char *kernelStr, const char *file, const char *line, int bytes, bool abort = true)
 {
 #ifndef NDEBUG
 	int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
@@ -150,10 +150,11 @@ inline void assertMemBelowLimit(int bytes, bool abort = true)
 	if (bytes > value)
 	{
 		std::stringstream ss;
-		ss << "Requested size of dynamically allocated shared memory exceeds";
-		ss << " the limitation of the current device.";
-		ss << "\nRequested size: " << bytes;
-		ss << "\nDevice limit: " << value;
+		ss << "Requested size of dynamically allocated shared memory exceeds"
+		   << " the limitation of the current device for kernel "
+		   << kernelStr << " at " << file << ":" << line << "."
+		   << "\nRequested size: " << bytes
+		   << "\nDevice limit: " << value;
 
 		if (abort)
 		{
@@ -166,7 +167,7 @@ inline void assertMemBelowLimit(int bytes, bool abort = true)
 #endif
 }
 
-inline void assertBlockSizeBelowLimit(dim3 blockSize, bool abort = true)
+inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, const char *line, dim3 blockSize, bool abort = true)
 {
 #ifndef NDEBUG
 	dim3 temp;
@@ -178,7 +179,8 @@ inline void assertBlockSizeBelowLimit(dim3 blockSize, bool abort = true)
 	{
 		std::stringstream ss;
 		ss << "Block size exceeds the limitation of the current device"
-		   << " in at least one dimension."
+		   << " in at least one dimension for kernel "
+		   << kernelStr << " at " << file << ":" << line << "."
 		   << "\nBlock size: (" << blockSize.x
 		   << ", " << blockSize.y
 		   << ", " << blockSize.z << ")"
@@ -198,7 +200,7 @@ inline void assertBlockSizeBelowLimit(dim3 blockSize, bool abort = true)
 #endif
 }
 
-inline void assertGridSizeBelowLimit(dim3 gridSize, bool abort = true)
+inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, const char *line, dim3 gridSize, bool abort = true)
 {
 #ifndef NDEBUG
 	dim3 temp;
@@ -210,7 +212,8 @@ inline void assertGridSizeBelowLimit(dim3 gridSize, bool abort = true)
 	{
 		std::stringstream ss;
 		ss << "Grid size exceeds the limitation of the current device"
-		   << " in at least one dimension."
+		   << " in at least one dimension for kernel "
+		   << kernelStr << " at " << file << ":" << line << "."
 		   << "\nGrid size: (" << gridSize.x
 		   << ", " << gridSize.y
 		   << ", " << gridSize.z << ")"
