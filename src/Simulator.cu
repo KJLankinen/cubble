@@ -409,7 +409,7 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
 
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z = 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
     cudaLaunch(policy, velocityWallKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd
 #if (PBC_X == 0)
