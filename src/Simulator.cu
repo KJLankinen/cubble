@@ -141,7 +141,7 @@ void Simulator::setupSimulation()
     pairPolicy.blockSize = dim3(128, 1, 1);
     pairPolicy.stream = 0;
     pairPolicy.gridSize = dim3(256, 1, 1);
-    pairPolicy.sharedMemBytes = 0;
+    pairPolicy.sharedMemBytes = 99999999999999;
 
     double timeStep = env->getTimeStep();
 
