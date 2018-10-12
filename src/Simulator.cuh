@@ -53,10 +53,10 @@ class Simulator
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 
-	cudaEvent_t asyncCopyDDEvent;
-	cudaEvent_t asyncCopyDHEvent;
-	cudaStream_t asyncCopyDDStream;
-	cudaStream_t asyncCopyDHStream;
+	cudaEvent_t blockingEvent1;
+	cudaEvent_t blockingEvent2;
+	cudaStream_t nonBlockingStream1;
+	cudaStream_t nonBlockingStream2;
 
 	std::vector<cudaStream_t> neighborStreamVec;
 	std::vector<cudaEvent_t> neighborEventVec;

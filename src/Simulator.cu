@@ -69,10 +69,10 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     CUDA_CALL(cudaGetSymbolAddress((void **)&np, dNumPairs));
     assert(np != nullptr);
 
-    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDDStream, cudaStreamNonBlocking));
-    CUDA_CALL(cudaStreamCreateWithFlags(&asyncCopyDHStream, cudaStreamNonBlocking));
-    CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDDEvent, cudaEventBlockingSync));
-    CUDA_CALL(cudaEventCreateWithFlags(&asyncCopyDHEvent, cudaEventBlockingSync));
+    CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
+    CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
+    CUDA_CALL(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
+    CUDA_CALL(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
 
     for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
@@ -90,10 +90,10 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
 Simulator::~Simulator()
 {
-    CUDA_CALL(cudaStreamDestroy(asyncCopyDDStream));
-    CUDA_CALL(cudaStreamDestroy(asyncCopyDHStream));
-    CUDA_CALL(cudaEventDestroy(asyncCopyDDEvent));
-    CUDA_CALL(cudaEventDestroy(asyncCopyDHEvent));
+    CUDA_CALL(cudaStreamDestroy(nonBlockingStream1));
+    CUDA_CALL(cudaStreamDestroy(nonBlockingStream2));
+    CUDA_CALL(cudaEventDestroy(blockingEvent1));
+    CUDA_CALL(cudaEventDestroy(blockingEvent2));
 
     for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
@@ -211,11 +211,11 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_PUSH_A("Integration step");
 
         doReset(defaultPolicy);
-        doPrediction(defaultPolicy, timeStep, useGasExchange, asyncCopyDHEvent);
+        doPrediction(defaultPolicy, timeStep, useGasExchange, blockingEvent2);
         doVelocity(pairPolicy);
         if (useGasExchange)
-            doGasExchange(pairPolicy, asyncCopyDHEvent, pairPolicy.stream);
-        doCorrection(defaultPolicy, timeStep, useGasExchange, asyncCopyDHStream);
+            doGasExchange(pairPolicy, blockingEvent2, pairPolicy.stream);
+        doCorrection(defaultPolicy, timeStep, useGasExchange, nonBlockingStream2);
 
         error = doError();
         if (error < env->getErrorTolerance() && timeStep < 0.1)
@@ -229,14 +229,14 @@ bool Simulator::integrate(bool useGasExchange)
     } while (error > env->getErrorTolerance());
 
     doBoundaryWrap(defaultPolicy);
-    doBubbleSizeChecks(defaultPolicy, asyncCopyDDStream, asyncCopyDDEvent);
+    doBubbleSizeChecks(defaultPolicy, nonBlockingStream1, blockingEvent1);
     updateData();
 
     ++integrationStep;
     env->setTimeStep(timeStep);
     SimulationTime += timeStep;
 
-    CUDA_CALL(cudaEventSynchronize(asyncCopyDDEvent));
+    CUDA_CALL(cudaEventSynchronize(blockingEvent1));
 
     const int numBubblesAboveMinRad = pinnedInt.get()[0];
     const bool shouldDeleteBubbles = numBubblesAboveMinRad < numBubbles;
@@ -333,14 +333,14 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
                    yPrd, y, dydt, dydtPrd,
                    zPrd, z, dzdt, dzdtPrd);
 
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, policy.stream));
-    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, asyncCopyDHEvent, 0));
+    CUDA_CALL(cudaEventRecord(blockingEvent2, policy.stream));
+    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
 }
 
 void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait)
 {
     ExecutionPolicy gasExchangePolicy(128, numBubbles);
-    gasExchangePolicy.stream = asyncCopyDHStream;
+    gasExchangePolicy.stream = nonBlockingStream2;
     policy.stream = gasExchangePolicy.stream;
 
     CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
@@ -382,8 +382,8 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     cudaLaunch(gasExchangePolicy, finalRadiusChangeRateKernel,
                drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
 
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, gasExchangePolicy.stream));
-    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, asyncCopyDHEvent, 0));
+    CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
+    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
 }
 
 void Simulator::doVelocity(const ExecutionPolicy &policy)
@@ -425,10 +425,10 @@ void Simulator::doReset(const ExecutionPolicy &policy)
 
 double Simulator::doError()
 {
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, bubbleData.getRowPtr((size_t)BP::ERROR), dtfa, numBubbles, asyncCopyDHStream);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, asyncCopyDHStream));
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent, asyncCopyDHStream));
-    CUDA_CALL(cudaEventSynchronize(asyncCopyDHEvent));
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, bubbleData.getRowPtr((size_t)BP::ERROR), dtfa, numBubbles, nonBlockingStream2);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
+    CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
+    CUDA_CALL(cudaEventSynchronize(blockingEvent2));
 
     return pinnedDouble.get()[0];
 }
@@ -543,7 +543,7 @@ void Simulator::updateCellsAndNeighbors()
     ExecutionPolicy defaultPolicy = {};
     defaultPolicy.blockSize = dim3(128, 1, 1);
     defaultPolicy.gridSize = dim3(256, 1, 1);
-    ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, asyncCopyDDStream);
+    ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, nonBlockingStream1);
     cudaLaunch(defaultPolicy, assignBubblesToCells,
                x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
 
@@ -557,8 +557,8 @@ void Simulator::updateCellsAndNeighbors()
                                     bubbleIndices,
                                     numBubbles);
 
-    CUDA_CALL(cudaEventRecord(asyncCopyDDEvent));
-    CUDA_CALL(cudaStreamWaitEvent(asyncCopyDDStream, asyncCopyDDEvent, 0));
+    CUDA_CALL(cudaEventRecord(blockingEvent1));
+    CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream1, blockingEvent1, 0));
 
     cubWrapper->histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven,
                                                 bubbleCellIndices.getRowPtr(2),
@@ -569,7 +569,7 @@ void Simulator::updateCellsAndNeighbors()
                                                 numBubbles);
 
     cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
-    CUDA_CALL(cudaEventRecord(asyncCopyDHEvent));
+    CUDA_CALL(cudaEventRecord(blockingEvent2));
 
     cudaLaunch(asyncCopyDDPolicy, reorganizeKernel,
                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
@@ -589,9 +589,9 @@ void Simulator::updateCellsAndNeighbors()
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
                               sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice,
-                              asyncCopyDDStream));
+                              nonBlockingStream1));
 
-    CUDA_CALL(cudaEventRecord(asyncCopyDDEvent, asyncCopyDDStream));
+    CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
 
     dvec interval = env->getTfr() - env->getLbb();
 
@@ -605,8 +605,8 @@ void Simulator::updateCellsAndNeighbors()
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
-        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDDEvent, 0));
-        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], asyncCopyDHEvent, 0));
+        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent1, 0));
+        CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent2, 0));
         cudaLaunch(findPolicy, neighborSearch,
                    i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
                    offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,
@@ -634,7 +634,7 @@ void Simulator::updateCellsAndNeighbors()
 
 void Simulator::updateData()
 {
-    CUDA_CALL(cudaStreamWaitEvent(0, asyncCopyDDEvent, 0));
+    CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
     const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
 
     double *x = bubbleData.getRowPtr((size_t)BP::X);
