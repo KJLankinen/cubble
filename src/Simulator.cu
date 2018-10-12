@@ -783,7 +783,7 @@ dim3 Simulator::getGridSize()
     return dim3(grid.x, grid.y, grid.z);
 }
 
-void Simulator::getElasticEnergy()
+double Simulator::getElasticEnergy()
 {
     ExecutionPolicy pairPolicy;
     pairPolicy.blockSize = dim3(128, 1, 1);

@@ -28,7 +28,7 @@ class Simulator
 	void setupSimulation();
 	bool integrate();
 	bool integratePosition(bool forcePeriodicBoundaries);
-	void getElasticEnergy();
+	double getElasticEnergy();
 	double getVolumeOfBubbles();
 	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
