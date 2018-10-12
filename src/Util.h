@@ -94,7 +94,7 @@ inline void cudaAssert(cudaError_t result, const char *callStr, const char *file
 	std::stringstream ss;
 	if (result != cudaSuccess)
 	{
-		ss << "Cuda error " << result " encountered at " << file << ":" << line << ": "
+		ss << "Cuda error " << result << " encountered at " << file << ":" << line << ": "
 		   << cudaGetErrorString(result)
 		   << " (" << callStr << ")"
 		   << "\n";
