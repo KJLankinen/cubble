@@ -26,6 +26,8 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	cubble::CubbleApp app(argv[1], argv[2]);
+
 	try
 	{
 		std::string str;
@@ -43,7 +45,7 @@ int main(int argc, char **argv)
 		str += "------------------------------------------------------------------------\n";
 #endif
 		std::cout << str << std::endl;
-		cubble::CubbleApp app(argv[1], argv[2]);
+
 		app.run();
 	}
 	catch (const std::exception &e)
