@@ -27,7 +27,7 @@ class Simulator
 
 	void setupSimulation();
 	bool integrate();
-	bool integratePosition(bool forcePeriodicBoundaries);
+	void integratePosition(bool forcePeriodicBoundaries);
 	double getElasticEnergy();
 	double getVolumeOfBubbles();
 	double getAverageRadius();

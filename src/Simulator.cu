@@ -255,7 +255,7 @@ bool Simulator::integrate()
     return continueSimulation;
 }
 
-bool Simulator::integratePosition(bool forcePeriodicBoundaries)
+void Simulator::integratePosition(bool forcePeriodicBoundaries)
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
 
