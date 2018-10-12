@@ -37,14 +37,14 @@ class Simulator
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
 	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
 	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
-	void doVelocity(const ExecutionPolicy &policy, bool forcePeriodicBoundaries);
+	void doVelocity(const ExecutionPolicy &policy, bool forcePeriodicBoundaries = false);
 	void doReset(const ExecutionPolicy &policy);
 	double doError();
-	void doBoundaryWrap(const ExecutionPolicy &policy, bool forcePeriodicBoundaries);
+	void doBoundaryWrap(const ExecutionPolicy &policy, bool forcePeriodicBoundaries = false);
 	void doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark);
 
 	void generateBubbles();
-	void updateCellsAndNeighbors(bool forcePeriodicBoundaries);
+	void updateCellsAndNeighbors(bool forcePeriodicBoundaries = false);
 	void updateData();
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();
