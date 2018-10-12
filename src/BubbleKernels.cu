@@ -12,7 +12,7 @@ __device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
 __device__ double dTotalVolume;
 
-__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
+__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum, bool wrapX, bool wrapY, bool wrapZ)
 {
 	ivec idxVec = cellIdx;
 	switch (neighborNum)
@@ -66,40 +66,31 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 		break;
 	}
 
-#if (PBC_X == 1)
-	idxVec.x += dim.x;
-	idxVec.x %= dim.x;
-#else
-	if (idxVec.x < 0 || idxVec.x >= dim.x)
+	if (wrapX)
+	{
+		idxVec.x += dim.x;
+		idxVec.x %= dim.x;
+	}
+	else if (idxVec.x < 0 || idxVec.x >= dim.x)
 		return -1;
-#endif
 
-#if (PBC_Y == 1)
-	idxVec.y += dim.y;
-	idxVec.y %= dim.y;
-#else
-	if (idxVec.y < 0 || idxVec.y >= dim.y)
+	if (wrapY)
+	{
+		idxVec.y += dim.y;
+		idxVec.y %= dim.y;
+	}
+	else if (idxVec.y < 0 || idxVec.y >= dim.y)
 		return -1;
-#endif
 
-#if (PBC_Z == 1)
-	idxVec.z += dim.z;
-	idxVec.z %= dim.z;
-#else
-	if (idxVec.z < 0 || idxVec.z >= dim.z)
+	if (wrapZ)
+	{
+		idxVec.z += dim.z;
+		idxVec.z %= dim.z;
+	}
+	else if (idxVec.z < 0 || idxVec.z >= dim.z)
 		return -1;
-#endif
 
 	return get1DIdxFrom3DIdx(idxVec, dim);
-}
-
-__device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
-{
-	double difference = val1 - val2;
-	val2 = difference < -0.5 * multiplier ? val2 - multiplier : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
-	val2 = val1 - val2;
-
-	return val2;
 }
 
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim)
@@ -233,6 +224,79 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 		const int cellIdx = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
 		cellIndices[i] = cellIdx;
 		bubbleIndices[i] = i;
+	}
+}
+
+__global__ void neighborSearch(int neighborCellNumber,
+							   int numValues,
+							   int numCells,
+							   int numMaxPairs,
+							   int *offsets,
+							   int *sizes,
+							   int *first,
+							   int *second,
+							   double *r,
+							   double intervalX, bool wrapX, double *x,
+							   double intervalY, bool wrapY, double *y,
+							   double intervalZ, bool wrapZ, double *z)
+{
+	const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
+	const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
+	const int cellIdx2 = getNeighborCellIndex(idxVec, dimVec, neighborCellNumber, wrapX, wrapY, wrapZ);
+
+	if (cellIdx2 >= 0)
+	{
+		const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
+		DEVICE_ASSERT(cellIdx1 < numCells);
+		DEVICE_ASSERT(cellIdx2 < numCells);
+
+		if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
+			return;
+
+		// Self comparison only loops the upper triangle of values (n * (n - 1)) / 2 comparisons instead of n^2.
+		if (cellIdx1 == cellIdx2)
+		{
+			const int size = sizes[cellIdx1];
+			const int offset = offsets[cellIdx1];
+			for (int k = threadIdx.x; k < (size * (size - 1)) / 2; k += blockDim.x)
+			{
+				int idx1 = size - 2 - (int)floor(sqrt(-8.0 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
+				const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 + (size - idx1) * ((size - idx1) - 1) / 2;
+				idx1 += offset;
+
+				DEVICE_ASSERT(idx1 < numValues);
+				DEVICE_ASSERT(idx2 < numValues);
+				DEVICE_ASSERT(idx1 != idx2);
+
+#if (NUM_DIM == 3)
+				comparePair(idx1, idx2, r, first, second, intervalX, wrapX, x, intervalY, wrapY, y, intervalZ, wrapZ, z);
+#else
+				comparePair(idx1, idx2, r, first, second, intervalX, wrapX, x, intervalY, wrapY, y);
+#endif
+			}
+		}
+		else // Compare all values of one cell to all values of other cell, resulting in n1 * n2 comparisons.
+		{
+			const int size1 = sizes[cellIdx1];
+			const int size2 = sizes[cellIdx2];
+			const int offset1 = offsets[cellIdx1];
+			const int offset2 = offsets[cellIdx2];
+			for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x)
+			{
+				const int idx1 = offset1 + k / size2;
+				const int idx2 = offset2 + k % size2;
+
+				DEVICE_ASSERT(idx1 < numValues);
+				DEVICE_ASSERT(idx2 < numValues);
+				DEVICE_ASSERT(idx1 != idx2);
+
+#if (NUM_DIM == 3)
+				comparePair(idx1, idx2, r, first, second, intervalX, wrapX, x, intervalY, wrapY, y, intervalZ, wrapZ, z);
+#else
+				comparePair(idx1, idx2, r, first, second, intervalX, wrapX, x, intervalY, wrapY, y);
+#endif
+			}
+		}
 	}
 }
 

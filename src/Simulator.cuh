@@ -21,14 +21,14 @@ enum class BubbleProperty;
 class Simulator
 {
 	CUBBLE_PROP(double, SimulationTime, 0)
-	CUBBLE_PROP(double, ElasticEnergy, 0)
   public:
 	Simulator(std::shared_ptr<Env> e);
 	~Simulator();
 
 	void setupSimulation();
-	bool integrate(bool useGasExchange = false);
-	void calculateEnergy();
+	bool integrate();
+	bool integratePosition(bool forcePeriodicBoundaries);
+	void getElasticEnergy();
 	double getVolumeOfBubbles();
 	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
@@ -37,14 +37,14 @@ class Simulator
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
 	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
 	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
-	void doVelocity(const ExecutionPolicy &policy);
+	void doVelocity(const ExecutionPolicy &policy, bool forcePeriodicBoundaries);
 	void doReset(const ExecutionPolicy &policy);
 	double doError();
-	void doBoundaryWrap(const ExecutionPolicy &policy);
+	void doBoundaryWrap(const ExecutionPolicy &policy, bool forcePeriodicBoundaries);
 	void doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark);
 
 	void generateBubbles();
-	void updateCellsAndNeighbors();
+	void updateCellsAndNeighbors(bool forcePeriodicBoundaries);
 	void updateData();
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();

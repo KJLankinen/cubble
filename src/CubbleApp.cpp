@@ -58,7 +58,7 @@ void CubbleApp::setupSimulation()
 
     std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
     for (size_t i = 0; i < (size_t)env->getNumStepsToRelax(); ++i)
-        simulator->integrate();
+        simulator->integratePosition(true);
 
     saveSnapshotToFile();
 
@@ -83,7 +83,7 @@ void CubbleApp::setupSimulation()
         env->setTfr(env->getTfr() - scaleAmount);
 
         for (size_t i = 0; i < 50; ++i)
-            simulator->integrate();
+            simulator->integratePosition(true);
 
         bubbleVolume = simulator->getVolumeOfBubbles();
         phi = bubbleVolume / env->getSimulationBoxVolume();
@@ -107,8 +107,7 @@ void CubbleApp::stabilizeSimulation()
     int numSteps = 0;
     const int failsafe = 500;
 
-    simulator->integrate();
-    simulator->calculateEnergy();
+    simulator->integratePosition(false);
     double energy2 = simulator->getElasticEnergy();
 
     while (true)
@@ -118,11 +117,10 @@ void CubbleApp::stabilizeSimulation()
 
         for (int i = 0; i < env->getNumStepsToRelax(); ++i)
         {
-            simulator->integrate();
+            simulator->integratePosition(false);
             time += env->getTimeStep();
         }
 
-        simulator->calculateEnergy();
         energy2 = simulator->getElasticEnergy();
         double deltaEnergy = std::abs(energy2 - energy1) / time;
         deltaEnergy *= 0.5 * env->getSigmaZero();
@@ -184,7 +182,7 @@ void CubbleApp::runSimulation()
             CUDA_PROFILER_START();
         }
 
-        stopSimulation = !simulator->integrate(true);
+        stopSimulation = !simulator->integrate();
 
         if (numSteps == 2050)
         {

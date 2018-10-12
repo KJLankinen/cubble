@@ -192,7 +192,7 @@ void Simulator::setupSimulation()
     );
 }
 
-bool Simulator::integrate(bool useGasExchange)
+bool Simulator::integrate()
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
 
@@ -211,11 +211,10 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_PUSH_A("Integration step");
 
         doReset(defaultPolicy);
-        doPrediction(defaultPolicy, timeStep, useGasExchange, blockingEvent2);
+        doPrediction(defaultPolicy, timeStep, true, blockingEvent2);
         doVelocity(pairPolicy);
-        if (useGasExchange)
-            doGasExchange(pairPolicy, blockingEvent2, pairPolicy.stream);
-        doCorrection(defaultPolicy, timeStep, useGasExchange, nonBlockingStream2);
+        doGasExchange(pairPolicy, blockingEvent2, pairPolicy.stream);
+        doCorrection(defaultPolicy, timeStep, true, nonBlockingStream2);
 
         error = doError();
         if (error < env->getErrorTolerance() && timeStep < 0.1)
@@ -254,6 +253,47 @@ bool Simulator::integrate(bool useGasExchange)
 #endif
 
     return continueSimulation;
+}
+
+bool Simulator::integratePosition(bool forcePeriodicBoundaries)
+{
+    ExecutionPolicy defaultPolicy(128, numBubbles);
+
+    ExecutionPolicy pairPolicy;
+    pairPolicy.blockSize = dim3(128, 1, 1);
+    pairPolicy.stream = 0;
+    pairPolicy.gridSize = dim3(256, 1, 1);
+    pairPolicy.sharedMemBytes = 0;
+
+    double timeStep = env->getTimeStep();
+    double error = 100000;
+    size_t numLoopsDone = 0;
+
+    do
+    {
+        doReset(defaultPolicy);
+        doPrediction(defaultPolicy, timeStep, false, blockingEvent2);
+        doVelocity(pairPolicy, forcePeriodicBoundaries);
+        doCorrection(defaultPolicy, timeStep, false, nonBlockingStream2);
+
+        error = doError();
+        if (error < env->getErrorTolerance() && timeStep < 0.1)
+            timeStep *= 1.9;
+        else if (error > env->getErrorTolerance())
+            timeStep *= 0.5;
+
+        ++numLoopsDone;
+    } while (error > env->getErrorTolerance());
+
+    doBoundaryWrap(defaultPolicy, forcePeriodicBoundaries);
+    updateData();
+
+    ++integrationStep;
+    env->setTimeStep(timeStep);
+    SimulationTime += timeStep;
+
+    if (integrationStep % 50 == 0)
+        updateCellsAndNeighbors(forcePeriodicBoundaries);
 }
 
 void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark)
@@ -386,7 +426,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
 }
 
-void Simulator::doVelocity(const ExecutionPolicy &policy)
+void Simulator::doVelocity(const ExecutionPolicy &policy, bool forcePeriodicBoundaries)
 {
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -409,6 +449,9 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
     );
+
+    if (forcePeriodicBoundaries)
+        return;
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
     cudaLaunch(policy, velocityWallKernel,
@@ -451,7 +494,7 @@ double Simulator::doError()
     return pinnedDouble.get()[0];
 }
 
-void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
+void Simulator::doBoundaryWrap(const ExecutionPolicy &policy, bool forcePeriodicBoundaries)
 {
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -460,23 +503,34 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
     double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
     double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
 
+    if (forcePeriodicBoundaries)
+    {
+        cudaLaunch(policy, boundaryWrapKernel,
+                   numBubbles,
+                   xPrd, lbb.x, tfr.x,
+                   yPrd, lbb.y, tfr.y,
+                   zPrd, lbb.z, tfr.z);
+    }
+    else
+    {
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    cudaLaunch(policy, boundaryWrapKernel,
-               numBubbles
+        cudaLaunch(policy, boundaryWrapKernel,
+                   numBubbles
 #if (PBC_X == 1)
-               ,
-               xPrd, lbb.x, tfr.x
+                   ,
+                   xPrd, lbb.x, tfr.x
 #endif
 #if (PBC_Y == 1)
-               ,
-               yPrd, lbb.y, tfr.y
+                   ,
+                   yPrd, lbb.y, tfr.y
 #endif
 #if (PBC_Z == 1)
-               ,
-               zPrd, lbb.z, tfr.z
+                   ,
+                   zPrd, lbb.z, tfr.z
 #endif
-    );
+        );
 #endif
+    }
 }
 
 void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark)
@@ -542,7 +596,7 @@ void Simulator::generateBubbles()
                x, y, z, xPrd, yPrd, zPrd, r, w, aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
 }
 
-void Simulator::updateCellsAndNeighbors()
+void Simulator::updateCellsAndNeighbors(bool forcePeriodicBoundaries)
 {
     dim3 gridSize = getGridSize();
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -620,6 +674,10 @@ void Simulator::updateCellsAndNeighbors()
 
     CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
 
+    const bool wrapX = forcePeriodicBoundaries || PBC_X == 1;
+    const bool wrapY = forcePeriodicBoundaries || PBC_Y == 1;
+    const bool wrapZ = forcePeriodicBoundaries || PBC_Z == 1;
+
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         findPolicy.stream = neighborStreamVec[i];
@@ -628,11 +686,11 @@ void Simulator::updateCellsAndNeighbors()
         cudaLaunch(findPolicy, neighborSearch,
                    i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
                    offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,
-                   interval.x, PBC_X == 1, x,
-                   interval.y, PBC_Y == 1, y
+                   interval.x, wrapX, x,
+                   interval.y, wrapY, y
 #if (NUM_DIM == 3)
                    ,
-                   interval.z, PBC_Z == 1, z
+                   interval.z, wrapZ, z
 #endif
         );
 
@@ -725,7 +783,7 @@ dim3 Simulator::getGridSize()
     return dim3(grid.x, grid.y, grid.z);
 }
 
-void Simulator::calculateEnergy()
+void Simulator::getElasticEnergy()
 {
     ExecutionPolicy pairPolicy;
     pairPolicy.blockSize = dim3(128, 1, 1);
@@ -751,9 +809,7 @@ void Simulator::calculateEnergy()
 #endif
     );
 
-    ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                                   bubbleData.getRowPtr((size_t)BP::ENERGY),
-                                                                   numBubbles);
+    return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, bubbleData.getRowPtr((size_t)BP::ENERGY), numBubbles);
 }
 
 double Simulator::getVolumeOfBubbles()
