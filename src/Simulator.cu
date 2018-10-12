@@ -110,7 +110,7 @@ void Simulator::setupSimulation()
     if (numBubblesAboveMinRad < numBubbles)
         deleteSmallBubbles(numBubblesAboveMinRad);
 
-    updateCellsAndNeighbors();
+    updateCellsAndNeighbors(true);
 
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
@@ -153,11 +153,11 @@ void Simulator::setupSimulation()
 
     cudaLaunch(pairPolicy, velocityPairKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-               interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-               interval.y, lbb.y, PBC_Y == 1, y, dydtOld
+               interval.x, lbb.x, true, x, dxdtOld,
+               interval.y, lbb.y, true, y, dydtOld
 #if (NUM_DIM == 3)
                ,
-               interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
+               interval.z, lbb.z, true, z, dzdtOld
 #endif
     );
 
@@ -183,11 +183,11 @@ void Simulator::setupSimulation()
 
     cudaLaunch(pairPolicy, velocityPairKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-               interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-               interval.y, lbb.y, PBC_Y == 1, y, dydtOld
+               interval.x, lbb.x, true, x, dxdtOld,
+               interval.y, lbb.y, true, y, dydtOld
 #if (NUM_DIM == 3)
                ,
-               interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
+               interval.z, lbb.z, true, z, dzdtOld
 #endif
     );
 }
