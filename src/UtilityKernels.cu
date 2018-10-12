@@ -30,11 +30,11 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values
 
 __device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap)
 {
-    const double distance1 = x1 - x2;
+    const double distance = x1 - x2;
     x2 = distance < -0.5 * maxDistance ? x2 - maxDistance : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
     const double distance2 = x1 - x2;
 
-    return shouldWrap ? distance2 : distance1;
+    return shouldWrap ? distance2 : distance;
 }
 
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
