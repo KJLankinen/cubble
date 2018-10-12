@@ -21,11 +21,28 @@ CubbleApp::CubbleApp(const std::string &inF, const std::string &saveF)
     simulator = std::make_unique<Simulator>(env);
 }
 
+CubbleApp::~CubbleApp()
+{
+    CUDA_CALL(cudaDeviceSynchronize());
+}
+
 void CubbleApp::run()
 {
-    setupSimulation();
-    stabilizeSimulation();
-    runSimulation();
+    try
+    {
+        setupSimulation();
+        stabilizeSimulation();
+        runSimulation();
+    }
+    catch (const std::runtime_error &err)
+    {
+        std::cout << "Runtime error encountered! Saving a final snapshot and parameters." << std::endl;
+        saveSnapshotToFile();
+        env->writeParameters();
+
+        throw err;
+    }
+
     saveSnapshotToFile();
     env->writeParameters();
 
@@ -41,7 +58,7 @@ void CubbleApp::setupSimulation()
 
     std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
     for (size_t i = 0; i < (size_t)env->getNumStepsToRelax(); ++i)
-        simulator->integratePosition(true);
+        simulator->integrate();
 
     saveSnapshotToFile();
 
@@ -66,7 +83,7 @@ void CubbleApp::setupSimulation()
         env->setTfr(env->getTfr() - scaleAmount);
 
         for (size_t i = 0; i < 50; ++i)
-            simulator->integratePosition(true);
+            simulator->integrate();
 
         bubbleVolume = simulator->getVolumeOfBubbles();
         phi = bubbleVolume / env->getSimulationBoxVolume();
@@ -90,7 +107,8 @@ void CubbleApp::stabilizeSimulation()
     int numSteps = 0;
     const int failsafe = 500;
 
-    simulator->integratePosition(false);
+    simulator->integrate();
+    simulator->calculateEnergy();
     double energy2 = simulator->getElasticEnergy();
 
     while (true)
@@ -100,10 +118,11 @@ void CubbleApp::stabilizeSimulation()
 
         for (int i = 0; i < env->getNumStepsToRelax(); ++i)
         {
-            simulator->integratePosition(false);
+            simulator->integrate();
             time += env->getTimeStep();
         }
 
+        simulator->calculateEnergy();
         energy2 = simulator->getElasticEnergy();
         double deltaEnergy = std::abs(energy2 - energy1) / time;
         deltaEnergy *= 0.5 * env->getSigmaZero();
@@ -165,7 +184,7 @@ void CubbleApp::runSimulation()
             CUDA_PROFILER_START();
         }
 
-        stopSimulation = !simulator->integrate();
+        stopSimulation = !simulator->integrate(true);
 
         if (numSteps == 2050)
         {
