@@ -89,7 +89,7 @@ inline void handleException(const std::exception_ptr pExc)
 	}
 }
 
-inline void cudaAssert(cudaError_t result, const char *file, int line, bool abort = true)
+inline void cudaAssert(cudaError_t result, const char *file, int line, bool abort = false)
 {
 	std::stringstream ss;
 	if (result != cudaSuccess)
