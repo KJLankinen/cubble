@@ -151,7 +151,7 @@ void Simulator::setupSimulation()
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
-    cudaLaunch(pairPolicy, velocityKernel,
+    cudaLaunch(pairPolicy, velocityPairKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
@@ -181,7 +181,7 @@ void Simulator::setupSimulation()
                0.0, numBubbles,
                dxdtOld, dydtOld, dzdtOld, drdtOld);
 
-    cudaLaunch(pairPolicy, velocityKernel,
+    cudaLaunch(pairPolicy, velocityPairKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
