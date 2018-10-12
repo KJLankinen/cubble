@@ -169,15 +169,17 @@ __global__ void neighborSearch(int neighborCellNumber,
 }
 
 template <typename... Args>
-__global__ void velocityKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+__global__ void velocityPairKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
+}
 
-#if (PBC_X != 1 || PBC_Y != 1 || PBC_Z != 1)
+template <typename... Args>
+__global__ void velocityWallKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+{
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
         forceFromWalls(i, fZeroPerMuZero, r, args...);
-#endif
 }
 
 template <typename... Args>
