@@ -19,9 +19,16 @@ enum class ReorganizeType
 };
 
 template <typename... Arguments>
-void cudaLaunch(const ExecutionPolicy &p, void (*f)(Arguments...), Arguments... args)
+void cudaLaunch(const char *kernelNameStr, void (*f)(Arguments...), const ExecutionPolicy &p, Arguments... args)
 {
+#ifndef NDEBUG
+    assertMemBelowLimit(p.sharedMemBytes);
+    assertBlockSizeBelowLimit(p.blockSize);
+    assertGridSizeBelowLimit(p.gridSize);
+#endif
+
     f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+
 #ifndef NDEBUG
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());

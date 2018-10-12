@@ -166,6 +166,38 @@ inline void assertMemBelowLimit(int bytes, bool abort = true)
 #endif
 }
 
+inline void assertBlockSizeBelowLimit(dim3 blockSize, bool abort = true)
+{
+#ifndef NDEBUG
+	dim3 temp;
+	temp.x = getCurrentDeviceAttrVal(cudaDevAttrMaxBlockDimX);
+	temp.y = getCurrentDeviceAttrVal(cudaDevAttrMaxBlockDimY);
+	temp.z = getCurrentDeviceAttrVal(cudaDevAttrMaxBlockDimZ);
+
+	if (temp.x < blockSize.x || temp.y < blockSize.y || temp.z < blockSize.z)
+	{
+		std::stringstream ss;
+		ss << "Block size exceeds the limitation of the current device"
+		   << " in at least one dimension."
+		   << "\Block size: (" << blockSize.x
+		   << ", " << blockSize.y
+		   << ", " << blockSize.z << ")"
+		   << "\nDevice limit: (" << temp.x
+		   << ", " << temp.y
+		   << ", " << temp.z
+		   << ")";
+
+		if (abort)
+		{
+			ss << "\nThrowing...";
+			throw std::runtime_error(ss.str());
+		}
+		else
+			std::cerr << ss.str() << std::endl;
+	}
+#endif
+}
+
 inline void assertGridSizeBelowLimit(dim3 gridSize, bool abort = true)
 {
 #ifndef NDEBUG

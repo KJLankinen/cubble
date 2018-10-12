@@ -63,6 +63,11 @@
     }
 #endif
 
+#define CUDA_LAUNCH(kernel, ...)                   \
+    {                                              \
+        cudaLaunch(#kernel, kernel, __VA__ARGS__); \
+    }
+
 // Macro for device assert.
 #ifndef NDEBUG
 #define DEVICE_ASSERT(statement) \
