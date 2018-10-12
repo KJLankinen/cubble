@@ -21,28 +21,11 @@ CubbleApp::CubbleApp(const std::string &inF, const std::string &saveF)
     simulator = std::make_unique<Simulator>(env);
 }
 
-CubbleApp::~CubbleApp()
-{
-}
-
 void CubbleApp::run()
 {
-    try
-    {
-        setupSimulation();
-        stabilizeSimulation();
-        runSimulation();
-    }
-    catch (const std::runtime_error &err)
-    {
-        std::cout << "Runtime error encountered! Saving a final snapshot and parameters." << std::endl;
-        CUDA_CALL(cudaDeviceSynchronize());
-        saveSnapshotToFile();
-        env->writeParameters();
-
-        throw err;
-    }
-
+    setupSimulation();
+    stabilizeSimulation();
+    runSimulation();
     saveSnapshotToFile();
     env->writeParameters();
 

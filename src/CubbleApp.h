@@ -11,17 +11,17 @@ namespace cubble
 {
 class CubbleApp
 {
-  public:
+public:
 	CubbleApp(const std::string &inputFile,
-			  const std::string &saveFile);
-	~CubbleApp();
+						const std::string &saveFile);
+	~CubbleApp(){};
 	void run();
+	void saveSnapshotToFile();
 
-  private:
+private:
 	void setupSimulation();
 	void stabilizeSimulation();
 	void runSimulation();
-	void saveSnapshotToFile();
 
 	static int numSnapshots;
 	std::unique_ptr<Simulator> simulator;

@@ -5,10 +5,13 @@
 
 #include "CubbleApp.h"
 #include "Util.h"
+#include "Macros.h"
 
 int main(int argc, char **argv)
 {
 	std::exception_ptr pExc = nullptr;
+
+	int exitCode = EXIT_SUCCESS;
 
 	if (argc != 3)
 	{
@@ -45,12 +48,15 @@ int main(int argc, char **argv)
 	}
 	catch (const std::exception &e)
 	{
+		app.saveSnapshotToFile();
 		pExc = std::current_exception();
 		cubble::handleException(pExc);
 
-		return EXIT_FAILURE;
+		exitCode = EXIT_FAILURE;
 	}
 
-	cudaDeviceReset();
-	return EXIT_SUCCESS;
+	CUDA_CALL(cudaDeviceSynchronize());
+	CUDA_CALL(cudaDeviceReset());
+
+	return exitCode;
 }
