@@ -408,18 +408,22 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
                ,
                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
+    );
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
     cudaLaunch(policy, velocityWallKernel,
                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd
 #if (PBC_X == 0)
-               ,interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd
+               ,
+               interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd
 #endif
 #if (PBC_Y == 0)
-               ,interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
+               ,
+               interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #endif
 #if (NUM_DIM == 3 && PBC_Z == 0)
-               ,interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
+               ,
+               interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
     );
 #endif
