@@ -89,13 +89,15 @@ inline void handleException(const std::exception_ptr pExc)
 	}
 }
 
-inline void cudaAssert(cudaError_t result, const char *file, int line, bool abort = true)
+inline void cudaAssert(cudaError_t result, const char *callStr, const char *file, int line, bool abort = true)
 {
 	std::stringstream ss;
 	if (result != cudaSuccess)
 	{
-		ss << "Cuda error encountered at " << file << ":" << line << ": ";
-		ss << cudaGetErrorString(result) << "\n";
+		ss << "Cuda error " << result " encountered at " << file << ":" << line << ": "
+		   << cudaGetErrorString(result)
+		   << " (" << callStr << ")"
+		   << "\n";
 
 		if (abort)
 		{

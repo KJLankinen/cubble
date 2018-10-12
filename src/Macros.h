@@ -37,14 +37,15 @@
 // Cuda error checking
 // See Util.h for actual implementation
 #ifndef NDEBUG
-#define CUDA_CALL(result)                                 \
-    {                                                     \
-        cubble::cudaAssert((result), __FILE__, __LINE__); \
+#define CUDA_CALL(call)                                        \
+    {                                                          \
+        cudaError_t result = call;                             \
+        cubble::cudaAssert(result, #call, __FILE__, __LINE__); \
     }
 #else
-#define CUDA_CALL(result) \
-    {                     \
-        (result);         \
+#define CUDA_CALL(call) \
+    {                   \
+        call;           \
     }
 #endif
 
