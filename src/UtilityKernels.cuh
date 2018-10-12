@@ -44,7 +44,7 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)
     {
         std::stringstream ss;
         ss << "Error encountered during kernel execution."
-           << "\nError location: '" << kernelStr << "' @" << file << ":" << line << "."
+           << "\nError location: '" << kernelNameStr << "' @" << file << ":" << line << "."
            << "\nSee earlier messages for possible details.";
 
         throw std::runtime_error(ss.str());
