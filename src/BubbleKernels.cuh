@@ -123,8 +123,8 @@ __global__ void neighborSearch(int neighborCellNumber,
     if (cellIdx2 >= 0)
     {
         const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
-        DEVICE_ASSERT(cellIdx1 < numCells);
-        DEVICE_ASSERT(cellIdx2 < numCells);
+        DEVICE_ASSERT(cellIdx1 < numCells, "Invalid cell index!");
+        DEVICE_ASSERT(cellIdx2 < numCells, "Invalid cell index!");
 
         if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
             return;
@@ -140,9 +140,9 @@ __global__ void neighborSearch(int neighborCellNumber,
                 const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 + (size - idx1) * ((size - idx1) - 1) / 2;
                 idx1 += offset;
 
-                DEVICE_ASSERT(idx1 < numValues);
-                DEVICE_ASSERT(idx2 < numValues);
-                DEVICE_ASSERT(idx1 != idx2);
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, r, first, second, args...);
             }
@@ -158,9 +158,9 @@ __global__ void neighborSearch(int neighborCellNumber,
                 const int idx1 = offset1 + k / size2;
                 const int idx2 = offset2 + k % size2;
 
-                DEVICE_ASSERT(idx1 < numValues);
-                DEVICE_ASSERT(idx2 < numValues);
-                DEVICE_ASSERT(idx1 != idx2);
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, r, first, second, args...);
             }
@@ -234,9 +234,9 @@ __global__ void gasExchangeKernel(int numValues,
                 overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
                 overlapArea *= overlapArea;
                 overlapArea = r2 * r2 - overlapArea;
-                DEVICE_ASSERT(overlapArea > -0.0001);
+                DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
                 overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-                DEVICE_ASSERT(overlapArea >= 0);
+                DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
             }
 #if (NUM_DIM == 3)
             overlapArea *= pi;

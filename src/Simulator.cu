@@ -138,9 +138,9 @@ void Simulator::setupSimulation()
     const dvec interval = tfr - lbb;
     ExecutionPolicy defaultPolicy(128, numBubbles);
     ExecutionPolicy pairPolicy;
-    pairPolicy.blockSize = dim3(128, 1, 1666666666666666);
+    pairPolicy.blockSize = dim3(128, 1, 1);
     pairPolicy.stream = 0;
-    pairPolicy.gridSize = dim3(256666666666, 1, 1);
+    pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
     double timeStep = env->getTimeStep();

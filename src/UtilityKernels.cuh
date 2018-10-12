@@ -18,6 +18,8 @@ enum class ReorganizeType
     NUM_VALUES
 };
 
+extern __device__ bool dErrorEncountered;
+
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)(Arguments...), const ExecutionPolicy &p, Arguments... args)
 {
@@ -32,8 +34,25 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)
 #ifndef NDEBUG
     CUDA_CALL(cudaDeviceSynchronize());
     CUDA_CALL(cudaPeekAtLastError());
+
+    bool errorEncountered = false;
+    void *dee = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dee, dErrorEncountered));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(&errorEncountered), dee, sizeof(bool), cudaMemcpyDeviceToHost));
+
+    if (errorEncountered)
+    {
+        std::stringstream ss;
+        ss << "Error encountered during kernel execution."
+           << "\nError location: '" << kernelStr << "' @" << file << ":" << line << "."
+           << "\nSee earlier messages for possible details.";
+
+        throw std::runtime_error(ss.str());
+    }
 #endif
 }
+
+__device__ void logError(bool condition, const char *statement, const char *errMsg);
 
 __device__ int getGlobalTid();
 
