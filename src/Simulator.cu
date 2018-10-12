@@ -279,18 +279,22 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
     double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
     if (useGasExchange)
+    {
         CUDA_LAUNCH(predictKernel, policy,
                     numBubbles, timeStep,
                     xPrd, x, dxdt, dxdtOld,
                     yPrd, y, dydt, dydtOld,
                     zPrd, z, dzdt, dzdtOld,
                     rPrd, r, drdt, drdtOld);
+    }
     else
+    {
         CUDA_LAUNCH(predictKernel, policy,
                     numBubbles, timeStep,
                     xPrd, x, dxdt, dxdtOld,
                     yPrd, y, dydt, dydtOld,
                     zPrd, z, dzdt, dzdtOld);
+    }
 
     CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
 }
@@ -320,18 +324,22 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
     double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
 
     if (useGasExchange)
+    {
         CUDA_LAUNCH(correctKernel, policy,
                     numBubbles, timeStep, errors,
                     xPrd, x, dxdt, dxdtPrd,
                     yPrd, y, dydt, dydtPrd,
                     zPrd, z, dzdt, dzdtPrd,
                     rPrd, r, drdt, drdtPrd);
+    }
     else
+    {
         CUDA_LAUNCH(correctKernel, policy,
                     numBubbles, timeStep, errors,
                     xPrd, x, dxdt, dxdtPrd,
                     yPrd, y, dydt, dydtPrd,
                     zPrd, z, dzdt, dzdtPrd);
+    }
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, policy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
