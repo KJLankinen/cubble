@@ -151,8 +151,8 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, int lin
 	{
 		std::stringstream ss;
 		ss << "Requested size of dynamically allocated shared memory exceeds"
-		   << " the limitation of the current device for kernel "
-		   << kernelStr << " at " << file << ":" << line << "."
+		   << " the limitation of the current device."
+		   << "\nError encountered at: " << kernelStr << "@" << file << ":" << line << "."
 		   << "\nRequested size: " << bytes
 		   << "\nDevice limit: " << value;
 
@@ -179,8 +179,8 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, i
 	{
 		std::stringstream ss;
 		ss << "Block size exceeds the limitation of the current device"
-		   << " in at least one dimension for kernel "
-		   << kernelStr << " at " << file << ":" << line << "."
+		   << " in at least one dimension."
+		   << "\nError encountered at: " << kernelStr << "@" << file << ":" << line << "."
 		   << "\nBlock size: (" << blockSize.x
 		   << ", " << blockSize.y
 		   << ", " << blockSize.z << ")"
@@ -212,8 +212,8 @@ inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, in
 	{
 		std::stringstream ss;
 		ss << "Grid size exceeds the limitation of the current device"
-		   << " in at least one dimension for kernel "
-		   << kernelStr << " at " << file << ":" << line << "."
+		   << " in at least one dimension."
+		   << "\nError encountered at: " << kernelStr << "@" << file << ":" << line << "."
 		   << "\nGrid size: (" << gridSize.x
 		   << ", " << gridSize.y
 		   << ", " << gridSize.z << ")"
