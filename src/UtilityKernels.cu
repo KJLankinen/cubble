@@ -8,10 +8,14 @@ __device__ void logError(bool condition, const char *statement, const char *errM
 {
     if (condition == false)
     {
-        printf("----------------------------------------------------\n");
-        printf("Error encountered.\n(%s) -> %s\n", statement, errMsg);
-        printf("@thread[%d, %d, %d], @block[%d, %d, %d]\n", threadIdx.x, threadIdx.y, threadIdx.z, blockIdx.x, blockIdx.y, blockIdx.z);
-        printf("----------------------------------------------------\n");
+        printf("----------------------------------------------------"
+               "\nError encountered"
+               "\n(%s) -> %s"
+               "\n@thread[%d, %d, %d], @block[%d, %d, %d]"
+               "\n----------------------------------------------------\n",
+               statement, errMsg,
+               threadIdx.x, threadIdx.y, threadIdx.z,
+               blockIdx.x, blockIdx.y, blockIdx.z);
 
         dErrorEncountered = true;
     }
