@@ -23,7 +23,6 @@ CubbleApp::CubbleApp(const std::string &inF, const std::string &saveF)
 
 CubbleApp::~CubbleApp()
 {
-    CUDA_CALL(cudaDeviceSynchronize());
 }
 
 void CubbleApp::run()
@@ -37,6 +36,7 @@ void CubbleApp::run()
     catch (const std::runtime_error &err)
     {
         std::cout << "Runtime error encountered! Saving a final snapshot and parameters." << std::endl;
+        CUDA_CALL(cudaDeviceSynchronize());
         saveSnapshotToFile();
         env->writeParameters();
 
