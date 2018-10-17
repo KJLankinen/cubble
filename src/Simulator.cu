@@ -171,11 +171,23 @@ void Simulator::setupSimulation()
 #endif
     );
 
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
     CUDA_LAUNCH(boundaryWrapKernel, defaultPolicy,
-                numBubbles,
-                x, lbb.x, tfr.x,
-                y, lbb.y, tfr.y,
-                z, lbb.z, tfr.z);
+                numBubbles
+#if (PBC_X == 1)
+                ,
+                x, lbb.x, tfr.x
+#endif
+#if (PBC_Y == 1)
+                ,
+                y, lbb.y, tfr.y
+#endif
+#if (PBC_Z == 1 && NUM_DIM == 3)
+                ,
+                z, lbb.z, tfr.z
+#endif
+    );
+#endif
 
     CUDA_LAUNCH(resetKernel, defaultPolicy,
                 0.0, numBubbles,
@@ -284,7 +296,9 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
                     numBubbles, timeStep,
                     xPrd, x, dxdt, dxdtOld,
                     yPrd, y, dydt, dydtOld,
+#if (NUM_DIM == 3)
                     zPrd, z, dzdt, dzdtOld,
+#endif
                     rPrd, r, drdt, drdtOld);
     }
     else
@@ -292,8 +306,12 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
         CUDA_LAUNCH(predictKernel, policy,
                     numBubbles, timeStep,
                     xPrd, x, dxdt, dxdtOld,
-                    yPrd, y, dydt, dydtOld,
-                    zPrd, z, dzdt, dzdtOld);
+                    yPrd, y, dydt, dydtOld
+#if (NUM_DIM == 3)
+                    ,
+                    zPrd, z, dzdt, dzdtOld,
+#endif
+        );
     }
 
     CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
@@ -329,7 +347,9 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
                     numBubbles, timeStep, errors,
                     xPrd, x, dxdt, dxdtPrd,
                     yPrd, y, dydt, dydtPrd,
+#if (NUM_DIM == 3)
                     zPrd, z, dzdt, dzdtPrd,
+#endif
                     rPrd, r, drdt, drdtPrd);
     }
     else
@@ -337,8 +357,12 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
         CUDA_LAUNCH(correctKernel, policy,
                     numBubbles, timeStep, errors,
                     xPrd, x, dxdt, dxdtPrd,
-                    yPrd, y, dydt, dydtPrd,
-                    zPrd, z, dzdt, dzdtPrd);
+                    yPrd, y, dydt, dydtPrd
+#if (NUM_DIM == 3)
+                    ,
+                    zPrd, z, dzdt, dzdtPrd,
+#endif
+        );
     }
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, policy.stream));
@@ -479,7 +503,7 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
                 ,
                 yPrd, lbb.y, tfr.y
 #endif
-#if (PBC_Z == 1)
+#if (PBC_Z == 1 && NUM_DIM == 3)
                 ,
                 zPrd, lbb.z, tfr.z
 #endif
@@ -534,7 +558,9 @@ void Simulator::generateBubbles()
 
     CURAND_CALL(curandGenerateUniformDouble(generator, x, numBubbles));
     CURAND_CALL(curandGenerateUniformDouble(generator, y, numBubbles));
+#if (NUM_DIM == 3)
     CURAND_CALL(curandGenerateUniformDouble(generator, z, numBubbles));
+#endif
     CURAND_CALL(curandGenerateUniformDouble(generator, w, numBubbles));
     CURAND_CALL(curandGenerateNormalDouble(generator, r, numBubbles, avgRad, stdDevRad));
 

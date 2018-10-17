@@ -107,7 +107,11 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tf
 	const dvec interval = tfr - lbb;
 	const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
 	const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+#if (NUM_DIM == 3)
 	const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+#else
+	const int zid = 0;
+#endif
 
 	return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
@@ -121,7 +125,9 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
 	ivec idxVec(0, 0, 0);
 	idxVec.x = idx % cellDim.x;
 	idxVec.y = (idx / cellDim.x) % cellDim.y;
+#if (NUM_DIM == 3)
 	idxVec.z = idx / (cellDim.x * cellDim.y);
+#endif
 
 	return idxVec;
 }
@@ -215,10 +221,12 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 		wrapAround(tid,
 				   x, lbb.x, tfr.x,
 				   y, lbb.y, tfr.y,
+#if (NUM_DIM == 3)
 				   z, lbb.z, tfr.z,
+				   zPrd, lbb.z, tfr.z,
+#endif
 				   xPrd, lbb.x, tfr.x,
-				   yPrd, lbb.y, tfr.y,
-				   zPrd, lbb.z, tfr.z);
+				   yPrd, lbb.y, tfr.y);
 
 		r[tid] = r[tid] > 0 ? r[tid] : -r[tid];
 		w[tid] = r[tid];
