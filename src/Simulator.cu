@@ -724,8 +724,9 @@ dim3 Simulator::getGridSize()
     float nx = std::cbrt((float)totalNumCells / (interval.y * interval.z));
 #else
     float nx = std::sqrt((float)totalNumCells / interval.y);
+    interval.z = 0;
 #endif
-    ivec grid = (nx * interval).ceil();
+    ivec grid = (nx * interval).floor() + 1;
     assert(grid.x > 0);
     assert(grid.y > 0);
     assert(grid.z > 0);
