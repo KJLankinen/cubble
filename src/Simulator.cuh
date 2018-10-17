@@ -32,6 +32,8 @@ class Simulator
 	double getVolumeOfBubbles();
 	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
+	int getNumBubbles() const { return numBubbles; }
+	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
@@ -52,6 +54,8 @@ class Simulator
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
+
+	double maxBubbleRadius = 0;
 
 	cudaEvent_t blockingEvent1;
 	cudaEvent_t blockingEvent2;

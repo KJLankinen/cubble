@@ -199,7 +199,11 @@ void CubbleApp::runSimulation()
         {
             double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
             double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
-            dataStream << scaledTime << " " << relativeRadius << "\n";
+            dataStream << scaledTime
+                       << " " << relativeRadius
+                       << " " << simulator->getMaxBubbleRadius() / env->getAvgRad()
+                       << " " << simulator->getNumBubbles()
+                       << "\n";
 
             std::cout << "t*: " << scaledTime
                       << " <R>/<R_in>: " << relativeRadius
