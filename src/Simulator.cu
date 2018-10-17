@@ -310,7 +310,7 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
                     yPrd, y, dydt, dydtOld
 #if (NUM_DIM == 3)
                     ,
-                    zPrd, z, dzdt, dzdtOld,
+                    zPrd, z, dzdt, dzdtOld
 #endif
         );
     }
@@ -361,7 +361,7 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
                     yPrd, y, dydt, dydtPrd
 #if (NUM_DIM == 3)
                     ,
-                    zPrd, z, dzdt, dzdtPrd,
+                    zPrd, z, dzdt, dzdtPrd
 #endif
         );
     }

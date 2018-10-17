@@ -86,8 +86,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
     ax.xaxis.label.set_fontsize(20)
     ax.yaxis.label.set_fontsize(20)
-    ax.set_xlim(1, 2300)
-    ax.set_ylim(0.65, 10)
+    ax.set_xlim(1, 10000)
+    ax.set_ylim(0.65, 20)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
     #ax.set_axis_bgcolor((160 / 255.0, 198 / 255.0, 255 / 255.0))
@@ -132,8 +132,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
 
     alpha1 = 0.62
     alpha2 = 0.48
-    alpha3 = 0.5
-    alpha4 = 0.39
+    alpha3 = 0.53
+    alpha4 = 0.55
     
     x1 = np.linspace(10, 600)
     y1 = pow(0.05 * x1, alpha1)
@@ -142,22 +142,22 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     y2 = pow(0.0825 * x2, alpha2)
     
     x3 = np.linspace(10, 1800)
-    y3 = pow(0.0138 * x3, alpha3)
+    y3 = pow(0.021 * x3, alpha3)
     
     x4 = np.linspace(10, 1800)
-    y4 = pow(0.0175 * x4, alpha4)
+    y4 = pow(0.035 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
     arrow_props_down=dict(arrowstyle='-', connectionstyle="angle,angleA=-90,angleB=180,rad=0")
     
-    ax.loglog(x1, y1, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha1), xy=(x1[11], y1[15]))
-    ax.annotate("", xy=(x1[13], y1[13]), xycoords='data', xytext=(x1[15], y1[15]), textcoords='data', arrowprops=arrow_props_up)
+    #ax.loglog(x1, y1, '--', color=line_color, linewidth=2.0)
+    #ax.annotate(str(alpha1), xy=(x1[11], y1[15]))
+    #ax.annotate("", xy=(x1[13], y1[13]), xycoords='data', xytext=(x1[15], y1[15]), textcoords='data', arrowprops=arrow_props_up)
     
-    ax.loglog(x2, y2, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha2), xy=(x2[2], y2[3]))
-    ax.annotate("", xy=(x2[2], y2[2]), xycoords='data', xytext=(x2[3], y2[3]), textcoords='data', arrowprops=arrow_props_up)
+    #ax.loglog(x2, y2, '--', color=line_color, linewidth=2.0)
+    #ax.annotate(str(alpha2), xy=(x2[2], y2[3]))
+    #ax.annotate("", xy=(x2[2], y2[2]), xycoords='data', xytext=(x2[3], y2[3]), textcoords='data', arrowprops=arrow_props_up)
     
     ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
     ax.annotate(str(alpha3), xy=(x3[11], y3[15]))
