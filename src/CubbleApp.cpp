@@ -230,28 +230,13 @@ void CubbleApp::saveSnapshotToFile()
     ss << env->getDataPath()
        << env->getSnapshotFilename()
        << numSnapshots
-       << ".dat";
+       << ".csv";
 
     std::string filename(ss.str());
     ss.clear();
     ss.str("");
 
-    // Add descriptions here, when adding new things to the 'header' of the data file
-    ss << "#--------------------------------------------------"
-       << "\n# Lines starting with '#' are comment lines"
-       << "\n#"
-       << "\n# Format of data:"
-       << "\n# left bottom back"
-       << "\n# top front right"
-       << "\n#"
-       << "\n# bubble data: (x, y, z, r)"
-       << "\n#--------------------------------------------------";
-
-    // Add the new things here.
-    ss << "\n"
-       << env->getLbb()
-       << "\n"
-       << env->getTfr();
+    ss << "x, y, z, r";
 
     for (const auto &bubble : tempVec)
         ss << "\n"
