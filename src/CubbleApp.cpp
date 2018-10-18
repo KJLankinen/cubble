@@ -83,9 +83,9 @@ void CubbleApp::setupSimulation()
         simulator->transformPositions(true);
         const dvec relativeSize = env->getBoxRelativeDimensions();
 #if (NUM_DIM == 3)
-        const double t = std::cbrt(phiTarget * simulator->getVolumeOfBubbles() / (relativeSize.x * relativeSize.y * relativeSize.z));
+        const double t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
 #else
-        const double t = std::sqrt(phiTarget * simulator->getVolumeOfBubbles() / (relativeSize.x * relativeSize.y));
+        const double t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
 #endif
         env->setTfr(dvec(t, t, t) * relativeSize);
         simulator->transformPositions(false);
