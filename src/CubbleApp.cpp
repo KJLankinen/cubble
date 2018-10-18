@@ -62,18 +62,13 @@ void CubbleApp::setupSimulation()
 
     saveSnapshotToFile();
 
-    int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
 
-    auto printPhi = [](double phi, double phiTarget) -> void {
-        std::cout << "Volume ratios: current: " << phi
-                  << ", target: " << phiTarget
-                  << std::endl;
-    };
-
-    printPhi(phi, phiTarget);
+    std::cout << "Volume ratios: current: " << phi
+              << ", target: " << phiTarget
+              << std::endl;
 
     std::cout << "Scaling the simulation box." << std::endl;
 
@@ -89,7 +84,10 @@ void CubbleApp::setupSimulation()
 
     phi = bubbleVolume / env->getSimulationBoxVolume();
 
-    printPhi(phi, phiTarget);
+    std::cout << "Volume ratios: current: " << phi
+              << ", target: " << phiTarget
+              << std::endl;
+
     saveSnapshotToFile();
 }
 
