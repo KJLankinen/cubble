@@ -70,7 +70,7 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, dou
 __global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z)
 {
     const dvec interval = tfr - lbb;
-    for (int i = threadIdx.x; i < numValues; i += gridDim.x * blockDim.x)
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
         if (normalize)
         {
