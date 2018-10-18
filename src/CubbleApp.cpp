@@ -80,9 +80,11 @@ void CubbleApp::setupSimulation()
     const dvec scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1) * env->getTfr();
     while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
     {
+        simulator->transformPositions(true);
         env->setTfr(env->getTfr() - scaleAmount);
+        simulator->transformPositions(false);
 
-        for (size_t i = 0; i < 50; ++i)
+        for (size_t i = 0; i < 10; ++i)
             simulator->integrate();
 
         bubbleVolume = simulator->getVolumeOfBubbles();

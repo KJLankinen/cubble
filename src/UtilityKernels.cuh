@@ -159,6 +159,8 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
         setFlagIfGreaterThanConstant(tid, args...);
 }
 
+__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z);
+
 __device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap);
 
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);

@@ -67,4 +67,28 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, dou
     return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
 }
 
+__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z)
+{
+    const dvec interval = tfr - lbb;
+    for (int i = theadIdx.x; i < numValues; i += gridDim.x * blockDim.x)
+    {
+        if (normalize)
+        {
+            x[i] = (x[i] - lbb.x) / interval.x;
+            y[i] = (y[i] - lbb.y) / interval.y;
+#if (NUM_DIM == 3)
+            z[i] = (z[i] - lbb.z) / interval.z;
+#endif
+        }
+        else
+        {
+            x[i] = interval.x * x[i] + lbb.x;
+            y[i] = interval.y * y[i] + lbb.y;
+#if (NUM_DIM == 3)
+            z[i] = interval.z * z[i] + lbb.z;
+#endif
+        }
+    }
+}
+
 } // namespace cubble
