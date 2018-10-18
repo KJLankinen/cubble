@@ -89,6 +89,8 @@ void CubbleApp::setupSimulation()
 #endif
         env->setTfr(dvec(t, t, t) * relativeSize);
         simulator->transformPositions(false);
+
+        phi = bubbleVolume / env->getSimulationBoxVolume();
         ++numSteps;
     }
     else
