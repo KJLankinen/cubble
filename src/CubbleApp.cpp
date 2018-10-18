@@ -75,46 +75,19 @@ void CubbleApp::setupSimulation()
 
     printPhi(phi, phiTarget);
 
-    std::cout << "Starting the scaling of the simulation box." << std::endl;
+    std::cout << "Scaling the simulation box." << std::endl;
 
-    // If simulation box is too small
-    if (phi > phiTarget)
-    {
-        simulator->transformPositions(true);
-        const dvec relativeSize = env->getBoxRelativeDimensions();
+    simulator->transformPositions(true);
+    const dvec relativeSize = env->getBoxRelativeDimensions();
 #if (NUM_DIM == 3)
-        const double t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
+    const double t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
 #else
-        const double t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
+    const double t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
 #endif
-        env->setTfr(dvec(t, t, t) * relativeSize);
-        simulator->transformPositions(false);
+    env->setTfr(dvec(t, t, t) * relativeSize);
+    simulator->transformPositions(false);
 
-        phi = bubbleVolume / env->getSimulationBoxVolume();
-        ++numSteps;
-    }
-    else
-    {
-        const dvec scaleAmount = env->getScaleAmount() * env->getTfr();
-        while (phi < phiTarget)
-        {
-            simulator->transformPositions(true);
-            env->setTfr(env->getTfr() - scaleAmount);
-            simulator->transformPositions(false);
-
-            for (size_t i = 0; i < 10; ++i)
-                simulator->integrate();
-
-            phi = bubbleVolume / env->getSimulationBoxVolume();
-
-            if (numSteps % 50 == 0)
-                printPhi(phi, phiTarget);
-
-            ++numSteps;
-        }
-    }
-
-    std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
+    phi = bubbleVolume / env->getSimulationBoxVolume();
 
     printPhi(phi, phiTarget);
     saveSnapshotToFile();
