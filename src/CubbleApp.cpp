@@ -62,41 +62,32 @@ void CubbleApp::setupSimulation()
 
     saveSnapshotToFile();
 
-    int numSteps = 0;
     const double phiTarget = env->getPhiTarget();
     double bubbleVolume = simulator->getVolumeOfBubbles();
     double phi = bubbleVolume / env->getSimulationBoxVolume();
 
-    auto printPhi = [](double phi, double phiTarget) -> void {
-        std::cout << "Volume ratios: current: " << phi
-                  << ", target: " << phiTarget
-                  << std::endl;
-    };
+    std::cout << "Volume ratios: current: " << phi
+              << ", target: " << phiTarget
+              << std::endl;
 
-    printPhi(phi, phiTarget);
+    std::cout << "Scaling the simulation box." << std::endl;
 
-    std::cout << "Starting the scaling of the simulation box." << std::endl;
-    const bool shouldShrink = phi < phiTarget;
-    const dvec scaleAmount = env->getScaleAmount() * (shouldShrink ? 1 : -1) * env->getTfr();
-    while ((shouldShrink && phi < phiTarget) || (!shouldShrink && phi > phiTarget))
-    {
-        env->setTfr(env->getTfr() - scaleAmount);
+    simulator->transformPositions(true);
+    const dvec relativeSize = env->getBoxRelativeDimensions();
+#if (NUM_DIM == 3)
+    const double t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
+#else
+    const double t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
+#endif
+    env->setTfr(dvec(t, t, t) * relativeSize);
+    simulator->transformPositions(false);
 
-        for (size_t i = 0; i < 50; ++i)
-            simulator->integrate();
+    phi = bubbleVolume / env->getSimulationBoxVolume();
 
-        bubbleVolume = simulator->getVolumeOfBubbles();
-        phi = bubbleVolume / env->getSimulationBoxVolume();
+    std::cout << "Volume ratios: current: " << phi
+              << ", target: " << phiTarget
+              << std::endl;
 
-        if (numSteps % 50 == 0)
-            printPhi(phi, phiTarget);
-
-        ++numSteps;
-    }
-
-    std::cout << "Scaling took total of " << numSteps << " steps." << std::endl;
-
-    printPhi(phi, phiTarget);
     saveSnapshotToFile();
 }
 
@@ -240,28 +231,13 @@ void CubbleApp::saveSnapshotToFile()
     ss << env->getDataPath()
        << env->getSnapshotFilename()
        << numSnapshots
-       << ".dat";
+       << ".csv";
 
     std::string filename(ss.str());
     ss.clear();
     ss.str("");
 
-    // Add descriptions here, when adding new things to the 'header' of the data file
-    ss << "#--------------------------------------------------"
-       << "\n# Lines starting with '#' are comment lines"
-       << "\n#"
-       << "\n# Format of data:"
-       << "\n# left bottom back"
-       << "\n# top front right"
-       << "\n#"
-       << "\n# bubble data: (x, y, z, r)"
-       << "\n#--------------------------------------------------";
-
-    // Add the new things here.
-    ss << "\n"
-       << env->getLbb()
-       << "\n"
-       << env->getTfr();
+    ss << "x, y, z, r";
 
     for (const auto &bubble : tempVec)
         ss << "\n"

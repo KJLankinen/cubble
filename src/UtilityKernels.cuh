@@ -2,9 +2,11 @@
 
 #include <cuda_runtime_api.h>
 #include <stdint.h>
+#include <assert.h>
+
 #include "Macros.h"
 #include "Util.h"
-#include "assert.h"
+#include "Vec.h"
 
 namespace cubble
 {
@@ -158,6 +160,8 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
     if (tid < numValues)
         setFlagIfGreaterThanConstant(tid, args...);
 }
+
+__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z);
 
 __device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap);
 

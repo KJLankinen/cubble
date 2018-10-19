@@ -848,4 +848,18 @@ double Simulator::getInvRho()
     return invRho;
 }
 
+void Simulator::transformPositions(bool normalize)
+{
+    ExecutionPolicy policy;
+    policy.gridSize = dim3(256, 1, 1);
+    policy.blockSize = dim3(128, 1, 1);
+    policy.stream = 0;
+    policy.sharedMemBytes = 0;
+
+    CUDA_LAUNCH(transformPositionsKernel, policy,
+                normalize, numBubbles, env->getLbb(), env->getTfr(),
+                bubbleData.getRowPtr((size_t)BP::X),
+                bubbleData.getRowPtr((size_t)BP::Y),
+                bubbleData.getRowPtr((size_t)BP::Z));
+}
 } // namespace cubble

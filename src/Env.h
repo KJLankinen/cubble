@@ -33,7 +33,6 @@ class Env
 	CUBBLE_CONST_PROP(double, SigmaZero, 0)
 	CUBBLE_CONST_PROP(double, FZeroPerMuZero, 0)
 	CUBBLE_CONST_PROP(double, ErrorTolerance, 0)
-	CUBBLE_CONST_PROP(double, ScaleAmount, 0)
 	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
 	CUBBLE_CONST_PROP(double, KParameter, 0)
 	CUBBLE_CONST_PROP(double, Kappa, 0)
@@ -113,7 +112,6 @@ class Env
 		CUBBLE_IO_PARAMETER(read, params, ErrorTolerance);
 		CUBBLE_IO_PARAMETER(read, params, TimeStep);
 		CUBBLE_IO_PARAMETER(read, params, RngSeed);
-		CUBBLE_IO_PARAMETER(read, params, ScaleAmount);
 		CUBBLE_IO_PARAMETER(read, params, NumBubblesPerCell);
 		CUBBLE_IO_PARAMETER(read, params, SnapshotFilename);
 		CUBBLE_IO_PARAMETER(read, params, NumStepsToRelax);

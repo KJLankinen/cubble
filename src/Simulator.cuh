@@ -35,6 +35,7 @@ class Simulator
 	int getNumBubbles() const { return numBubbles; }
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
+	void transformPositions(bool normalize);
 
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
