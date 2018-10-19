@@ -194,7 +194,7 @@ void CubbleApp::runSimulation()
                        << " " << relativeRadius
                        << " " << simulator->getMaxBubbleRadius() / env->getAvgRad()
                        << " " << simulator->getNumBubbles()
-                       << " " << simulator->getInvRho()
+                       << " " << 1.0 / (simulator->getInvRho() * env->getAvgRad())
                        << "\n";
 
             std::cout << "t*: " << scaledTime
