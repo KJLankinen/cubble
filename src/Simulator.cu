@@ -68,6 +68,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(dtv != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&np, dNumPairs));
     assert(np != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dir, dInvRho));
+    assert(dir != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
@@ -837,4 +839,13 @@ void Simulator::getBubbles(std::vector<Bubble> &bubbles) const
         bubbles[i] = b;
     }
 }
+
+double Simulator::getInvRho()
+{
+    double invRho = 0;
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(&invRho), static_cast<void *>(dir), sizeof(double), cudaMemcpyDeviceToHost));
+
+    return invRho;
+}
+
 } // namespace cubble

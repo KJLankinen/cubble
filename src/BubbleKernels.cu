@@ -11,6 +11,7 @@ __device__ double dTotalFreeArea;
 __device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
 __device__ double dTotalVolume;
+__device__ double dInvRho;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
@@ -263,9 +264,9 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
 	const int tid = getGlobalTid();
 	if (tid < numBubbles)
 	{
-		const double invRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
+		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
 		const double invRadius = 1.0 / r[tid];
-		double vr = kappa * freeArea[tid] * (invRho - invRadius);
+		double vr = kappa * freeArea[tid] * (dInvRho - invRadius);
 		vr += drdt[tid];
 
 		vr *= 0.5 * invPi * invRadius;

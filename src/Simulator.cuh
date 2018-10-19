@@ -34,6 +34,7 @@ class Simulator
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 	int getNumBubbles() const { return numBubbles; }
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
+	double getInvRho();
 
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
@@ -72,6 +73,7 @@ class Simulator
 	double *dtfa = nullptr;
 	double *dvm = nullptr;
 	double *dtv = nullptr;
+	double *dir = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;

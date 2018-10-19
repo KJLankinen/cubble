@@ -12,6 +12,7 @@ extern __device__ double dTotalFreeArea;
 extern __device__ double dTotalFreeAreaPerRadius;
 extern __device__ double dVolumeMultiplier;
 extern __device__ double dTotalVolume;
+extern __device__ double dInvRho;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
@@ -220,7 +221,7 @@ __global__ void gasExchangeKernel(int numValues,
         const double r1 = r[idx1];
         const double r2 = r[idx2];
 
-        if (magnitude <= r1 + r2)
+        if (magnitude < r1 + r2)
         {
             double overlapArea = 0;
 

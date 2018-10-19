@@ -84,53 +84,21 @@ def plot_2d(n):
     fig = plt.figure()
     axes = []
     for i in range(n):
-        filename = "data/snapshot" + str(i + 9) + ".dat"
+        filename = "data/snapshot" + str(i + 2) + ".dat"
 
         with open(filename) as file:
             head = [next(file) for x in xrange(11)]
 
-        lbb = np.fromstring(head[-2], count=3, sep=',')
-        tfr = np.fromstring(head[-1], count=3, sep=',')
-            
         data = np.loadtxt(filename, delimiter=',', skiprows=11)
-            
-        x = lbb[0] + data[:,0] * (tfr - lbb)[0]
-        y = lbb[1] + data[:,1] * (tfr - lbb)[1]
+        x = data[:,0]
+        y = data[:,1]
         r = data[:,3]
             
         axes.append(fig.add_subplot(np.ceil(n / 2.0), np.clip(np.ceil(n / 1.9), 1, 2), i + 1, aspect='equal'))
         out = circles(x, y, r, alpha=0.3)
     
     plt.show()
-
-def plot_3d():
-    filename = "data/snapshot2.dat"
-
-    with open(filename) as file:
-        head = [next(file) for x in xrange(11)]
-    lbb = np.fromstring(head[-2], count=3, sep=',')
-    tfr = np.fromstring(head[-1], count=3, sep=',')
-    
-    data = np.loadtxt(filename, delimiter=',', skiprows=11)
-
-    x = lbb[0] + data[:,0] * (tfr - lbb)[0]
-    y = lbb[1] + data[:,1] * (tfr - lbb)[1]
-    z = lbb[2] + data[:,2] * (tfr - lbb)[2]
-    r = data[:,3]
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    
-    for (xi, yi, zi, ri) in zip(x, y, z, r):
-        (xs, ys, zs) = drawSphere(xi, yi, zi, ri)
-        ax.plot_surface(xs, ys, zs)
-
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-    ax.set_zlabel("z")
-
-    plt.show()
-    
+  
 def main():
     plot_2d(1)
 

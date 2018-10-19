@@ -71,7 +71,7 @@ def plot_data_loglog(data_file, json_file, ax):
     print("Plotting data from \"" + str(data_file) + "\" using \"" + str(json_file) + "\" for some parameters.")
     data = np.loadtxt(data_file)
     x = data[:, 0]
-    y = data[:, 1]
+    y = data[:, 2]
             
     with open(json_file, 'r') as f:
         decoded_json = json.load(f)
@@ -80,14 +80,14 @@ def plot_data_loglog(data_file, json_file, ax):
     kappa = decoded_json["Kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '-', linewidth=1.5, label=label_str)
+    ax.loglog(x, y, '.', linewidth=1.5, label=label_str)
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
     
     ax.xaxis.label.set_fontsize(20)
     ax.yaxis.label.set_fontsize(20)
-    ax.set_xlim(1, 10000)
-    ax.set_ylim(0.65, 20)
+    ax.set_xlim(1, 2000)
+    ax.set_ylim(0.9, 15)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
     #ax.set_axis_bgcolor((160 / 255.0, 198 / 255.0, 255 / 255.0))
@@ -97,6 +97,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     json_files = []
     data_files = []
     phis = []
+    kappas = []
 
     # Gather files and sort them according to phi
     for dir in child_dirs:
@@ -119,10 +120,11 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
                     decoded_json = json.load(f)
             
                 phis.append(float(decoded_json["PhiTarget"]))
+                kappas.append(float(decoded_json["Kappa"]))
                 json_files.append(json_file)
                 data_files.append(data_file)
 
-    indices = list(reversed(np.argsort(np.array(phis))))
+    indices = list(reversed(np.lexsort((np.array(kappas), np.array(phis)))))
     json_files = [json_files[idx] for idx in indices]
     data_files = [data_files[idx] for idx in indices]
 
@@ -132,20 +134,20 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
 
     alpha1 = 0.62
     alpha2 = 0.48
-    alpha3 = 0.53
-    alpha4 = 0.55
+    alpha3 = 0.51
+    alpha4 = 0.47
     
     x1 = np.linspace(10, 600)
-    y1 = pow(0.05 * x1, alpha1)
+    y1 = pow(0.1 * x1, alpha1)
     
     x2 = np.linspace(10, 600)
     y2 = pow(0.0825 * x2, alpha2)
     
-    x3 = np.linspace(10, 1800)
-    y3 = pow(0.021 * x3, alpha3)
+    x3 = np.linspace(10, 350, 1000)
+    y3 = pow(0.27 * x3, alpha3)
     
-    x4 = np.linspace(10, 1800)
-    y4 = pow(0.035 * x4, alpha4)
+    x4 = np.linspace(10, 1400, 1000)
+    y4 = pow(0.075 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
@@ -159,15 +161,19 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     #ax.annotate(str(alpha2), xy=(x2[2], y2[3]))
     #ax.annotate("", xy=(x2[2], y2[2]), xycoords='data', xytext=(x2[3], y2[3]), textcoords='data', arrowprops=arrow_props_up)
     
-    ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha3), xy=(x3[11], y3[15]))
-    ax.annotate("", xy=(x3[13], y3[13]), xycoords='data', xytext=(x3[15], y3[15]), textcoords='data', arrowprops=arrow_props_up)
+    smaller_idx = 200
+    larger_idx = 250
+    #ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
+    #ax.annotate(str(alpha3), xy=(x3[smaller_idx], y3[larger_idx]))
+    #ax.annotate("", xy=(x3[smaller_idx], y3[smaller_idx]), xycoords='data', xytext=(x3[larger_idx], y3[larger_idx]), textcoords='data', arrowprops=arrow_props_up)
     
-    ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha4), xy=(x4[2], y4[3]))
-    ax.annotate("", xy=(x4[2], y4[2]), xycoords='data', xytext=(x4[3], y4[3]), textcoords='data', arrowprops=arrow_props_up)
+    smaller_idx = 200
+    larger_idx = 250
+    #ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
+    #ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
+    #ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
 
-    ax.legend()
+    ax.legend(loc='upper left')
 
     plt.show()
     
