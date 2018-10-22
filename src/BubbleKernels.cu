@@ -262,13 +262,14 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
 		const double invRadius = 1.0 / r[i];
-		double vr = drdt[i];
 
-		vr *= 0.5 * invPi * invRadius;
+		double invArea = 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
-		vr *= 0.5 * invRadius;
+		invArea *= 0.5 * invRadius;
 #endif
-		vr += kappa * freeArea[i] * (dInvRho - invRadius);
+		double vr = drdt[i];
+		vr += invArea * kappa * freeArea[i] * (dInvRho - invRadius);
+		vr *= invArea;
 
 		drdt[i] = kParam * vr;
 	}
