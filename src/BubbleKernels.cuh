@@ -264,7 +264,8 @@ __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             int numValues,
                                             double invPi,
                                             double kappa,
-                                            double kParam);
+                                            double kParam,
+                                            double avgRadIn);
 
 __global__ void addVolume(double *r, int numValues);
 
