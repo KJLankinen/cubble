@@ -71,7 +71,7 @@ def plot_data_loglog(data_file, json_file, ax):
     print("Plotting data from \"" + str(data_file) + "\" using \"" + str(json_file) + "\" for some parameters.")
     data = np.loadtxt(data_file)
     x = data[:, 0]
-    y = data[:, 3]
+    y = data[:, 1]
             
     with open(json_file, 'r') as f:
         decoded_json = json.load(f)
@@ -134,8 +134,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
 
     alpha1 = 0.62
     alpha2 = 0.48
-    alpha3 = 0.51
-    alpha4 = 0.51
+    alpha3 = 0.34
+    alpha4 = 0.45
     
     x1 = np.linspace(10, 600)
     y1 = pow(0.1 * x1, alpha1)
@@ -143,11 +143,11 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     x2 = np.linspace(10, 600)
     y2 = pow(0.0825 * x2, alpha2)
     
-    x3 = np.linspace(10, 350, 1000)
-    y3 = pow(0.27 * x3, alpha3)
+    x3 = np.linspace(10, 3500, 1000)
+    y3 = pow(0.245 * x3, alpha3)
     
-    x4 = np.linspace(10, 1400, 1000)
-    y4 = pow(0.4 * x4, alpha4)
+    x4 = np.linspace(10, 550, 1000)
+    y4 = pow(0.26 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
@@ -163,9 +163,9 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
     smaller_idx = 200
     larger_idx = 250
-    #ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
-    #ax.annotate(str(alpha3), xy=(x3[smaller_idx], y3[larger_idx]))
-    #ax.annotate("", xy=(x3[smaller_idx], y3[smaller_idx]), xycoords='data', xytext=(x3[larger_idx], y3[larger_idx]), textcoords='data', arrowprops=arrow_props_up)
+    ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha3), xy=(x3[smaller_idx], y3[larger_idx]))
+    ax.annotate("", xy=(x3[smaller_idx], y3[smaller_idx]), xycoords='data', xytext=(x3[larger_idx], y3[larger_idx]), textcoords='data', arrowprops=arrow_props_up)
     
     smaller_idx = 200
     larger_idx = 250
