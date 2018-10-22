@@ -258,21 +258,22 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *free
 	}
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double invPi, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double invPi, double kappa, double kParam, double avgRadIn)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
 		const double invRadius = 1.0 / r[i];
-		const double invAvgArea = numValues / dTotalArea;
+		double avgAreaRatio = dTotalArea * invPi;
+		avgAreaRatio = 1.0 / avgAreaRatio * numValues * 2.0 * avgRadIn;
 
 		double invArea = 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
 		invArea *= 0.5 * invRadius;
+		avgAreaRatio *= 2.0 * avgRadIn;
 #endif
-		double vr = drdt[i] * invArea + kappa * freeArea[i] * invAvgArea * (dInvRho - invRadius);
-
-		drdt[i] = kParam * vr;
+		const double vr = drdt[i] + kappa * avgAreaRatio * freeArea[i] * (dInvRho - invRadius);
+		drdt[i] = kParam * invArea * vr;
 	}
 }
 
