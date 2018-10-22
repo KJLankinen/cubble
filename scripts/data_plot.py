@@ -71,7 +71,7 @@ def plot_data_loglog(data_file, json_file, ax):
     print("Plotting data from \"" + str(data_file) + "\" using \"" + str(json_file) + "\" for some parameters.")
     data = np.loadtxt(data_file)
     x = data[:, 0]
-    y = data[:, 2]
+    y = data[:, 3]
             
     with open(json_file, 'r') as f:
         decoded_json = json.load(f)
@@ -80,7 +80,7 @@ def plot_data_loglog(data_file, json_file, ax):
     kappa = decoded_json["Kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '.', linewidth=1.5, label=label_str)
+    ax.loglog(x, y, '-', linewidth=1.5, label=label_str)
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
     
@@ -135,7 +135,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     alpha1 = 0.62
     alpha2 = 0.48
     alpha3 = 0.51
-    alpha4 = 0.47
+    alpha4 = 0.51
     
     x1 = np.linspace(10, 600)
     y1 = pow(0.1 * x1, alpha1)
@@ -147,7 +147,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     y3 = pow(0.27 * x3, alpha3)
     
     x4 = np.linspace(10, 1400, 1000)
-    y4 = pow(0.075 * x4, alpha4)
+    y4 = pow(0.4 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
@@ -169,9 +169,9 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
     smaller_idx = 200
     larger_idx = 250
-    #ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
-    #ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
-    #ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
+    ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
+    ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
+    ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
 
     ax.legend(loc='upper left')
 

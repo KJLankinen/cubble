@@ -168,18 +168,17 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
 	}
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi)
+__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi)
 {
-	int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double radius = r[tid];
+		double radius = r[i];
 		double volume = radius * radius * pi;
 #if (NUM_DIM == 3)
 		volume *= radius * 1.33333333333333333333333333;
 #endif
 
-		volumes[tid] = volume;
+		volumes[i] = volume;
 	}
 }
 
@@ -193,33 +192,32 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 									dvec lbb,
 									double avgRad,
 									double minRad,
-									int numBubbles)
+									int numValues)
 {
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		dvec pos(0, 0, 0);
-		pos.x = (tid % bubblesPerDim.x) / (double)bubblesPerDim.x;
-		pos.y = ((tid / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
+		pos.x = (i % bubblesPerDim.x) / (double)bubblesPerDim.x;
+		pos.y = ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
 
-		dvec randomOffset(x[tid], y[tid], 0);
+		dvec randomOffset(x[i], y[i], 0);
 #if (NUM_DIM == 3)
-		randomOffset.z = z[tid];
-		pos.z = (tid / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
+		randomOffset.z = z[i];
+		pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
 #endif
 		pos *= tfr - lbb;
-		randomOffset = dvec::normalize(randomOffset) * avgRad * w[tid];
+		randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
 		pos += randomOffset;
 
-		x[tid] = pos.x;
-		y[tid] = pos.y;
-		z[tid] = pos.z;
+		x[i] = pos.x;
+		y[i] = pos.y;
+		z[i] = pos.z;
 
-		xPrd[tid] = pos.x;
-		yPrd[tid] = pos.y;
-		zPrd[tid] = pos.z;
+		xPrd[i] = pos.x;
+		yPrd[i] = pos.y;
+		zPrd[i] = pos.z;
 
-		wrapAround(tid,
+		wrapAround(i,
 				   x, lbb.x, tfr.x,
 				   y, lbb.y, tfr.y,
 #if (NUM_DIM == 3)
@@ -229,15 +227,15 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 				   xPrd, lbb.x, tfr.x,
 				   yPrd, lbb.y, tfr.y);
 
-		r[tid] = r[tid] > 0 ? r[tid] : -r[tid];
-		w[tid] = r[tid];
-		setFlagIfGreaterThanConstant(tid, aboveMinRadFlags, r, minRad);
+		r[i] = r[i] > 0 ? r[i] : -r[i];
+		w[i] = r[i];
+		setFlagIfGreaterThanConstant(i, aboveMinRadFlags, r, minRad);
 	}
 }
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles)
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues)
 {
-	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numBubbles; i += gridDim.x * blockDim.x)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		const int cellIdx = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
 		cellIndices[i] = cellIdx;
@@ -247,41 +245,38 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 
 __global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius)
 {
-	const int tid = getGlobalTid();
-	if (tid < numValues)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double area = 2.0 * pi * r[tid];
+		double area = 2.0 * pi * r[i];
 #if (NUM_DIM == 3)
-		area *= 2.0 * r[tid];
+		area *= 2.0 * r[i];
 #endif
-		freeArea[tid] = area - freeArea[tid];
-		freeAreaPerRadius[tid] = freeArea[tid] / r[tid];
+		freeArea[i] = area - freeArea[i];
+		freeAreaPerRadius[i] = freeArea[i] / r[i];
 	}
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numBubbles, double invPi, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double invPi, double kappa, double kParam)
 {
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
-		const double invRadius = 1.0 / r[tid];
-		double vr = kappa * freeArea[tid] * (dInvRho - invRadius);
-		vr += drdt[tid];
+		const double invRadius = 1.0 / r[i];
+		double vr = drdt[i];
 
 		vr *= 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
 		vr *= 0.5 * invRadius;
 #endif
+		vr += kappa * freeArea[i] * (dInvRho - invRadius);
 
-		drdt[tid] = kParam * vr;
+		drdt[i] = kParam * vr;
 	}
 }
 
-__global__ void addVolume(double *r, int numBubbles)
+__global__ void addVolume(double *r, int numValues)
 {
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		double multiplier = dVolumeMultiplier / dTotalVolume;
 		multiplier += 1.0;
@@ -291,28 +286,27 @@ __global__ void addVolume(double *r, int numBubbles)
 #else
 		multiplier = sqrt(multiplier);
 #endif
-		r[tid] = r[tid] * multiplier;
+		r[i] = r[i] * multiplier;
 	}
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numBubbles)
+__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numValues)
 {
-	const int tid = getGlobalTid();
-	if (tid < numBubbles)
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		const double radius = r[tid];
+		const double radius = r[i];
 		double vol = pi * radius * radius;
 #if (NUM_DIM == 3)
 		vol *= 1.333333333333333333333333 * radius;
 #endif
 
-		if (aboveMinRadFlags[tid] == 0)
+		if (aboveMinRadFlags[i] == 0)
 		{
 			atomicAdd(&dVolumeMultiplier, vol);
-			volume[tid] = 0;
+			volume[i] = 0;
 		}
 		else
-			volume[tid] = vol;
+			volume[i] = vol;
 	}
 }
 } // namespace cubble

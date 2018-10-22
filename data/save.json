@@ -8,7 +8,7 @@
     "DataFilename": "collected_data.dat",
     "ErrorTolerance": 1e-05,
     "KParameter": 0.0001,
-    "Kappa": 0.01,
+    "Kappa": 0.374,
     "MaxDeltaEnergy": 0.0001,
     "MinNumBubbles": 900,
     "MuZero": 1.0,
@@ -16,10 +16,9 @@
     "NumBubblesPerCell": 32,
     "NumStepsToRelax": 10000,
     "PhiTarget": 0.4,
-    "RngSeed": 67826,
-    "ScaleAmount": 0.0001,
+    "RngSeed": 626,
     "SigmaZero": 1.0,
     "SnapshotFilename": "snapshot",
     "StdDevRad": 0.0126,
-    "TimeStep": 0.10526768316799404
+    "TimeStep": 0.1118604104607286
 }

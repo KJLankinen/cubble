@@ -85,7 +85,7 @@ __global__ void boundaryWrapKernel(int numValues, Args... args)
         wrapAround(tid, args...);
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numBubbles, double pi);
+__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi);
 
 __global__ void assignDataToBubbles(double *x,
                                     double *y,
@@ -101,9 +101,9 @@ __global__ void assignDataToBubbles(double *x,
                                     dvec lbb,
                                     double avgRad,
                                     double minRad,
-                                    int numBubbles);
+                                    int numValues);
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numBubbles);
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues);
 
 template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber,
@@ -260,16 +260,16 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *free
 __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             double *r,
                                             double *freeArea,
-                                            int numBubbles,
+                                            int numValues,
                                             double invPi,
                                             double kappa,
                                             double kParam);
 
-__global__ void addVolume(double *r, int numBubbles);
+__global__ void addVolume(double *r, int numValues);
 
 __global__ void calculateRedistributedGasVolume(double *volume,
                                                 double *r,
                                                 int *aboveMinRadFlags,
                                                 double pi,
-                                                int numBubbles);
+                                                int numValues);
 } // namespace cubble
