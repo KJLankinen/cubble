@@ -12,6 +12,7 @@ __device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
 __device__ double dTotalVolume;
 __device__ double dInvRho;
+__device__ double dTotalArea;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
@@ -243,15 +244,16 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 	}
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius)
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double area = 2.0 * pi * r[i];
+		double totalArea = 2.0 * pi * r[i];
 #if (NUM_DIM == 3)
-		area *= 2.0 * r[i];
+		totalArea *= 2.0 * r[i];
 #endif
-		freeArea[i] = area - freeArea[i];
+		area[i] = totalArea;
+		freeArea[i] = totalArea - freeArea[i];
 		freeAreaPerRadius[i] = freeArea[i] / r[i];
 	}
 }
@@ -262,14 +264,13 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
 		const double invRadius = 1.0 / r[i];
+		double averageArea = dTotalArea / numValues;
+		double vr = drdt[i] + kappa * freeArea[i] / averageArea * (dInvRho - invRadius);
 
-		double invArea = 0.5 * invPi * invRadius;
+		vr *= 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
-		invArea *= 0.5 * invRadius;
+		vr *= 0.5 * invRadius;
 #endif
-		double vr = drdt[i];
-		vr += invArea * kappa * freeArea[i] * (dInvRho - invRadius);
-		vr *= invArea;
 
 		drdt[i] = kParam * vr;
 	}

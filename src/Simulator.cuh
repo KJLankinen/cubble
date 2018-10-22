@@ -75,6 +75,7 @@ class Simulator
 	double *dvm = nullptr;
 	double *dtv = nullptr;
 	double *dir = nullptr;
+	double *dta = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;

@@ -70,6 +70,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(np != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&dir, dInvRho));
     assert(dir != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dta, dTotalArea));
+    assert(dta != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
@@ -387,6 +389,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
     double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
     double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+    double *volume = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
     const dvec tfr = env->getTfr();
     const dvec lbb = env->getLbb();
@@ -409,10 +412,11 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     );
 
     CUDA_LAUNCH(freeAreaKernel, gasExchangePolicy,
-                numBubbles, env->getPi(), rPrd, freeArea, errors);
+                numBubbles, env->getPi(), rPrd, freeArea, errors, volume);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
 
     CUDA_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
                 drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
