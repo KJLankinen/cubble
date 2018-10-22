@@ -1,16 +1,16 @@
-PhiTarget 0.950 RngSeed 4818
-PhiTarget 0.900 RngSeed 15777
-PhiTarget 0.890 RngSeed 6904
-PhiTarget 0.885 RngSeed 6643
-PhiTarget 0.870 RngSeed 22379
-PhiTarget 0.86 RngSeed 25902
-PhiTarget 0.840 RngSeed 28526
-PhiTarget 0.82 RngSeed 8213
-PhiTarget 0.800 RngSeed 21378
-PhiTarget 0.900 Kappa 0.5 RngSeed 15247
-PhiTarget 0.900 Kappa 0.4 RngSeed 152677
-PhiTarget 0.900 Kappa 0.3 RngSeed 15677
-PhiTarget 0.900 Kappa 0.2 RngSeed 15277
-PhiTarget 0.900 Kappa 0.15 RngSeed 1527
-PhiTarget 0.900 Kappa 0.05 RngSeed 12777
-PhiTarget 0.900 Kappa 0.0 RngSeed 15777
+PhiTarget 0.95
+PhiTarget 0.90
+PhiTarget 0.89
+PhiTarget 0.88
+PhiTarget 0.87
+PhiTarget 0.86
+PhiTarget 0.84
+PhiTarget 0.82
+PhiTarget 0.80
+PhiTarget 0.90 Kappa 0.50
+PhiTarget 0.90 Kappa 0.40
+PhiTarget 0.90 Kappa 0.30
+PhiTarget 0.90 Kappa 0.20
+PhiTarget 0.90 Kappa 0.15
+PhiTarget 0.90 Kappa 0.05
+PhiTarget 0.90 Kappa 0.00
