@@ -253,7 +253,7 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *free
 		totalArea *= 2.0 * r[i];
 #endif
 		area[i] = totalArea;
-		freeArea[i] = totalArea - freeArea[i];
+		freeArea[i] = (totalArea - freeArea[i]) / area[i];
 		freeAreaPerRadius[i] = freeArea[i] / r[i];
 	}
 }
@@ -264,15 +264,11 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
 		const double invRadius = 1.0 / r[i];
-		double avgAreaRatio = dTotalArea * invPi;
-		avgAreaRatio = 1.0 / avgAreaRatio * numValues * 2.0 * avgRadIn;
-
 		double invArea = 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
 		invArea *= 0.5 * invRadius;
-		avgAreaRatio *= 2.0 * avgRadIn;
 #endif
-		const double vr = drdt[i] + kappa * avgAreaRatio * freeArea[i] * (dInvRho - invRadius);
+		const double vr = drdt[i] + kappa * dTotalArea / numValues * freeArea[i] * (dInvRho - invRadius);
 		drdt[i] = kParam * invArea * vr;
 	}
 }
