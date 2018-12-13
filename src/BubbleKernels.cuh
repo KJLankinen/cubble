@@ -14,6 +14,7 @@ extern __device__ double dVolumeMultiplier;
 extern __device__ double dTotalVolume;
 extern __device__ double dInvRho;
 extern __device__ double dTotalArea;
+extern __device__ double dAverageSurfaceAreaIn;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
@@ -256,16 +257,15 @@ __global__ void gasExchangeKernel(int numValues,
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             double *r,
-                                            double *freeArea,
+                                            double *relativeFreeArea,
                                             int numValues,
                                             double invPi,
                                             double kappa,
-                                            double kParam,
-                                            double avgRadIn);
+                                            double kParam);
 
 __global__ void addVolume(double *r, int numValues);
 

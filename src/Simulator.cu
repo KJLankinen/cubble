@@ -72,6 +72,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(dir != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&dta, dTotalArea));
     assert(dta != nullptr);
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dasai, dTotadAverageSurfaceAreaInlArea));
+    assert(dasai != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
@@ -419,7 +421,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
 
     CUDA_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter(), env->getAvgRad());
+                drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
