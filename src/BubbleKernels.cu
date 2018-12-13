@@ -275,7 +275,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *rel
 #if (NUM_DIM == 3)
 		invArea *= 0.5 * invRadius;
 #endif
-		const double vr = drdt[i] + kappa * dTotalArea / numValues * relativeFreeArea[i] * (dInvRho - invRadius);
+		const double vr = drdt[i] + kappa * relativeFreeArea[i] * (dInvRho - invRadius);
 		drdt[i] = kParam * invArea * vr;
 	}
 }
