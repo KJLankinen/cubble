@@ -582,7 +582,15 @@ void Simulator::generateBubbles()
     assert(bubblesPerDimAtStart.z > 0);
 #endif
     CUDA_LAUNCH(assignDataToBubbles, defaultPolicy,
-                x, y, z, xPrd, yPrd, zPrd, r, w, aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart, tfr, lbb, avgRad, env->getMinRad(), numBubbles);
+                x, y, z, xPrd, yPrd, zPrd, r, w,
+                aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
+                tfr, lbb, avgRad, env->getMinRad(), env->getPi(), numBubbles);
+
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, w, dasai, numBubbles, defaultPolicy.stream);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(w), static_cast<void *>(r),
+                              sizeof(double) * bubbleData.getWidth(),
+                              cudaMemcpyDeviceToDevice,
+                              defaultPolicy.stream));
 }
 
 void Simulator::updateCellsAndNeighbors()

@@ -103,6 +103,7 @@ __global__ void assignDataToBubbles(double *x,
                                     dvec lbb,
                                     double avgRad,
                                     double minRad,
+                                    double pi,
                                     int numValues);
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues);

@@ -194,6 +194,7 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 									dvec lbb,
 									double avgRad,
 									double minRad,
+									double pi,
 									int numValues)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
@@ -230,7 +231,12 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 				   yPrd, lbb.y, tfr.y);
 
 		r[i] = r[i] > 0 ? r[i] : -r[i];
-		w[i] = r[i];
+		w[i] = 2.0 * pi * r[i] / numValues;
+
+#if (NUM_DIM == 3)
+		w[i] *= 2.0 * r[i];
+#endif
+
 		setFlagIfGreaterThanConstant(i, aboveMinRadFlags, r, minRad);
 	}
 }
