@@ -47,7 +47,7 @@ make clean
 # Generate folders and input files for each run
 #==============================================================
 
-NUM_RUNS = python $PYTHON_SCRIPT $MUL_RUN_DIR $PROJECT_ROOT_DIR"/data/"$INPUT_DATA $PARAMS_FILE
+NUM_RUNS=$(python $PYTHON_SCRIPT $MUL_RUN_DIR $PROJECT_ROOT_DIR"/data/"$INPUT_DATA $PARAMS_FILE)
 printf "$NUM_RUNS"
 
 
