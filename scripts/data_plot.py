@@ -86,7 +86,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
     ax.xaxis.label.set_fontsize(20)
     ax.yaxis.label.set_fontsize(20)
-    ax.set_xlim(1, 2000)
+    ax.set_xlim(1, 12000)
     ax.set_ylim(0.9, 15)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
@@ -135,7 +135,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     alpha1 = 0.62
     alpha2 = 0.48
     alpha3 = 0.34
-    alpha4 = 0.45
+    alpha4 = 0.5
     
     x1 = np.linspace(10, 600)
     y1 = pow(0.1 * x1, alpha1)
@@ -143,11 +143,11 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     x2 = np.linspace(10, 600)
     y2 = pow(0.0825 * x2, alpha2)
     
-    x3 = np.linspace(10, 3500, 1000)
-    y3 = pow(0.245 * x3, alpha3)
+    x3 = np.linspace(100, 15000, 1000)
+    y3 = pow(0.06 * x3, alpha3)
     
-    x4 = np.linspace(10, 550, 1000)
-    y4 = pow(0.26 * x4, alpha4)
+    x4 = np.linspace(30, 1550, 1000)
+    y4 = pow(0.08 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
