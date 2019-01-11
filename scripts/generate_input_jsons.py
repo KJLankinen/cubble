@@ -2,6 +2,7 @@ import json
 import sys
 import os
 import copy
+import datetime
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
@@ -11,43 +12,37 @@ def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
         json.dump(data, outfile, indent=4, sort_keys=True)
 
 def main():
+    ROOT_DIR  = os.path.join(os.environ['WRKDIR'], "cubble")
+    DEFAULT_INPUT_FILE = os.path.join(ROOT_DIR, "input_parameters.json")
+    MULTIRUN_PARAM_FILE = os.path.join(ROOT_DIR, "multirun_parameters.json")
+    
+    date_str = datetime.datetime.now().strftime("%d_%m_%Y")
 
-    if len(sys.argv) < 4:
-        print("Not enough input arguments. Provide")
-        print("\tRoot dir for multiple runs")
-        print("\tOriginal input file")
-        print("\tFile with arguments for different runs")
-
-        return 1
-
-    root_dir = str(sys.argv[1])
-    if not os.path.isdir(root_dir):
-        print("Given root dir \"" + root_dir + "\" is not a directory.")
+    if not os.path.isdir(ROOT_DIR):
+        print("Root dir \"" + ROOT_DIR + "\" is not a directory.")
         return 1
     
-    original_json = str(sys.argv[2])
-    if not os.path.isfile(original_json):
-        print("Given json file \"" + original_json + "\" is not a file.")
+    if not os.path.isfile(DEFAULT_INPUT_FILE):
+        print("\"" + DEFAULT_INPUT_FILE + "\" is not a file.")
         return 1
 
-    param_file = str(sys.argv[3])
-    if not os.path.isfile(param_file):
-        print("Given parameter file \"" + param_file + "\" is not a file.")
+    if not os.path.isfile(MULTIRUN_PARAM_FILE):
+        print("\"" + MULTIRUN_PARAM_FILE + "\" is not a file.")
         return 1
 
-    print("Using " + root_dir + " as root dir.")
-    print("Using " + original_json + " as the original input file.")
-    print("Using " + param_file + " as the file to modify the input file with.")
+    print("Using " + ROOT_DIR + " as root dir.")
+    print("Using " + DEFAULT_INPUT_FILE + " as the default input file.")
+    print("Using " + MULTIRUN_PARAM_FILE + " as the file to modify the default input file with.")
 
-    with open(original_json) as json_file_handle:
+    with open(DEFAULT_INPUT_FILE) as json_file_handle:
         json_data = json.load(json_file_handle)
 
     num_runs = 0
 
-    with open(param_file) as parameter_file_handle:
+    with open(MULTIRUN_PARAM_FILE) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
-            dir_path = os.path.join(root_dir, "run_" + str(counter), "data")
-            outfile_path = os.path.join(dir_path, os.path.split(original_json)[1])
+            dir_path = os.path.join(ROOT_DIR, date_str, "data", "run_" + str(counter))
+            outfile_path = os.path.join(dir_path, os.path.split(DEFAULT_INPUT_FILE)[1])
 
             create_folder_and_data_file(dir_path,
                 outfile_path,
