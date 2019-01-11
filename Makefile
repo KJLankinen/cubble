@@ -32,9 +32,6 @@ BIN_PATH := bin/
 # All the source files recide here.
 SRC_PATH := src/
 
-# All the data files recide here.
-DATA_PATH := data/
-
 # Included (external) headers
 INCL = -Iinclude/ 
 
@@ -83,7 +80,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DDATA_PATH="$(DATA_PATH)" -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
+DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 
@@ -181,5 +178,3 @@ $(BIN_PATH)%.o : $(SRC_PATH)%.cu
 .PHONY : clean
 clean :
 	rm -f $(BIN_PATH)*
-	rm -f $(SRC_PATH)*~
-	rm -f scripts/*~

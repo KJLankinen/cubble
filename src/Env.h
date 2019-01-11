@@ -38,7 +38,6 @@ class Env
 	CUBBLE_CONST_PROP(double, Kappa, 0)
 	CUBBLE_PROP(double, TimeStep, 0)
 
-	CUBBLE_CONST_PROP(std::string, DataPath, "")
 	CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
 	CUBBLE_CONST_PROP(std::string, DataFilename, "")
 
@@ -50,9 +49,8 @@ class Env
 	Env(const std::string &inF,
 		const std::string &saveF)
 	{
-		DataPath = CUBBLE_XSTRINGIFY(DATA_PATH);
-		inputFile = std::string(DataPath + inF);
-		saveFile = std::string(DataPath + saveF);
+		inputFile = std::string(inF);
+		saveFile = std::string(saveF);
 	}
 
 	~Env() {}

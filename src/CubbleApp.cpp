@@ -162,7 +162,7 @@ void CubbleApp::runSimulation()
     bool stopSimulation = false;
 
     std::stringstream dataStream;
-    dataStream << env->getDataPath() << env->getDataFilename();
+    dataStream << env->getDataFilename();
 
     std::string filename(dataStream.str());
     dataStream.clear();
@@ -228,8 +228,7 @@ void CubbleApp::saveSnapshotToFile()
     simulator->getBubbles(tempVec);
 
     std::stringstream ss;
-    ss << env->getDataPath()
-       << env->getSnapshotFilename()
+    ss << env->getSnapshotFilename()
        << numSnapshots
        << ".csv";
 
