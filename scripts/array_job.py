@@ -14,7 +14,7 @@ def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
 def main():
     ROOT_DIR  = os.path.join(os.environ['WRKDIR'], "cubble")
     DEFAULT_INPUT_FILE = os.path.join(ROOT_DIR, "input_parameters.json")
-    MULTIRUN_PARAM_FILE = os.path.join(ROOT_DIR, "multirun_parameters.json")
+    ARRAY_PARAM_FILE = os.path.join(ROOT_DIR, "array_parameters.json")
     
     date_str = datetime.datetime.now().strftime("%d_%m_%Y")
 
@@ -26,20 +26,20 @@ def main():
         print("\"" + DEFAULT_INPUT_FILE + "\" is not a file.")
         return 1
 
-    if not os.path.isfile(MULTIRUN_PARAM_FILE):
-        print("\"" + MULTIRUN_PARAM_FILE + "\" is not a file.")
+    if not os.path.isfile(ARRAY_PARAM_FILE):
+        print("\"" + ARRAY_PARAM_FILE + "\" is not a file.")
         return 1
 
     print("Using " + ROOT_DIR + " as root dir.")
     print("Using " + DEFAULT_INPUT_FILE + " as the default input file.")
-    print("Using " + MULTIRUN_PARAM_FILE + " as the file to modify the default input file with.")
+    print("Using " + ARRAY_PARAM_FILE + " as the file to modify the default input file with.")
 
     with open(DEFAULT_INPUT_FILE) as json_file_handle:
         json_data = json.load(json_file_handle)
 
     num_runs = 0
 
-    with open(MULTIRUN_PARAM_FILE) as parameter_file_handle:
+    with open(ARRAY_PARAM_FILE) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
             dir_path = os.path.join(ROOT_DIR, date_str, "data", "run_" + str(counter))
             outfile_path = os.path.join(dir_path, os.path.split(DEFAULT_INPUT_FILE)[1])
@@ -55,3 +55,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+'''
+    Build script:
+    1. CD to $WRKDIR
+    2. Make
+    3. mkdir under $WRKDIR/cubble/data/dd_mm_yyyy for each line in multirun json
+    4. copy built bin/cubble to dd_mm_yyyy
+    5. process multirun json and add input json to each child dir
+    6. make clean
+
+    Array script:
+    1. mkdir /tmp/$SLURM_JOB_ID
+    2. cd to above
+    3. run $WRKDIR/cubble/data/dd_mm_yyyy/cubble with $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_ID/input_parameters.json
+    4. copy files: cp . $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_ID/
+'''
