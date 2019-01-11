@@ -72,7 +72,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     assert(dir != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&dta, dTotalArea));
     assert(dta != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dasai, dTotadAverageSurfaceAreaInlArea));
+    CUDA_CALL(cudaGetSymbolAddress((void **)&dasai, dAverageSurfaceAreaIn));
     assert(dasai != nullptr);
 
     CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
