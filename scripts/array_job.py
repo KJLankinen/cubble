@@ -41,7 +41,7 @@ def main():
 
     with open(ARRAY_PARAM_FILE) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
-            dir_path = os.path.join(ROOT_DIR, date_str, "data", "run_" + str(counter))
+            dir_path = os.path.join(ROOT_DIR, "data", date_str, "run_" + str(counter))
             outfile_path = os.path.join(dir_path, os.path.split(DEFAULT_INPUT_FILE)[1])
 
             create_folder_and_data_file(dir_path,
@@ -59,12 +59,9 @@ if __name__ == "__main__":
 
 '''
     Build script:
-    1. CD to $WRKDIR
-    2. Make
-    3. mkdir under $WRKDIR/cubble/data/dd_mm_yyyy for each line in multirun json
-    4. copy built bin/cubble to dd_mm_yyyy
-    5. process multirun json and add input json to each child dir
-    6. make clean
+    1. make
+    2. copy built bin/cubble to dd_mm_yyyy
+    3. make clean
 
     Array script:
     1. mkdir /tmp/$SLURM_JOB_ID
