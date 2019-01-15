@@ -23,8 +23,8 @@ def main():
     compile_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
-#SBATCH --mem=2M\n\
-#SBATCH --time=00:01:00\n\
+#SBATCH --mem=100M\n\
+#SBATCH --time=00:10:00\n\
 #SBATCH --gres=gpu:1\n\
 #SBATCH --constraint=pascal\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
