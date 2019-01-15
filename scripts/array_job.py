@@ -4,6 +4,7 @@ import os
 import copy
 import datetime
 import subprocess
+import pwd
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
@@ -49,6 +50,15 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     print("Using " + root_dir + " as root dir.")
     print("Using " + default_input_file + " as the default input file.")
     print("Using " + array_param_file + " as the file to modify the default input file with.")
+    
+    print("Launching process for compiling the binary.")
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    compile_stdout = compile_process.communicate(input=compile_script)[0]
+    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
+
+    if compile_process.returncode != 0:
+        print("Compile process submission was not successful!")
+        return compile_process.returncode
 
     print("Reading default input arguments.")
     with open(default_input_file) as json_file_handle:
@@ -68,11 +78,6 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
                 json.loads(line.strip()))
             
             num_runs = counter
-    
-    print("Launching process for compiling the binary.")
-    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    compile_stdout = compile_process.communicate(input=compile_script)[0]
-    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
 
     array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
     array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
@@ -100,6 +105,17 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
     print("Launching an array of processes that run the simulation.")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script)[0]
+
+    if array_process.returncode != 0:
+        print("Array process submission was not successful!")
+        return array_process.returncode
+
+    current_user = pwd.getpwuid(os.getuid()).pw_name
+
+    squeue_process = subprocess.Popen(["squeue", "-u", current_user], stdout=subprocess.PIPE)
+    print("Slurm queue of the current user:")
+    print(squeue_process.communicate()[0])
+    print("\nJob submission done!")
 
 if __name__ == "__main__":
     main()
