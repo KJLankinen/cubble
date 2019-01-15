@@ -19,6 +19,7 @@ def main():
     default_input_file = os.path.join(root_dir, "input_parameters.json")
     array_param_file = os.path.join(root_dir, "array_parameters.json")
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
+    executable_path = os.path.join(data_dir, "cubble")
 
     compile_script = "\
 #!/bin/bash\n\
@@ -73,7 +74,27 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     compile_stdout = compile_process.communicate(input=compile_script)[0]
     compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
 
-    print(compile_slurm_id)
+    array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
+    array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
+
+    array_script = "\
+#!/bin/bash\n\
+#SBATCH --job-name=cubble\n\
+#SBATCH --mem=1G\n\
+#SBATCH --time=01:00:00\n\
+#SBATCH --gres=gpu:1\n\
+#SBATCH --constraint=pascal\n\
+#SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
+#SBATCH --mail-type=ALL\n\
+#SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
+#SBATCH --array=0-" + str(num_runs) + "\n\
+module purge\n\
+module load goolfc/triton-2017a\n\
+mkdir /tmp/$SLURM_JOB_ID\
+cd /tmp/$SLURM_JOB_ID\
+srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
+cp /tmp/$SLURM_JOB_ID/* " + array_data_dir + "\n\
+"
 
 if __name__ == "__main__":
     main()
@@ -83,6 +104,6 @@ if __name__ == "__main__":
     Array script:
     1. mkdir /tmp/$SLURM_JOB_ID
     2. cd to above
-    3. run $WRKDIR/cubble/data/dd_mm_yyyy/cubble with $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_ID/input_parameters.json
-    4. copy files: cp . $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_ID/
+    3. run $WRKDIR/cubble/data/dd_mm_yyyy/cubble with $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_TASK_ID/input_parameters.json
+    4. copy files: cp . $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_TASK_ID/
 '''
