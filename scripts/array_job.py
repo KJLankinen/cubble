@@ -70,8 +70,11 @@ def main():
             
             num_runs = counter
     
-    subprocess.call(BUILD_SCRIPT_ARGS)
+    build_process = subprocess.Popen(BUILD_SCRIPT_ARGS, stdout=subprocess.PIPE)
     
+    for counter, line in enumerate(iter(proc.stdout.readline(), '')):
+        print("Line " + counter + " contains: " + line.rstrip())
+
 
 if __name__ == "__main__":
     main()
