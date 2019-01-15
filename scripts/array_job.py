@@ -93,7 +93,6 @@ module purge\n\
 module load goolfc/triton-2017a\n\
 mkdir " + array_temp_dir + "\n\
 cd " + array_temp_dir + "\n\
-trap \"mv -f " + array_temp_dir + "/* " +  array_data_dir + "; exit\" TERM EXIT\n\
 srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
 mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 "
