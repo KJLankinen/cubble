@@ -6,11 +6,9 @@ import datetime
 import subprocess
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
-    print("Creating directory \"" + dir_name + "\".")
     os.makedirs(dir_name)
     data.update((key, val) for (key, val) in inbound.items() if key in data.keys())
 
-    print("Writing input arguments to json \"" + outfile_name + "\".")
     with open(outfile_name, 'w') as outfile:
         json.dump(data, outfile, indent=4, sort_keys=True)
 
@@ -58,6 +56,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 
     num_runs = 0
 
+    print("Creating directories and input files.")
     with open(array_param_file) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
             run_dir = os.path.join(data_dir, "run_" + str(counter))
@@ -70,12 +69,14 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
             
             num_runs = counter
     
+    print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script)[0]
     compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
 
     array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
     array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
+    array_temp_dir = "/tmp/$SLURM_JOB_ID"
 
     array_script = "\
 #!/bin/bash\n\
@@ -90,20 +91,16 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 module purge\n\
 module load goolfc/triton-2017a\n\
-mkdir /tmp/$SLURM_JOB_ID\
-cd /tmp/$SLURM_JOB_ID\
+mkdir " + array_temp_dir + "\n\
+cd " + array_temp_dir + "\n\
+trap \"mv -f " + array_temp_dir + "/* " +  array_data_dir + "; exit\" TERM EXIT\n\
 srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
-cp /tmp/$SLURM_JOB_ID/* " + array_data_dir + "\n\
+mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 "
+
+    print("Launching an array of processes that run the simulation.")
+    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    array_stdout = array_process.communicate(input=array_script)[0]
 
 if __name__ == "__main__":
     main()
-
-
-'''
-    Array script:
-    1. mkdir /tmp/$SLURM_JOB_ID
-    2. cd to above
-    3. run $WRKDIR/cubble/data/dd_mm_yyyy/cubble with $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_TASK_ID/input_parameters.json
-    4. copy files: cp . $WRKDIR/cubble/data/dd_mm_yyyy/$SLURM_ARRAY_TASK_ID/
-'''
