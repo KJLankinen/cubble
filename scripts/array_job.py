@@ -20,21 +20,21 @@ def main():
     array_param_file = os.path.join(root_dir, "array_parameters.json")
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
-    BUILD_SCRIPT_ARGS = \
-    [\
-    "sbatch"\
-    ,"--job-name=cubble_compile"
-    ,"--mem=1G"\
-    ,"--time=01:00:00"\
-    ,"--gres=gpu:1"\
-    ,"--constraint=pascal"\
-    ,"--mail-user=juhana.lankinen@aalto.fi"\
-    ,"--mail-type=ALL"\
-    ,"module purge"\
-    ,"module load goolfc/triton-2017a"\
-    ,"srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID"
-    ,"cp /tmp/$SLURM_JOB_ID/cubble " + data_dir
-    ]
+    build_script = "\
+    #SBATCH --job-name=cubble_compile\n\
+    #SBATCH --mem=1G\n\
+    #SBATCH --time=01:00:00\n\
+    #SBATCH --gres=gpu:1\n\
+    #SBATCH --constraint=pascal\n\
+    #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
+    #SBATCH --mail-type=ALL\n\
+    \
+    module purge\n\
+    module load goolfc/triton-2017a\n\
+    \
+    srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
+    cp /tmp/$SLURM_JOB_ID/cubble + data_dir\n\
+    "
 
     if not os.path.isdir(root_dir):
         print("Root dir \"" + root_dir + "\" is not a directory.")
@@ -70,11 +70,11 @@ def main():
             
             num_runs = counter
     
-    build_process = subprocess.Popen(BUILD_SCRIPT_ARGS, stdout=subprocess.PIPE)
+    build_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    build_stdout = build_process.communicate(build_script)[0]
     
-    for counter, line in enumerate(iter(proc.stdout.readline(), '')):
-        print("Line " + counter + " contains: " + line.rstrip())
-
+    print("Output of popen subprocess:")
+    print(build_stdout)
 
 if __name__ == "__main__":
     main()
