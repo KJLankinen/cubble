@@ -20,11 +20,11 @@ def main():
     array_param_file = os.path.join(root_dir, "array_parameters.json")
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
-    build_script = "\
+    compile_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
-#SBATCH --mem=1G\n\
-#SBATCH --time=01:00:00\n\
+#SBATCH --mem=2M\n\
+#SBATCH --time=00:01:00\n\
 #SBATCH --gres=gpu:1\n\
 #SBATCH --constraint=pascal\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
@@ -69,11 +69,11 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
             
             num_runs = counter
     
-    build_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    build_stdout = build_process.communicate(input=build_script)[0]
-    
-    print("Output of popen subprocess:")
-    print(build_stdout)
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    compile_stdout = compile_process.communicate(input=compile_script)[0]
+    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
+
+    print(compile_slurm_id)
 
 if __name__ == "__main__":
     main()
