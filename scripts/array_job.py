@@ -21,7 +21,7 @@ def main():
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
     build_script = "\
-#!/bin/sh\
+#!/bin/sh\n\
 #SBATCH --job-name=cubble_compile\n\
 #SBATCH --mem=1G\n\
 #SBATCH --time=01:00:00\n\
