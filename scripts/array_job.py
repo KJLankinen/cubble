@@ -3,66 +3,81 @@ import sys
 import os
 import copy
 import datetime
+import subprocess
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
+    print("Creating directory \"" + dir_name + "\".")
     os.makedirs(dir_name)
     data.update((key, val) for (key, val) in inbound.items() if key in data.keys())
 
+    print("Writing input arguments to json \"" + outfile_name + "\".")
     with open(outfile_name, 'w') as outfile:
         json.dump(data, outfile, indent=4, sort_keys=True)
 
 def main():
-    ROOT_DIR  = os.path.join(os.environ['WRKDIR'], "cubble")
-    DEFAULT_INPUT_FILE = os.path.join(ROOT_DIR, "input_parameters.json")
-    ARRAY_PARAM_FILE = os.path.join(ROOT_DIR, "array_parameters.json")
-    
-    date_str = datetime.datetime.now().strftime("%d_%m_%Y")
+    root_dir  = os.path.join(os.environ['WRKDIR'], "cubble")
+    default_input_file = os.path.join(root_dir, "input_parameters.json")
+    array_param_file = os.path.join(root_dir, "array_parameters.json")
+    data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
-    if not os.path.isdir(ROOT_DIR):
-        print("Root dir \"" + ROOT_DIR + "\" is not a directory.")
+    BUILD_SCRIPT_ARGS = \
+    [\
+    "sbatch"\
+    ,"--job-name=cubble_compile"
+    ,"--mem=1G"\
+    ,"--time=01:00:00"\
+    ,"--gres=gpu:1"\
+    ,"--constraint=pascal"\
+    ,"--mail-user=juhana.lankinen@aalto.fi"\
+    ,"--mail-type=ALL"\
+    ,"module purge"\
+    ,"module load goolfc/triton-2017a"\
+    ,"srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID"
+    ,"cp /tmp/$SLURM_JOB_ID/cubble " + data_dir
+    ]
+
+    if not os.path.isdir(root_dir):
+        print("Root dir \"" + root_dir + "\" is not a directory.")
         return 1
     
-    if not os.path.isfile(DEFAULT_INPUT_FILE):
-        print("\"" + DEFAULT_INPUT_FILE + "\" is not a file.")
+    if not os.path.isfile(default_input_file):
+        print("\"" + default_input_file + "\" is not a file.")
         return 1
 
-    if not os.path.isfile(ARRAY_PARAM_FILE):
-        print("\"" + ARRAY_PARAM_FILE + "\" is not a file.")
+    if not os.path.isfile(array_param_file):
+        print("\"" + array_param_file + "\" is not a file.")
         return 1
 
-    print("Using " + ROOT_DIR + " as root dir.")
-    print("Using " + DEFAULT_INPUT_FILE + " as the default input file.")
-    print("Using " + ARRAY_PARAM_FILE + " as the file to modify the default input file with.")
+    print("Using " + root_dir + " as root dir.")
+    print("Using " + default_input_file + " as the default input file.")
+    print("Using " + array_param_file + " as the file to modify the default input file with.")
 
-    with open(DEFAULT_INPUT_FILE) as json_file_handle:
+    print("Reading default input arguments.")
+    with open(default_input_file) as json_file_handle:
         json_data = json.load(json_file_handle)
 
     num_runs = 0
 
-    with open(ARRAY_PARAM_FILE) as parameter_file_handle:
+    with open(array_param_file) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
-            dir_path = os.path.join(ROOT_DIR, "data", date_str, "run_" + str(counter))
-            outfile_path = os.path.join(dir_path, os.path.split(DEFAULT_INPUT_FILE)[1])
+            run_dir = os.path.join(data_dir, "run_" + str(counter))
+            outfile_path = os.path.join(run_dir, os.path.split(default_input_file)[1])
 
-            create_folder_and_data_file(dir_path,
+            create_folder_and_data_file(run_dir,
                 outfile_path,
                 copy.deepcopy(json_data),
                 json.loads(line.strip()))
             
             num_runs = counter
     
-    print(str(num_runs))
+    subprocess.call(BUILD_SCRIPT_ARGS)
+    
 
 if __name__ == "__main__":
     main()
 
 
 '''
-    Build script:
-    1. make
-    2. copy built bin/cubble to dd_mm_yyyy
-    3. make clean
-
     Array script:
     1. mkdir /tmp/$SLURM_JOB_ID
     2. cd to above
