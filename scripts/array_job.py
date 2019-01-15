@@ -21,21 +21,19 @@ def main():
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
     build_script = "\
-    #!/bin/sh\
-    #SBATCH --job-name=cubble_compile\n\
-    #SBATCH --mem=1G\n\
-    #SBATCH --time=01:00:00\n\
-    #SBATCH --gres=gpu:1\n\
-    #SBATCH --constraint=pascal\n\
-    #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
-    #SBATCH --mail-type=ALL\n\
-    \
-    module purge\n\
-    module load goolfc/triton-2017a\n\
-    \
-    srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
-    cp /tmp/$SLURM_JOB_ID/cubble + data_dir\n\
-    "
+#!/bin/sh\
+#SBATCH --job-name=cubble_compile\n\
+#SBATCH --mem=1G\n\
+#SBATCH --time=01:00:00\n\
+#SBATCH --gres=gpu:1\n\
+#SBATCH --constraint=pascal\n\
+#SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
+#SBATCH --mail-type=ALL\n\
+module purge\n\
+module load goolfc/triton-2017a\n\
+srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
+cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
+"
 
     if not os.path.isdir(root_dir):
         print("Root dir \"" + root_dir + "\" is not a directory.")
@@ -72,7 +70,7 @@ def main():
             num_runs = counter
     
     build_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    build_stdout = build_process.communicate(build_script)[0]
+    build_stdout = build_process.communicate(input=build_script)[0]
     
     print("Output of popen subprocess:")
     print(build_stdout)
