@@ -21,7 +21,7 @@ def main():
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
 
     build_script = "\
-#!/bin/sh\n\
+#!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
 #SBATCH --mem=1G\n\
 #SBATCH --time=01:00:00\n\
@@ -31,7 +31,7 @@ def main():
 #SBATCH --mail-type=ALL\n\
 module purge\n\
 module load goolfc/triton-2017a\n\
-srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
+srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
 
