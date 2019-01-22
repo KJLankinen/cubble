@@ -14,7 +14,7 @@
     "TimeStepExpl" : "The initial time step with which to increment the simulation time.",
     "TimeStep" : 1e-5,
     "RngSeedExpl" : "The seed for the RNG.",
-    "RngSeed" : 62663,
+    "RngSeed" : 6663,
     "NumBubblesPerCellExpl" : "How many bubbles per cell.",
     "NumBubblesPerCell" : 32,
     "NumBubblesExpl" : "Total number of bubbles to simulate.",
