@@ -179,8 +179,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
 def main():
     arguments = sys.argv
-    data_file_name = "collected_data.dat"
-    json_file_name = "save.json"
+    data_file_name = "output.dat"
+    json_file_name = "output_parameters.json"
     num_plots = 999
     
     if len(arguments) < 2:
