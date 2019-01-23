@@ -135,7 +135,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     alpha1 = 0.62
     alpha2 = 0.48
     alpha3 = 0.34
-    alpha4 = 0.5
+    alpha4 = 0.45
     
     x1 = np.linspace(10, 600)
     y1 = pow(0.1 * x1, alpha1)

@@ -173,7 +173,7 @@ __global__ void neighborSearch(int neighborCellNumber,
 }
 
 template <typename... Args>
-__global__ void velocityPairKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);

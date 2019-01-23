@@ -442,7 +442,7 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
     double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
 
     CUDA_LAUNCH(velocityPairKernel, policy,
-                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
                 interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
                 interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
