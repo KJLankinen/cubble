@@ -199,6 +199,7 @@ void CubbleApp::runSimulation()
 
             std::cout << "t*: " << scaledTime
                       << " <R>/<R_in>: " << relativeRadius
+                      << " #b: " << simulator->getNumBubbles()
                       << " phi: " << phi
                       << std::endl;
 
