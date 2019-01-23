@@ -26,7 +26,7 @@ def main():
 #SBATCH --mem=100M\n\
 #SBATCH --time=00:10:00\n\
 #SBATCH --gres=gpu:1\n\
-#SBATCH --constraint='pascal|volta'\n\
+#SBATCH --constraint="pascal|volta"\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 module purge\n\
@@ -89,7 +89,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --mem=1G\n\
 #SBATCH --time=24:00:00\n\
 #SBATCH --gres=gpu:1\n\
-#SBATCH --constraint='pascal|volta'\n\
+#SBATCH --constraint="pascal|volta"\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
