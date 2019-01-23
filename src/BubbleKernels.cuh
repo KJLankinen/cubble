@@ -258,11 +258,11 @@ __global__ void gasExchangeKernel(int numValues,
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area);
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             double *r,
-                                            double *relativeFreeArea,
+                                            double *freeArea,
                                             int numValues,
                                             double invPi,
                                             double kappa,
