@@ -87,7 +87,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
 #SBATCH --mem=1G\n\
-#SBATCH --time=72:00:00\n\
+#SBATCH --time=24:00:00\n\
 #SBATCH --gres=gpu:1\n\
 #SBATCH --constraint='pascal|volta'\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
