@@ -1,9 +1,12 @@
-{"PhiTarget" : 0.95}
-{"PhiTarget" : 0.95, "Kappa" : 0.02}
-{"PhiTarget" : 0.90}
-{"PhiTarget" : 0.89}
-{"PhiTarget" : 0.88}
-{"PhiTarget" : 0.87}
-{"PhiTarget" : 0.86}
-{"PhiTarget" : 0.85}
-{"PhiTarget" : 0.84}
+{"PhiTarget" : 0.95, "RngSeed" : 123}
+{"PhiTarget" : 0.90, "RngSeed" : 23}
+{"PhiTarget" : 0.89, "RngSeed" : 3}
+{"PhiTarget" : 0.88, "RngSeed" : 32}
+{"PhiTarget" : 0.87, "RngSeed" : 1233}
+{"PhiTarget" : 0.86, "RngSeed" : 1253}
+{"PhiTarget" : 0.85, "RngSeed" : 1263}
+{"PhiTarget" : 0.84, "RngSeed" : 1273}
+{"PhiTarget" : 0.82, "RngSeed" : 1283}
+{"PhiTarget" : 0.80, "RngSeed" : 12283}
+{"PhiTarget" : 0.70, "RngSeed" : 12483}
+{"PhiTarget" : 0.60, "RngSeed" : 126683}
