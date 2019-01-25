@@ -58,7 +58,6 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     print("Using " + array_param_file + " as the file to modify the default input file with.")
     print("Using " + data_dir + " as the data directory for this simulation run.")
     
-    '''
     print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script)[0]
@@ -123,7 +122,7 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
     squeue_process = subprocess.Popen(["squeue", "-u", current_user], stdout=subprocess.PIPE)
     print("Slurm queue of the current user:")
     print(squeue_process.communicate()[0])
-    print("\nJob submission done!")'''
+    print("\nJob submission done!")
 
 if __name__ == "__main__":
     main()
