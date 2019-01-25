@@ -5,68 +5,6 @@ import sys
 import os
 import json
 
-##########
-# Fitting the data -- Least Squares Method
-##########
-
-# Power-law fitting is best done by first converting
-# to a linear equation and then fitting to a straight line.
-# Note that the `logyerr` term here is ignoring a constant prefactor.
-#
-#  y = a * x^b
-#  log(y) = log(a) + b*log(x)
-#
-
-def fit_to_data(xdata, ydata):
-    logx = np.log10(xdata)
-    logy = np.log10(ydata)
-    yerr = np.ones(ydata.shape)
-    logyerr = yerr / ydata
-    
-    # define our (line) fitting function
-    fitfunc = lambda p, x: p[0] + p[1] * x
-    errfunc = lambda p, x, y, err: (y - fitfunc(p, x)) / err
-    powerlaw = lambda x, amp, index: amp * (x**index)
-    
-    pinit = [1.0, -1.0]
-    out = optimize.leastsq(errfunc, pinit,
-                           args=(logx, logy, logyerr), full_output=1)
-    
-    pfinal = out[0]
-    covar = out[1]
-    print pfinal
-    print covar
-    
-    index = pfinal[1]
-    amp = 10.0**pfinal[0]
-    
-    indexErr = np.sqrt( covar[1][1] )
-    ampErr = np.sqrt( covar[0][0] ) * amp
-    
-    ##########
-    # Plotting data
-    ##########
-    
-    plt.clf()
-    plt.subplot(2, 1, 1)
-    plt.plot(xdata, powerlaw(xdata, amp, index))     # Fit
-    plt.errorbar(xdata, ydata, yerr=yerr, fmt='k.')  # Data
-    plt.text(5, 6.5, 'Ampli = %5.2f +/- %5.2f' % (amp, ampErr))
-    plt.text(5, 5.5, 'Index = %5.2f +/- %5.2f' % (index, indexErr))
-    plt.title('Best Fit Power Law')
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.xlim(1, 11)
-
-    plt.subplot(2, 1, 2)
-    plt.loglog(xdata, powerlaw(xdata, amp, index))
-    plt.errorbar(xdata, ydata, yerr=yerr, fmt='k.')  # Data
-    plt.xlabel('X (log scale)')
-    plt.ylabel('Y (log scale)')
-    plt.xlim(1.0, 11)
-
-    plt.show()
-
 def plot_data_loglog(data_file, json_file, ax):
     print("Plotting data from \"" + str(data_file) + "\" using \"" + str(json_file) + "\" for some parameters.")
     data = np.loadtxt(data_file)
@@ -80,7 +18,10 @@ def plot_data_loglog(data_file, json_file, ax):
     kappa = decoded_json["Kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '-', linewidth=1.5, label=label_str)
+    ax.loglog(x, y, '+', linewidth=1.5, label=label_str)
+
+def plot_line(ax, alpha, x, y, line_color, label_str):
+    ax.loglog(x, y, '--', color=line_color, linewidth=2.0, label=label_str)
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
     
@@ -89,8 +30,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     ax.set_xlim(1, 12000)
     ax.set_ylim(0.9, 15)
     ax.set_xlabel(r"$\tau$")
-    ax.set_ylabel(r"$\frac{R}{<R_{in}>}$")
-    #ax.set_axis_bgcolor((160 / 255.0, 198 / 255.0, 255 / 255.0))
+    ax.set_ylabel(r"$\frac{R}{\langle R_{in} \rangle}$", rotation=0)
     ax.grid(1)
 
     child_dirs = [name for name in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, name))]
@@ -128,50 +68,25 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     json_files = [json_files[idx] for idx in indices]
     data_files = [data_files[idx] for idx in indices]
 
+    # line
+    alpha = 0.48
+    x = np.linspace(30, 1250, 1000)
+    y = pow(0.3 * x, alpha)
+    line_color = (1, 0, 0)
+    label_str = r"$k \tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
+    plot_line(ax, alpha, x, y, line_color, label_str)
+
     # Plot
     for i in range(min(len(data_files), max(num_plots, 0))):
         plot_data_loglog(data_files[i], json_files[i], ax)
 
-    alpha1 = 0.62
-    alpha2 = 0.48
-    alpha3 = 0.34
-    alpha4 = 0.45
-    
-    x1 = np.linspace(10, 600)
-    y1 = pow(0.1 * x1, alpha1)
-    
-    x2 = np.linspace(10, 600)
-    y2 = pow(0.0825 * x2, alpha2)
-    
-    x3 = np.linspace(100, 15000, 1000)
-    y3 = pow(0.06 * x3, alpha3)
-    
-    x4 = np.linspace(30, 1550, 1000)
-    y4 = pow(0.08 * x4, alpha4)
-
+    # line
+    alpha = 0.33
+    x = np.linspace(100, 58000, 1000)
+    y = pow(0.07 * x, alpha)
+    label_str = r"$k \tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
     line_color = (0, 0, 0)
-    arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
-    arrow_props_down=dict(arrowstyle='-', connectionstyle="angle,angleA=-90,angleB=180,rad=0")
-    
-    #ax.loglog(x1, y1, '--', color=line_color, linewidth=2.0)
-    #ax.annotate(str(alpha1), xy=(x1[11], y1[15]))
-    #ax.annotate("", xy=(x1[13], y1[13]), xycoords='data', xytext=(x1[15], y1[15]), textcoords='data', arrowprops=arrow_props_up)
-    
-    #ax.loglog(x2, y2, '--', color=line_color, linewidth=2.0)
-    #ax.annotate(str(alpha2), xy=(x2[2], y2[3]))
-    #ax.annotate("", xy=(x2[2], y2[2]), xycoords='data', xytext=(x2[3], y2[3]), textcoords='data', arrowprops=arrow_props_up)
-    
-    smaller_idx = 200
-    larger_idx = 250
-    ax.loglog(x3, y3, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha3), xy=(x3[smaller_idx], y3[larger_idx]))
-    ax.annotate("", xy=(x3[smaller_idx], y3[smaller_idx]), xycoords='data', xytext=(x3[larger_idx], y3[larger_idx]), textcoords='data', arrowprops=arrow_props_up)
-    
-    smaller_idx = 200
-    larger_idx = 250
-    ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
-    ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
+    plot_line(ax, alpha, x, y, line_color, label_str)
 
     ax.legend(loc='upper left')
 

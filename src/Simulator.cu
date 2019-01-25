@@ -158,7 +158,7 @@ void Simulator::setupSimulation()
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
     CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                 interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
                 interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
@@ -200,7 +200,7 @@ void Simulator::setupSimulation()
                 dxdtOld, dydtOld, dzdtOld, drdtOld);
 
     CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
                 interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
                 interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
