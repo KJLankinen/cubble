@@ -1,15 +1,17 @@
-{"Kappa" : 0.001, "RngSeed" : 683}
-{"Kappa" : 0.01, "RngSeed" : 6823}
-{"Kappa" : 0.02, "RngSeed" : 6833}
-{"Kappa" : 0.03, "RngSeed" : 6843}
-{"Kappa" : 0.04, "RngSeed" : 6853}
-{"Kappa" : 0.05, "RngSeed" : 6863}
-{"Kappa" : 0.1, "RngSeed" : 6837}
-{"Kappa" : 0.15, "RngSeed" : 6883}
-{"Kappa" : 0.2, "RngSeed" : 6839}
-{"Kappa" : 0.25, "RngSeed" : 6813}
-{"Kappa" : 0.3, "RngSeed" : 6832}
-{"Kappa" : 0.35, "RngSeed" : 6383}
-{"Kappa" : 0.4, "RngSeed" : 61283}
-{"Kappa" : 0.45, "RngSeed" : 655583}
-{"Kappa" : 0.5, "RngSeed" : 666683}
+{"PhiTarget" : 0.90}
+{"PhiTarget" : 0.85}
+{"PhiTarget" : 0.80}
+{"PhiTarget" : 0.75}
+{"PhiTarget" : 0.70}
+{"PhiTarget" : 0.69}
+{"PhiTarget" : 0.68}
+{"PhiTarget" : 0.67}
+{"PhiTarget" : 0.66}
+{"PhiTarget" : 0.65}
+{"PhiTarget" : 0.64}
+{"PhiTarget" : 0.63}
+{"PhiTarget" : 0.62}
+{"PhiTarget" : 0.61}
+{"PhiTarget" : 0.60}
+{"PhiTarget" : 0.55}
+{"PhiTarget" : 0.50}
