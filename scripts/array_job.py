@@ -14,10 +14,16 @@ def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
         json.dump(data, outfile, indent=4, sort_keys=True)
 
 def main():
+
+    if len(sys.argv) < 2:
+        print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
+        return 1
+    
+    sub_dir = sys.argv[1]
     root_dir  = os.path.join(os.environ['WRKDIR'], "cubble")
     default_input_file = os.path.join(root_dir, "input_parameters.json")
     array_param_file = os.path.join(root_dir, "array_parameters.json")
-    data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"))
+    data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"), sub_dir)
     executable_path = os.path.join(data_dir, "cubble")
 
     compile_script = "\
@@ -50,7 +56,9 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     print("Using " + root_dir + " as root dir.")
     print("Using " + default_input_file + " as the default input file.")
     print("Using " + array_param_file + " as the file to modify the default input file with.")
+    print("Using " + data_dir + " as the data directory for this simulation run.")
     
+    '''
     print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script)[0]
@@ -115,7 +123,7 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
     squeue_process = subprocess.Popen(["squeue", "-u", current_user], stdout=subprocess.PIPE)
     print("Slurm queue of the current user:")
     print(squeue_process.communicate()[0])
-    print("\nJob submission done!")
+    print("\nJob submission done!")'''
 
 if __name__ == "__main__":
     main()
