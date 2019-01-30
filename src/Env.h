@@ -5,13 +5,13 @@
 #include <string>
 #include <assert.h>
 #include <iostream>
+#include <fstream>
 
 #ifndef __CUDACC__
 #include "json.hpp"
 #endif
 
 #include "Macros.h"
-#include "Fileio.h"
 #include "Vec.h"
 
 namespace cubble
@@ -95,9 +95,13 @@ class Env
 
 		std::cout << msg << std::endl;
 		nlohmann::json params;
+		std::fstream file;
 
 		if (read)
-			fileio::readFileToJSON(inputFile, params);
+		{
+			file.open(inputFile, std::ios::in);
+			file >> params;
+		}
 
 		// When adding new parameters, be sure to add them to the input .json as well
 		// and with the exact same name as here.
@@ -122,7 +126,10 @@ class Env
 		CUBBLE_IO_PARAMETER(read, params, BoxRelativeDimensions);
 
 		if (!read)
-			fileio::writeJSONToFile(saveFile, params);
+		{
+			file.open(saveFile, std::ios::out);
+			file << std::setw(4) << params << std::endl;
+		}
 	}
 #endif
 

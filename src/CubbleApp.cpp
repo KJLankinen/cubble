@@ -1,12 +1,11 @@
 #include <iostream>
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
-
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
+#include <ofstream>
 
 #include "CubbleApp.h"
-#include "Fileio.h"
 #include "Bubble.h"
 
 using namespace cubble;
@@ -213,7 +212,8 @@ void CubbleApp::runSimulation()
         ++numSteps;
     }
 
-    fileio::writeStringToFile(filename, dataStream.str());
+    std::ofstream file(filename);
+    file << dataStream.str() << std::endl;
 }
 
 void CubbleApp::saveSnapshotToFile()
@@ -223,8 +223,6 @@ void CubbleApp::saveSnapshotToFile()
 #endif
 
     std::cout << "Writing a snapshot to a file." << std::endl;
-    // This could easily be parallellized s.t. bubbles are fetched serially, but written to file parallelly.
-
     std::vector<Bubble> tempVec;
     simulator->getBubbles(tempVec);
 
@@ -243,6 +241,8 @@ void CubbleApp::saveSnapshotToFile()
         ss << "\n"
            << bubble;
 
-    fileio::writeStringToFile(filename, ss.str());
+    std::ofstream file(filename);
+    file << ss.str() << std::endl;
+
     ++numSnapshots;
 }
