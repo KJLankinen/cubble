@@ -7,6 +7,7 @@
 #include "Macros.h"
 #include "Util.h"
 #include "Vec.h"
+#include "Globals.h"
 
 namespace cubble
 {
@@ -58,13 +59,17 @@ __device__ void logError(bool condition, const char *statement, const char *errM
 
 __device__ int getGlobalTid();
 
-__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array);
-
-template <typename... Args>
-__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array, Args... args)
+template <typename T>
+__device__ void setArrayToValue(T value, int idx, T *array)
 {
-    resetDoubleArrayToValue(value, idx, array);
-    resetDoubleArrayToValue(value, idx, args...);
+    array[idx] = value;
+}
+
+template <typename T, typename... Args>
+__device__ void setArrayToValue(T value, int idx, T *array, Args... args)
+{
+    setArrayToValue(value, idx, array);
+    setArrayToValue(value, idx, args...);
 }
 
 template <typename... Args>
@@ -72,7 +77,7 @@ __global__ void resetKernel(CubbleFloatType value, int numValues, Args... args)
 {
     const int tid = getGlobalTid();
     if (tid < numValues)
-        resetDoubleArrayToValue(value, tid, args...);
+        setArrayToValue(value, tid, args...);
 }
 
 template <typename T>

@@ -32,10 +32,6 @@ __device__ int getGlobalTid()
 
     return tid;
 }
-__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array)
-{
-    array[idx] = value;
-}
 
 __device__ void setFlagIfLessThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant)
 {
