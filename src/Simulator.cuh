@@ -9,7 +9,6 @@
 #include "PinnedHostArray.h"
 #include "CubWrapper.h"
 #include "Util.h"
-#include "Globals.h"
 
 #include <utility>
 #include <memory>
@@ -21,8 +20,8 @@ enum class BubbleProperty;
 
 class Simulator
 {
-	CUBBLE_PROP(CubbleFloatType, SimulationTime, 0)
-	CUBBLE_PROP(CubbleFloatType, ElasticEnergy, 0)
+	CUBBLE_PROP(double, SimulationTime, 0)
+	CUBBLE_PROP(double, ElasticEnergy, 0)
   public:
 	Simulator(std::shared_ptr<Env> e);
 	~Simulator();
@@ -30,21 +29,21 @@ class Simulator
 	void setupSimulation();
 	bool integrate(bool useGasExchange = false);
 	void calculateEnergy();
-	CubbleFloatType getVolumeOfBubbles();
-	CubbleFloatType getAverageRadius();
+	double getVolumeOfBubbles();
+	double getAverageRadius();
 	void getBubbles(std::vector<Bubble> &bubbles) const;
 	int getNumBubbles() const { return numBubbles; }
-	CubbleFloatType getMaxBubbleRadius() const { return maxBubbleRadius; }
-	CubbleFloatType getInvRho();
+	double getMaxBubbleRadius() const { return maxBubbleRadius; }
+	double getInvRho();
 	void transformPositions(bool normalize);
 
   private:
-	void doPrediction(const ExecutionPolicy &policy, CubbleFloatType timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
-	void doCorrection(const ExecutionPolicy &policy, CubbleFloatType timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
+	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
+	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
 	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
 	void doVelocity(const ExecutionPolicy &policy);
 	void doReset(const ExecutionPolicy &policy);
-	CubbleFloatType doError();
+	double doError();
 	void doBoundaryWrap(const ExecutionPolicy &policy);
 	void doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark);
 
@@ -58,7 +57,7 @@ class Simulator
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
 
-	CubbleFloatType maxBubbleRadius = 0;
+	double maxBubbleRadius = 0;
 
 	cudaEvent_t blockingEvent1;
 	cudaEvent_t blockingEvent2;
@@ -71,27 +70,27 @@ class Simulator
 	// Host pointers to device global variables
 	int *mbpc = nullptr;
 	int *np = nullptr;
-	CubbleFloatType *dtfapr = nullptr;
-	CubbleFloatType *dtfa = nullptr;
-	CubbleFloatType *dvm = nullptr;
-	CubbleFloatType *dtv = nullptr;
-	CubbleFloatType *dir = nullptr;
-	CubbleFloatType *dta = nullptr;
-	CubbleFloatType *dasai = nullptr;
+	double *dtfapr = nullptr;
+	double *dtfa = nullptr;
+	double *dvm = nullptr;
+	double *dtv = nullptr;
+	double *dir = nullptr;
+	double *dta = nullptr;
+	double *dasai = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
-	DeviceArray<CubbleFloatType> bubbleData;
+	DeviceArray<double> bubbleData;
 	DeviceArray<int> aboveMinRadFlags;
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
 	DeviceArray<int> pairs;
 
 	PinnedHostArray<int> pinnedInt;
-	PinnedHostArray<CubbleFloatType> pinnedDouble;
+	PinnedHostArray<double> pinnedDouble;
 
-	std::vector<CubbleFloatType> hostData;
+	std::vector<double> hostData;
 
 	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };

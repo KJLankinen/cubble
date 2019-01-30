@@ -23,27 +23,27 @@ typedef BubbleProperty BP;
 Simulator::Simulator(std::shared_ptr<Env> e)
 {
     env = e;
-    fpvec relDim = env->getBoxRelativeDimensions();
+    dvec relDim = env->getBoxRelativeDimensions();
     relDim /= relDim.x;
-    const CubbleFloatType d = 2 * env->getAvgRad();
+    const float d = 2 * env->getAvgRad();
 #if (NUM_DIM == 3)
-    const CubbleFloatType x = std::cbrt(env->getNumBubbles() * d * d * d / (relDim.y * relDim.z));
-    fpvec tfr = relDim * x;
+    const float x = std::cbrt(env->getNumBubbles() * d * d * d / (relDim.y * relDim.z));
+    dvec tfr = relDim * x;
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), std::ceil(tfr.z / d));
     numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
 #else
-    const CubbleFloatType x = std::sqrt(env->getNumBubbles() * d * d / relDim.y);
-    fpvec tfr = relDim * x;
+    const float x = std::sqrt(env->getNumBubbles() * d * d / relDim.y);
+    dvec tfr = relDim * x;
     tfr.z = 0;
     const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
     bubblesPerDimAtStart = bubblesPerDim;
-    tfr = d * bubblesPerDim.asType<CubbleFloatType>();
+    tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
 
     cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
-    bubbleData = DeviceArray<CubbleFloatType>(numBubbles, (size_t)BP::NUM_VALUES);
+    bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = DeviceArray<int>(numBubbles, 2);
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
     pairs = DeviceArray<int>(8 * numBubbles, 4);
@@ -87,7 +87,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     }
 
     pinnedInt = PinnedHostArray<int>(1);
-    pinnedDouble = PinnedHostArray<CubbleFloatType>(1);
+    pinnedDouble = PinnedHostArray<double>(1);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -119,27 +119,27 @@ void Simulator::setupSimulation()
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton perdictor-corrector method (ABMpc).
 
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *y = bubbleData.getRowPtr((size_t)BP::Y);
-    CubbleFloatType *z = bubbleData.getRowPtr((size_t)BP::Z);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    CubbleFloatType *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
-    CubbleFloatType *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
-    CubbleFloatType *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
-    CubbleFloatType *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    CubbleFloatType *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
-    CubbleFloatType *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
-    CubbleFloatType *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
-    CubbleFloatType *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
-    CubbleFloatType *energies = bubbleData.getRowPtr((size_t)BP::ENERGY);
-    CubbleFloatType *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+    double *energies = bubbleData.getRowPtr((size_t)BP::ENERGY);
+    double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
 
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
-    const fpvec interval = tfr - lbb;
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
     ExecutionPolicy defaultPolicy(128, numBubbles);
     ExecutionPolicy pairPolicy;
     pairPolicy.blockSize = dim3(128, 1, 1);
@@ -147,7 +147,7 @@ void Simulator::setupSimulation()
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    CubbleFloatType timeStep = env->getTimeStep();
+    double timeStep = env->getTimeStep();
 
     CUDA_LAUNCH(resetKernel, defaultPolicy,
                 0.0, numBubbles,
@@ -218,8 +218,8 @@ bool Simulator::integrate(bool useGasExchange)
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    CubbleFloatType timeStep = env->getTimeStep();
-    CubbleFloatType error = 100000;
+    double timeStep = env->getTimeStep();
+    double error = 100000;
     size_t numLoopsDone = 0;
 
     do
@@ -273,27 +273,27 @@ bool Simulator::integrate(bool useGasExchange)
     return continueSimulation;
 }
 
-void Simulator::doPrediction(const ExecutionPolicy &policy, CubbleFloatType timeStep, bool useGasExchange, cudaEvent_t &eventToMark)
+void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark)
 {
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *y = bubbleData.getRowPtr((size_t)BP::Y);
-    CubbleFloatType *z = bubbleData.getRowPtr((size_t)BP::Z);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
-    CubbleFloatType *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
-    CubbleFloatType *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
-    CubbleFloatType *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
-    CubbleFloatType *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
-    CubbleFloatType *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    CubbleFloatType *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
-    CubbleFloatType *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
-    CubbleFloatType *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
-    CubbleFloatType *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
     if (useGasExchange)
     {
@@ -322,29 +322,29 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, CubbleFloatType time
     CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
 }
 
-void Simulator::doCorrection(const ExecutionPolicy &policy, CubbleFloatType timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait)
+void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait)
 {
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *y = bubbleData.getRowPtr((size_t)BP::Y);
-    CubbleFloatType *z = bubbleData.getRowPtr((size_t)BP::Z);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
-    CubbleFloatType *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
-    CubbleFloatType *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
-    CubbleFloatType *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
-    CubbleFloatType *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
-    CubbleFloatType *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-    CubbleFloatType *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
-    CubbleFloatType *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
-    CubbleFloatType *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
-    CubbleFloatType *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
+    double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
+    double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
 
-    CubbleFloatType *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
+    double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
 
     if (useGasExchange)
     {
@@ -382,18 +382,18 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
 
     CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
-    CubbleFloatType *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
-    CubbleFloatType *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
-    CubbleFloatType *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
-    CubbleFloatType *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
-    CubbleFloatType *volume = bubbleData.getRowPtr((size_t)BP::VOLUME);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *drdtPrd = bubbleData.getRowPtr((size_t)BP::DRDT_PRD);
+    double *errors = bubbleData.getRowPtr((size_t)BP::ERROR);
+    double *freeArea = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+    double *volume = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
-    const fpvec interval = tfr - lbb;
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
 
     CUDA_LAUNCH(gasExchangeKernel, policy,
                 numBubbles,
@@ -414,9 +414,9 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     CUDA_LAUNCH(freeAreaKernel, gasExchangePolicy,
                 numBubbles, env->getPi(), rPrd, freeArea, errors, volume);
 
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
 
     CUDA_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
                 drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
@@ -427,17 +427,17 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
 
 void Simulator::doVelocity(const ExecutionPolicy &policy)
 {
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
-    const fpvec interval = tfr - lbb;
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
-    CubbleFloatType *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
-    CubbleFloatType *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
-    CubbleFloatType *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
-    CubbleFloatType *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *dxdtPrd = bubbleData.getRowPtr((size_t)BP::DXDT_PRD);
+    double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
+    double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
 
     CUDA_LAUNCH(velocityPairKernel, policy,
                 env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
@@ -480,10 +480,10 @@ void Simulator::doReset(const ExecutionPolicy &policy)
                 bubbleData.getRowPtr((size_t)BP::ENERGY));
 }
 
-CubbleFloatType Simulator::doError()
+double Simulator::doError()
 {
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Max, bubbleData.getRowPtr((size_t)BP::ERROR), dtfa, numBubbles, nonBlockingStream2);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(CubbleFloatType), cudaMemcpyDeviceToHost, nonBlockingStream2));
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, bubbleData.getRowPtr((size_t)BP::ERROR), dtfa, numBubbles, nonBlockingStream2);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
     CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
     CUDA_CALL(cudaEventSynchronize(blockingEvent2));
 
@@ -492,12 +492,12 @@ CubbleFloatType Simulator::doError()
 
 void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
 {
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
 
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
     CUDA_LAUNCH(boundaryWrapKernel, policy,
@@ -520,7 +520,7 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
 
 void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark)
 {
-    CubbleFloatType *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
     policy.stream = streamToUse;
 
     CUDA_LAUNCH(setFlagIfGreaterThanConstantKernel, policy,
@@ -532,8 +532,8 @@ void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamT
     cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, streamToUse);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, streamToUse));
 
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Max, rPrd, static_cast<CubbleFloatType *>(dtfa), numBubbles, streamToUse);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(CubbleFloatType), cudaMemcpyDeviceToHost, streamToUse));
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, rPrd, static_cast<double *>(dtfa), numBubbles, streamToUse);
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, streamToUse));
 
     CUDA_CALL(cudaEventRecord(eventToMark, streamToUse));
 }
@@ -543,21 +543,21 @@ void Simulator::generateBubbles()
     std::cout << "Starting to generate data for bubbles." << std::endl;
 
     const int rngSeed = env->getRngSeed();
-    const CubbleFloatType avgRad = env->getAvgRad();
-    const CubbleFloatType stdDevRad = env->getStdDevRad();
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
+    const double avgRad = env->getAvgRad();
+    const double stdDevRad = env->getStdDevRad();
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
 
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *y = bubbleData.getRowPtr((size_t)BP::Y);
-    CubbleFloatType *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
 
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    CubbleFloatType *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
 
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
-    CubbleFloatType *w = bubbleData.getRowPtr((size_t)BP::R_PRD);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *w = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -584,9 +584,9 @@ void Simulator::generateBubbles()
                 aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
                 tfr, lbb, avgRad, env->getMinRad(), env->getPi(), numBubbles);
 
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, w, dasai, numBubbles, defaultPolicy.stream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, w, dasai, numBubbles, defaultPolicy.stream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(w), static_cast<void *>(r),
-                              sizeof(CubbleFloatType) * bubbleData.getWidth(),
+                              sizeof(double) * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice,
                               defaultPolicy.stream));
 }
@@ -597,10 +597,10 @@ void Simulator::updateCellsAndNeighbors()
     const int numCells = gridSize.x * gridSize.y * gridSize.z;
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *y = bubbleData.getRowPtr((size_t)BP::Y);
-    CubbleFloatType *z = bubbleData.getRowPtr((size_t)BP::Z);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
     int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
     int *sizes = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
@@ -654,13 +654,13 @@ void Simulator::updateCellsAndNeighbors()
                 bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
-                              sizeof(CubbleFloatType) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice,
                               nonBlockingStream1));
 
     CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
 
-    fpvec interval = env->getTfr() - env->getLbb();
+    dvec interval = env->getTfr() - env->getLbb();
 
     ExecutionPolicy findPolicy;
     findPolicy.blockSize = dim3(128, 1, 1);
@@ -702,12 +702,12 @@ void Simulator::updateCellsAndNeighbors()
 void Simulator::updateData()
 {
     CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
-    const size_t numBytesToCopy = 4 * sizeof(CubbleFloatType) * bubbleData.getWidth();
+    const size_t numBytesToCopy = 4 * sizeof(double) * bubbleData.getWidth();
 
-    CubbleFloatType *x = bubbleData.getRowPtr((size_t)BP::X);
-    CubbleFloatType *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    CubbleFloatType *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
-    CubbleFloatType *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
 
     CUDA_CALL(cudaMemcpyAsync(dxdtOld, dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
     CUDA_CALL(cudaMemcpyAsync(x, xPrd, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
@@ -719,14 +719,14 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
     ExecutionPolicy defaultPolicy(128, numBubbles);
 
     int *flag = aboveMinRadFlags.getRowPtr(0);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
-    CubbleFloatType *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
-    CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(CubbleFloatType)));
+    CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
     CUDA_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
                 volumes, r, flag, env->getPi(), numBubbles);
 
-    cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
 
     int *newIdx = aboveMinRadFlags.getRowPtr(1);
     cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
@@ -747,7 +747,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                 bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
-                              sizeof(CubbleFloatType) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice));
 
     numBubbles = numBubblesAboveMinRad;
@@ -758,13 +758,13 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
 dim3 Simulator::getGridSize()
 {
-    const int totalNumCells = std::ceil((CubbleFloatType)numBubbles / env->getNumBubblesPerCell());
-    fpvec interval = env->getTfr() - env->getLbb();
+    const int totalNumCells = std::ceil((float)numBubbles / env->getNumBubblesPerCell());
+    dvec interval = env->getTfr() - env->getLbb();
     interval /= interval.x;
 #if (NUM_DIM == 3)
-    CubbleFloatType nx = std::cbrt((CubbleFloatType)totalNumCells / (interval.y * interval.z));
+    float nx = std::cbrt((float)totalNumCells / (interval.y * interval.z));
 #else
-    CubbleFloatType nx = std::sqrt((CubbleFloatType)totalNumCells / interval.y);
+    float nx = std::sqrt((float)totalNumCells / interval.y);
     interval.z = 0;
 #endif
     ivec grid = (nx * interval).floor() + 1;
@@ -783,9 +783,9 @@ void Simulator::calculateEnergy()
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    const fpvec tfr = env->getTfr();
-    const fpvec lbb = env->getLbb();
-    const fpvec interval = tfr - lbb;
+    const dvec tfr = env->getTfr();
+    const dvec lbb = env->getLbb();
+    const dvec interval = tfr - lbb;
 
     CUDA_LAUNCH(potentialEnergyKernel, pairPolicy,
                 numBubbles,
@@ -801,27 +801,27 @@ void Simulator::calculateEnergy()
 #endif
     );
 
-    ElasticEnergy = cubWrapper->reduce<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum,
-                                                                                              bubbleData.getRowPtr((size_t)BP::ENERGY),
-                                                                                              numBubbles);
+    ElasticEnergy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                                   bubbleData.getRowPtr((size_t)BP::ENERGY),
+                                                                   numBubbles);
 }
 
-CubbleFloatType Simulator::getVolumeOfBubbles()
+double Simulator::getVolumeOfBubbles()
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
-    CubbleFloatType *volPtr = bubbleData.getRowPtr((size_t)BP::VOLUME);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double *volPtr = bubbleData.getRowPtr((size_t)BP::VOLUME);
     CUDA_LAUNCH(calculateVolumes, defaultPolicy,
                 r, volPtr, numBubbles, env->getPi());
-    CubbleFloatType volume = cubWrapper->reduce<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
+    double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
 
     return volume;
 }
 
-CubbleFloatType Simulator::getAverageRadius()
+double Simulator::getAverageRadius()
 {
-    CubbleFloatType *r = bubbleData.getRowPtr((size_t)BP::R);
-    CubbleFloatType avgRad = cubWrapper->reduce<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, r, numBubbles);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
+    double avgRad = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, r, numBubbles);
     avgRad /= numBubbles;
 
     return avgRad;
@@ -833,16 +833,16 @@ void Simulator::getBubbles(std::vector<Bubble> &bubbles) const
     bubbles.resize(numBubbles);
 
     size_t memoryStride = bubbleData.getWidth();
-    CubbleFloatType *devX = bubbleData.getRowPtr((size_t)BP::X);
-    std::vector<CubbleFloatType> xyzr;
+    double *devX = bubbleData.getRowPtr((size_t)BP::X);
+    std::vector<double> xyzr;
     xyzr.resize(memoryStride * 4);
 
-    CUDA_CALL(cudaMemcpy(xyzr.data(), devX, sizeof(CubbleFloatType) * 4 * memoryStride, cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpy(xyzr.data(), devX, sizeof(double) * 4 * memoryStride, cudaMemcpyDeviceToHost));
 
     for (size_t i = 0; i < numBubbles; ++i)
     {
         Bubble b;
-        fpvec pos(-1, -1, -1);
+        dvec pos(-1, -1, -1);
         pos.x = xyzr[i];
         pos.y = xyzr[i + memoryStride];
         pos.z = xyzr[i + 2 * memoryStride];
@@ -852,10 +852,10 @@ void Simulator::getBubbles(std::vector<Bubble> &bubbles) const
     }
 }
 
-CubbleFloatType Simulator::getInvRho()
+double Simulator::getInvRho()
 {
-    CubbleFloatType invRho = 0;
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(&invRho), static_cast<void *>(dir), sizeof(CubbleFloatType), cudaMemcpyDeviceToHost));
+    double invRho = 0;
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(&invRho), static_cast<void *>(dir), sizeof(double), cudaMemcpyDeviceToHost));
 
     return invRho;
 }

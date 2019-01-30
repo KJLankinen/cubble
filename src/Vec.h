@@ -9,7 +9,6 @@
 #include "json.hpp"
 
 #include "Util.h"
-#include "Globals.h"
 
 namespace cubble
 {
@@ -406,7 +405,8 @@ class vec
 	T z = 0;
 };
 
-typedef vec<CubbleFloatType> fpvec;
+typedef vec<float> fvec;
+typedef vec<double> dvec;
 typedef vec<int> ivec;
 typedef vec<size_t> uvec;
 } // namespace cubble

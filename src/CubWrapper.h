@@ -18,8 +18,8 @@ class CubWrapper
     {
         env = e;
 
-        outData = DeviceArray<char>(sizeof(CubbleFloatType), 1);
-        tempStorage = DeviceArray<char>(numBubbles * sizeof(CubbleFloatType), 1);
+        outData = DeviceArray<char>(sizeof(double), 1);
+        tempStorage = DeviceArray<char>(numBubbles * sizeof(double), 1);
     }
     ~CubWrapper() {}
 

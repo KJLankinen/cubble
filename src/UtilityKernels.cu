@@ -32,44 +32,44 @@ __device__ int getGlobalTid()
 
     return tid;
 }
-__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array)
+__device__ void resetDoubleArrayToValue(double value, int idx, double *array)
 {
     array[idx] = value;
 }
 
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant)
+__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values, double constant)
 {
     flags[idx] = values[idx] < constant ? 1 : 0;
 }
 
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant)
+__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values, double constant)
 {
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__device__ CubbleFloatType getWrappedDistance(CubbleFloatType x1, CubbleFloatType x2, CubbleFloatType maxDistance, bool shouldWrap)
+__device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap)
 {
-    const CubbleFloatType distance = x1 - x2;
+    const double distance = x1 - x2;
     x2 = distance < -0.5 * maxDistance ? x2 - maxDistance : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
-    const CubbleFloatType distance2 = x1 - x2;
+    const double distance2 = x1 - x2;
 
     return shouldWrap ? distance2 : distance;
 }
 
-__device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, bool shouldWrap, CubbleFloatType *x)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
-    const CubbleFloatType distance = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
+    const double distance = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
     DEVICE_ASSERT(distance * distance > 0, "Distance is zero!");
     return distance * distance;
 }
-__device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *useless)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap, double *x, double *useless)
 {
     return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
 }
 
-__global__ void transformPositionsKernel(bool normalize, int numValues, fpvec lbb, fpvec tfr, CubbleFloatType *x, CubbleFloatType *y, CubbleFloatType *z)
+__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z)
 {
-    const fpvec interval = tfr - lbb;
+    const dvec interval = tfr - lbb;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
         if (normalize)
