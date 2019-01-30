@@ -8,14 +8,12 @@
 #include "IntegrationKernels.cuh"
 
 #include "cub.cuh"
-
 #include <iostream>
 #include <sstream>
 #include <chrono>
 #include <algorithm>
 #include <vector>
 #include <curand.h>
-
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
 

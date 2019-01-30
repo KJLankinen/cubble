@@ -3916,7 +3916,14 @@ class iter_impl
 {
     /// allow basic_json to access private members
     friend iter_impl<typename std::conditional<std::is_const<BasicJsonType>::value, typename std::remove_const<BasicJsonType>::type, const BasicJsonType>::type>;
-    friend BasicJsonType;
+    
+    //  MODIFICATION START MODIFICATION START MODIFICATION START MODIFICATION START
+    // This change was made to circumvent an erroneous translation bug in nvcc.
+    // The original version was just "friend BasicJsonType;"
+    template<typename DummyType> struct dummy{typedef DummyType type;};
+    friend typename dummy<BasicJsonType>::type;
+    // MODIFICATION END MODIFICATION END MODIFICATION END MODIFICATION END
+
     friend iteration_proxy<iter_impl>;
 
     using object_t = typename BasicJsonType::object_t;
