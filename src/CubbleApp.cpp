@@ -3,7 +3,7 @@
 #include <nvToolsExt.h>
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
-#include <ofstream>
+#include <fstream>
 
 #include "CubbleApp.h"
 #include "Bubble.h"
