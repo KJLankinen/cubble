@@ -7,7 +7,7 @@
 #include "UtilityKernels.cuh"
 #include "IntegrationKernels.cuh"
 
-#include "cub/cub/cub.cuh"
+#include "cub.cuh"
 
 #include <iostream>
 #include <sstream>

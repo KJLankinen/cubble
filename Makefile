@@ -33,7 +33,7 @@ BIN_PATH := bin/
 SRC_PATH := src/
 
 # Included (external) headers
-INCL = -Iinclude/ 
+INCL = -Iexternal_dependencies/nlohmann -Iexternal_dependencies/cub/cub/
 
 
 # -----------------------------------------------------
