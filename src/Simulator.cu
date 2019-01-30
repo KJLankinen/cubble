@@ -150,7 +150,7 @@ void Simulator::setupSimulation()
     CubbleFloatType timeStep = env->getTimeStep();
 
     CUDA_LAUNCH(resetKernel, defaultPolicy,
-                (CubbleFloatType)0.0, numBubbles,
+                0.0, numBubbles,
                 dxdtOld, dydtOld, dzdtOld, drdtOld);
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
@@ -194,7 +194,7 @@ void Simulator::setupSimulation()
 #endif
 
     CUDA_LAUNCH(resetKernel, defaultPolicy,
-                (CubbleFloatType)0.0, numBubbles,
+                0.0, numBubbles,
                 dxdtOld, dydtOld, dzdtOld, drdtOld);
 
     CUDA_LAUNCH(velocityPairKernel, pairPolicy,
@@ -419,7 +419,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     cubWrapper->reduceNoCopy<CubbleFloatType, CubbleFloatType *, CubbleFloatType *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
 
     CUDA_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                drdtPrd, rPrd, freeArea, numBubbles, (CubbleFloatType)1.0 / env->getPi(), env->getKappa(), env->getKParameter());
+                drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
@@ -471,7 +471,7 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
 void Simulator::doReset(const ExecutionPolicy &policy)
 {
     CUDA_LAUNCH(resetKernel, policy,
-                (CubbleFloatType)0.0, numBubbles,
+                0.0, numBubbles,
                 bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
                 bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
                 bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
@@ -563,15 +563,6 @@ void Simulator::generateBubbles()
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
 
-#if (CUBBLE_FLOAT_TYPE == CUBBLE_FLOAT)
-    CURAND_CALL(curandGenerateUniform(generator, x, numBubbles));
-    CURAND_CALL(curandGenerateUniform(generator, y, numBubbles));
-#if (NUM_DIM == 3)
-    CURAND_CALL(curandGenerateUniform(generator, z, numBubbles));
-#endif
-    CURAND_CALL(curandGenerateUniform(generator, w, numBubbles));
-    CURAND_CALL(curandGenerateNormal(generator, r, numBubbles, avgRad, stdDevRad));
-#else
     CURAND_CALL(curandGenerateUniformDouble(generator, x, numBubbles));
     CURAND_CALL(curandGenerateUniformDouble(generator, y, numBubbles));
 #if (NUM_DIM == 3)
@@ -579,7 +570,6 @@ void Simulator::generateBubbles()
 #endif
     CURAND_CALL(curandGenerateUniformDouble(generator, w, numBubbles));
     CURAND_CALL(curandGenerateNormalDouble(generator, r, numBubbles, avgRad, stdDevRad));
-#endif
 
     CURAND_CALL(curandDestroyGenerator(generator));
 
