@@ -55,6 +55,7 @@ __device__ CubbleFloatType getWrappedDistance(CubbleFloatType x1, CubbleFloatTyp
 __device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, bool shouldWrap, CubbleFloatType *x)
 {
     const CubbleFloatType distance = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
+    DEVICE_ASSERT(idx1 != idx2, "Indices are equal!");
     DEVICE_ASSERT(distance * distance > 0, "Distance is zero!");
     return distance * distance;
 }
