@@ -3,29 +3,30 @@
 #include <cuda_runtime_api.h>
 #include "Vec.h"
 #include "UtilityKernels.cuh"
+#include "Globals.h"
 
 namespace cubble
 {
 extern __device__ int dMaxBubblesPerCell;
 extern __device__ int dNumPairs;
-extern __device__ double dTotalFreeArea;
-extern __device__ double dTotalFreeAreaPerRadius;
-extern __device__ double dVolumeMultiplier;
-extern __device__ double dTotalVolume;
-extern __device__ double dInvRho;
-extern __device__ double dTotalArea;
-extern __device__ double dAverageSurfaceAreaIn;
+extern __device__ CubbleFloatType dTotalFreeArea;
+extern __device__ CubbleFloatType dTotalFreeAreaPerRadius;
+extern __device__ CubbleFloatType dVolumeMultiplier;
+extern __device__ CubbleFloatType dTotalVolume;
+extern __device__ CubbleFloatType dInvRho;
+extern __device__ CubbleFloatType dTotalArea;
+extern __device__ CubbleFloatType dAverageSurfaceAreaIn;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-__device__ double getWrappedCoordinate(double val1, double val2, double multiplier);
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim);
+__device__ CubbleFloatType getWrappedCoordinate(CubbleFloatType val1, CubbleFloatType val2, CubbleFloatType multiplier);
+__device__ int getCellIdxFromPos(CubbleFloatType x, CubbleFloatType y, CubbleFloatType z, fpvec lbb, fpvec tfr, ivec cellDim);
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, double *r, int *first, int *second, Args... args)
+__device__ void comparePair(int idx1, int idx2, CubbleFloatType *r, int *first, int *second, Args... args)
 {
-    const double radii = r[idx1] + r[idx2];
+    const CubbleFloatType radii = r[idx1] + r[idx2];
     if (getDistanceSquared(idx1, idx2, args...) < 1.5 * radii * radii)
     {
         // Set the smaller idx to idx1 and larger to idx2
@@ -39,27 +40,27 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first, int *seco
     }
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue);
+__device__ void wrapAround(int idx, CubbleFloatType *coordinate, CubbleFloatType minValue, CubbleFloatType maxValue);
 template <typename... Args>
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, Args... args)
+__device__ void wrapAround(int idx, CubbleFloatType *coordinate, CubbleFloatType minValue, CubbleFloatType maxValue, Args... args)
 {
     wrapAround(idx, coordinate, minValue, maxValue);
     wrapAround(idx, args...);
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v);
+__device__ void addVelocity(int idx1, int idx2, CubbleFloatType multiplier, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v);
 template <typename... Args>
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v, Args... args)
+__device__ void addVelocity(int idx1, int idx2, CubbleFloatType multiplier, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v, Args... args)
 {
     addVelocity(idx1, idx2, multiplier, maxDistance, minDistance, shouldWrap, x, v);
     addVelocity(idx1, idx2, multiplier, args...);
 }
 
 template <typename... Args>
-__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, double *r, Args... args)
+__device__ void forceBetweenPair(int idx1, int idx2, CubbleFloatType fZeroPerMuZero, CubbleFloatType *r, Args... args)
 {
-    const double radii = r[idx1] + r[idx2];
-    double multiplier = getDistanceSquared(idx1, idx2, args...);
+    const CubbleFloatType radii = r[idx1] + r[idx2];
+    CubbleFloatType multiplier = getDistanceSquared(idx1, idx2, args...);
     if (radii * radii >= multiplier)
     {
         multiplier = sqrt(multiplier);
@@ -68,11 +69,11 @@ __device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero, doub
     }
 }
 
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-                               double interval, double zeroPoint, bool shouldWrap, double *x, double *v);
+__device__ void forceFromWalls(int idx, CubbleFloatType fZeroPerMuZero, CubbleFloatType *r,
+                               CubbleFloatType interval, CubbleFloatType zeroPoint, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v);
 template <typename... Args>
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-                               double interval, double zeroPoint, bool shouldWrap, double *x, double *v,
+__device__ void forceFromWalls(int idx, CubbleFloatType fZeroPerMuZero, CubbleFloatType *r,
+                               CubbleFloatType interval, CubbleFloatType zeroPoint, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v,
                                Args... args)
 {
     forceFromWalls(idx, fZeroPerMuZero, r, interval, zeroPoint, shouldWrap, x, v);
@@ -87,26 +88,26 @@ __global__ void boundaryWrapKernel(int numValues, Args... args)
         wrapAround(tid, args...);
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi);
+__global__ void calculateVolumes(CubbleFloatType *r, CubbleFloatType *volumes, int numValues, CubbleFloatType pi);
 
-__global__ void assignDataToBubbles(double *x,
-                                    double *y,
-                                    double *z,
-                                    double *xPrd,
-                                    double *yPrd,
-                                    double *zPrd,
-                                    double *r,
-                                    double *w,
+__global__ void assignDataToBubbles(CubbleFloatType *x,
+                                    CubbleFloatType *y,
+                                    CubbleFloatType *z,
+                                    CubbleFloatType *xPrd,
+                                    CubbleFloatType *yPrd,
+                                    CubbleFloatType *zPrd,
+                                    CubbleFloatType *r,
+                                    CubbleFloatType *w,
                                     int *aboveMinRadFlags,
                                     ivec bubblesPerDim,
-                                    dvec tfr,
-                                    dvec lbb,
-                                    double avgRad,
-                                    double minRad,
-                                    double pi,
+                                    fpvec tfr,
+                                    fpvec lbb,
+                                    CubbleFloatType avgRad,
+                                    CubbleFloatType minRad,
+                                    CubbleFloatType pi,
                                     int numValues);
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues);
+__global__ void assignBubblesToCells(CubbleFloatType *x, CubbleFloatType *y, CubbleFloatType *z, int *cellIndices, int *bubbleIndices, fpvec lbb, fpvec tfr, ivec cellDim, int numValues);
 
 template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber,
@@ -117,7 +118,7 @@ __global__ void neighborSearch(int neighborCellNumber,
                                int *sizes,
                                int *first,
                                int *second,
-                               double *r,
+                               CubbleFloatType *r,
                                Args... args)
 {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
@@ -173,14 +174,14 @@ __global__ void neighborSearch(int neighborCellNumber,
 }
 
 template <typename... Args>
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+__global__ void velocityPairKernel(CubbleFloatType fZeroPerMuZero, int *first, int *second, CubbleFloatType *r, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
 }
 
 template <typename... Args>
-__global__ void velocityWallKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+__global__ void velocityWallKernel(int numValues, CubbleFloatType fZeroPerMuZero, int *first, int *second, CubbleFloatType *r, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
         forceFromWalls(i, fZeroPerMuZero, r, args...);
@@ -190,15 +191,15 @@ template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
                                       int *first,
                                       int *second,
-                                      double *r,
-                                      double *energy,
+                                      CubbleFloatType *r,
+                                      CubbleFloatType *energy,
                                       Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
     {
         const int idx1 = first[i];
         const int idx2 = second[i];
-        double e = r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
+        CubbleFloatType e = r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
         e *= e;
         atomicAdd(&energy[idx1], e);
         atomicAdd(&energy[idx2], e);
@@ -207,12 +208,12 @@ __global__ void potentialEnergyKernel(int numValues,
 
 template <typename... Args>
 __global__ void gasExchangeKernel(int numValues,
-                                  double pi,
+                                  CubbleFloatType pi,
                                   int *first,
                                   int *second,
-                                  double *r,
-                                  double *drdt,
-                                  double *freeArea,
+                                  CubbleFloatType *r,
+                                  CubbleFloatType *drdt,
+                                  CubbleFloatType *freeArea,
                                   Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
@@ -220,13 +221,13 @@ __global__ void gasExchangeKernel(int numValues,
         const int idx1 = first[i];
         const int idx2 = second[i];
 
-        const double magnitude = sqrt(getDistanceSquared(idx1, idx2, args...));
-        const double r1 = r[idx1];
-        const double r2 = r[idx2];
+        const CubbleFloatType magnitude = sqrt(getDistanceSquared(idx1, idx2, args...));
+        const CubbleFloatType r1 = r[idx1];
+        const CubbleFloatType r2 = r[idx2];
 
         if (magnitude < r1 + r2)
         {
-            double overlapArea = 0;
+            CubbleFloatType overlapArea = 0;
 
             if (magnitude < r1 || magnitude < r2)
             {
@@ -258,21 +259,21 @@ __global__ void gasExchangeKernel(int numValues,
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area);
+__global__ void freeAreaKernel(int numValues, CubbleFloatType pi, CubbleFloatType *r, CubbleFloatType *relativeFreeArea, CubbleFloatType *relativeFreeAreaPerRadius, CubbleFloatType *area);
 
-__global__ void finalRadiusChangeRateKernel(double *drdt,
-                                            double *r,
-                                            double *relativeFreeArea,
+__global__ void finalRadiusChangeRateKernel(CubbleFloatType *drdt,
+                                            CubbleFloatType *r,
+                                            CubbleFloatType *relativeFreeArea,
                                             int numValues,
-                                            double invPi,
-                                            double kappa,
-                                            double kParam);
+                                            CubbleFloatType invPi,
+                                            CubbleFloatType kappa,
+                                            CubbleFloatType kParam);
 
-__global__ void addVolume(double *r, int numValues);
+__global__ void addVolume(CubbleFloatType *r, int numValues);
 
-__global__ void calculateRedistributedGasVolume(double *volume,
-                                                double *r,
+__global__ void calculateRedistributedGasVolume(CubbleFloatType *volume,
+                                                CubbleFloatType *r,
                                                 int *aboveMinRadFlags,
-                                                double pi,
+                                                CubbleFloatType pi,
                                                 int numValues);
 } // namespace cubble

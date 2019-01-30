@@ -7,13 +7,13 @@ namespace cubble
 {
 __device__ int dMaxBubblesPerCell;
 __device__ int dNumPairs;
-__device__ double dTotalFreeArea;
-__device__ double dTotalFreeAreaPerRadius;
-__device__ double dVolumeMultiplier;
-__device__ double dTotalVolume;
-__device__ double dInvRho;
-__device__ double dTotalArea;
-__device__ double dAverageSurfaceAreaIn;
+__device__ CubbleFloatType dTotalFreeArea;
+__device__ CubbleFloatType dTotalFreeAreaPerRadius;
+__device__ CubbleFloatType dVolumeMultiplier;
+__device__ CubbleFloatType dTotalVolume;
+__device__ CubbleFloatType dInvRho;
+__device__ CubbleFloatType dTotalArea;
+__device__ CubbleFloatType dAverageSurfaceAreaIn;
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 {
@@ -96,18 +96,18 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 	return get1DIdxFrom3DIdx(idxVec, dim);
 }
 
-__device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
+__device__ CubbleFloatType getWrappedCoordinate(CubbleFloatType val1, CubbleFloatType val2, CubbleFloatType multiplier)
 {
-	double difference = val1 - val2;
+	CubbleFloatType difference = val1 - val2;
 	val2 = difference < -0.5 * multiplier ? val2 - multiplier : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
 	val2 = val1 - val2;
 
 	return val2;
 }
 
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb, dvec tfr, ivec cellDim)
+__device__ int getCellIdxFromPos(CubbleFloatType x, CubbleFloatType y, CubbleFloatType z, fpvec lbb, fpvec tfr, ivec cellDim)
 {
-	const dvec interval = tfr - lbb;
+	const fpvec interval = tfr - lbb;
 	const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
 	const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
 #if (NUM_DIM == 3)
@@ -135,47 +135,47 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
 	return idxVec;
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue)
+__device__ void wrapAround(int idx, CubbleFloatType *coordinate, CubbleFloatType minValue, CubbleFloatType maxValue)
 {
-	const double interval = maxValue - minValue;
-	double value = coordinate[idx];
+	const CubbleFloatType interval = maxValue - minValue;
+	CubbleFloatType value = coordinate[idx];
 	value = value < minValue ? value + interval : (value > maxValue ? value - interval : value);
 	coordinate[idx] = value;
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance, bool shouldWrap, double *x, double *v)
+__device__ void addVelocity(int idx1, int idx2, CubbleFloatType multiplier, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v)
 {
-	const double velocity = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
+	const CubbleFloatType velocity = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
 	atomicAdd(&v[idx1], velocity);
 	atomicAdd(&v[idx2], -velocity);
 }
 
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-							   double interval, double zeroPoint, bool shouldWrap, double *x, double *v)
+__device__ void forceFromWalls(int idx, CubbleFloatType fZeroPerMuZero, CubbleFloatType *r,
+							   CubbleFloatType interval, CubbleFloatType zeroPoint, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *v)
 {
 	if (shouldWrap)
 		return;
 
-	const double radius = r[idx];
-	const double distance1 = x[idx] - zeroPoint;
-	const double distance2 = x[idx] - (interval + zeroPoint);
-	double distance = distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
+	const CubbleFloatType radius = r[idx];
+	const CubbleFloatType distance1 = x[idx] - zeroPoint;
+	const CubbleFloatType distance2 = x[idx] - (interval + zeroPoint);
+	CubbleFloatType distance = distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
 
 	if (radius * radius >= distance * distance)
 	{
-		const double direction = distance < 0 ? -1.0 : 1.0;
+		const CubbleFloatType direction = distance < 0 ? -1.0 : 1.0;
 		distance *= direction;
-		const double velocity = direction * distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
+		const CubbleFloatType velocity = direction * distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
 		atomicAdd(&v[idx], velocity);
 	}
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi)
+__global__ void calculateVolumes(CubbleFloatType *r, CubbleFloatType *volumes, int numValues, CubbleFloatType pi)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double radius = r[i];
-		double volume = radius * radius * pi;
+		CubbleFloatType radius = r[i];
+		CubbleFloatType volume = radius * radius * pi;
 #if (NUM_DIM == 3)
 		volume *= radius * 1.33333333333333333333333333;
 #endif
@@ -184,32 +184,32 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues, doub
 	}
 }
 
-__global__ void assignDataToBubbles(double *x, double *y, double *z,
-									double *xPrd, double *yPrd, double *zPrd,
-									double *r,
-									double *w,
+__global__ void assignDataToBubbles(CubbleFloatType *x, CubbleFloatType *y, CubbleFloatType *z,
+									CubbleFloatType *xPrd, CubbleFloatType *yPrd, CubbleFloatType *zPrd,
+									CubbleFloatType *r,
+									CubbleFloatType *w,
 									int *aboveMinRadFlags,
 									ivec bubblesPerDim,
-									dvec tfr,
-									dvec lbb,
-									double avgRad,
-									double minRad,
-									double pi,
+									fpvec tfr,
+									fpvec lbb,
+									CubbleFloatType avgRad,
+									CubbleFloatType minRad,
+									CubbleFloatType pi,
 									int numValues)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		dvec pos(0, 0, 0);
-		pos.x = (i % bubblesPerDim.x) / (double)bubblesPerDim.x;
-		pos.y = ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
+		fpvec pos(0, 0, 0);
+		pos.x = (i % bubblesPerDim.x) / (CubbleFloatType)bubblesPerDim.x;
+		pos.y = ((i / bubblesPerDim.x) % bubblesPerDim.y) / (CubbleFloatType)bubblesPerDim.y;
 
-		dvec randomOffset(x[i], y[i], 0);
+		fpvec randomOffset(x[i], y[i], 0);
 #if (NUM_DIM == 3)
 		randomOffset.z = z[i];
-		pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
+		pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) / (CubbleFloatType)bubblesPerDim.z;
 #endif
 		pos *= tfr - lbb;
-		randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
+		randomOffset = fpvec::normalize(randomOffset) * avgRad * w[i];
 		pos += randomOffset;
 
 		x[i] = pos.x;
@@ -241,7 +241,7 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 	}
 }
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues)
+__global__ void assignBubblesToCells(CubbleFloatType *x, CubbleFloatType *y, CubbleFloatType *z, int *cellIndices, int *bubbleIndices, fpvec lbb, fpvec tfr, ivec cellDim, int numValues)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
@@ -251,11 +251,11 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 	}
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area)
+__global__ void freeAreaKernel(int numValues, CubbleFloatType pi, CubbleFloatType *r, CubbleFloatType *relativeFreeArea, CubbleFloatType *relativeFreeAreaPerRadius, CubbleFloatType *area)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double totalArea = 2.0 * pi * r[i];
+		CubbleFloatType totalArea = 2.0 * pi * r[i];
 #if (NUM_DIM == 3)
 		totalArea *= 2.0 * r[i];
 #endif
@@ -265,26 +265,26 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *rela
 	}
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *relativeFreeArea, int numValues, double invPi, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(CubbleFloatType *drdt, CubbleFloatType *r, CubbleFloatType *relativeFreeArea, int numValues, CubbleFloatType invPi, CubbleFloatType kappa, CubbleFloatType kParam)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
 		dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
-		const double invRadius = 1.0 / r[i];
-		double invArea = 0.5 * invPi * invRadius;
+		const CubbleFloatType invRadius = 1.0 / r[i];
+		CubbleFloatType invArea = 0.5 * invPi * invRadius;
 #if (NUM_DIM == 3)
 		invArea *= 0.5 * invRadius;
 #endif
-		const double vr = drdt[i] + kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * relativeFreeArea[i] * (dInvRho - invRadius);
+		const CubbleFloatType vr = drdt[i] + kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * relativeFreeArea[i] * (dInvRho - invRadius);
 		drdt[i] = kParam * invArea * vr;
 	}
 }
 
-__global__ void addVolume(double *r, int numValues)
+__global__ void addVolume(CubbleFloatType *r, int numValues)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		double multiplier = dVolumeMultiplier / dTotalVolume;
+		CubbleFloatType multiplier = dVolumeMultiplier / dTotalVolume;
 		multiplier += 1.0;
 
 #if (NUM_DIM == 3)
@@ -296,12 +296,12 @@ __global__ void addVolume(double *r, int numValues)
 	}
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numValues)
+__global__ void calculateRedistributedGasVolume(CubbleFloatType *volume, CubbleFloatType *r, int *aboveMinRadFlags, CubbleFloatType pi, int numValues)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		const double radius = r[i];
-		double vol = pi * radius * radius;
+		const CubbleFloatType radius = r[i];
+		CubbleFloatType vol = pi * radius * radius;
 #if (NUM_DIM == 3)
 		vol *= 1.333333333333333333333333 * radius;
 #endif

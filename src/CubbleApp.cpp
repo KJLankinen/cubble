@@ -61,9 +61,9 @@ void CubbleApp::setupSimulation()
 
     saveSnapshotToFile();
 
-    const double phiTarget = env->getPhiTarget();
-    double bubbleVolume = simulator->getVolumeOfBubbles();
-    double phi = bubbleVolume / env->getSimulationBoxVolume();
+    const CubbleFloatType phiTarget = env->getPhiTarget();
+    CubbleFloatType bubbleVolume = simulator->getVolumeOfBubbles();
+    CubbleFloatType phi = bubbleVolume / env->getSimulationBoxVolume();
 
     std::cout << "Volume ratios: current: " << phi
               << ", target: " << phiTarget
@@ -72,13 +72,13 @@ void CubbleApp::setupSimulation()
     std::cout << "Scaling the simulation box." << std::endl;
 
     simulator->transformPositions(true);
-    const dvec relativeSize = env->getBoxRelativeDimensions();
+    const fpvec relativeSize = env->getBoxRelativeDimensions();
 #if (NUM_DIM == 3)
-    const double t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
+    const CubbleFloatType t = std::cbrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
 #else
-    const double t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
+    const CubbleFloatType t = std::sqrt(simulator->getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
 #endif
-    env->setTfr(dvec(t, t, t) * relativeSize);
+    env->setTfr(fpvec(t, t, t) * relativeSize);
     simulator->transformPositions(false);
 
     phi = bubbleVolume / env->getSimulationBoxVolume();
@@ -99,12 +99,12 @@ void CubbleApp::stabilizeSimulation()
 
     simulator->integrate();
     simulator->calculateEnergy();
-    double energy2 = simulator->getElasticEnergy();
+    CubbleFloatType energy2 = simulator->getElasticEnergy();
 
     while (true)
     {
-        double energy1 = energy2;
-        double time = 0;
+        CubbleFloatType energy1 = energy2;
+        CubbleFloatType time = 0;
 
         for (int i = 0; i < env->getNumStepsToRelax(); ++i)
         {
@@ -114,7 +114,7 @@ void CubbleApp::stabilizeSimulation()
 
         simulator->calculateEnergy();
         energy2 = simulator->getElasticEnergy();
-        double deltaEnergy = std::abs(energy2 - energy1) / time;
+        CubbleFloatType deltaEnergy = std::abs(energy2 - energy1) / time;
         deltaEnergy *= 0.5 * env->getSigmaZero();
 
         if (deltaEnergy < env->getMaxDeltaEnergy())
@@ -184,11 +184,11 @@ void CubbleApp::runSimulation()
 #endif
         }
 
-        double scaledTime = simulator->getSimulationTime() * env->getKParameter() / (env->getAvgRad() * env->getAvgRad());
+        CubbleFloatType scaledTime = simulator->getSimulationTime() * env->getKParameter() / (env->getAvgRad() * env->getAvgRad());
         if ((int)scaledTime >= timesPrinted)
         {
-            double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
-            double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
+            CubbleFloatType phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
+            CubbleFloatType relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
             dataStream << scaledTime
                        << " " << relativeRadius
                        << " " << simulator->getMaxBubbleRadius() / env->getAvgRad()

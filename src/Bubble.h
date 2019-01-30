@@ -11,8 +11,8 @@ namespace cubble
 // and stream output operator.
 class Bubble
 {
-	CUBBLE_HOST_DEVICE_PROP(double, Radius, 0)
-	CUBBLE_HOST_DEVICE_PROP(dvec, Pos, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(CubbleFloatType, Radius, 0)
+	CUBBLE_HOST_DEVICE_PROP(fpvec, Pos, fpvec(0, 0, 0))
 
   public:
 	__host__ __device__

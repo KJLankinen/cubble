@@ -10,6 +10,7 @@
 
 #include "Macros.h"
 #include "Vec.h"
+#include "Globals.h"
 
 namespace cubble
 {
@@ -22,25 +23,25 @@ class Env
 	CUBBLE_CONST_PROP(int, NumBubbles, 0)
 	CUBBLE_CONST_PROP(int, MinNumBubbles, 0)
 
-	CUBBLE_CONST_PROP(double, AvgRad, 0)
-	CUBBLE_CONST_PROP(double, StdDevRad, 0)
-	CUBBLE_CONST_PROP(double, MinRad, 0)
-	CUBBLE_CONST_PROP(double, PhiTarget, 0)
-	CUBBLE_CONST_PROP(double, MuZero, 0)
-	CUBBLE_CONST_PROP(double, SigmaZero, 0)
-	CUBBLE_CONST_PROP(double, FZeroPerMuZero, 0)
-	CUBBLE_CONST_PROP(double, ErrorTolerance, 0)
-	CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
-	CUBBLE_CONST_PROP(double, KParameter, 0)
-	CUBBLE_CONST_PROP(double, Kappa, 0)
-	CUBBLE_PROP(double, TimeStep, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, AvgRad, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, StdDevRad, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, MinRad, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, PhiTarget, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, MuZero, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, SigmaZero, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, FZeroPerMuZero, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, ErrorTolerance, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, MaxDeltaEnergy, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, KParameter, 0)
+	CUBBLE_CONST_PROP(CubbleFloatType, Kappa, 0)
+	CUBBLE_PROP(CubbleFloatType, TimeStep, 0)
 
 	CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
 	CUBBLE_CONST_PROP(std::string, DataFilename, "")
 
-	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
-	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
-	CUBBLE_PROP(dvec, BoxRelativeDimensions, dvec(0, 0, 0))
+	CUBBLE_PROP(fpvec, Lbb, fpvec(0, 0, 0))
+	CUBBLE_PROP(fpvec, Tfr, fpvec(0, 0, 0))
+	CUBBLE_PROP(fpvec, BoxRelativeDimensions, fpvec(0, 0, 0))
 
   public:
 	Env(const std::string &inF,
@@ -67,9 +68,9 @@ class Env
 
 	void writeParameters() { readWriteParameters(false); }
 
-	double getSimulationBoxVolume() const
+	CubbleFloatType getSimulationBoxVolume() const
 	{
-		dvec temp = Tfr - Lbb;
+		fpvec temp = Tfr - Lbb;
 #if NUM_DIM == 3
 		return temp.x * temp.y * temp.z;
 #else
@@ -77,7 +78,7 @@ class Env
 #endif
 	}
 
-	double getPi() const { return 3.1415926535897932384626433832795028841971693993; }
+	CubbleFloatType getPi() const { return 3.1415926535897932384626433832795028841971693993; }
 
   private:
 	void readWriteParameters(bool read)
@@ -128,6 +129,6 @@ class Env
 	std::string inputFile;
 	std::string saveFile;
 
-	double integrationTime = 0.0;
+	CubbleFloatType integrationTime = 0.0;
 };
 }; // namespace cubble

@@ -58,17 +58,17 @@ __device__ void logError(bool condition, const char *statement, const char *errM
 
 __device__ int getGlobalTid();
 
-__device__ void resetDoubleArrayToValue(double value, int idx, double *array);
+__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array);
 
 template <typename... Args>
-__device__ void resetDoubleArrayToValue(double value, int idx, double *array, Args... args)
+__device__ void resetDoubleArrayToValue(CubbleFloatType value, int idx, CubbleFloatType *array, Args... args)
 {
     resetDoubleArrayToValue(value, idx, array);
     resetDoubleArrayToValue(value, idx, args...);
 }
 
 template <typename... Args>
-__global__ void resetKernel(double value, int numValues, Args... args)
+__global__ void resetKernel(CubbleFloatType value, int numValues, Args... args)
 {
     const int tid = getGlobalTid();
     if (tid < numValues)
@@ -129,9 +129,9 @@ __global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType, i
 }
 
 // Could be generalized to accept any comparable type, but I've been too lazy to do that...
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values, double constant);
+__device__ void setFlagIfLessThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant);
 template <typename... Args>
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values, double constant, Args... args)
+__device__ void setFlagIfLessThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant, Args... args)
 {
     setFlagIfLessThanConstant(idx, flags, values, constant);
     setFlagIfLessThanConstant(idx, args...);
@@ -145,9 +145,9 @@ __global__ void setFlagIfLessThanConstantKernel(int numValues, Args... args)
         setFlagIfLessThanConstant(tid, args...);
 }
 
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values, double constant);
+__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant);
 template <typename... Args>
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values, double constant, Args... args)
+__device__ void setFlagIfGreaterThanConstant(int idx, int *flags, CubbleFloatType *values, CubbleFloatType constant, Args... args)
 {
     setFlagIfGreaterThanConstant(idx, flags, values, constant);
     setFlagIfGreaterThanConstant(idx, args...);
@@ -161,24 +161,24 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
         setFlagIfGreaterThanConstant(tid, args...);
 }
 
-__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y, double *z);
+__global__ void transformPositionsKernel(bool normalize, int numValues, fpvec lbb, fpvec tfr, CubbleFloatType *x, CubbleFloatType *y, CubbleFloatType *z);
 
-__device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap);
+__device__ CubbleFloatType getWrappedDistance(CubbleFloatType x1, CubbleFloatType x2, CubbleFloatType maxDistance, bool shouldWrap);
 
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x);
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap, double *x, double *useless);
+__device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, bool shouldWrap, CubbleFloatType *x);
+__device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *useless);
 template <typename... Args>
-__forceinline__ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap, double *x, double *useless, Args... args)
+__forceinline__ __device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, CubbleFloatType minDistance, bool shouldWrap, CubbleFloatType *x, CubbleFloatType *useless, Args... args)
 {
-    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+    CubbleFloatType d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
 
     return d;
 }
 template <typename... Args>
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x, Args... args)
+__device__ CubbleFloatType getDistanceSquared(int idx1, int idx2, CubbleFloatType maxDistance, bool shouldWrap, CubbleFloatType *x, Args... args)
 {
-    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+    CubbleFloatType d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
     d += getDistanceSquared(idx1, idx2, args...);
 
     return d;

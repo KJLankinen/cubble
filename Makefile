@@ -19,6 +19,11 @@ PBC_Z := 1
 
 USE_PROFILING := 0
 
+# -----------------------------------------------------
+# Should float or double be the default floating point type?
+# -----------------------------------------------------
+CUBBLE_FLOAT_TYPE = CUBBLE_FLOAT
+#CUBBLE_FLOAT_TYPE = CUBBLE_DOUBLE
 
 # -----------------------------------------------------
 # Directories
@@ -80,7 +85,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
+DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z) -DCUBBLE_FLOAT_TYPE=$(CUBBLE_FLOAT_TYPE)
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 

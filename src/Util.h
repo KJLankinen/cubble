@@ -11,6 +11,7 @@
 #include "json.hpp"
 
 #include "Macros.h"
+#include "Globals.h"
 
 namespace cubble
 {
@@ -30,7 +31,7 @@ struct ExecutionPolicy
 	ExecutionPolicy(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
 	{
 		blockSize = dim3(numThreadsPerBlock, 1, 1);
-		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
+		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (CubbleFloatType)numThreadsPerBlock), 1, 1);
 		sharedMemBytes = 0;
 		stream = 0;
 	}
@@ -38,7 +39,7 @@ struct ExecutionPolicy
 	ExecutionPolicy(uint32_t numThreadsPerBlock, uint32_t numTotalThreads, uint32_t bytes, cudaStream_t s)
 	{
 		blockSize = dim3(numThreadsPerBlock, 1, 1);
-		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
+		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (CubbleFloatType)numThreadsPerBlock), 1, 1);
 		sharedMemBytes = bytes;
 		stream = s;
 	}
@@ -48,13 +49,6 @@ struct ExecutionPolicy
 	uint32_t sharedMemBytes = 0;
 	cudaStream_t stream = 0;
 };
-
-const double CUBBLE_EPSILON = 1.0e-10;
-#if NUM_DIM == 3
-const int CUBBLE_NUM_NEIGHBORS = 13;
-#else
-const int CUBBLE_NUM_NEIGHBORS = 4;
-#endif
 
 inline void handleException(const std::exception_ptr pExc)
 {
