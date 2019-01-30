@@ -93,10 +93,10 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     array_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
-#SBATCH --mem=1G\n\
+#SBATCH --mem=4G\n\
 #SBATCH --time=72:00:00\n\
 #SBATCH --gres=gpu:1\n\
-#SBATCH --constraint=\"pascal\"\n\
+#SBATCH --constraint=\"pascal|volta\"\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
