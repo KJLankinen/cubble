@@ -6,10 +6,7 @@
 #include <assert.h>
 #include <iostream>
 #include <fstream>
-
-#ifndef __CUDACC__
 #include "json.hpp"
-#endif
 
 #include "Macros.h"
 #include "Vec.h"
@@ -54,8 +51,6 @@ class Env
 	}
 
 	~Env() {}
-
-#ifndef __CUDACC__
 	void readParameters()
 	{
 		readWriteParameters(true);
@@ -71,7 +66,6 @@ class Env
 	}
 
 	void writeParameters() { readWriteParameters(false); }
-#endif
 
 	double getSimulationBoxVolume() const
 	{
@@ -86,7 +80,6 @@ class Env
 	double getPi() const { return 3.1415926535897932384626433832795028841971693993; }
 
   private:
-#ifndef __CUDACC__
 	void readWriteParameters(bool read)
 	{
 		std::string msg = read
@@ -131,7 +124,6 @@ class Env
 			file << std::setw(4) << params << std::endl;
 		}
 	}
-#endif
 
 	std::string inputFile;
 	std::string saveFile;

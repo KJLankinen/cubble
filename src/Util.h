@@ -5,14 +5,10 @@
 #include <stdexcept>
 #include <exception>
 #include <sstream>
-
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <curand.h>
-
-#ifndef __CUDACC__
 #include "json.hpp"
-#endif
 
 #include "Macros.h"
 
@@ -62,15 +58,12 @@ const int CUBBLE_NUM_NEIGHBORS = 4;
 
 inline void handleException(const std::exception_ptr pExc)
 {
-#ifndef __CUDACC__
 	using json = nlohmann::json;
-#endif
 	try
 	{
 		if (pExc)
 			std::rethrow_exception(pExc);
 	}
-#ifndef __CUDACC__
 	catch (const json::exception &e)
 	{
 		std::cout << "Encountered a json parse error."
@@ -78,7 +71,6 @@ inline void handleException(const std::exception_ptr pExc)
 				  << e.what()
 				  << std::endl;
 	}
-#endif
 	catch (const std::exception &e)
 	{
 		std::cout << "\n----------Unhandled exception----------\n"
