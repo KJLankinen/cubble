@@ -4,10 +4,10 @@
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
 #include <fstream>
-#include <vtkPoints.h>
-#include <vtkSmartPointer.h>
-#include <vtkXMLUnstructuredGrid.h>
-#include <vtkXMLUnstructuredGridWriter.h>
+#include <vtk-8.0/vtkPoints.h>
+#include <vtk-8.0/vtkSmartPointer.h>
+#include <vtk-8.0/vtkXMLUnstructuredGrid.h>
+#include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
 
 #include "CubbleApp.h"
 
