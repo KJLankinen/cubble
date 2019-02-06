@@ -6,7 +6,7 @@
 #include <fstream>
 #include <vtk-8.0/vtkPoints.h>
 #include <vtk-8.0/vtkSmartPointer.h>
-#include <vtk-8.0/vtkXMLUnstructuredGrid.h>
+#include <vtk-8.0/vtkDoubleArray.h>
 #include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
 
 #include "CubbleApp.h"
@@ -272,7 +272,6 @@ void CubbleApp::saveSnapshotToFile()
         velArray->InsertTuple(i, t.data());
     }
 
-    dataSet->GetPointData()->AddArray(idArray);
     dataSet->GetPointData()->AddArray(radiiArray);
     dataSet->GetPointData()->AddArray(velArray);
     dataSet->SetPoints(points);
