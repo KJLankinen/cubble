@@ -9,6 +9,8 @@
 #include <vtk-8.0/vtkDoubleArray.h>
 #include <vtk-8.0/vtkUnstructuredGrid.h>
 #include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
+#include <vtk-8.0/vtkFieldData.h>
+#include <vtk-8.0/vtkPointData.h>
 
 #include "CubbleApp.h"
 
@@ -281,7 +283,7 @@ void CubbleApp::saveSnapshotToFile()
     dataSet->Squeeze();
 
     // Write
-    writer->SetInput(dataSet);
+    writer->SetInputData(dataSet);
     writer->SetDataModeToAscii();
     writer->Write();
 
