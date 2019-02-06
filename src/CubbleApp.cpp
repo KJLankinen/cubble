@@ -206,7 +206,7 @@ void CubbleApp::runSimulation()
                       << " <R>/<R_in>: " << relativeRadius
                       << " #b: " << simulator->getNumBubbles()
                       << " phi: " << phi
-                      << std::endl;
+                      << std::endl;ource code for the 
 
             // Only write snapshots when t* is a power of 2.
             if ((timesPrinted & (timesPrinted - 1)) == 0)
@@ -284,7 +284,7 @@ void CubbleApp::saveSnapshotToFile()
 
     // Write
     writer->SetInputData(dataSet);
-    writer->SetDataModeToAscii();
+    writer->SetDataModeToBinary();
     writer->Write();
 
     ++numSnapshots;
