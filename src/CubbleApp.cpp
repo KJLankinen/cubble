@@ -7,6 +7,7 @@
 #include <vtk-8.0/vtkPoints.h>
 #include <vtk-8.0/vtkSmartPointer.h>
 #include <vtk-8.0/vtkDoubleArray.h>
+#include <vtk-8.0/vtkUnstructuredGrid.h>
 #include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
 
 #include "CubbleApp.h"
@@ -257,7 +258,7 @@ void CubbleApp::saveSnapshotToFile()
     std::vector<double> t;
     t.resize(3);
 
-    for (size_t i = 0; i < points->GetNumberOfPoints(); ++i)
+    for (size_t i = 0; i < (size_t)points->GetNumberOfPoints(); ++i)
     {
         t[0] = hostData[i + 0 * memoryStride];
         t[1] = hostData[i + 1 * memoryStride];
@@ -282,7 +283,7 @@ void CubbleApp::saveSnapshotToFile()
     // Write
     writer->SetInput(dataSet);
     writer->SetDataModeToAscii();
-    writer->write();
+    writer->Write();
 
     ++numSnapshots;
 }
