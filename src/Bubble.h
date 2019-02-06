@@ -13,6 +13,7 @@ class Bubble
 {
 	CUBBLE_HOST_DEVICE_PROP(double, Radius, 0)
 	CUBBLE_HOST_DEVICE_PROP(dvec, Pos, dvec(0, 0, 0))
+	CUBBLE_HOST_DEVICE_PROP(dvec, Vel, dvec(0, 0, 0))
 
   public:
 	__host__ __device__

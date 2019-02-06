@@ -52,8 +52,6 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
     cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
-    hostData.resize(bubbleData.getSize(), 0);
-
     CUDA_CALL(cudaGetSymbolAddress((void **)&dtfa, dTotalFreeArea));
     assert(dtfa != nullptr);
     CUDA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
@@ -827,29 +825,14 @@ double Simulator::getAverageRadius()
     return avgRad;
 }
 
-void Simulator::getBubbles(std::vector<Bubble> &bubbles) const
+void Simulator::getBubbleData(std::vector<double> &hostSoA, size_t &numComp, size_t &memoryStride) const
 {
-    bubbles.clear();
-    bubbles.resize(numBubbles);
-
-    size_t memoryStride = bubbleData.getWidth();
     double *devX = bubbleData.getRowPtr((size_t)BP::X);
-    std::vector<double> xyzr;
-    xyzr.resize(memoryStride * 4);
-
-    CUDA_CALL(cudaMemcpy(xyzr.data(), devX, sizeof(double) * 4 * memoryStride, cudaMemcpyDeviceToHost));
-
-    for (size_t i = 0; i < numBubbles; ++i)
-    {
-        Bubble b;
-        dvec pos(-1, -1, -1);
-        pos.x = xyzr[i];
-        pos.y = xyzr[i + memoryStride];
-        pos.z = xyzr[i + 2 * memoryStride];
-        b.setPos(pos);
-        b.setRadius(xyzr[i + 3 * memoryStride]);
-        bubbles[i] = b;
-    }
+    numComp = 7;
+    memoryStride = bubbleData.getWidth();
+    hostSoA.clear();
+    hostSoA.resize(memoryStride * numComp);
+    CUDA_CALL(cudaMemcpy(hostSoA.data(), devX, sizeof(double) * numComp * memoryStride, cudaMemcpyDeviceToHost));
 }
 
 double Simulator::getInvRho()

@@ -3,7 +3,6 @@
 #pragma once
 
 #include "Env.h"
-#include "Bubble.h"
 #include "Vec.h"
 #include "DeviceArray.h"
 #include "PinnedHostArray.h"
@@ -31,7 +30,7 @@ class Simulator
 	void calculateEnergy();
 	double getVolumeOfBubbles();
 	double getAverageRadius();
-	void getBubbles(std::vector<Bubble> &bubbles) const;
+	void getBubbleData(std::vector<double> &hostSoA, size_t &numComp, size_t &memoryStride) const;
 	int getNumBubbles() const { return numBubbles; }
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
@@ -89,8 +88,6 @@ class Simulator
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;
-
-	std::vector<double> hostData;
 
 	std::vector<std::pair<BubbleProperty, BubbleProperty>> pairedProperties;
 };

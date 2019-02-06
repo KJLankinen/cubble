@@ -4,9 +4,12 @@
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
 #include <fstream>
+#include <vtkPoints.h>
+#include <vtkSmartPointer.h>
+#include <vtkXMLUnstructuredGrid.h>
+#include <vtkXMLUnstructuredGridWriter.h>
 
 #include "CubbleApp.h"
-#include "Bubble.h"
 
 using namespace cubble;
 
@@ -184,7 +187,7 @@ void CubbleApp::runSimulation()
 #endif
         }
 
-        double scaledTime = simulator->getSimulationTime() * env->getKParameter() / (env->getAvgRad() * env->getAvgRad());
+        const double scaledTime = getScaledTime();
         if ((int)scaledTime >= timesPrinted)
         {
             double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
@@ -218,31 +221,69 @@ void CubbleApp::runSimulation()
 
 void CubbleApp::saveSnapshotToFile()
 {
-#if (USE_PROFILING == 1)
-    return;
-#endif
+    auto writer = vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
+    auto dataSet = vtkSmartPointer<vtkUnstructuredGrid>::New();
+    auto points = vtkSmartPointer<vtkPoints>::New();
+    auto timeArray = vtkSmartPointer<vtkDoubleArray>::New();
+    auto radiiArray = vtkSmartPointer<vtkDoubleArray>::New();
+    auto velArray = vtkSmartPointer<vtkDoubleArray>::New();
 
-    std::cout << "Writing a snapshot to a file." << std::endl;
-    std::vector<Bubble> tempVec;
-    simulator->getBubbles(tempVec);
-
+    // Filename
     std::stringstream ss;
-    ss << env->getSnapshotFilename()
-       << numSnapshots
-       << ".csv";
+    ss << env->getSnapshotFilename() << "." << writer->GetDefaultFileExtension() << "." << numSnapshots;
+    writer->SetFileName((ss.str()).c_str());
 
-    std::string filename(ss.str());
-    ss.clear();
-    ss.str("");
+    // Time stamp
+    timeArray->SetNumberOfTuples(1);
+    timeArray->SetTuple1(0, getScaledTime());
+    timeArray->SetName("Time");
+    dataSet->GetFieldData()->AddArray(timeArray);
 
-    ss << "x, y, z, r";
+    // Points
+    size_t numComponents = 0;
+    size_t memoryStride = 0;
+    simulator->getBubbleData(hostData, numComponents, memoryStride);
+    assert(numComponents == 7);
+    points->SetNumberOfPoints(simulator->getNumBubbles());
 
-    for (const auto &bubble : tempVec)
-        ss << "\n"
-           << bubble;
+    radiiArray->SetNumberOfComponents(1);
+    radiiArray->SetNumberOfTuples(points->GetNumberOfPoints());
+    radiiArray->SetName("Radius");
 
-    std::ofstream file(filename);
-    file << ss.str() << std::endl;
+    velArray->SetNumberOfComponents(3);
+    velArray->SetNumberOfTuples(points->GetNumberOfPoints());
+    velArray->SetName("Velocity");
+
+    std::vector<double> t;
+    t.resize(3);
+
+    for (size_t i = 0; i < points->GetNumberOfPoints(); ++i)
+    {
+        t[0] = hostData[i + 0 * memoryStride];
+        t[1] = hostData[i + 1 * memoryStride];
+        t[2] = hostData[i + 2 * memoryStride];
+        points->SetPoint(i, t.data());
+
+        radiiArray->InsertValue(i, hostData[i + 3 * memoryStride]);
+
+        t[0] = hostData[i + 4 * memoryStride];
+        t[1] = hostData[i + 5 * memoryStride];
+        t[2] = hostData[i + 6 * memoryStride];
+        velArray->InsertTuple(i, t.data());
+    }
+
+    dataSet->GetPointData()->AddArray(idArray);
+    dataSet->GetPointData()->AddArray(radiiArray);
+    dataSet->GetPointData()->AddArray(velArray);
+    dataSet->SetPoints(points);
+
+    // Remove unused memory
+    dataSet->Squeeze();
+
+    // Write
+    writer->SetInput(dataSet);
+    writer->SetDataModeToAscii();
+    writer->write();
 
     ++numSnapshots;
 }
