@@ -6,7 +6,9 @@
 #SBATCH --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL
 
 module purge
-module load goolfc/triton-2017a					## toolchain
+module load gcc/5.5.0
+module load cuda/9.2.88
+module load vtk/8.0.1-opengl2-osmesa-python2
 
 srun make clean
 srun make final
