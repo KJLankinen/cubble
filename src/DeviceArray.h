@@ -1,13 +1,9 @@
-// -*- C++ -*-
-
 #pragma once
 
 #include "Macros.h"
 
 #include <memory>
 #include <assert.h>
-#include <utility>
-#include <type_traits>
 
 namespace cubble
 {
@@ -15,24 +11,44 @@ template <typename T>
 class DeviceArray
 {
   public:
-	DeviceArray(size_t w, size_t h, size_t d)
+	DeviceArray(size_t w = 0, size_t h = 0, size_t d = 0)
 		: width(w), height(h), depth(d), dataPtr(createDataPtr(w, h, d), destroyDataPtr)
 	{
-		static_assert(std::is_arithmetic<T>::value, "Only arithmetic types supported for now.");
-		CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * getSize()));
 	}
 
-	DeviceArray(size_t w, size_t h)
-		: DeviceArray(w, h, 1)
+	DeviceArray(const DeviceArray<T> &other)
+		: DeviceArray(other.width, other.height, other.depth)
 	{
+		CUDA_ASSERT(cudaMemcpy(static_cast<void *>(dataPtr.get()),
+							   static_cast<void *>(other.dataPtr.get()),
+							   other.getSizeInBytes(),
+							   cudaMemcpyDeviceToDevice));
 	}
 
-	DeviceArray()
-		: DeviceArray(1, 1, 1)
+	DeviceArray(DeviceArray<T> &&other)
+		: DeviceArray()
 	{
+		swap(*this, other);
 	}
 
 	~DeviceArray() {}
+
+	DeviceArray<T> &operator=(DeviceArray<T> other)
+	{
+		swap(*this, other);
+
+		return *this;
+	}
+
+	friend void swap(DeviceArray<T> &first, DeviceArray<T> &second)
+	{
+		using std::swap;
+
+		swap(first.width, second.width);
+		swap(first.height, second.height);
+		swap(first.depth, second.depth);
+		swap(first.dataPtr, second.dataPtr);
+	}
 
 	T *get() const { return dataPtr.get(); }
 
@@ -57,23 +73,14 @@ class DeviceArray
 	size_t getSliceSize() const { return width * height; }
 	size_t getSize() const { return width * height * depth; }
 	size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
-
-	// Strictly speaking this should only be allowed when T is an integer type...
 	void setBytesToZero() { CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
 
-	void operator=(DeviceArray<T> &&o)
-	{
-		width = o.width;
-		height = o.height;
-		depth = o.depth;
-		dataPtr = std::move(o.dataPtr);
-	}
-
   private:
-	T *createDataPtr(size_t w, size_t h, size_t d)
+	static T *createDataPtr(size_t w, size_t h, size_t d)
 	{
-		T *t;
-		CUDA_ASSERT(cudaMalloc((void **)&t, w * h * d * sizeof(T)));
+		T *t = nullptr;
+		if (w * h * d > 0)
+			CUDA_ASSERT(cudaMalloc((void **)&t, w * h * d * sizeof(T)));
 
 		return t;
 	}

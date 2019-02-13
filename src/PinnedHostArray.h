@@ -4,9 +4,6 @@
 
 #include <memory>
 #include <assert.h>
-#include <utility>
-#include <type_traits>
-#include <cuda_runtime_api.h>
 
 namespace cubble
 {
@@ -15,36 +12,50 @@ template <typename T>
 class PinnedHostArray
 {
   public:
-    PinnedHostArray(size_t size)
+    PinnedHostArray(size_t size = 0)
         : size(size), dataPtr(createDataPtr(size), destroyDataPtr)
     {
-        static_assert(std::is_arithmetic<T>::value, "Only arithmetic types supported for now.");
-        // Strictly speaking, this doesn't guarantee that anything else than integers are zero...
-        memset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * size);
     }
 
-    PinnedHostArray()
-        : PinnedHostArray(1)
+    PinnedHostArray(const PinnedHostArray<T> &other)
+        : PinnedHostArray(other.size)
     {
+        memcpy(static_cast<void *>(dataPtr.get()), static_cast<void *>(other.dataPtr.get()), other.getSizeInBytes());
+    }
+
+    PinnedHostArray(PinnedHostArray<T> &&other)
+        : PinnedHostArray()
+    {
+        swap(*this, other);
     }
 
     ~PinnedHostArray() {}
+
+    PinnedHostArray<T> &operator=(PinnedHostArray<T> other)
+    {
+        swap(*this, other);
+
+        return *this;
+    }
+
+    friend void swap(PinnedHostArray<T> &first, PinnedHostArray<T> &second)
+    {
+        using std::swap;
+
+        swap(first.size, second.size);
+        swap(first.dataPtr, second.dataPtr);
+    }
 
     T *get() const { return dataPtr.get(); }
     size_t getSize() const { return size; }
     size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
 
-    void operator=(PinnedHostArray<T> &&o)
-    {
-        size = o.size;
-        dataPtr = std::move(o.dataPtr);
-    }
-
   private:
-    T *createDataPtr(size_t size)
+    static T *createDataPtr(size_t size)
     {
         T *t = nullptr;
-        CUDA_ASSERT(cudaMallocHost((void **)&t, size * sizeof(T)));
+        if (size > 0)
+            CUDA_ASSERT(cudaMallocHost((void **)&t, size * sizeof(T)));
 
         return t;
     }
