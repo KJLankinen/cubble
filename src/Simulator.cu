@@ -53,7 +53,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
     CUDA_ASSERT(cudaGetSymbolAddress((void **)&dtfa, dTotalFreeArea));
-    CUDCUDA_ASSERTA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
     CUDA_ASSERT(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
     CUDA_ASSERT(cudaGetSymbolAddress((void **)&dvm, dVolumeMultiplier));
     CUDA_ASSERT(cudaGetSymbolAddress((void **)&dtv, dTotalVolume));
