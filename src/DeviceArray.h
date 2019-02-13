@@ -11,13 +11,8 @@ template <typename T>
 class DeviceArray
 {
   public:
-	DeviceArray(size_t w = 0, size_t h = 0, size_t d = 0)
+	DeviceArray(size_t w = 0, size_t h = 1, size_t d = 1)
 		: width(w), height(h), depth(d), dataPtr(createDataPtr(w, h, d), destroyDataPtr)
-	{
-	}
-
-	DeviceArray(size_t w, size_t h)
-		: DeviceArray(w, h, 1)
 	{
 	}
 
