@@ -52,36 +52,27 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
     cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dtfa, dTotalFreeArea));
-    assert(dtfa != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
-    assert(dtfapr != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
-    assert(mbpc != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dvm, dVolumeMultiplier));
-    assert(dvm != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dtv, dTotalVolume));
-    assert(dtv != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&np, dNumPairs));
-    assert(np != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dir, dInvRho));
-    assert(dir != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dta, dTotalArea));
-    assert(dta != nullptr);
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dasai, dAverageSurfaceAreaIn));
-    assert(dasai != nullptr);
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dtfa, dTotalFreeArea));
+    CUDCUDA_ASSERTA_CALL(cudaGetSymbolAddress((void **)&dtfapr, dTotalFreeAreaPerRadius));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&mbpc, dMaxBubblesPerCell));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dvm, dVolumeMultiplier));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dtv, dTotalVolume));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&np, dNumPairs));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dir, dInvRho));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dta, dTotalArea));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dasai, dAverageSurfaceAreaIn));
 
-    CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
-    CUDA_CALL(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
-    CUDA_CALL(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
-    CUDA_CALL(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
+    CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
+    CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
+    CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
+    CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
 
     for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
     {
         neighborStreamVec.emplace_back();
         neighborEventVec.emplace_back();
-        CUDA_CALL(cudaStreamCreateWithFlags(&neighborStreamVec[i], cudaStreamNonBlocking));
-        CUDA_CALL(cudaEventCreate(&neighborEventVec[i]));
+        CUDA_ASSERT(cudaStreamCreateWithFlags(&neighborStreamVec[i], cudaStreamNonBlocking));
+        CUDA_ASSERT(cudaEventCreate(&neighborEventVec[i]));
     }
 
     pinnedInt = PinnedHostArray<int>(1);

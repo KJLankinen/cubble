@@ -34,52 +34,14 @@
         }                                       \
     } while (0)
 
-// Cuda error checking
-// See Util.h for actual implementation
-#ifndef NDEBUG
-#define CUDA_CALL(call)                                        \
-    do                                                         \
-    {                                                          \
-        cudaError_t result = call;                             \
-        cubble::cudaAssert(result, #call, __FILE__, __LINE__); \
-    } while (0)
-#else
-#define CUDA_CALL(call) \
-    do                  \
-    {                   \
-        call;           \
-    } while (0)
-#endif
-
-// Curand error checking
-// See Util.h for actual implementation
-#ifndef NDEBUG
-#define CURAND_CALL(result)                                 \
-    do                                                      \
-    {                                                       \
-        cubble::curandAssert((result), __FILE__, __LINE__); \
-    } while (0)
-#else
-#define CURAND_CALL(result) \
-    do                      \
-    {                       \
-        (result);           \
-    } while (0)
-#endif
-
-#define CUDA_LAUNCH(kernel, ...)                                      \
-    do                                                                \
-    {                                                                 \
-        cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__); \
-    } while (0)
+#define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__);
+#define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__);
+#define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__);
+#define CUDA_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__);
 
 // Macro for device assert.
 #ifndef NDEBUG
-#define DEVICE_ASSERT(statement, msg)         \
-    do                                        \
-    {                                         \
-        logError(statement, #statement, msg); \
-    } while (0)
+#define DEVICE_ASSERT(statement, msg) cubble::logError(statement, #statement, msg);
 #else
 #define DEVICE_ASSERT(statement, msg)
 #endif

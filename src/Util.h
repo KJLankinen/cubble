@@ -81,41 +81,51 @@ inline void handleException(const std::exception_ptr pExc)
 	}
 }
 
-inline void cudaAssert(cudaError_t result, const char *callStr, const char *file, int line, bool abort = true)
+inline char *getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line, std::ios_base<char> &outStream)
 {
-	std::stringstream ss;
+	outStream << "Cuda error \"" << cudaGetErrorName(result) << "\" encountered at "
+			  << file
+			  << ":" << line
+			  << ":" << callStr
+			  << "\n"
+			  << cudaGetErrorString(result)
+			  << std::endl;
+}
+
+inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file, int line) noexcept
+{
 	if (result != cudaSuccess)
 	{
-		ss << "Cuda error " << result << " encountered at " << file << ":" << line << ": "
-		   << cudaGetErrorString(result)
-		   << " (" << callStr << ")"
-		   << "\n";
+		getFormattedCudaErrorString(result, callStr, file, line, std::cerr);
+		return false;
+	}
 
-		if (abort)
-		{
-			ss << "Throwing...\n";
-			throw std::runtime_error(ss.str());
-		}
-		else
-			std::cerr << ss.str() << std::endl;
+	return true;
+}
+
+inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char *file, int line) noexcept
+{
+	if (result != cudaSuccess)
+	{
+		std::stringstream ss;
+		getFormattedCudaErrorString(result, callStr, file, line, ss);
+		throw std::runtime_error(ss.str());
 	}
 }
 
-inline void curandAssert(curandStatus_t result, const char *file, int line, bool abort = true)
+inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file, int line) noexcept
 {
-	std::stringstream ss;
 	if (result != CURAND_STATUS_SUCCESS)
 	{
-		ss << "Curand error encountered at " << file << ":" << line << "\n";
-
-		if (abort)
-		{
-			ss << "Throwing...\n";
-			throw std::runtime_error(ss.str());
-		}
-		else
-			std::cerr << ss.str() << std::endl;
+		std::cerr << "Curand error " << result << " encountered at "
+				  << file
+				  << ":" << line
+				  << ":" << callStr
+				  << std::endl;
+		return false;
 	}
+
+	return true;
 }
 
 inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
@@ -124,9 +134,9 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 	int value = 0;
 	int device = 0;
 
-	CUDA_CALL(cudaDeviceSynchronize());
-	CUDA_CALL(cudaGetDevice(&device));
-	CUDA_CALL(cudaDeviceGetAttribute(&value, attr, device));
+	CUDA_ASSERT(cudaDeviceSynchronize());
+	CUDA_ASSERT(cudaGetDevice(&device));
+	CUDA_ASSERT(cudaDeviceGetAttribute(&value, attr, device));
 
 	return value;
 #else
@@ -230,9 +240,9 @@ inline void printRelevantInfoOfCurrentDevice()
 	cudaDeviceProp prop;
 	int device = 0;
 
-	CUDA_CALL(cudaDeviceSynchronize());
-	CUDA_CALL(cudaGetDevice(&device));
-	CUDA_CALL(cudaGetDeviceProperties(&prop, device));
+	CUDA_ASSERT(cudaDeviceSynchronize());
+	CUDA_ASSERT(cudaGetDevice(&device));
+	CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
 
 	std::cout << "\n----------Properties of current device----------"
 			  << "\n\n\tGeneral"

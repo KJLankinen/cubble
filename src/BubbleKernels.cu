@@ -65,7 +65,7 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 		break;
 #endif
 	default:
-		printf("Should never end up here!");
+		printf("Should never end up here!\n");
 		break;
 	}
 

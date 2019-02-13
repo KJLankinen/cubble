@@ -48,8 +48,8 @@ class CubWrapper
         cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T), cudaMemcpyDeviceToHost, stream);
 
 #ifndef NDEBUG
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaPeekAtLastError());
+        CUDA_ASSERT(cudaDeviceSynchronize());
+        CUDA_ASSERT(cudaPeekAtLastError());
 #endif
 
         return hostOutputData;
@@ -72,8 +72,8 @@ class CubWrapper
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
 #ifndef NDEBUG
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaPeekAtLastError());
+        CUDA_ASSERT(cudaDeviceSynchronize());
+        CUDA_ASSERT(cudaPeekAtLastError());
 #endif
     }
 
@@ -94,8 +94,8 @@ class CubWrapper
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
 #ifndef NDEBUG
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaPeekAtLastError());
+        CUDA_ASSERT(cudaDeviceSynchronize());
+        CUDA_ASSERT(cudaPeekAtLastError());
 #endif
     }
 
@@ -118,8 +118,8 @@ class CubWrapper
         (*func)(tempStoragePtr, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream, debug);
 
 #ifndef NDEBUG
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaPeekAtLastError());
+        CUDA_ASSERT(cudaDeviceSynchronize());
+        CUDA_ASSERT(cudaPeekAtLastError());
 #endif
     }
 
@@ -140,8 +140,8 @@ class CubWrapper
         (*func)(tempStoragePtr, tempStorageBytes, samples, deviceOutHist, numLevels, lowerLevel, upperLevel, numSamples, stream, debug);
 
 #ifndef NDEBUG
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaPeekAtLastError());
+        CUDA_ASSERT(cudaDeviceSynchronize());
+        CUDA_ASSERT(cudaPeekAtLastError());
 #endif
     }
 

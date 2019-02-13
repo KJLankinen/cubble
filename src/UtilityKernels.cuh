@@ -34,13 +34,16 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)
     f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
 
 #ifndef NDEBUG
-    CUDA_CALL(cudaDeviceSynchronize());
-    CUDA_CALL(cudaPeekAtLastError());
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaPeekAtLastError());
 
     bool errorEncountered = false;
     void *dee = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress((void **)&dee, dErrorEncountered));
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(&errorEncountered), dee, sizeof(bool), cudaMemcpyDeviceToHost));
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dee, dErrorEncountered));
+    if (dee != nullptr)
+        CUDA_ASSERT(cudaMemcpy(static_cast<void *>(&errorEncountered), dee, sizeof(bool), cudaMemcpyDeviceToHost));
+    else
+        throw std::runtime_error("Couldn't get symbol address for dErrorEncountered variable!");
 
     if (errorEncountered)
     {

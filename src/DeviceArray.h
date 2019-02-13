@@ -19,7 +19,7 @@ class DeviceArray
 		: width(w), height(h), depth(d), dataPtr(createDataPtr(w, h, d), destroyDataPtr)
 	{
 		static_assert(std::is_arithmetic<T>::value, "Only arithmetic types supported for now.");
-		CUDA_CALL(cudaMemset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * getSize()));
+		CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, sizeof(T) * getSize()));
 	}
 
 	DeviceArray(size_t w, size_t h)
@@ -59,7 +59,7 @@ class DeviceArray
 	size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
 
 	// Strictly speaking this should only be allowed when T is an integer type...
-	void setBytesToZero() { CUDA_CALL(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
+	void setBytesToZero() { CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
 
 	void operator=(DeviceArray<T> &&o)
 	{
@@ -73,7 +73,7 @@ class DeviceArray
 	T *createDataPtr(size_t w, size_t h, size_t d)
 	{
 		T *t;
-		CUDA_CALL(cudaMalloc((void **)&t, w * h * d * sizeof(T)));
+		CUDA_ASSERT(cudaMalloc((void **)&t, w * h * d * sizeof(T)));
 
 		return t;
 	}
