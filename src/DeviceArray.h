@@ -16,6 +16,11 @@ class DeviceArray
 	{
 	}
 
+	DeviceArray(size_t w, size_t h)
+		: DeviceArray(w, h, 1)
+	{
+	}
+
 	DeviceArray(const DeviceArray<T> &other)
 		: DeviceArray(other.width, other.height, other.depth)
 	{
