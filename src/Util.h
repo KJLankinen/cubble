@@ -83,8 +83,9 @@ inline void handleException(const std::exception_ptr pExc)
 
 inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line, std::basic_ostream<char> &outStream)
 {
-	outStream << "Cuda error \"" << cudaGetErrorName(result) << "\" encountered: \""
-			  << cudaGetErrorString(result) << "\""
+	outStream << "Cuda error encountered."
+			  << "\n\tType: " << cudaGetErrorName(result)
+			  << "\n\tDescription: " << cudaGetErrorString(result)
 			  << "\n\tLocation: " << file << ":" << line
 			  << "\n\tCall: " << callStr
 			  << std::endl;
@@ -115,11 +116,12 @@ inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const c
 {
 	if (result != CURAND_STATUS_SUCCESS)
 	{
-		std::cerr << "Curand error " << result << " encountered at "
-				  << file
-				  << ":" << line
-				  << ":" << callStr
+		std::cerr << "Curand error encountered."
+				  << "\n\tType: " << result
+				  << "\n\tLocation: " << file << ":" << line
+				  << "\n\tCall: " << callStr
 				  << std::endl;
+
 		return false;
 	}
 
