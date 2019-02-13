@@ -81,7 +81,7 @@ inline void handleException(const std::exception_ptr pExc)
 	}
 }
 
-inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line, std::basic_iostream<char> &outStream)
+inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line, std::basic_ostream<char> &outStream)
 {
 	outStream << "Cuda error \"" << cudaGetErrorName(result) << "\" encountered at "
 			  << file
