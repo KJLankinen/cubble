@@ -44,9 +44,9 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
     bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
-    aboveMinRadFlags = DeviceArray<int>(numBubbles, 2);
-    bubbleCellIndices = DeviceArray<int>(numBubbles, 4);
-    pairs = DeviceArray<int>(8 * numBubbles, 4);
+    aboveMinRadFlags = DeviceArray<int>(numBubbles, 2u);
+    bubbleCellIndices = DeviceArray<int>(numBubbles, 4u);
+    pairs = DeviceArray<int>(8 * numBubbles, 4u);
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
