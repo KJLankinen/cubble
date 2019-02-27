@@ -79,6 +79,25 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
     forceFromWalls(idx, fZeroPerMuZero, r, args...);
 }
 
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity);
+template <typename... Args>
+__device__ void addNeighborVelocity(int idx1, int idx2, int *numNeighbors, double *sumOfVelocities, double *velocity, Args... args)
+{
+    atomicAdd(&numNeighbors[idx1], 1);
+    atomicAdd(&numNeighbors[idx2], 1);
+
+    addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
+    addNeighborVelocity(idx1, idx2, args...);
+}
+
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity);
+template <typename... Args>
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity, Args... args)
+{
+    addFlowVelocity(idx, numNeighbors, flowVelocity, velocity);
+    addFlowVelocity(idx, numNeighbors, args...);
+}
+
 template <typename... Args>
 __global__ void boundaryWrapKernel(int numValues, Args... args)
 {
@@ -173,7 +192,7 @@ __global__ void neighborSearch(int neighborCellNumber,
 }
 
 template <typename... Args>
-__global__ void velocityPairKernel(int numValues, double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *first, int *second, double *r, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
         forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
@@ -184,6 +203,20 @@ __global__ void velocityWallKernel(int numValues, double fZeroPerMuZero, int *fi
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
         forceFromWalls(i, fZeroPerMuZero, r, args...);
+}
+
+template <typename... Args>
+__global__ void neighborVelocityKernel(int *first, int *second, int *numNeighbors, Args... args)
+{
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
+        addNeighborVelocity(first[i], second[i], numNeighbors, args...);
+}
+
+template <typename... Args>
+__global__ void flowVelocityKernel(int numValues, int *numNeighbors, Args... args)
+{
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
+        addFlowVelocity(i, numNeighbors, args...);
 }
 
 template <typename... Args>

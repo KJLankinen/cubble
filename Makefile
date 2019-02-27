@@ -14,6 +14,13 @@ PBC_Y := 1
 PBC_Z := 1
 
 # -----------------------------------------------------
+# Use flow or not?
+# -----------------------------------------------------
+
+USE_FLOW := 1
+
+
+# -----------------------------------------------------
 # Profile or not?
 # -----------------------------------------------------
 
@@ -80,7 +87,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
+DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_PROFILING=$(USE_PROFILING) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z) -DUSE_FLOW=$(USE_FLOW)
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 

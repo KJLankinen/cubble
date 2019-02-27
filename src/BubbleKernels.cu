@@ -170,6 +170,17 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
 	}
 }
 
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity)
+{
+	atomicAdd(&sumOfVelocities[idx1], velocity[idx2]);
+	atomicAdd(&sumOfVelocities[idx2], velocity[idx1]);
+}
+
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity)
+{
+	velocity[idx] += (numNeighbors[idx] > 0 ? 1.0 / numNeighbors[idx] : 0.0) * flowVelocity[idx];
+}
+
 __global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
@@ -245,8 +256,7 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		const int cellIdx = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
-		cellIndices[i] = cellIdx;
+		cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
 		bubbleIndices[i] = i;
 	}
 }

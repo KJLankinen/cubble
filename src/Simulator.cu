@@ -442,7 +442,7 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
     double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
 
     CUDA_LAUNCH(velocityPairKernel, policy,
-                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
                 interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
                 interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
@@ -465,6 +465,36 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
 #if (NUM_DIM == 3 && PBC_Z == 0)
                 ,
                 interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
+#endif
+    );
+#endif
+
+#if USE_FLOW
+    int *numNeighbors = bubbleCellIndices.getRowPtr(0);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *flowVelocityX = bubbleData.getRowPtr((size_t)BP::ENERGY);
+    double *flowVelocityY = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+    double *flowVelocityZ = bubbleData.getRowPtr((size_t)BP::ERROR);
+
+    CUDA_LAUNCH(neighborVelocityKernel, policy,
+                pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
+                flowVelocityX, dxdtOld,
+                flowVelocityY, dydtOld
+#if (NUM_DIM == 3)
+                ,
+                flowVelocityZ, dzdtOld
+#endif
+    );
+
+    CUDA_LAUNCH(flowVelocityKernel, policy,
+                numBubbles, numNeighbors,
+                flowVelocityX, dxdtPrd,
+                flowVelocityY, dydtPrd
+#if (NUM_DIM == 3)
+                ,
+                flowVelocityZ, dzdtPrd
 #endif
     );
 #endif
