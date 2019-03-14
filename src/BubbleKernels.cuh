@@ -79,6 +79,22 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
     forceFromWalls(idx, fZeroPerMuZero, r, args...);
 }
 
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity);
+template <typename... Args>
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity, Args... args)
+{
+    addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
+    addNeighborVelocity(idx1, idx2, args...);
+}
+
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity);
+template <typename... Args>
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity, Args... args)
+{
+    addFlowVelocity(idx, numNeighbors, flowVelocity, velocity);
+    addFlowVelocity(idx, numNeighbors, args...);
+}
+
 template <typename... Args>
 __global__ void boundaryWrapKernel(int numValues, Args... args)
 {
@@ -187,6 +203,26 @@ __global__ void velocityWallKernel(int numValues, double fZeroPerMuZero, int *fi
 }
 
 template <typename... Args>
+__global__ void neighborVelocityKernel(int *first, int *second, int *numNeighbors, Args... args)
+{
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
+    {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        atomicAdd(&numNeighbors[idx1], 1);
+        atomicAdd(&numNeighbors[idx2], 1);
+        addNeighborVelocity(idx1, idx2, args...);
+    }
+}
+
+template <typename... Args>
+__global__ void flowVelocityKernel(int numValues, int *numNeighbors, Args... args)
+{
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
+        addFlowVelocity(i, numNeighbors, args...);
+}
+
+template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
                                       int *first,
                                       int *second,
@@ -258,11 +294,11 @@ __global__ void gasExchangeKernel(int numValues,
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area);
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             double *r,
-                                            double *relativeFreeArea,
+                                            double *freeArea,
                                             int numValues,
                                             double invPi,
                                             double kappa,

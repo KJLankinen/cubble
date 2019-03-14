@@ -88,6 +88,8 @@ class Simulator
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;
+
+	std::vector<double> hostData;
 };
 
 enum class BubbleProperty

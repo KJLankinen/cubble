@@ -455,6 +455,36 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
 #endif
     );
 #endif
+
+#if USE_FLOW
+    int *numNeighbors = bubbleCellIndices.getRowPtr(0);
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *flowVelocityX = bubbleData.getRowPtr((size_t)BP::ENERGY);
+    double *flowVelocityY = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
+    double *flowVelocityZ = bubbleData.getRowPtr((size_t)BP::ERROR);
+
+    CUDA_LAUNCH(neighborVelocityKernel, policy,
+                pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
+                flowVelocityX, dxdtOld,
+                flowVelocityY, dydtOld
+#if (NUM_DIM == 3)
+                ,
+                flowVelocityZ, dzdtOld
+#endif
+    );
+
+    CUDA_LAUNCH(flowVelocityKernel, policy,
+                numBubbles, numNeighbors,
+                flowVelocityX, dxdtPrd,
+                flowVelocityY, dydtPrd
+#if (NUM_DIM == 3)
+                ,
+                flowVelocityZ, dzdtPrd
+#endif
+    );
+#endif
 }
 
 void Simulator::doReset(const ExecutionPolicy &policy)

@@ -170,6 +170,17 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
 	}
 }
 
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity)
+{
+	atomicAdd(&sumOfVelocities[idx1], velocity[idx2]);
+	atomicAdd(&sumOfVelocities[idx2], velocity[idx1]);
+}
+
+__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity)
+{
+	velocity[idx] += (numNeighbors[idx] > 0 ? 1.0 / numNeighbors[idx] : 0.0) * flowVelocity[idx];
+}
+
 __global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
@@ -245,13 +256,12 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
-		const int cellIdx = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
-		cellIndices[i] = cellIdx;
+		cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
 		bubbleIndices[i] = i;
 	}
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *relativeFreeArea, double *relativeFreeAreaPerRadius, double *area)
+__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
@@ -260,12 +270,12 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *rela
 		totalArea *= 2.0 * r[i];
 #endif
 		area[i] = totalArea;
-		relativeFreeArea[i] = totalArea - relativeFreeArea[i];
-		relativeFreeAreaPerRadius[i] = relativeFreeArea[i] / r[i];
+		freeArea[i] = totalArea - freeArea[i];
+		freeAreaPerRadius[i] = freeArea[i] / r[i];
 	}
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *relativeFreeArea, int numValues, double invPi, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double invPi, double kappa, double kParam)
 {
 	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
 	{
@@ -275,7 +285,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *rel
 #if (NUM_DIM == 3)
 		invArea *= 0.5 * invRadius;
 #endif
-		const double vr = drdt[i] + kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * relativeFreeArea[i] * (dInvRho - invRadius);
+		const double vr = drdt[i] + kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * freeArea[i] * (dInvRho - invRadius);
 		drdt[i] = kParam * invArea * vr;
 	}
 }
