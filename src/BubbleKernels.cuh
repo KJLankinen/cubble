@@ -81,11 +81,8 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
 
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity);
 template <typename... Args>
-__device__ void addNeighborVelocity(int idx1, int idx2, int *numNeighbors, double *sumOfVelocities, double *velocity, Args... args)
+__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities, double *velocity, Args... args)
 {
-    atomicAdd(&numNeighbors[idx1], 1);
-    atomicAdd(&numNeighbors[idx2], 1);
-
     addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
     addNeighborVelocity(idx1, idx2, args...);
 }
@@ -209,7 +206,13 @@ template <typename... Args>
 __global__ void neighborVelocityKernel(int *first, int *second, int *numNeighbors, Args... args)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs; i += gridDim.x * blockDim.x)
-        addNeighborVelocity(first[i], second[i], numNeighbors, args...);
+    {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        atomicAdd(&numNeighbors[idx1], 1);
+        atomicAdd(&numNeighbors[idx2], 1);
+        addNeighborVelocity(idx1, idx2, args...);
+    }
 }
 
 template <typename... Args>

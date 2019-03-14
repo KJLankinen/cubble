@@ -134,7 +134,7 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
 
     alpha1 = 0.62
     alpha2 = 0.48
-    alpha3 = 0.34
+    alpha3 = 0.25
     alpha4 = 0.5
     
     x1 = np.linspace(10, 600)
@@ -144,10 +144,10 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     y2 = pow(0.0825 * x2, alpha2)
     
     x3 = np.linspace(100, 15000, 1000)
-    y3 = pow(0.06 * x3, alpha3)
+    y3 = pow(0.05 * x3, alpha3)
     
     x4 = np.linspace(30, 1550, 1000)
-    y4 = pow(0.08 * x4, alpha4)
+    y4 = pow(0.25 * x4, alpha4)
 
     line_color = (0, 0, 0)
     arrow_props_up=dict(arrowstyle='-', connectionstyle="angle,angleA=180,angleB=-90,rad=0")
@@ -167,11 +167,11 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     ax.annotate(str(alpha3), xy=(x3[smaller_idx], y3[larger_idx]))
     ax.annotate("", xy=(x3[smaller_idx], y3[smaller_idx]), xycoords='data', xytext=(x3[larger_idx], y3[larger_idx]), textcoords='data', arrowprops=arrow_props_up)
     
-    smaller_idx = 200
-    larger_idx = 250
-    ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
-    ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
-    ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
+    #smaller_idx = 200
+    #larger_idx = 250
+    #ax.loglog(x4, y4, '--', color=line_color, linewidth=2.0)
+    #ax.annotate(str(alpha4), xy=(x4[larger_idx], y4[smaller_idx]))
+    #ax.annotate("", xy=(x4[smaller_idx], y4[smaller_idx]), xycoords='data', xytext=(x4[larger_idx], y4[larger_idx]), textcoords='data', arrowprops=arrow_props_down)
 
     ax.legend(loc='upper left')
 
