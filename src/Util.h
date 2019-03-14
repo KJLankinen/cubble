@@ -102,7 +102,7 @@ inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *
 	return true;
 }
 
-inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char *file, int line) noexcept
+inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char *file, int line)
 {
 	if (result != cudaSuccess)
 	{
