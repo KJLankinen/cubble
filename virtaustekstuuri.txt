@@ -1,8 +1,0 @@
-Virtausmuistiinpanoja:
-
-Yksi mahdollinen ajatus olisi käyttää vakiotekstuuria virtauksen vektorikenttänä (ja kokonaan jättää laskematta naapurien keskimääräinen nopeus).
-Simulaation ulottuvuudesta riippuen kaksi- tai kolmiulotteinen (D = 2 tai 3) 8 * D bpp RG(B) tekstuuri (resoluutio ~100^D -> muistinkäyttö <= 3 * 100 * 100 * 100 t = 2,85 Mt).
-Tekstuurin eri komponentit kuvaavat vektorikentän eri komponentteja: R = x, G = y, B = z.
-Kuplan lokaatio muutetaan tekstuurikoordinaateiksi (uvw = pos / interval), joilla haetaan 2^D lähintä
-texeliä. Suoritetaan bi-/trilineaarinen interpolointi ja käytetään laskettua vektoria ympäröivän nesteen virtausnopeutena.
-Tällä tavalla virtauskentän voi muodostaa simulaatiosta erillään 'tavallisena' kuvatiedostona tai muodostaa laskennallisesti simulaation alussa (esim. vakiokentän tapauksessa).
