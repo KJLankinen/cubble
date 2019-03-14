@@ -35,7 +35,7 @@
     } while (0)
 
 #define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
-#define CUDA_ASSERT(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
+#define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
 #define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
 #define CUDA_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
 
