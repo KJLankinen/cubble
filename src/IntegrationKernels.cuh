@@ -21,18 +21,15 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
         adamsBashforth(tid, timeStep, args...);
 }
 
-template <int N, int N>
-__device__ void adamsBashforth2(int idx, double timeStep, double **pointers)
-{
-    // Bottom out
-}
-
 template <int I, int N>
 __device__ void adamsBashforth2(int idx, double timeStep, double **pointers)
 {
-    const int offset = 4 * I;
-    adamsBashforth(idx, timeStep, pointers[offset], pointers[offset + 1], pointers[offset + 2], pointers[offset + 3]);
-    adamsBashforth2<I + 1, N>(idx, timeStep, pointers);
+    if (I < N)
+    {
+        const int offset = 4 * I;
+        adamsBashforth(idx, timeStep, pointers[offset], pointers[offset + 1], pointers[offset + 2], pointers[offset + 3]);
+        adamsBashforth2<I + 1, N>(idx, timeStep, pointers);
+    }
 }
 
 template <int N>
