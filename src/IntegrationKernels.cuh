@@ -21,8 +21,8 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
         adamsBashforth(tid, timeStep, args...);
 }
 
-template <0>
-__device__ void adamsBashforth2(int idx, double timeStep, double **pointers)
+template <>
+__device__ void adamsBashforth2<0>(int idx, double timeStep, double **pointers)
 {
     // Bottom out the recursion
     return;
