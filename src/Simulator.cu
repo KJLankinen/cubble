@@ -252,7 +252,7 @@ bool Simulator::integrate(bool useGasExchange)
 
     CUDA_CALL(cudaEventSynchronize(blockingEvent1));
 
-    const int numBubblesAboveMinRad = pinnedInt.get()[0];
+    const int numBubblesAboveMinRad = pinnedInt[0];
     const bool shouldDeleteBubbles = numBubblesAboveMinRad < numBubbles;
 
     if (shouldDeleteBubbles)
@@ -263,7 +263,7 @@ bool Simulator::integrate(bool useGasExchange)
 
     bool continueSimulation = numBubbles > env->getMinNumBubbles();
 
-    maxBubbleRadius = pinnedDouble.get()[0];
+    maxBubbleRadius = pinnedDouble[0];
 #if (NUM_DIM == 3)
     continueSimulation &= maxBubbleRadius < 0.5 * (env->getTfr() - env->getLbb()).getMinComponent();
 #endif
@@ -283,7 +283,7 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
     pinnedPointers[6] = bubbleData.getRowPtr((size_t)BP::DYDT);
     pinnedPointers[7] = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
 
-    int offset = 7;
+    uint32_t offset = 8;
 
 #if (NUM_DIM == 3)
     pinnedPointers[8] = bubbleData.getRowPtr((size_t)BP::Z_PRD);
@@ -291,7 +291,7 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
     pinnedPointers[10] = bubbleData.getRowPtr((size_t)BP::DZDT);
     pinnedPointers[11] = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
 
-    offset = 11;
+    offset = 12;
 #endif
 
     if (useGasExchange)
@@ -501,7 +501,7 @@ double Simulator::doError()
     CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
     CUDA_CALL(cudaEventSynchronize(blockingEvent2));
 
-    return pinnedDouble.get()[0];
+    return pinnedDouble[0];
 }
 
 void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
@@ -704,7 +704,7 @@ void Simulator::updateCellsAndNeighbors()
     }
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
-    int numPairs = pinnedInt.get()[0];
+    int numPairs = pinnedInt[0];
     cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
                                     const_cast<const int *>(pairs.getRowPtr(2)),
                                     pairs.getRowPtr(0),

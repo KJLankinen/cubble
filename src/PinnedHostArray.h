@@ -50,6 +50,11 @@ class PinnedHostArray
     size_t getSize() const { return size; }
     size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
 
+    T &operator[](size_t i)
+    {
+        return this->get()[i];
+    }
+
   private:
     static T *createDataPtr(size_t size)
     {
