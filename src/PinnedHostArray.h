@@ -20,7 +20,7 @@ class PinnedHostArray
     PinnedHostArray(const PinnedHostArray<T> &other)
         : PinnedHostArray(other.size)
     {
-        memcpy(static_cast<void *>(dataPtr.get()), static_cast<void *>(other.dataPtr.get()), other.getSizeInBytes());
+        memcpy(reinterpret_cast<void *>(dataPtr.get()), reinterpret_cast<void *>(other.dataPtr.get()), other.getSizeInBytes());
     }
 
     PinnedHostArray(PinnedHostArray<T> &&other)
@@ -60,7 +60,7 @@ class PinnedHostArray
     {
         T *t = nullptr;
         if (size > 0)
-            CUDA_ASSERT(cudaMallocHost((void **)&t, size * sizeof(T)));
+            CUDA_ASSERT(cudaMallocHost(reinterpret_cast<void **>(&t), size * sizeof(T)));
 
         return t;
     }
@@ -68,7 +68,7 @@ class PinnedHostArray
     static void destroyDataPtr(T *t)
     {
         CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaFreeHost(static_cast<void *>(t)));
+        CUDA_CALL(cudaFreeHost(reinterpret_cast<void *>(t)));
     }
 
     size_t size = 0;

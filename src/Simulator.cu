@@ -78,7 +78,9 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     pinnedInt = PinnedHostArray<int>(1);
     pinnedDouble = PinnedHostArray<double>(1);
     pinnedPointers = PinnedHostArray<double *>((NUM_DIM + 1) * 4);
-    CUDA_CALL(cudaHostGetDevicePointer(static_cast<void **>(&devicePinnedPointers), static_cast<void *>(pinnedPointers.get()), 0));
+    void *tempVoidPr = nullptr;
+    CUDA_CALL(cudaHostGetDevicePointer(&tempVoidPr, reinterpret_cast<void *>(pinnedPointers.get()), 0));
+    devicePinnedPointers = reinterpret_cast<double **>(tempVoidPr);
 
     printRelevantInfoOfCurrentDevice();
 }
