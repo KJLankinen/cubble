@@ -50,15 +50,15 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
     cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
 
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dtfa), dTotalFreeArea));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dtfapr), dTotalFreeAreaPerRadius));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(mbpc), dMaxBubblesPerCell));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dvm), dVolumeMultiplier));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dtv), dTotalVolume));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(np), dNumPairs));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dir), dInvRho));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dta), dTotalArea));
-    CUDA_ASSERT(cudaGetSymbolAddress(&static_cast<void *>(dasai), dAverageSurfaceAreaIn));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfapr), dTotalFreeAreaPerRadius));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&mbpc), dMaxBubblesPerCell));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dvm), dVolumeMultiplier));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtv), dTotalVolume));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&np), dNumPairs));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dir), dInvRho));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dta), dTotalArea));
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dasai), dAverageSurfaceAreaIn));
 
     CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
     CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
