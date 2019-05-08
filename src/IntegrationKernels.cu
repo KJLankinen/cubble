@@ -7,6 +7,13 @@ __device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *
     yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
 }
 
+template <>
+__device__ void adamsBashforth2<0>(int idx, double timeStep, double **pointers)
+{
+    // Bottom out the recursion
+    return;
+}
+
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext)
 {
     const double yTemp = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
