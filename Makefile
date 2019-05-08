@@ -2,7 +2,7 @@
 # How many dimensions to simulate.
 # -----------------------------------------------------
 
-NUM_DIM := 3
+NUM_DIM := 2
 
 
 # -----------------------------------------------------
@@ -55,7 +55,7 @@ OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 # Overlap with the objects above is totally fine.
 # These are only related to linking, compiling is done automatically
 # based on the file extension (.cpp vs. .cu)
-GPU_OBJ_NAMES := BubbleKernels.o Simulator.o Kernels.o
+GPU_OBJ_NAMES := Simulator.o Kernels.o
 GPU_OBJS = $(foreach OBJ, $(GPU_OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # Find all headers in source dir.
