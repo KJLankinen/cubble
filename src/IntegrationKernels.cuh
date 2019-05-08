@@ -21,25 +21,6 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
         adamsBashforth(tid, timeStep, args...);
 }
 
-template <int N>
-__device__ void adamsBashforth2(int idx, double timeStep, double **pointers)
-{
-    const int offset = 4 * (N - 1);
-    adamsBashforth(idx, timeStep, pointers[offset], pointers[offset + 1], pointers[offset + 2], pointers[offset + 3]);
-    adamsBashforth2<N - 1>(idx, timeStep, pointers);
-}
-
-template <>
-__device__ void adamsBashforth2<0>(int idx, double timeStep, double **pointers);
-
-template <int N>
-__global__ void predictKernel2(int numValues, double timeStep, double **pointers)
-{
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        adamsBashforth2<N>(tid, timeStep, pointers);
-}
-
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext);
 template <typename... Args>
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext, Args... args)
@@ -74,4 +55,4 @@ __global__ void eulerKernel(int numValues, double timeStep, Args... args)
     if (tid < numValues)
         eulerIntegrate(tid, timeStep, args...);
 }
-} // namespace cubble
+}

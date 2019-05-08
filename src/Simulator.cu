@@ -77,10 +77,6 @@ Simulator::Simulator(std::shared_ptr<Env> e)
 
     pinnedInt = PinnedHostArray<int>(1);
     pinnedDouble = PinnedHostArray<double>(1);
-    pinnedPointers = PinnedHostArray<double *>((NUM_DIM + 1) * 4);
-    void *tempPtr = nullptr;
-    CUDA_CALL(cudaHostGetDevicePointer(&tempPtr, static_cast<void *>(pinnedPointers.get()), 0));
-    devicePinnedPointers = static_cast<double **>(tempPtr);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -148,29 +144,25 @@ void Simulator::setupSimulation()
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
+    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld,
-                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld);
-
-    CUDA_LAUNCH(eulerKernel, defaultPolicy,
-                numBubbles, timeStep,
-                x, dxdtOld,
-                y, dydtOld,
-                z, dzdtOld);
-#else
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld);
-
-    CUDA_LAUNCH(eulerKernel, defaultPolicy,
-                numBubbles, timeStep,
-                x, dxdtOld,
-                y, dydtOld);
+                ,
+                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
+    );
+
+    CUDA_LAUNCH(eulerKernel, defaultPolicy,
+                numBubbles, timeStep,
+                x, dxdtOld,
+                y, dydtOld
+#if (NUM_DIM == 3)
+                ,
+                z, dzdtOld
+#endif
+    );
 
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
     CUDA_LAUNCH(boundaryWrapKernel, defaultPolicy,
@@ -194,18 +186,15 @@ void Simulator::setupSimulation()
                 0.0, numBubbles,
                 dxdtOld, dydtOld, dzdtOld, drdtOld);
 
+    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
+                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld,
-                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld);
-#else
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld);
+                ,
+                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
+    );
 }
 
 bool Simulator::integrate(bool useGasExchange)
@@ -254,7 +243,7 @@ bool Simulator::integrate(bool useGasExchange)
 
     CUDA_CALL(cudaEventSynchronize(blockingEvent1));
 
-    const int numBubblesAboveMinRad = pinnedInt[0];
+    const int numBubblesAboveMinRad = pinnedInt.get()[0];
     const bool shouldDeleteBubbles = numBubblesAboveMinRad < numBubbles;
 
     if (shouldDeleteBubbles)
@@ -265,7 +254,7 @@ bool Simulator::integrate(bool useGasExchange)
 
     bool continueSimulation = numBubbles > env->getMinNumBubbles();
 
-    maxBubbleRadius = pinnedDouble[0];
+    maxBubbleRadius = pinnedDouble.get()[0];
 #if (NUM_DIM == 3)
     continueSimulation &= maxBubbleRadius < 0.5 * (env->getTfr() - env->getLbb()).getMinComponent();
 #endif
@@ -275,39 +264,50 @@ bool Simulator::integrate(bool useGasExchange)
 
 void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark)
 {
-    pinnedPointers[0] = bubbleData.getRowPtr((size_t)BP::X_PRD);
-    pinnedPointers[1] = bubbleData.getRowPtr((size_t)BP::X);
-    pinnedPointers[2] = bubbleData.getRowPtr((size_t)BP::DXDT);
-    pinnedPointers[3] = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *x = bubbleData.getRowPtr((size_t)BP::X);
+    double *y = bubbleData.getRowPtr((size_t)BP::Y);
+    double *z = bubbleData.getRowPtr((size_t)BP::Z);
+    double *r = bubbleData.getRowPtr((size_t)BP::R);
 
-    pinnedPointers[4] = bubbleData.getRowPtr((size_t)BP::Y_PRD);
-    pinnedPointers[5] = bubbleData.getRowPtr((size_t)BP::Y);
-    pinnedPointers[6] = bubbleData.getRowPtr((size_t)BP::DYDT);
-    pinnedPointers[7] = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *xPrd = bubbleData.getRowPtr((size_t)BP::X_PRD);
+    double *yPrd = bubbleData.getRowPtr((size_t)BP::Y_PRD);
+    double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
+    double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
 
-    int numArgs = NUM_DIM;
-    uint32_t offset = 8;
+    double *dxdt = bubbleData.getRowPtr((size_t)BP::DXDT);
+    double *dydt = bubbleData.getRowPtr((size_t)BP::DYDT);
+    double *dzdt = bubbleData.getRowPtr((size_t)BP::DZDT);
+    double *drdt = bubbleData.getRowPtr((size_t)BP::DRDT);
 
-#if (NUM_DIM == 3)
-    pinnedPointers[8] = bubbleData.getRowPtr((size_t)BP::Z_PRD);
-    pinnedPointers[9] = bubbleData.getRowPtr((size_t)BP::Z);
-    pinnedPointers[10] = bubbleData.getRowPtr((size_t)BP::DZDT);
-    pinnedPointers[11] = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
-
-    offset = 12;
-#endif
+    double *dxdtOld = bubbleData.getRowPtr((size_t)BP::DXDT_OLD);
+    double *dydtOld = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
+    double *dzdtOld = bubbleData.getRowPtr((size_t)BP::DZDT_OLD);
+    double *drdtOld = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
 
     if (useGasExchange)
     {
-        pinnedPointers[offset + 0] = bubbleData.getRowPtr((size_t)BP::R_PRD);
-        pinnedPointers[offset + 1] = bubbleData.getRowPtr((size_t)BP::R);
-        pinnedPointers[offset + 2] = bubbleData.getRowPtr((size_t)BP::DRDT);
-        pinnedPointers[offset + 3] = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
-
-        ++numArgs;
+        CUDA_LAUNCH(predictKernel, policy,
+                    numBubbles, timeStep,
+                    xPrd, x, dxdt, dxdtOld,
+                    yPrd, y, dydt, dydtOld,
+#if (NUM_DIM == 3)
+                    zPrd, z, dzdt, dzdtOld,
+#endif
+                    rPrd, r, drdt, drdtOld);
+    }
+    else
+    {
+        CUDA_LAUNCH(predictKernel, policy,
+                    numBubbles, timeStep,
+                    xPrd, x, dxdt, dxdtOld,
+                    yPrd, y, dydt, dydtOld
+#if (NUM_DIM == 3)
+                    ,
+                    zPrd, z, dzdt, dzdtOld
+#endif
+        );
     }
 
-    CUDA_LAUNCH(predictKernel2<numArgs>, policy, numBubbles, timeStep, devicePinnedPointers);
     CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
 }
 
@@ -506,7 +506,7 @@ double Simulator::doError()
     CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
     CUDA_CALL(cudaEventSynchronize(blockingEvent2));
 
-    return pinnedDouble[0];
+    return pinnedDouble.get()[0];
 }
 
 void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
@@ -709,7 +709,7 @@ void Simulator::updateCellsAndNeighbors()
     }
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
-    int numPairs = pinnedInt[0];
+    int numPairs = pinnedInt.get()[0];
     cubWrapper->sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
                                     const_cast<const int *>(pairs.getRowPtr(2)),
                                     pairs.getRowPtr(0),

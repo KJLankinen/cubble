@@ -66,6 +66,7 @@ class Simulator
 	std::vector<cudaStream_t> neighborStreamVec;
 	std::vector<cudaEvent_t> neighborEventVec;
 
+	// Host pointers to device global variables
 	int *mbpc = nullptr;
 	int *np = nullptr;
 	double *dtfapr = nullptr;
@@ -75,7 +76,6 @@ class Simulator
 	double *dir = nullptr;
 	double *dta = nullptr;
 	double *dasai = nullptr;
-	double **devicePinnedPointers = nullptr;
 
 	std::shared_ptr<Env> env;
 	std::shared_ptr<CubWrapper> cubWrapper;
@@ -88,7 +88,6 @@ class Simulator
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;
-	PinnedHostArray<double *> pinnedPointers;
 
 	std::vector<double> hostData;
 };
