@@ -29,6 +29,9 @@ __device__ void adamsBashforth2(int idx, double timeStep, double **pointers)
     adamsBashforth2<N - 1>(idx, timeStep, pointers);
 }
 
+template <>
+__device__ void adamsBashforth2<0>(int idx, double timeStep, double **pointers);
+
 template <int N>
 __global__ void predictKernel2(int numValues, double timeStep, double **pointers)
 {
