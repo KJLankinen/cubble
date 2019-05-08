@@ -78,9 +78,9 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     pinnedInt = PinnedHostArray<int>(1);
     pinnedDouble = PinnedHostArray<double>(1);
     pinnedPointers = PinnedHostArray<double *>((NUM_DIM + 1) * 4);
-    void *tempVoidPr = nullptr;
-    CUDA_CALL(cudaHostGetDevicePointer(&tempVoidPr, reinterpret_cast<void *>(pinnedPointers.get()), 0));
-    devicePinnedPointers = reinterpret_cast<double **>(tempVoidPr);
+    void *tempPtr = nullptr;
+    CUDA_CALL(cudaHostGetDevicePointer(&tempPtr, static_cast<void *>(pinnedPointers.get()), 0));
+    devicePinnedPointers = static_cast<double **>(tempPtr);
 
     printRelevantInfoOfCurrentDevice();
 }
@@ -285,6 +285,7 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
     pinnedPointers[6] = bubbleData.getRowPtr((size_t)BP::DYDT);
     pinnedPointers[7] = bubbleData.getRowPtr((size_t)BP::DYDT_OLD);
 
+    int numArgs = NUM_DIM;
     uint32_t offset = 8;
 
 #if (NUM_DIM == 3)
@@ -302,9 +303,11 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
         pinnedPointers[offset + 1] = bubbleData.getRowPtr((size_t)BP::R);
         pinnedPointers[offset + 2] = bubbleData.getRowPtr((size_t)BP::DRDT);
         pinnedPointers[offset + 3] = bubbleData.getRowPtr((size_t)BP::DRDT_OLD);
+
+        ++numArgs;
     }
 
-    CUDA_LAUNCH(predictKernel2<NUM_DIM + 1>, policy, numBubbles, timeStep, devicePinnedPointers);
+    CUDA_LAUNCH(predictKernel2<numArgs>, policy, numBubbles, timeStep, devicePinnedPointers);
     CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
 }
 
