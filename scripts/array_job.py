@@ -36,9 +36,7 @@ def main():
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 module purge\n\
-module load cuda/10.0.130\n\
-module load vtk/8.0.1-opengl2-osmesa-python2\n\
-module load gcc/6.3.0\n\
+module load cuda/10.0.130 vtk/8.0.1-opengl2-osmesa-python2 gcc/6.3.0\n\
 srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
@@ -104,9 +102,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 module purge\n\
-module load cuda/10.0.130\n\
-module load vtk/8.0.1-opengl2-osmesa-python2\n\
-module load gcc/6.3.0\n\
+module load cuda/10.0.130 vtk/8.0.1-opengl2-osmesa-python2 gcc/6.3.0\n\
 mkdir " + array_temp_dir + "\n\
 cd " + array_temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
