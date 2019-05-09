@@ -138,66 +138,66 @@ void Simulator::setupSimulation()
 
     double timeStep = env->getTimeStep();
 
-    CUDA_LAUNCH(resetKernel, defaultPolicy,
-                0.0, numBubbles,
-                dxdtOld,
-                dydtOld,
-                dzdtOld,
-                drdtOld,
-                bubbleData.getRowPtr((size_t)BP::MSD),
-                bubbleData.getRowPtr((size_t)BP::PATH_LENGTH));
+    KERNEL_LAUNCH(resetKernel, defaultPolicy,
+                  0.0, numBubbles,
+                  dxdtOld,
+                  dydtOld,
+                  dzdtOld,
+                  drdtOld,
+                  bubbleData.getRowPtr((size_t)BP::MSD),
+                  bubbleData.getRowPtr((size_t)BP::PATH_LENGTH));
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
+    KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
+                  env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                  interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+                  interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
-                ,
-                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
+                  ,
+                  interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
     );
 
-    CUDA_LAUNCH(eulerKernel, defaultPolicy,
-                numBubbles, timeStep,
-                x, dxdtOld,
-                y, dydtOld
+    KERNEL_LAUNCH(eulerKernel, defaultPolicy,
+                  numBubbles, timeStep,
+                  x, dxdtOld,
+                  y, dydtOld
 #if (NUM_DIM == 3)
-                ,
-                z, dzdtOld
+                  ,
+                  z, dzdtOld
 #endif
     );
 
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    CUDA_LAUNCH(boundaryWrapKernel, defaultPolicy,
-                numBubbles
+    KERNEL_LAUNCH(boundaryWrapKernel, defaultPolicy,
+                  numBubbles
 #if (PBC_X == 1)
-                ,
-                x, lbb.x, tfr.x
+                  ,
+                  x, lbb.x, tfr.x
 #endif
 #if (PBC_Y == 1)
-                ,
-                y, lbb.y, tfr.y
+                  ,
+                  y, lbb.y, tfr.y
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-                ,
-                z, lbb.z, tfr.z
+                  ,
+                  z, lbb.z, tfr.z
 #endif
     );
 #endif
 
-    CUDA_LAUNCH(resetKernel, defaultPolicy,
-                0.0, numBubbles,
-                dxdtOld, dydtOld, dzdtOld, drdtOld);
+    KERNEL_LAUNCH(resetKernel, defaultPolicy,
+                  0.0, numBubbles,
+                  dxdtOld, dydtOld, dzdtOld, drdtOld);
 
-    CUDA_LAUNCH(velocityPairKernel, pairPolicy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
-                interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
-                interval.y, lbb.y, PBC_Y == 1, y, dydtOld
+    KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
+                  env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), r,
+                  interval.x, lbb.x, PBC_X == 1, x, dxdtOld,
+                  interval.y, lbb.y, PBC_Y == 1, y, dydtOld
 #if (NUM_DIM == 3)
-                ,
-                interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
+                  ,
+                  interval.z, lbb.z, PBC_Z == 1, z, dzdtOld
 #endif
     );
 }
@@ -239,15 +239,15 @@ bool Simulator::integrate(bool useGasExchange)
     } while (error > env->getErrorTolerance());
 
     const dvec interval = env->getTfr() - env->getLbb();
-    CUDA_CALL(pathLengthDistanceKernel, defaultPolicy,
-              numBubbles,
-              bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
-              bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
-              bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PREV), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
-              bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PREV), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
+    KERNEL_LAUNCH(pathLengthDistanceKernel, defaultPolicy,
+                  numBubbles,
+                  bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
+                  bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
+                  bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PREV), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
+                  bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PREV), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
 #if (NUM_DIM == 3)
-              ,
-              bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PREV), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
+                  ,
+                  bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PREV), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
 #endif
     );
     doBoundaryWrap(defaultPolicy);
@@ -303,24 +303,24 @@ void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, boo
 
     if (useGasExchange)
     {
-        CUDA_LAUNCH(predictKernel, policy,
-                    numBubbles, timeStep,
-                    xPrd, x, dxdt, dxdtOld,
-                    yPrd, y, dydt, dydtOld,
+        KERNEL_LAUNCH(predictKernel, policy,
+                      numBubbles, timeStep,
+                      xPrd, x, dxdt, dxdtOld,
+                      yPrd, y, dydt, dydtOld,
 #if (NUM_DIM == 3)
-                    zPrd, z, dzdt, dzdtOld,
+                      zPrd, z, dzdt, dzdtOld,
 #endif
-                    rPrd, r, drdt, drdtOld);
+                      rPrd, r, drdt, drdtOld);
     }
     else
     {
-        CUDA_LAUNCH(predictKernel, policy,
-                    numBubbles, timeStep,
-                    xPrd, x, dxdt, dxdtOld,
-                    yPrd, y, dydt, dydtOld
+        KERNEL_LAUNCH(predictKernel, policy,
+                      numBubbles, timeStep,
+                      xPrd, x, dxdt, dxdtOld,
+                      yPrd, y, dydt, dydtOld
 #if (NUM_DIM == 3)
-                    ,
-                    zPrd, z, dzdt, dzdtOld
+                      ,
+                      zPrd, z, dzdt, dzdtOld
 #endif
         );
     }
@@ -354,24 +354,24 @@ void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, boo
 
     if (useGasExchange)
     {
-        CUDA_LAUNCH(correctKernel, policy,
-                    numBubbles, timeStep, errors,
-                    xPrd, x, dxdt, dxdtPrd,
-                    yPrd, y, dydt, dydtPrd,
+        KERNEL_LAUNCH(correctKernel, policy,
+                      numBubbles, timeStep, errors,
+                      xPrd, x, dxdt, dxdtPrd,
+                      yPrd, y, dydt, dydtPrd,
 #if (NUM_DIM == 3)
-                    zPrd, z, dzdt, dzdtPrd,
+                      zPrd, z, dzdt, dzdtPrd,
 #endif
-                    rPrd, r, drdt, drdtPrd);
+                      rPrd, r, drdt, drdtPrd);
     }
     else
     {
-        CUDA_LAUNCH(correctKernel, policy,
-                    numBubbles, timeStep, errors,
-                    xPrd, x, dxdt, dxdtPrd,
-                    yPrd, y, dydt, dydtPrd
+        KERNEL_LAUNCH(correctKernel, policy,
+                      numBubbles, timeStep, errors,
+                      xPrd, x, dxdt, dxdtPrd,
+                      yPrd, y, dydt, dydtPrd
 #if (NUM_DIM == 3)
-                    ,
-                    zPrd, z, dzdt, dzdtPrd
+                      ,
+                      zPrd, z, dzdt, dzdtPrd
 #endif
         );
     }
@@ -401,31 +401,31 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     const dvec lbb = env->getLbb();
     const dvec interval = tfr - lbb;
 
-    CUDA_LAUNCH(gasExchangeKernel, policy,
-                numBubbles,
-                env->getPi(),
-                pairs.getRowPtr(0),
-                pairs.getRowPtr(1),
-                rPrd,
-                drdtPrd,
-                freeArea,
-                interval.x, PBC_X == 1, xPrd,
-                interval.y, PBC_Y == 1, yPrd
+    KERNEL_LAUNCH(gasExchangeKernel, policy,
+                  numBubbles,
+                  env->getPi(),
+                  pairs.getRowPtr(0),
+                  pairs.getRowPtr(1),
+                  rPrd,
+                  drdtPrd,
+                  freeArea,
+                  interval.x, PBC_X == 1, xPrd,
+                  interval.y, PBC_Y == 1, yPrd
 #if (NUM_DIM == 3)
-                ,
-                interval.z, PBC_Z == 1, zPrd
+                  ,
+                  interval.z, PBC_Z == 1, zPrd
 #endif
     );
 
-    CUDA_LAUNCH(freeAreaKernel, gasExchangePolicy,
-                numBubbles, env->getPi(), rPrd, freeArea, errors, volume);
+    KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
+                  numBubbles, env->getPi(), rPrd, freeArea, errors, volume);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, errors, dtfapr, numBubbles, gasExchangePolicy.stream);
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, freeArea, dtfa, numBubbles, gasExchangePolicy.stream);
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volume, dta, numBubbles, gasExchangePolicy.stream);
 
-    CUDA_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
+    KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
+                  drdtPrd, rPrd, freeArea, numBubbles, 1.0 / env->getPi(), env->getKappa(), env->getKParameter());
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
@@ -445,30 +445,30 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
     double *dydtPrd = bubbleData.getRowPtr((size_t)BP::DYDT_PRD);
     double *dzdtPrd = bubbleData.getRowPtr((size_t)BP::DZDT_PRD);
 
-    CUDA_LAUNCH(velocityPairKernel, policy,
-                env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
-                interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
-                interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
+    KERNEL_LAUNCH(velocityPairKernel, policy,
+                  env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd,
+                  interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd,
+                  interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #if (NUM_DIM == 3)
-                ,
-                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
+                  ,
+                  interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
     );
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    CUDA_LAUNCH(velocityWallKernel, policy,
-                numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd
+    KERNEL_LAUNCH(velocityWallKernel, policy,
+                  numBubbles, env->getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), rPrd
 #if (PBC_X == 0)
-                ,
-                interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd
+                  ,
+                  interval.x, lbb.x, PBC_X == 1, xPrd, dxdtPrd
 #endif
 #if (PBC_Y == 0)
-                ,
-                interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
+                  ,
+                  interval.y, lbb.y, PBC_Y == 1, yPrd, dydtPrd
 #endif
 #if (NUM_DIM == 3 && PBC_Z == 0)
-                ,
-                interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
+                  ,
+                  interval.z, lbb.z, PBC_Z == 1, zPrd, dzdtPrd
 #endif
     );
 #endif
@@ -482,23 +482,23 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
     double *flowVelocityY = bubbleData.getRowPtr((size_t)BP::FREE_AREA);
     double *flowVelocityZ = bubbleData.getRowPtr((size_t)BP::ERROR);
 
-    CUDA_LAUNCH(neighborVelocityKernel, policy,
-                pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
-                flowVelocityX, dxdtOld,
-                flowVelocityY, dydtOld
+    KERNEL_LAUNCH(neighborVelocityKernel, policy,
+                  pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
+                  flowVelocityX, dxdtOld,
+                  flowVelocityY, dydtOld
 #if (NUM_DIM == 3)
-                ,
-                flowVelocityZ, dzdtOld
+                  ,
+                  flowVelocityZ, dzdtOld
 #endif
     );
 
-    CUDA_LAUNCH(flowVelocityKernel, policy,
-                numBubbles, numNeighbors,
-                flowVelocityX, dxdtPrd,
-                flowVelocityY, dydtPrd
+    KERNEL_LAUNCH(flowVelocityKernel, policy,
+                  numBubbles, numNeighbors,
+                  flowVelocityX, dxdtPrd,
+                  flowVelocityY, dydtPrd
 #if (NUM_DIM == 3)
-                ,
-                flowVelocityZ, dzdtPrd
+                  ,
+                  flowVelocityZ, dzdtPrd
 #endif
     );
 #endif
@@ -506,14 +506,14 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
 
 void Simulator::doReset(const ExecutionPolicy &policy)
 {
-    CUDA_LAUNCH(resetKernel, policy,
-                0.0, numBubbles,
-                bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::FREE_AREA),
-                bubbleData.getRowPtr((size_t)BP::ENERGY));
+    KERNEL_LAUNCH(resetKernel, policy,
+                  0.0, numBubbles,
+                  bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+                  bubbleData.getRowPtr((size_t)BP::ENERGY));
 }
 
 double Simulator::doError()
@@ -536,19 +536,19 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
     double *zPrd = bubbleData.getRowPtr((size_t)BP::Z_PRD);
 
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    CUDA_LAUNCH(boundaryWrapKernel, policy,
-                numBubbles
+    KERNEL_LAUNCH(boundaryWrapKernel, policy,
+                  numBubbles
 #if (PBC_X == 1)
-                ,
-                xPrd, lbb.x, tfr.x, wrappedFlags.getRowPtr(0)
+                  ,
+                  xPrd, lbb.x, tfr.x, wrappedFlags.getRowPtr(0)
 #endif
 #if (PBC_Y == 1)
-                                        ,
-                yPrd, lbb.y, tfr.y, wrappedFlags.getRowPtr(1)
+                                          ,
+                  yPrd, lbb.y, tfr.y, wrappedFlags.getRowPtr(1)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-                                        ,
-                zPrd, lbb.z, tfr.z, wrappedFlags.getRowPtr(2)
+                                          ,
+                  zPrd, lbb.z, tfr.z, wrappedFlags.getRowPtr(2)
 #endif
     );
 #endif
@@ -559,11 +559,11 @@ void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamT
     double *rPrd = bubbleData.getRowPtr((size_t)BP::R_PRD);
     policy.stream = streamToUse;
 
-    CUDA_LAUNCH(setFlagIfGreaterThanConstantKernel, policy,
-                numBubbles,
-                aboveMinRadFlags.getRowPtr(0),
-                rPrd,
-                env->getMinRad());
+    KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, policy,
+                  numBubbles,
+                  aboveMinRadFlags.getRowPtr(0),
+                  rPrd,
+                  env->getMinRad());
 
     cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, streamToUse);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, streamToUse));
@@ -615,10 +615,10 @@ void Simulator::generateBubbles()
 #if (NUM_DIM == 3)
     assert(bubblesPerDimAtStart.z > 0);
 #endif
-    CUDA_LAUNCH(assignDataToBubbles, defaultPolicy,
-                x, y, z, xPrd, yPrd, zPrd, r, w,
-                aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
-                tfr, lbb, avgRad, env->getMinRad(), env->getPi(), numBubbles);
+    KERNEL_LAUNCH(assignDataToBubbles, defaultPolicy,
+                  x, y, z, xPrd, yPrd, zPrd, r, w,
+                  aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
+                  tfr, lbb, avgRad, env->getMinRad(), env->getPi(), numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, w, dasai, numBubbles, defaultPolicy.stream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(w), static_cast<void *>(r),
@@ -647,8 +647,8 @@ void Simulator::updateCellsAndNeighbors()
     defaultPolicy.blockSize = dim3(128, 1, 1);
     defaultPolicy.gridSize = dim3(256, 1, 1);
     ExecutionPolicy asyncCopyDDPolicy(128, numBubbles, 0, nonBlockingStream1);
-    CUDA_LAUNCH(assignBubblesToCells, defaultPolicy,
-                x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
+    KERNEL_LAUNCH(assignBubblesToCells, defaultPolicy,
+                  x, y, z, bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), env->getLbb(), env->getTfr(), cellDim, numBubbles);
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
@@ -674,23 +674,23 @@ void Simulator::updateCellsAndNeighbors()
     cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, numCells);
     CUDA_CALL(cudaEventRecord(blockingEvent2));
 
-    CUDA_LAUNCH(reorganizeKernel, asyncCopyDDPolicy,
-                numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
-                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
-                bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
-                bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
-                bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
-                bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
-                bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
-                bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
-                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME),
-                wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
-                wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
-                wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
+    KERNEL_LAUNCH(reorganizeKernel, asyncCopyDDPolicy,
+                  numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
+                  bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
+                  bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
+                  bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
+                  bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
+                  bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+                  bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
+                  bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME),
+                  wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
+                  wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
+                  wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
@@ -720,14 +720,14 @@ void Simulator::updateCellsAndNeighbors()
         findPolicy.stream = neighborStreamVec[i];
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent1, 0));
         CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent2, 0));
-        CUDA_LAUNCH(neighborSearch, findPolicy,
-                    i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
-                    offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,
-                    interval.x, PBC_X == 1, x,
-                    interval.y, PBC_Y == 1, y
+        KERNEL_LAUNCH(neighborSearch, findPolicy,
+                      i, numBubbles, numCells, static_cast<int>(pairs.getWidth()),
+                      offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), r,
+                      interval.x, PBC_X == 1, x,
+                      interval.y, PBC_Y == 1, y
 #if (NUM_DIM == 3)
-                    ,
-                    interval.z, PBC_Z == 1, z
+                      ,
+                      interval.z, PBC_Z == 1, z
 #endif
         );
 
@@ -769,35 +769,35 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
     double *volumes = bubbleData.getRowPtr((size_t)BP::VOLUME);
 
     CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
-    CUDA_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
-                volumes, r, flag, env->getPi(), numBubbles);
+    KERNEL_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
+                  volumes, r, flag, env->getPi(), numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, volumes, dtv, numBubbles);
 
     int *newIdx = aboveMinRadFlags.getRowPtr(1);
     cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
-    CUDA_LAUNCH(reorganizeKernel, defaultPolicy,
-                numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, flag,
-                bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
-                bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
-                bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
-                bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
-                bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
-                bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
-                bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
-                bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
-                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
+    KERNEL_LAUNCH(reorganizeKernel, defaultPolicy,
+                  numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, flag,
+                  bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PRD),
+                  bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PRD),
+                  bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PRD),
+                  bubbleData.getRowPtr((size_t)BP::R), bubbleData.getRowPtr((size_t)BP::R_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DXDT), bubbleData.getRowPtr((size_t)BP::DXDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DYDT), bubbleData.getRowPtr((size_t)BP::DYDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DZDT), bubbleData.getRowPtr((size_t)BP::DZDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DRDT), bubbleData.getRowPtr((size_t)BP::DRDT_PRD),
+                  bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
+                  bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
+                  bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
+                  bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
                               sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice));
 
     numBubbles = numBubblesAboveMinRad;
-    CUDA_LAUNCH(addVolume, defaultPolicy, r, numBubbles);
+    KERNEL_LAUNCH(addVolume, defaultPolicy, r, numBubbles);
 
     NVTX_RANGE_POP();
 }
@@ -833,17 +833,17 @@ void Simulator::calculateEnergy()
     const dvec lbb = env->getLbb();
     const dvec interval = tfr - lbb;
 
-    CUDA_LAUNCH(potentialEnergyKernel, pairPolicy,
-                numBubbles,
-                pairs.getRowPtr(0),
-                pairs.getRowPtr(1),
-                bubbleData.getRowPtr((size_t)BP::R),
-                bubbleData.getRowPtr((size_t)BP::ENERGY),
-                interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
-                interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
+    KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
+                  numBubbles,
+                  pairs.getRowPtr(0),
+                  pairs.getRowPtr(1),
+                  bubbleData.getRowPtr((size_t)BP::R),
+                  bubbleData.getRowPtr((size_t)BP::ENERGY),
+                  interval.x, PBC_X == 1, bubbleData.getRowPtr((size_t)BP::X),
+                  interval.y, PBC_Y == 1, bubbleData.getRowPtr((size_t)BP::Y)
 #if (NUM_DIM == 3)
-                                            ,
-                interval.z, PBC_Z == 1, bubbleData.getRowPtr((size_t)BP::Z)
+                                              ,
+                  interval.z, PBC_Z == 1, bubbleData.getRowPtr((size_t)BP::Z)
 #endif
     );
 
@@ -857,8 +857,8 @@ double Simulator::getVolumeOfBubbles()
     ExecutionPolicy defaultPolicy(128, numBubbles);
     double *r = bubbleData.getRowPtr((size_t)BP::R);
     double *volPtr = bubbleData.getRowPtr((size_t)BP::VOLUME);
-    CUDA_LAUNCH(calculateVolumes, defaultPolicy,
-                r, volPtr, numBubbles, env->getPi());
+    KERNEL_LAUNCH(calculateVolumes, defaultPolicy,
+                  r, volPtr, numBubbles, env->getPi());
     double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, volPtr, numBubbles);
 
     return volume;
@@ -890,11 +890,11 @@ void Simulator::transformPositions(bool normalize)
     policy.stream = 0;
     policy.sharedMemBytes = 0;
 
-    CUDA_LAUNCH(transformPositionsKernel, policy,
-                normalize, numBubbles, env->getLbb(), env->getTfr(),
-                bubbleData.getRowPtr((size_t)BP::X),
-                bubbleData.getRowPtr((size_t)BP::Y),
-                bubbleData.getRowPtr((size_t)BP::Z));
+    KERNEL_LAUNCH(transformPositionsKernel, policy,
+                  normalize, numBubbles, env->getLbb(), env->getTfr(),
+                  bubbleData.getRowPtr((size_t)BP::X),
+                  bubbleData.getRowPtr((size_t)BP::Y),
+                  bubbleData.getRowPtr((size_t)BP::Z));
 }
 
 double getAverageProperty(BubbleProperty property)
