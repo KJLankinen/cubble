@@ -306,29 +306,21 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         randomOffset.z = z[i];
         pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
 #endif
-        pos *= tfr - lbb;
+        dvec interval = tfr - lbb;
+        pos *= interval;
         randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
         pos += randomOffset;
 
-        x[i] = pos.x;
-        y[i] = pos.y;
-        z[i] = pos.z;
+        r[i] = r[i] > 0 ? r[i] : -r[i];
+
+        x[i] = pos.x > lbb.x ? (pos.x < tfr.x ? pos.x : pos.x - interval.x) : pos.x + interval.x;
+        y[i] = pos.y > lbb.y ? (pos.y < tfr.y ? pos.y : pos.y - interval.y) : pos.y + interval.y;
+        z[i] = pos.z > lbb.z ? (pos.z < tfr.z ? pos.z : pos.z - interval.z) : pos.z + interval.z;
 
         xPrd[i] = pos.x;
         yPrd[i] = pos.y;
         zPrd[i] = pos.z;
 
-        wrapAround(i,
-                   x, lbb.x, tfr.x,
-                   y, lbb.y, tfr.y,
-#if (NUM_DIM == 3)
-                   z, lbb.z, tfr.z,
-                   zPrd, lbb.z, tfr.z,
-#endif
-                   xPrd, lbb.x, tfr.x,
-                   yPrd, lbb.y, tfr.y);
-
-        r[i] = r[i] > 0 ? r[i] : -r[i];
         w[i] = 2.0 * pi * r[i] / numValues;
 
 #if (NUM_DIM == 3)

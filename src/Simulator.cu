@@ -238,18 +238,22 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
 
-    const dvec interval = env->getTfr() - env->getLbb();
-    KERNEL_LAUNCH(pathLengthDistanceKernel, defaultPolicy,
-                  numBubbles,
-                  bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
-                  bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
-                  bubbleData.getRowPtr((size_t)BP::X_PRD), bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
-                  bubbleData.getRowPtr((size_t)BP::Y_PRD), bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
+    // Holy crap this is ugly. Anyway, don't do the calculations, when stabilizing/equilibrating.
+    if (useGasExchange)
+    {
+        const dvec interval = env->getTfr() - env->getLbb();
+        KERNEL_LAUNCH(pathLengthDistanceKernel, defaultPolicy,
+                      numBubbles,
+                      bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
+                      bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
+                      bubbleData.getRowPtr((size_t)BP::X_PRD), bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
+                      bubbleData.getRowPtr((size_t)BP::Y_PRD), bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
 #if (NUM_DIM == 3)
-                  ,
-                  bubbleData.getRowPtr((size_t)BP::Z_PRD), bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
+                      ,
+                      bubbleData.getRowPtr((size_t)BP::Z_PRD), bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
 #endif
-    );
+        );
+    }
     doBoundaryWrap(defaultPolicy);
     doBubbleSizeChecks(defaultPolicy, nonBlockingStream1, blockingEvent1);
     updateData();
