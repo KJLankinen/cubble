@@ -219,11 +219,11 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first, int *seco
     }
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue);
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, bool *wrappedFlags);
 template <typename... Args>
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, Args... args)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, bool *wrappedFlags, Args... args)
 {
-    wrapAround(idx, coordinate, minValue, maxValue);
+    wrapAround(idx, coordinate, minValue, maxValue, wrappedFlags);
     wrapAround(idx, args...);
 }
 
@@ -541,6 +541,31 @@ __global__ void eulerKernel(int numValues, double timeStep, Args... args)
     const int tid = getGlobalTid();
     if (tid < numValues)
         eulerIntegrate(tid, timeStep, args...);
+}
+
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval);
+template <typename... Args>
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval, Args... args)
+{
+    return calculateDistanceFromStart(idx, args...) + calculateDistanceFromStart(idx, x, xPrev, xStart, wrapped, interval);
+}
+
+__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval);
+template <typename... Args>
+__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval, Args... args)
+{
+    return calculatePathLength(idx, args...) + calculatePathLength(idx, x, xPrev, xStart, wrapped, interval);
+}
+
+template <typename... Args>
+__global__ void pathLengthDistanceKernel(int numValues, double *pathLengths, double *squaredDistances, Args... args)
+{
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+    {
+        pathLengths[tid] = sqrt(calculatePathLength(tid, args...));
+        squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
+    }
 }
 
 }

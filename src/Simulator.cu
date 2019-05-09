@@ -45,6 +45,8 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     aboveMinRadFlags = DeviceArray<int>(numBubbles, 2u);
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4u);
     pairs = DeviceArray<int>(8 * numBubbles, 4u);
+    wrappedFlags = DeviceArray<bool>(numBubbles, 6);
+    CUDA_CALL(cudaMemset(wrappedFlags.get(), 0, wrappedFlags.getSizeInBytes()));
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -138,7 +140,12 @@ void Simulator::setupSimulation()
 
     CUDA_LAUNCH(resetKernel, defaultPolicy,
                 0.0, numBubbles,
-                dxdtOld, dydtOld, dzdtOld, drdtOld);
+                dxdtOld,
+                dydtOld,
+                dzdtOld,
+                drdtOld,
+                bubbleData.getRowPtr((size_t)BP::MSD),
+                bubbleData.getRowPtr((size_t)BP::PATH_LENGTH));
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
@@ -231,6 +238,18 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_POP();
     } while (error > env->getErrorTolerance());
 
+    const dvec interval = env->getTfr() - env->getLbb();
+    CUDA_CALL(pathLengthDistanceKernel, defaultPolicy,
+              numBubbles,
+              bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
+              bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
+              bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PREV), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
+              bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PREV), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
+#if (NUM_DIM == 3)
+              ,
+              bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PREV), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
+#endif
+    );
     doBoundaryWrap(defaultPolicy);
     doBubbleSizeChecks(defaultPolicy, nonBlockingStream1, blockingEvent1);
     updateData();
@@ -521,15 +540,15 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
                 numBubbles
 #if (PBC_X == 1)
                 ,
-                xPrd, lbb.x, tfr.x
+                xPrd, lbb.x, tfr.x, wrappedFlags.getRowPtr(0)
 #endif
 #if (PBC_Y == 1)
-                ,
-                yPrd, lbb.y, tfr.y
+                                        ,
+                yPrd, lbb.y, tfr.y, wrappedFlags.getRowPtr(1)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-                ,
-                zPrd, lbb.z, tfr.z
+                                        ,
+                zPrd, lbb.z, tfr.z, wrappedFlags.getRowPtr(2)
 #endif
     );
 #endif
@@ -668,10 +687,20 @@ void Simulator::updateCellsAndNeighbors()
                 bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
                 bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
                 bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
-                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
+                bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME),
+                wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
+                wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
+                wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
+
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
                               sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              cudaMemcpyDeviceToDevice,
+                              nonBlockingStream1));
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrappedFlags.getRowPtr(0)),
+                              static_cast<void *>(wrappedFlags.getRowPtr(3)),
+                              wrappedFlags.getSizeInBytes() / 2,
                               cudaMemcpyDeviceToDevice,
                               nonBlockingStream1));
 
@@ -835,15 +864,6 @@ double Simulator::getVolumeOfBubbles()
     return volume;
 }
 
-double Simulator::getAverageRadius()
-{
-    double *r = bubbleData.getRowPtr((size_t)BP::R);
-    double avgRad = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, r, numBubbles);
-    avgRad /= numBubbles;
-
-    return avgRad;
-}
-
 void Simulator::getBubbleData(std::vector<double> &hostSoA, size_t &numComp, size_t &memoryStride) const
 {
     double *devX = bubbleData.getRowPtr((size_t)BP::X);
@@ -875,5 +895,20 @@ void Simulator::transformPositions(bool normalize)
                 bubbleData.getRowPtr((size_t)BP::X),
                 bubbleData.getRowPtr((size_t)BP::Y),
                 bubbleData.getRowPtr((size_t)BP::Z));
+}
+
+double getAverageProperty(BubbleProperty property)
+{
+    return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, bubbleData.getRowPtr((size_t)property), numBubbles) / numBubbles;
+}
+
+void setStartingPositions()
+{
+    const size_t numBytesToCopy = 3 * sizeof(double) * bubbleData.getWidth();
+
+    double *src = bubbleData.getRowPtr((size_t)BP::X);
+    double *dst = bubbleData.getRowPtr((size_t)BP::X_START);
+
+    CUDA_CALL(cudaMemcpy(dst, src, numBytesToCopy, cudaMemcpyDeviceToDevice));
 }
 } // namespace cubble

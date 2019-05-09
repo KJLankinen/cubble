@@ -161,17 +161,12 @@ void CubbleApp::runSimulation()
     std::cout << "==========\nSimulation\n==========" << std::endl;
 
     simulator->setSimulationTime(0);
+    simulator->setStartingPositions();
 
     int numSteps = 0;
     int timesPrinted = 1;
     bool stopSimulation = false;
-
     std::stringstream dataStream;
-    dataStream << env->getDataFilename();
-
-    std::string filename(dataStream.str());
-    dataStream.clear();
-    dataStream.str("");
 
     while (!stopSimulation)
     {
@@ -194,12 +189,14 @@ void CubbleApp::runSimulation()
         if ((int)scaledTime >= timesPrinted)
         {
             double phi = simulator->getVolumeOfBubbles() / env->getSimulationBoxVolume();
-            double relativeRadius = simulator->getAverageRadius() / env->getAvgRad();
+            double relativeRadius = simulator->getAverageProperty(BubbleProperty::R) / env->getAvgRad();
             dataStream << scaledTime
                        << " " << relativeRadius
                        << " " << simulator->getMaxBubbleRadius() / env->getAvgRad()
                        << " " << simulator->getNumBubbles()
                        << " " << 1.0 / (simulator->getInvRho() * env->getAvgRad())
+                       << " " << simulator->getAverageProperty(BubbleProperty::SQUARED_DISTANCE)
+                       << " " << simulator->getAverageProperty(BubbleProperty::PATH_LENGTH)
                        << "\n";
 
             std::cout << "t*: " << scaledTime
@@ -218,7 +215,7 @@ void CubbleApp::runSimulation()
         ++numSteps;
     }
 
-    std::ofstream file(filename);
+    std::ofstream file(env->getDataFilename());
     file << dataStream.str() << std::endl;
 }
 

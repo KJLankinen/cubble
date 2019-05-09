@@ -29,12 +29,13 @@ class Simulator
 	bool integrate(bool useGasExchange = false);
 	void calculateEnergy();
 	double getVolumeOfBubbles();
-	double getAverageRadius();
 	void getBubbleData(std::vector<double> &hostSoA, size_t &numComp, size_t &memoryStride) const;
 	int getNumBubbles() const { return numBubbles; }
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
 	void transformPositions(bool normalize);
+	double getAverageProperty(BubbleProperty property);
+	void setStartingPositions();
 
   private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
@@ -85,6 +86,7 @@ class Simulator
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
 	DeviceArray<int> pairs;
+	DeviceArray<bool> wrappedFlags;
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;
@@ -123,6 +125,12 @@ enum class BubbleProperty
 	FREE_AREA,
 	ERROR,
 	VOLUME,
+
+	X_START,
+	Y_START,
+	Z_START,
+	PATH_LENGTH,
+	SQUARED_DISTANCE,
 
 	NUM_VALUES
 };

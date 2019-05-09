@@ -221,11 +221,12 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
     return idxVec;
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, bool *wrappedFlags)
 {
     const double interval = maxValue - minValue;
     double value = coordinate[idx];
     value = value < minValue ? value + interval : (value > maxValue ? value - interval : value);
+    wrappedFlags[idx] = coordinate[idx] != value ? !wrappedFlags[idx] : wrappedFlags[idx];
     coordinate[idx] = value;
 }
 
@@ -419,17 +420,28 @@ __device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *
 
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext)
 {
-    const double yTemp = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
-    double error = yTemp - yNext[idx];
-    error = error < 0 ? -error : error;
-    yNext[idx] = yTemp;
+    const double error = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]) - yNext[idx];
+    yNext[idx] += error;
 
-    return error;
+    return error < 0 ? -error : error;
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
 {
     y[idx] += f[idx] * timeStep;
+}
+
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval)
+{
+    double distance = x[idx] - xStart[idx];
+    distance = wrapped[idx] ? (interval + (distance < 0 ? distance : -distance)) : distance;
+    return distance * distance;
+}
+
+__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval)
+{
+    const double diff = x[idx] - xPrev[idx];
+    return diff * diff;
 }
 
 } // namespace cubble
