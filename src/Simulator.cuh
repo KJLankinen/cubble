@@ -111,6 +111,12 @@ enum class BubbleProperty
 	DZDT_OLD,
 	DRDT_OLD,
 
+	X_START,
+	Y_START,
+	Z_START,
+	PATH_LENGTH,
+	SQUARED_DISTANCE,
+
 	X_PRD,
 	Y_PRD,
 	Z_PRD,
@@ -126,11 +132,11 @@ enum class BubbleProperty
 	ERROR,
 	VOLUME,
 
-	X_START,
-	Y_START,
-	Z_START,
-	PATH_LENGTH,
-	SQUARED_DISTANCE,
+	TEMP1,
+	TEMP2,
+	TEMP3,
+	TEMP4,
+	TEMP5,
 
 	NUM_VALUES
 };

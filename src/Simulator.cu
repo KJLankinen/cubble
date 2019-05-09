@@ -692,6 +692,11 @@ void Simulator::updateCellsAndNeighbors()
                   bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
                   bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
                   bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME),
+                  bubbleData.getRowPtr((size_t)BP::START_X), bubbleData.getRowPtr((size_t)BP::TEMP1),
+                  bubbleData.getRowPtr((size_t)BP::START_Y), bubbleData.getRowPtr((size_t)BP::TEMP2),
+                  bubbleData.getRowPtr((size_t)BP::START_Z), bubbleData.getRowPtr((size_t)BP::TEMP3),
+                  bubbleData.getRowPtr((size_t)BP::PATH_LENGTH), bubbleData.getRowPtr((size_t)BP::TEMP4),
+                  bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE), bubbleData.getRowPtr((size_t)BP::TEMP5),
                   wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
                   wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
                   wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
