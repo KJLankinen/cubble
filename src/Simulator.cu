@@ -144,7 +144,7 @@ void Simulator::setupSimulation()
                   dydtOld,
                   dzdtOld,
                   drdtOld,
-                  bubbleData.getRowPtr((size_t)BP::MSD),
+                  bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
                   bubbleData.getRowPtr((size_t)BP::PATH_LENGTH));
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
@@ -174,15 +174,15 @@ void Simulator::setupSimulation()
                   numBubbles
 #if (PBC_X == 1)
                   ,
-                  x, lbb.x, tfr.x
+                  x, lbb.x, tfr.x, wrappedFlags.getRowPtr(3)
 #endif
 #if (PBC_Y == 1)
-                  ,
-                  y, lbb.y, tfr.y
+                                       ,
+                  y, lbb.y, tfr.y, wrappedFlags.getRowPtr(4)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-                  ,
-                  z, lbb.z, tfr.z
+                                       ,
+                  z, lbb.z, tfr.z, wrappedFlags.getRowPtr(5)
 #endif
     );
 #endif
@@ -243,11 +243,11 @@ bool Simulator::integrate(bool useGasExchange)
                   numBubbles,
                   bubbleData.getRowPtr((size_t)BP::PATH_LENGTH),
                   bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE),
-                  bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_PREV), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
-                  bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_PREV), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
+                  bubbleData.getRowPtr((size_t)BP::X_PRD), bubbleData.getRowPtr((size_t)BP::X), bubbleData.getRowPtr((size_t)BP::X_START), wrappedFlags.getRowPtr(0), interval.x,
+                  bubbleData.getRowPtr((size_t)BP::Y_PRD), bubbleData.getRowPtr((size_t)BP::Y), bubbleData.getRowPtr((size_t)BP::Y_START), wrappedFlags.getRowPtr(1), interval.y
 #if (NUM_DIM == 3)
                   ,
-                  bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_PREV), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
+                  bubbleData.getRowPtr((size_t)BP::Z_PRD), bubbleData.getRowPtr((size_t)BP::Z), bubbleData.getRowPtr((size_t)BP::Z_START), wrappedFlags.getRowPtr(2), interval.z
 #endif
     );
     doBoundaryWrap(defaultPolicy);
@@ -897,12 +897,12 @@ void Simulator::transformPositions(bool normalize)
                   bubbleData.getRowPtr((size_t)BP::Z));
 }
 
-double getAverageProperty(BubbleProperty property)
+double Simulator::getAverageProperty(BubbleProperty property)
 {
     return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, bubbleData.getRowPtr((size_t)property), numBubbles) / numBubbles;
 }
 
-void setStartingPositions()
+void Simulator::setStartingPositions()
 {
     const size_t numBytesToCopy = 3 * sizeof(double) * bubbleData.getWidth();
 
