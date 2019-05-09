@@ -563,7 +563,7 @@ __global__ void pathLengthDistanceKernel(int numValues, double *pathLengths, dou
     const int tid = getGlobalTid();
     if (tid < numValues)
     {
-        pathLengths[tid] = sqrt(calculatePathLength(tid, args...));
+        pathLengths[tid] += sqrt(calculatePathLength(tid, args...));
         squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
     }
 }
