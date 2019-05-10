@@ -215,7 +215,7 @@ void Simulator::run()
     simulationTime = 0;
     setStartingPositions();
 
-    int numSteps = 0;
+    numSteps = 0;
     int timesPrinted = 1;
     bool stopSimulation = false;
     std::stringstream dataStream;
