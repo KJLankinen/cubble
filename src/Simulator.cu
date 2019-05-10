@@ -646,7 +646,7 @@ void Simulator::doReset(const ExecutionPolicy &policy)
                   adp.dzdtP,
                   adp.drdtP,
                   adp.dummy1,
-                  adp.dummy2;
+                  adp.dummy2);
 }
 
 double Simulator::doError()
