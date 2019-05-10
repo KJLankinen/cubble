@@ -14,6 +14,13 @@
 #include <curand.h>
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
+#include <vtk-8.0/vtkPoints.h>
+#include <vtk-8.0/vtkSmartPointer.h>
+#include <vtk-8.0/vtkDoubleArray.h>
+#include <vtk-8.0/vtkUnstructuredGrid.h>
+#include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
+#include <vtk-8.0/vtkFieldData.h>
+#include <vtk-8.0/vtkPointData.h>
 
 namespace cubble
 {
@@ -203,7 +210,7 @@ void Simulator::run()
 {
     std::cout << "==========\nSimulation\n==========" << std::endl;
 
-    imulationTime = 0;
+    simulationTime = 0;
     setStartingPositions();
 
     int numSteps = 0;
@@ -1114,8 +1121,8 @@ void Simulator::saveSnapshotToFile()
     dataSet->GetFieldData()->AddArray(timeArray);
 
     // Points
-    size_t numComponents = 7;
-    size_t memoryStride = bubbleData.getWidth();
+    const size_t numComp = 7;
+    const size_t memoryStride = bubbleData.getWidth();
     double *devX = bubbleData.getRowPtr((size_t)BP::X);
     hostData.clear();
     hostData.resize(memoryStride * numComp);
