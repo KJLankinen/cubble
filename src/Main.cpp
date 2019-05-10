@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <cuda.h>
 
-#include "CubbleApp.h"
+#include "Simulator.cuh"
 #include "Util.h"
 
 int main(int argc, char **argv)
@@ -25,23 +25,17 @@ int main(int argc, char **argv)
 
 	try
 	{
-		std::string str;
-#if (NUM_DIM == 3)
-		str = "------------------------------------------------------------------------\n";
-		str += "The current program simulates the bubbles in 3D.\n";
-		str += "If you want a 2D simulation, change the number of dimensions 'NUM_DIM'";
-		str += "\nin Makefile and rebuild the program.\n";
-		str += "------------------------------------------------------------------------\n";
-#else
-		str = "------------------------------------------------------------------------\n";
-		str += "The current program simulates the bubbles in 2D.\n";
-		str += "If you want a 3D simulation, change the number of dimensions 'NUM_DIM'";
-		str += "\nin Makefile and rebuild the program.\n";
-		str += "------------------------------------------------------------------------\n";
-#endif
-		std::cout << str << std::endl;
-		cubble::CubbleApp app(argv[1], argv[2]);
-		app.run();
+		std::cout << "------------------------------------------------------------------------\n"
+				  << "The current program simulates the bubbles in" << NUM_DIM " dimensions.\n"
+				  << "If you want to change the dimensionality of the program, change the number of dimensions 'NUM_DIM'"
+				  << "\nin Makefile and rebuild the program.\n"
+				  << "------------------------------------------------------------------------\n"
+				  << std::endl;
+
+		cubble::Simulator simulator;
+		simulator.init(argv[1], argv[2]);
+		simulator.run();
+		simulator.deinit();
 	}
 	catch (const std::exception &e)
 	{

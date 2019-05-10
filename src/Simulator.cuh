@@ -19,25 +19,21 @@ enum class BubbleProperty;
 
 class Simulator
 {
-	CUBBLE_PROP(double, SimulationTime, 0)
-	CUBBLE_PROP(double, ElasticEnergy, 0)
   public:
-	Simulator(std::shared_ptr<Env> e);
-	~Simulator();
+	bool init(const char *inputFileName, const char *outputFileName);
+	void deinit();
+	void run();
 
+  private:
 	void setupSimulation();
 	bool integrate(bool useGasExchange = false);
 	void calculateEnergy();
 	double getVolumeOfBubbles();
-	void getBubbleData(std::vector<double> &hostSoA, size_t &numComp, size_t &memoryStride) const;
-	int getNumBubbles() const { return numBubbles; }
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
 	void transformPositions(bool normalize);
 	double getAverageProperty(BubbleProperty property);
 	void setStartingPositions();
-
-  private:
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
 	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
 	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
@@ -52,7 +48,11 @@ class Simulator
 	void updateData();
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();
+	void saveSnapshotToFile();
 
+	double simulationTime = 0.0;
+	double elasticEnergy = 0.0;
+	uint32_t numSnapshots = 0;
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
@@ -78,7 +78,7 @@ class Simulator
 	double *dta = nullptr;
 	double *dasai = nullptr;
 
-	std::shared_ptr<Env> env;
+	Env properties = {};
 	std::shared_ptr<CubWrapper> cubWrapper;
 
 	DeviceArray<double> bubbleData;

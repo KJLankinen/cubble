@@ -48,7 +48,7 @@ INCL = -Iexternal_dependencies/nlohmann -Iexternal_dependencies/cub/cub/
 # -----------------------------------------------------
 
 # List all objects that contain CPU code.
-OBJ_NAMES := Main.o CubbleApp.o Simulator.o Kernels.o
+OBJ_NAMES := Main.o Simulator.o Kernels.o
 OBJS = $(foreach OBJ, $(OBJ_NAMES), $(BIN_PATH)$(OBJ))
 
 # List all the objects that contain GPU code.
