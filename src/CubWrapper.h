@@ -6,7 +6,6 @@
 #include <cuda_runtime.h>
 #include <memory>
 
-#include "Env.h"
 #include "DeviceArray.h"
 
 namespace cubble
@@ -14,12 +13,10 @@ namespace cubble
 class CubWrapper
 {
   public:
-    CubWrapper(std::shared_ptr<Env> e, size_t numBubbles)
+    CubWrapper(size_t tempStorageSizeInBytes)
     {
-        env = e;
-
         outData = DeviceArray<char>(sizeof(double));
-        tempStorage = DeviceArray<char>(numBubbles * sizeof(double));
+        tempStorage = DeviceArray<char>(tempStorageSizeInBytes);
     }
     ~CubWrapper() {}
 
@@ -146,7 +143,6 @@ class CubWrapper
     }
 
   private:
-    std::shared_ptr<Env> env;
     DeviceArray<char> outData;
     DeviceArray<char> tempStorage;
 };

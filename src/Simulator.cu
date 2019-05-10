@@ -40,7 +40,7 @@ Simulator::Simulator(std::shared_ptr<Env> e)
     tfr = d * bubblesPerDim.asType<double>();
     env->setTfr(tfr + env->getLbb());
 
-    cubWrapper = std::make_shared<CubWrapper>(env, numBubbles);
+    cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
     bubbleData = DeviceArray<double>(numBubbles, (size_t)BP::NUM_VALUES);
     aboveMinRadFlags = DeviceArray<int>(numBubbles, 2u);
     bubbleCellIndices = DeviceArray<int>(numBubbles, 4u);
