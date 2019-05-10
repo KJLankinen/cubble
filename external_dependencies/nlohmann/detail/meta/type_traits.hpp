@@ -162,7 +162,7 @@ template <typename BasicJsonType, typename CompatibleObjectType>
 struct is_compatible_object_type_impl <
     BasicJsonType, CompatibleObjectType,
     enable_if_t<is_detected<mapped_type_t, CompatibleObjectType>::value and
-    is_detected<key_type_t, CompatibleObjectType>::value >>
+    is_detected<key_type_t, CompatibleObjectType>::value > >
 {
 
     using object_t = typename BasicJsonType::object_t;
@@ -187,7 +187,7 @@ template <typename BasicJsonType, typename ConstructibleObjectType>
 struct is_constructible_object_type_impl <
     BasicJsonType, ConstructibleObjectType,
     enable_if_t<is_detected<mapped_type_t, ConstructibleObjectType>::value and
-    is_detected<key_type_t, ConstructibleObjectType>::value >>
+    is_detected<key_type_t, ConstructibleObjectType>::value > >
 {
     using object_t = typename BasicJsonType::object_t;
 
@@ -261,7 +261,7 @@ struct is_compatible_array_type_impl <
 // Therefore it is detected as a CompatibleArrayType.
 // The real fix would be to have an Iterable concept.
     not is_iterator_traits<
-    iterator_traits<CompatibleArrayType>>::value >>
+    iterator_traits<CompatibleArrayType> >::value > >
 {
     static constexpr bool value =
         std::is_constructible<BasicJsonType,
@@ -293,7 +293,7 @@ struct is_constructible_array_type_impl <
 is_detected<value_type_t, ConstructibleArrayType>::value and
 is_detected<iterator_t, ConstructibleArrayType>::value and
 is_complete_type<
-detected_t<value_type_t, ConstructibleArrayType>>::value >>
+detected_t<value_type_t, ConstructibleArrayType> >::value > >
 {
     static constexpr bool value =
         // This is needed because json_reverse_iterator has a ::iterator type,
