@@ -7,6 +7,7 @@
 #include "PinnedHostArray.h"
 #include "CubWrapper.h"
 #include "Util.h"
+#include "SimulationProperties.h"
 
 #include <utility>
 #include <memory>
