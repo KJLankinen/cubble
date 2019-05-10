@@ -26,7 +26,9 @@ int main(int argc, char **argv)
 	try
 	{
 		std::cout << "------------------------------------------------------------------------\n"
-				  << "The current program simulates the bubbles in" << NUM_DIM " dimensions.\n"
+				  << "The current program simulates the bubbles in "
+				  << NUM_DIM
+				  << " dimensions.\n"
 				  << "If you want to change the dimensionality of the program, change the number of dimensions 'NUM_DIM'"
 				  << "\nin Makefile and rebuild the program.\n"
 				  << "------------------------------------------------------------------------\n"

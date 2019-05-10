@@ -78,7 +78,7 @@ class Simulator
 	double *dta = nullptr;
 	double *dasai = nullptr;
 
-	Env properties = {};
+	Env properties;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
 	DeviceArray<double> bubbleData;
