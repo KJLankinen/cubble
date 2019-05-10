@@ -6,6 +6,7 @@
 #include "Kernels.cuh"
 
 #include "cub/cub/cub.cuh"
+
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -14,6 +15,8 @@
 #include <curand.h>
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
+
+#ifndef __NVCC__
 #include <vtk-8.0/vtkPoints.h>
 #include <vtk-8.0/vtkSmartPointer.h>
 #include <vtk-8.0/vtkDoubleArray.h>
@@ -21,6 +24,9 @@
 #include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
 #include <vtk-8.0/vtkFieldData.h>
 #include <vtk-8.0/vtkPointData.h>
+
+#include "nlohmann/json.hpp"
+#endif
 
 namespace cubble
 {
