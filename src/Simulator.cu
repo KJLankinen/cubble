@@ -8,6 +8,7 @@
 #include "cub/cub/cub.cuh"
 
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <chrono>
 #include <algorithm>
@@ -35,7 +36,7 @@ typedef BubbleProperty BP;
 bool Simulator::init(const char *inputFileName)
 {
     assert(inputFileName != nullptr && "Invalid input file name!");
-    std::fstream inputFileStream(inputFileName, std::ios::in);
+    std::ifstream inputFileStream(inputFileName, std::ios::in);
     if (!inputFileStream.is_open())
     {
         std::cerr << "Couldn't open input file. Check file name." << std::endl;
@@ -1099,6 +1100,7 @@ void Simulator::setStartingPositions()
 
 void Simulator::saveSnapshotToFile()
 {
+#ifndef __NVCC__
     auto writer = vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
     auto dataSet = vtkSmartPointer<vtkUnstructuredGrid>::New();
     auto points = vtkSmartPointer<vtkPoints>::New();
@@ -1118,6 +1120,8 @@ void Simulator::saveSnapshotToFile()
     timeArray->SetName("Time");
     dataSet->GetFieldData()->AddArray(timeArray);
 
+#endif
+
     // Points
     const size_t numComp = 7;
     const size_t memoryStride = bubbleData.getWidth();
@@ -1125,6 +1129,8 @@ void Simulator::saveSnapshotToFile()
     hostData.clear();
     hostData.resize(memoryStride * numComp);
     CUDA_CALL(cudaMemcpy(hostData.data(), devX, sizeof(double) * numComp * memoryStride, cudaMemcpyDeviceToHost));
+
+#ifndef __NVCC__
     points->SetNumberOfPoints(numBubbles);
 
     radiiArray->SetNumberOfComponents(1);
@@ -1166,5 +1172,6 @@ void Simulator::saveSnapshotToFile()
     writer->Write();
 
     ++numSnapshots;
+#endif
 }
 } // namespace cubble
