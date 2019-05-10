@@ -74,7 +74,7 @@ inline void handleException(const std::exception_ptr pExc)
 				  << e.what()
 				  << std::endl;
 	}
-#ifndef __NVCC__
+#endif
 	catch (const std::exception &e)
 	{
 		std::cout << "\n----------Unhandled exception----------\n"
