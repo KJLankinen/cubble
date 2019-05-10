@@ -128,7 +128,5 @@ class Env
 
 	std::string inputFile;
 	std::string saveFile;
-
-	double integrationTime = 0.0;
 };
 }; // namespace cubble

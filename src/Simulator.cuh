@@ -15,8 +15,6 @@
 
 namespace cubble
 {
-enum class BubbleProperty;
-
 class Simulator
 {
   public:
@@ -34,7 +32,7 @@ class Simulator
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
 	void transformPositions(bool normalize);
-	double getAverageProperty(BubbleProperty property);
+	double getAverageProperty(double *p);
 	void setStartingPositions();
 	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
 	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
@@ -83,7 +81,6 @@ class Simulator
 	Env properties;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
-	DeviceArray<double> bubbleData;
 	DeviceArray<int> aboveMinRadFlags;
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
@@ -94,53 +91,66 @@ class Simulator
 	PinnedHostArray<double> pinnedDouble;
 
 	std::vector<double> hostData;
-};
 
-enum class BubbleProperty
-{
-	X,
-	Y,
-	Z,
-	R,
+	double *deviceData = nullptr;
+	uint32_t dataStride = 0;
 
-	DXDT,
-	DYDT,
-	DZDT,
-	DRDT,
+	struct AliasedDevicePointers
+	{
+		// Position & radius
+		double *x = nullptr;
+		double *y = nullptr;
+		double *z = nullptr;
+		double *r = nullptr;
 
-	DXDT_OLD,
-	DYDT_OLD,
-	DZDT_OLD,
-	DRDT_OLD,
+		// Change rate (= velocity)
+		double *dxdt = nullptr;
+		double *dydt = nullptr;
+		double *dzdt = nullptr;
+		double *drdt = nullptr;
 
-	X_START,
-	Y_START,
-	Z_START,
-	PATH_LENGTH,
-	SQUARED_DISTANCE,
+		// Old change rates
+		double *dxdtO = nullptr;
+		double *dydtO = nullptr;
+		double *dzdtO = nullptr;
+		double *drdtO = nullptr;
 
-	X_PRD,
-	Y_PRD,
-	Z_PRD,
-	R_PRD,
+		// Starting coordinates
+		double *x0 = nullptr;
+		double *y0 = nullptr;
+		double *z0 = nullptr;
 
-	DXDT_PRD,
-	DYDT_PRD,
-	DZDT_PRD,
-	DRDT_PRD,
+		// Path length & distance
+		double *s = nullptr;
+		double *d = nullptr;
 
-	ENERGY,
-	FREE_AREA,
-	ERROR,
-	VOLUME,
+		// Predicted coordinates
+		double *xP = nullptr;
+		double *yP = nullptr;
+		double *zP = nullptr;
+		double *rP = nullptr;
 
-	TEMP1,
-	TEMP2,
-	TEMP3,
-	TEMP4,
-	TEMP5,
+		// Predicted change rates
+		double *dxdtP = nullptr;
+		double *dydtP = nullptr;
+		double *dzdtP = nullptr;
+		double *drdtP = nullptr;
 
-	NUM_VALUES
+		// Errors of predictions vs corrections
+		double *error = nullptr;
+
+		// Dummy for copying stuff & for temporary use
+		double *dummy1 = nullptr;
+		double *dummy2 = nullptr;
+		double *dummy3 = nullptr;
+		double *dummy4 = nullptr;
+		double *dummy5 = nullptr;
+		double *dummy6 = nullptr;
+		double *dummy7 = nullptr;
+		double *dummy8 = nullptr;
+	} adp;
+	static const uint32_t numAliases = 34;
+	static_assert(sizeof(adp) == sizeof(double *) * numAliases);
 };
 
 enum class CellProperty
