@@ -10,14 +10,12 @@ int main(int argc, char **argv)
 {
 	std::exception_ptr pExc = nullptr;
 
-	if (argc != 3)
+	if (argc != 2)
 	{
-		std::cerr << "Two arguments are required."
-				  << "\nUsage: " << argv[0] << " inputFile saveFile"
+		std::cerr << "One argument are required."
+				  << "\nUsage: " << argv[0] << " inputFile"
 				  << "\ninputFile = the name of the (.json) file that contains"
 				  << " the necessary inputs."
-				  << "\nsaveFile = file that can be used as a input file"
-				  << " to continue from an earlier run"
 				  << std::endl;
 
 		return EXIT_FAILURE;
@@ -35,7 +33,7 @@ int main(int argc, char **argv)
 				  << std::endl;
 
 		cubble::Simulator simulator;
-		simulator.init(argv[1], argv[2]);
+		simulator.init(argv[1]);
 		simulator.run();
 		simulator.deinit();
 	}

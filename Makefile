@@ -114,7 +114,7 @@ all : $(EXEC)
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) input_parameters.json output_parameters.json
+	$(EXEC) input_parameters.json
 
 # -----------------------------------------------------
 # Debug build, slow with all safety nets at place.
