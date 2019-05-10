@@ -5,7 +5,7 @@
 #include "Vec.h"
 #include "Kernels.cuh"
 
-#include "cub.cuh"
+#include "cub/cub/cub.cuh"
 #include <iostream>
 #include <sstream>
 #include <chrono>

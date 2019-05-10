@@ -4,7 +4,7 @@
 
 #include <string>
 #include <assert.h>
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include "Vec.h"
 
