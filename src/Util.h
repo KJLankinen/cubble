@@ -8,10 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <curand.h>
-
-#ifndef __NVCC__
-#include "nlohmann/json.hpp"
-#endif
+#include "json.hpp"
 
 #include "Macros.h"
 
@@ -61,20 +58,19 @@ const int CUBBLE_NUM_NEIGHBORS = 4;
 
 inline void handleException(const std::exception_ptr pExc)
 {
+	using json = nlohmann::json;
 	try
 	{
 		if (pExc)
 			std::rethrow_exception(pExc);
 	}
-#ifndef __NVCC__
-	catch (const nlohmann::json::exception &e)
+	catch (const json::exception &e)
 	{
 		std::cout << "Encountered a json parse error."
 				  << "\nMake sure the .json file is correct and filenames are correct.\n"
 				  << e.what()
 				  << std::endl;
 	}
-#endif
 	catch (const std::exception &e)
 	{
 		std::cout << "\n----------Unhandled exception----------\n"

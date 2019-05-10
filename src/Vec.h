@@ -6,10 +6,7 @@
 #include <iostream>
 #include <assert.h>
 #include <cuda_runtime.h>
-
-#ifndef __NVCC__
-#include "nlohmann/json.hpp"
-#endif
+#include "json.hpp"
 
 #include "Util.h"
 
@@ -388,7 +385,6 @@ class vec
 		return retVec;
 	}
 
-#ifndef __NVCC__
 	// .json .json .json .json .json .json .json .json .json .json .json
 	friend void to_json(nlohmann::json &j, const vec<T> &v)
 	{
@@ -403,7 +399,6 @@ class vec
 		v.y = j["y"];
 		v.z = j["z"];
 	}
-#endif
 
 	T x = 0;
 	T y = 0;

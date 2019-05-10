@@ -2,12 +2,12 @@
 
 #pragma once
 
+#include "Env.h"
 #include "Vec.h"
 #include "DeviceArray.h"
 #include "PinnedHostArray.h"
 #include "CubWrapper.h"
 #include "Util.h"
-#include "SimulationProperties.h"
 
 #include <utility>
 #include <memory>
@@ -22,7 +22,7 @@ class Simulator
   public:
 	Simulator(){};
 	~Simulator(){};
-	bool init(const char *inputFileName);
+	bool init(const char *inputFileName, const char *outputFileName);
 	void deinit();
 	void run();
 
@@ -52,8 +52,6 @@ class Simulator
 	dim3 getGridSize();
 	void saveSnapshotToFile();
 
-	const double pi = 3.1415926535897932384626433832795028841971693993;
-
 	double simulationTime = 0.0;
 	double elasticEnergy = 0.0;
 	uint32_t numSnapshots = 0;
@@ -82,7 +80,7 @@ class Simulator
 	double *dta = nullptr;
 	double *dasai = nullptr;
 
-	SimulationProperties properties = {};
+	Env properties;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
 	DeviceArray<double> bubbleData;
@@ -96,26 +94,6 @@ class Simulator
 	PinnedHostArray<double> pinnedDouble;
 
 	std::vector<double> hostData;
-
-	struct Box
-	{
-		double left = 0.0;
-		double bottom = 0.0;
-		double back = 0.0;
-		double width = 0.0;
-		double height = 0.0;
-		double depth = 0.0;
-
-		double right() { return left + width; }
-		double top() { return bottom + height; }
-		double front() { return back + depth; }
-		double volume() { return NUM_DIM == 3 ? width * height * depth : width * height; }
-		double minComponent()
-		{
-			return width < height ? (width < depth ? width : depth) : (height < depth ? height : depth);
-		}
-
-	} simulationBox;
 };
 
 enum class BubbleProperty

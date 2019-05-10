@@ -40,7 +40,7 @@ BIN_PATH := bin/
 SRC_PATH := src/
 
 # Included (external) headers
-INCL = -Iexternal_dependencies
+INCL = -Iexternal_dependencies/nlohmann -Iexternal_dependencies/cub/cub/
 
 
 # -----------------------------------------------------
@@ -114,7 +114,7 @@ all : $(EXEC)
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) input_parameters.json
+	$(EXEC) input_parameters.json output_parameters.json
 
 # -----------------------------------------------------
 # Debug build, slow with all safety nets at place.
