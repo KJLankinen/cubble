@@ -45,13 +45,13 @@ bool Simulator::init(const char *inputFileName)
 #if (NUM_DIM == 3)
     const float x = std::cbrt(properties.numBubbles * d * d * d / (relDim.y * relDim.z));
     dvec size = relDim * x;
-    const ivec bubblesPerDim(std::ceil(simulationBox.right() / d), std::ceil(simulationBox.top() / d), std::ceil(simulationBox.front() / d));
+    const ivec bubblesPerDim(std::ceil(size.x / d), std::ceil(size.y / d), std::ceil(size.z / d));
     numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
 #else
     const float x = std::sqrt(properties.numBubbles * d * d / relDim.y);
     dvec size = relDim * x;
-    simulationBox.front() = 0;
-    const ivec bubblesPerDim(std::ceil(simulationBox.right() / d), std::ceil(simulationBox.top() / d), 0);
+    size.z = 0;
+    const ivec bubblesPerDim(std::ceil(size.x / d), std::ceil(size.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
     bubblesPerDimAtStart = bubblesPerDim;
