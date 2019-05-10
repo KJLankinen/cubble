@@ -20,6 +20,8 @@ enum class BubbleProperty;
 class Simulator
 {
   public:
+	Simulator(){};
+	~Simulator(){};
 	bool init(const char *inputFileName, const char *outputFileName);
 	void deinit();
 	void run();

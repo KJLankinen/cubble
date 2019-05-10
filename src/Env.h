@@ -43,6 +43,7 @@ class Env
 	CUBBLE_PROP(dvec, BoxRelativeDimensions, dvec(0, 0, 0))
 
   public:
+	Env(){};
 	Env(const std::string &inF,
 		const std::string &saveF)
 	{
