@@ -28,7 +28,7 @@ typedef BubbleProperty BP;
 
 bool Simulator::init(const char *inputFileName)
 {
-    assert(inputFileName != nullptr, "Invalid input file name!");
+    assert(inputFileName != nullptr && "Invalid input file name!");
     std::fstream inputFileStream(inputFileName, std::ios::in));
     if (!inputFileStream.is_open())
     {
