@@ -427,6 +427,7 @@ __device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, 
 {
     double distance = x[idx] - xStart[idx];
     distance = wrapped[idx] ? (interval + (distance < 0 ? distance : -distance)) : distance;
+    DEVICE_ASSERT(distance < interval && "Distance is greater than dimension.");
     return distance * distance;
 }
 

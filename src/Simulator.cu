@@ -799,10 +799,24 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                   bubbleData.getRowPtr((size_t)BP::DXDT_OLD), bubbleData.getRowPtr((size_t)BP::ENERGY),
                   bubbleData.getRowPtr((size_t)BP::DYDT_OLD), bubbleData.getRowPtr((size_t)BP::FREE_AREA),
                   bubbleData.getRowPtr((size_t)BP::DZDT_OLD), bubbleData.getRowPtr((size_t)BP::ERROR),
-                  bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
+                  bubbleData.getRowPtr((size_t)BP::DRDT_OLD), bubbleData.getRowPtr((size_t)BP::VOLUME),
+                  bubbleData.getRowPtr((size_t)BP::X_START), bubbleData.getRowPtr((size_t)BP::TEMP1),
+                  bubbleData.getRowPtr((size_t)BP::Y_START), bubbleData.getRowPtr((size_t)BP::TEMP2),
+                  bubbleData.getRowPtr((size_t)BP::Z_START), bubbleData.getRowPtr((size_t)BP::TEMP3),
+                  bubbleData.getRowPtr((size_t)BP::PATH_LENGTH), bubbleData.getRowPtr((size_t)BP::TEMP4),
+                  bubbleData.getRowPtr((size_t)BP::SQUARED_DISTANCE), bubbleData.getRowPtr((size_t)BP::TEMP5),
+                  wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
+                  wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
+                  wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
                               sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
+                              cudaMemcpyDeviceToDevice));
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrappedFlags.getRowPtr(0)),
+                              static_cast<void *>(wrappedFlags.getRowPtr(3)),
+                              wrappedFlags.getSizeInBytes() / 2,
                               cudaMemcpyDeviceToDevice));
 
     numBubbles = numBubblesAboveMinRad;
