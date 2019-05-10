@@ -338,7 +338,7 @@ void Simulator::setupSimulation()
                   adp.dydtO,
                   adp.dzdtO,
                   adp.drdtO,
-                  adp.d),
+                  adp.d,
                   adp.s);
 
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
@@ -883,7 +883,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
     CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
     KERNEL_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
-                  adp.dumm1, adp.r, flag, properties.getPi(), numBubbles);
+                  adp.dummy1, adp.r, flag, properties.getPi(), numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtv, numBubbles);
 
