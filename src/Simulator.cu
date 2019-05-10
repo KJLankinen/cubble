@@ -809,7 +809,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                   wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
                   wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(x),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X)),
                               static_cast<void *>(bubbleData.getRowPtr((size_t)BP::X_PRD)),
                               sizeof(double) * (size_t)BP::X_PRD * bubbleData.getWidth(),
                               cudaMemcpyDeviceToDevice));
