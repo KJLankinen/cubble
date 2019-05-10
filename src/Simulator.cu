@@ -35,6 +35,7 @@ typedef BubbleProperty BP;
 
 bool Simulator::init(const char *inputFileName)
 {
+#ifndef __NVCC__
     assert(inputFileName != nullptr && "Invalid input file name!");
     std::ifstream inputFileStream(inputFileName, std::ios::in);
     if (!inputFileStream.is_open())
@@ -45,6 +46,7 @@ bool Simulator::init(const char *inputFileName)
     nlohmann::json j;
     inputFileStream >> j;
     properties = j.get<SimulationProperties>();
+#endif
 
     dvec relDim = properties.boxRelativeDimensions;
     relDim /= relDim.x;
