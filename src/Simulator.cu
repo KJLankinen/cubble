@@ -90,6 +90,30 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 
     printRelevantInfoOfCurrentDevice();
 
+    return true;
+}
+
+void Simulator::deinit()
+{
+    saveSnapshotToFile();
+    properties.writeParameters();
+
+    CUDA_CALL(cudaDeviceSynchronize());
+
+    CUDA_CALL(cudaStreamDestroy(nonBlockingStream1));
+    CUDA_CALL(cudaStreamDestroy(nonBlockingStream2));
+    CUDA_CALL(cudaEventDestroy(blockingEvent1));
+    CUDA_CALL(cudaEventDestroy(blockingEvent2));
+
+    for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
+    {
+        CUDA_CALL(cudaStreamDestroy(neighborStreamVec[i]));
+        CUDA_CALL(cudaEventDestroy(neighborEventVec[i]));
+    }
+}
+
+void Simulator::run()
+{
     std::cout << "======\nSetup\n======" << std::endl;
 
     setupSimulation();
@@ -185,29 +209,7 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
     }
 
     saveSnapshotToFile();
-}
 
-void Simulator::deinit()
-{
-    saveSnapshotToFile();
-    properties.writeParameters();
-
-    CUDA_CALL(cudaDeviceSynchronize());
-
-    CUDA_CALL(cudaStreamDestroy(nonBlockingStream1));
-    CUDA_CALL(cudaStreamDestroy(nonBlockingStream2));
-    CUDA_CALL(cudaEventDestroy(blockingEvent1));
-    CUDA_CALL(cudaEventDestroy(blockingEvent2));
-
-    for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
-    {
-        CUDA_CALL(cudaStreamDestroy(neighborStreamVec[i]));
-        CUDA_CALL(cudaEventDestroy(neighborEventVec[i]));
-    }
-}
-
-void Simulator::run()
-{
     std::cout << "==========\nSimulation\n==========" << std::endl;
 
     simulationTime = 0;
