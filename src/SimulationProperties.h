@@ -4,7 +4,10 @@
 
 #include <string>
 #include <assert.h>
+
+#ifndef __NVCC__
 #include "nlohmann/json.hpp"
+#endif
 
 #include "Vec.h"
 
@@ -36,7 +39,7 @@ struct SimulationProperties
 	double fZeroPerMuZero = 0.0;
 	double minRad = 0.0;
 };
-
+#ifndef __NVCC__
 void to_json(nlohmann::json &j, const SimulationProperties &props)
 {
 	j = nlohmann::json{
@@ -92,4 +95,5 @@ void from_json(const nlohmann::json &j, SimulationProperties &props)
 	props.minRad = 0.1 * props.avgRad;
 }
 #undef PROPERTY_FROM_JSON
+#endif
 }; // namespace cubble
