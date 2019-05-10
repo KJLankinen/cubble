@@ -83,13 +83,13 @@ void from_json(const nlohmann::json &j, SimulationProperties &props)
 	PROPERTY_FROM_JSON(j, props, snapshotFilename);
 	PROPERTY_FROM_JSON(j, props, dataFilename);
 
-	assert(muZero > 0);
-	assert(boxRelativeDimensions.x > 0);
-	assert(boxRelativeDimensions.y > 0);
-	assert(boxRelativeDimensions.z > 0);
+	assert(props.muZero > 0);
+	assert(props.boxRelativeDimensions.x > 0);
+	assert(props.boxRelativeDimensions.y > 0);
+	assert(props.boxRelativeDimensions.z > 0);
 
-	fZeroPerMuZero = sigmaZero * avgRad / muZero;
-	minRad = 0.1 * avgRad;
+	props.fZeroPerMuZero = props.sigmaZero * props.avgRad / props.muZero;
+	props.minRad = 0.1 * props.avgRad;
 }
 #undef PROPERTY_FROM_JSON
 }; // namespace cubble
