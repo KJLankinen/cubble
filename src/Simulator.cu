@@ -1009,7 +1009,7 @@ void Simulator::transformPositions(bool normalize)
                   normalize, numBubbles, properties.getLbb(), properties.getTfr(),
                   adp.x,
                   adp.y,
-                  adp.z;
+                  adp.z);
 }
 
 double Simulator::getAverageProperty(double *p)
