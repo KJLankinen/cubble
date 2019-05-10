@@ -29,7 +29,7 @@ typedef BubbleProperty BP;
 bool Simulator::init(const char *inputFileName)
 {
     assert(inputFileName != nullptr && "Invalid input file name!");
-    std::fstream inputFileStream(inputFileName, std::ios::in));
+    std::fstream inputFileStream(inputFileName, std::ios::in);
     if (!inputFileStream.is_open())
     {
         std::cerr << "Couldn't open input file. Check file name." << std::endl;
@@ -1102,7 +1102,7 @@ void Simulator::saveSnapshotToFile()
 
     // Filename
     std::stringstream ss;
-    ss << properties.snapshotFilename << "." << writer->GetDefaultFileExtension << "." << numSnapshots;
+    ss << properties.snapshotFilename << "." << writer->GetDefaultFileExtension() << "." << numSnapshots;
     writer->SetFileName((ss.str()).c_str());
 
     // Time stamp
