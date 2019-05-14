@@ -56,6 +56,8 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
     boxSize = d * bubblesPerDim.asType<double>();
     tfr = boxSize + lbb;
     interval = boxSize;
+    simulationBoxVolume = NUM_DIM == 2 ? interval.x * interval.y
+                                       : interval.x * interval.y * interval.z;
 
     cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
@@ -172,7 +174,7 @@ void Simulator::run()
 
     const double phiTarget = properties.phiTarget;
     double bubbleVolume = getVolumeOfBubbles();
-    double phi = bubbleVolume / properties.simulationBoxVolume;
+    double phi = bubbleVolume / simulationBoxVolume;
 
     std::cout << "Volume ratios: current: " << phi
               << ", target: " << phiTarget
@@ -187,8 +189,11 @@ void Simulator::run()
     const double t = std::cbrt(getVolumeOfBubbles() / divisor);
     tfr = dvec(t, t, t) * relativeSize;
     transformPositions(false);
+    interval = tfr - lbb;
+    simulationBoxVolume = NUM_DIM == 2 ? interval.x * interval.y
+                                       : interval.x * interval.y * interval.z;
 
-    phi = bubbleVolume / properties.simulationBoxVolume;
+    phi = bubbleVolume / simulationBoxVolume;
 
     std::cout << "Volume ratios: current: " << phi
               << ", target: " << phiTarget
@@ -266,7 +271,7 @@ void Simulator::run()
         const double scaledTime = simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad;
         if ((int)scaledTime >= timesPrinted)
         {
-            double phi = getVolumeOfBubbles() / properties.simulationBoxVolume;
+            double phi = getVolumeOfBubbles() / simulationBoxVolume;
             double relativeRadius = getAverageProperty(adp.r) / properties.avgRad;
             dataStream << scaledTime
                        << " " << relativeRadius
