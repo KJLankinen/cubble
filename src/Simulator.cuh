@@ -48,6 +48,7 @@ private:
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();
 	void saveSnapshotToFile();
+	double getScaledTime() { return simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad); }
 
 	dvec lbb = dvec(0, 0, 0);
 	dvec tfr = dvec(0, 0, 0);

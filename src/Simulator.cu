@@ -268,7 +268,7 @@ void Simulator::run()
 
     while (!stopSimulation)
     {
-        const double scaledTime = simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad;
+        const double scaledTime = getScaledTime();
         if ((int)scaledTime >= timesPrinted)
         {
             double phi = getVolumeOfBubbles() / simulationBoxVolume;
@@ -1006,9 +1006,8 @@ void Simulator::saveSnapshotToFile()
     writer->SetFileName((ss.str()).c_str());
 
     // Time stamp
-    const double scaledTime = simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad);
     timeArray->SetNumberOfTuples(1);
-    timeArray->SetTuple1(0, scaledTime);
+    timeArray->SetTuple1(0, getScaledTime());
     timeArray->SetName("Time");
     dataSet->GetFieldData()->AddArray(timeArray);
 
