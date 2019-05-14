@@ -550,7 +550,7 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dta, numBubbles, gasExchangePolicy.stream);
 
     KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                  adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / pi, properties.kappa, properties.kParameter;
+                  adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / pi, properties.kappa, properties.kParameter);
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
