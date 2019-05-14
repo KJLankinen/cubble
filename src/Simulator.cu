@@ -268,6 +268,7 @@ void Simulator::run()
     while (integrate(true))
     {
         const double scaledTime = getScaledTime();
+        std::cout << scaledTime << std::endl;
         if ((int)scaledTime >= timesPrinted)
         {
             double phi = getVolumeOfBubbles() / simulationBoxVolume;
