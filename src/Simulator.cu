@@ -24,29 +24,38 @@
 
 namespace cubble
 {
+
 bool Simulator::init(const char *inputFileName, const char *outputFileName)
 {
-    properties = Env(inputFileName, outputFileName);
-    properties.readParameters();
+    std::ifstream inputFileStream(inputFileName, std::ios::in);
+    if (!inputFileStream.is_open())
+    {
+        std::cerr << "Couldn't open input file!" << std::endl;
+        return false;
+    }
+    nlohmann::json j;
+    inputFileStream >> j;
+    properties = j;
 
-    dvec relDim = properties.getBoxRelativeDimensions();
+    dvec relDim = properties.boxRelativeDimensions;
     relDim /= relDim.x;
-    const float d = 2 * properties.getAvgRad();
+    const float d = 2 * properties.avgRad;
 #if (NUM_DIM == 3)
-    const float x = std::cbrt(properties.getNumBubbles() * d * d * d / (relDim.y * relDim.z));
-    dvec tfr = relDim * x;
-    const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), std::ceil(tfr.z / d));
+    const float x = std::cbrt(properties.numBubbles * d * d * d / (relDim.y * relDim.z));
+    dvec boxSize = relDim * x;
+    const ivec bubblesPerDim(std::ceil(boxSize.x / d), std::ceil(boxSize.y / d), std::ceil(boxSize.z / d));
     numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
 #else
-    const float x = std::sqrt(properties.getNumBubbles() * d * d / relDim.y);
-    dvec tfr = relDim * x;
-    tfr.z = 0;
-    const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
+    const float x = std::sqrt(properties.numBubbles * d * d / relDim.y);
+    dvec boxSize = relDim * x;
+    boxSize.z = 0;
+    const ivec bubblesPerDim(std::ceil(boxSize.x / d), std::ceil(boxSize.y / d), 0);
     numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
     bubblesPerDimAtStart = bubblesPerDim;
-    tfr = d * bubblesPerDim.asType<double>();
-    properties.setTfr(tfr + properties.getLbb());
+    boxSize = d * bubblesPerDim.asType<double>();
+    tfr = boxSize + lbb;
+    interval = boxSize;
 
     cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
@@ -131,7 +140,6 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 void Simulator::deinit()
 {
     saveSnapshotToFile();
-    properties.writeParameters();
 
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -157,14 +165,14 @@ void Simulator::run()
     saveSnapshotToFile();
 
     std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
-    for (size_t i = 0; i < (size_t)properties.getNumStepsToRelax(); ++i)
+    for (size_t i = 0; i < (size_t)properties.numStepsToRelax; ++i)
         integrate();
 
     saveSnapshotToFile();
 
-    const double phiTarget = properties.getPhiTarget();
+    const double phiTarget = properties.phiTarget;
     double bubbleVolume = getVolumeOfBubbles();
-    double phi = bubbleVolume / properties.getSimulationBoxVolume();
+    double phi = bubbleVolume / properties.simulationBoxVolume;
 
     std::cout << "Volume ratios: current: " << phi
               << ", target: " << phiTarget
@@ -173,16 +181,14 @@ void Simulator::run()
     std::cout << "Scaling the simulation box." << std::endl;
 
     transformPositions(true);
-    const dvec relativeSize = properties.getBoxRelativeDimensions();
-#if (NUM_DIM == 3)
-    const double t = std::cbrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
-#else
-    const double t = std::sqrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
-#endif
-    properties.setTfr(dvec(t, t, t) * relativeSize);
+    const dvec relativeSize = properties.boxRelativeDimensions;
+    const double divisor = NUM_DIM == 2 ? phiTarget * relativeSize.x * relativeSize.y
+                                        : phiTarget * relativeSize.x * relativeSize.y * relativeSize.z;
+    const double t = std::cbrt(getVolumeOfBubbles() / divisor);
+    tfr = dvec(t, t, t) * relativeSize;
     transformPositions(false);
 
-    phi = bubbleVolume / properties.getSimulationBoxVolume();
+    phi = bubbleVolume / properties.simulationBoxVolume;
 
     std::cout << "Volume ratios: current: " << phi
               << ", target: " << phiTarget
@@ -192,11 +198,10 @@ void Simulator::run()
 
     std::cout << "=============\nStabilization\n=============" << std::endl;
 
-    int numSteps = 0;
-    const int failsafe = 500;
-
     integrate();
     calculateEnergy();
+    int numSteps = 0;
+    const int failsafe = 500;
     double energy2 = elasticEnergy;
 
     while (true)
@@ -204,31 +209,31 @@ void Simulator::run()
         double energy1 = energy2;
         double time = 0;
 
-        for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
+        for (int i = 0; i < properties.numStepsToRelax; ++i)
         {
             integrate();
-            time += properties.getTimeStep();
+            time += properties.timeStep;
         }
 
         calculateEnergy();
         energy2 = elasticEnergy;
         double deltaEnergy = std::abs(energy2 - energy1) / time;
-        deltaEnergy *= 0.5 * properties.getSigmaZero();
+        deltaEnergy *= 0.5 * properties.sigmaZero;
 
-        if (deltaEnergy < properties.getMaxDeltaEnergy())
+        if (deltaEnergy < properties.maxDeltaEnergy)
         {
             std::cout << "Final delta energy " << deltaEnergy
-                      << " after " << (numSteps + 1) * properties.getNumStepsToRelax()
+                      << " after " << (numSteps + 1) * properties.numStepsToRelax
                       << " steps."
                       << " Energy before: " << energy1
                       << ", energy after: " << energy2
-                      << ", time: " << time * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad())
+                      << ", time: " << time * properties.kParameter / (properties.avgRad * properties.avgRad)
                       << std::endl;
             break;
         }
         else if (numSteps > failsafe)
         {
-            std::cout << "Over " << failsafe * properties.getNumStepsToRelax()
+            std::cout << "Over " << failsafe * properties.numStepsToRelax
                       << " steps taken and required delta energy not reached."
                       << " Check parameters."
                       << std::endl;
@@ -236,7 +241,7 @@ void Simulator::run()
         }
         else
             std::cout << "Number of simulation steps relaxed: "
-                      << (numSteps + 1) * properties.getNumStepsToRelax()
+                      << (numSteps + 1) * properties.numStepsToRelax
                       << ", delta energy: " << deltaEnergy
                       << ", energy before: " << energy1
                       << ", energy after: " << energy2
@@ -252,38 +257,22 @@ void Simulator::run()
     simulationTime = 0;
     setStartingPositions();
 
-    numSteps = 0;
     int timesPrinted = 1;
     bool stopSimulation = false;
     std::stringstream dataStream;
 
     while (!stopSimulation)
     {
-        if (numSteps == 2000)
-        {
-            CUDA_PROFILER_START();
-        }
-
-        stopSimulation = !integrate(true);
-
-        if (numSteps == 2050)
-        {
-            CUDA_PROFILER_STOP();
-#if (USE_PROFILING == 1)
-            break;
-#endif
-        }
-
-        const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
+        const double scaledTime = simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad;
         if ((int)scaledTime >= timesPrinted)
         {
-            double phi = getVolumeOfBubbles() / properties.getSimulationBoxVolume();
-            double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
+            double phi = getVolumeOfBubbles() / properties.simulationBoxVolume;
+            double relativeRadius = getAverageProperty(adp.r) / properties.avgRad;
             dataStream << scaledTime
                        << " " << relativeRadius
-                       << " " << getMaxBubbleRadius() / properties.getAvgRad()
+                       << " " << maxBubbleRadius / properties.avgRad
                        << " " << numBubbles
-                       << " " << 1.0 / (getInvRho() * properties.getAvgRad())
+                       << " " << 1.0 / (getInvRho() * properties.avgRad)
                        << " " << getAverageProperty(adp.d)
                        << " " << getAverageProperty(adp.s)
                        << "\n";
@@ -300,12 +289,11 @@ void Simulator::run()
 
             ++timesPrinted;
         }
-
-        ++numSteps;
     }
 
-    std::ofstream file(properties.getDataFilename());
-    file << dataStream.str() << std::endl;
+    std::ofstream file(properties.dataFilename);
+    if (file.is_open())
+        file << dataStream.str() << std::endl;
 }
 
 void Simulator::setupSimulation()
@@ -320,9 +308,6 @@ void Simulator::setupSimulation()
 
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton prEdictor-corrector method
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
     ExecutionPolicy defaultPolicy(128, numBubbles);
     ExecutionPolicy pairPolicy;
     pairPolicy.blockSize = dim3(128, 1, 1);
@@ -330,7 +315,7 @@ void Simulator::setupSimulation()
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    double timeStep = properties.getTimeStep();
+    double timeStep = properties.timeStep;
 
     KERNEL_LAUNCH(resetKernel, defaultPolicy,
                   0.0, numBubbles,
@@ -344,7 +329,7 @@ void Simulator::setupSimulation()
     std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
     KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
-                  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r,
+                  properties.fZeroPerMuZero, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r,
                   interval.x, lbb.x, PBC_X == 1, adp.x, adp.dxdtO,
                   interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO
 #if (NUM_DIM == 3)
@@ -386,7 +371,7 @@ void Simulator::setupSimulation()
                   adp.dxdtO, adp.dydtO, adp.dzdtO, adp.drdtO);
 
     KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
-                  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r,
+                  properties.fZeroPerMuZero, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r,
                   interval.x, lbb.x, PBC_X == 1, adp.x, adp.dxdtO,
                   interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO
 #if (NUM_DIM == 3)
@@ -406,7 +391,6 @@ bool Simulator::integrate(bool useGasExchange)
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    double timeStep = properties.getTimeStep();
     double error = 100000;
     size_t numLoopsDone = 0;
 
@@ -415,27 +399,26 @@ bool Simulator::integrate(bool useGasExchange)
         NVTX_RANGE_PUSH_A("Integration step");
 
         doReset(defaultPolicy);
-        doPrediction(defaultPolicy, timeStep, useGasExchange, blockingEvent2);
+        doPrediction(defaultPolicy, properties.timeStep, useGasExchange, blockingEvent2);
         doVelocity(pairPolicy);
         if (useGasExchange)
             doGasExchange(pairPolicy, blockingEvent2, pairPolicy.stream);
-        doCorrection(defaultPolicy, timeStep, useGasExchange, nonBlockingStream2);
+        doCorrection(defaultPolicy, properties.timeStep, useGasExchange, nonBlockingStream2);
 
         error = doError();
-        if (error < properties.getErrorTolerance() && timeStep < 0.1)
-            timeStep *= 1.9;
-        else if (error > properties.getErrorTolerance())
-            timeStep *= 0.5;
+        if (error < properties.errorTolerance && properties.timeStep < 0.1)
+            properties.timeStep *= 1.9;
+        else if (error > properties.errorTolerance)
+            properties.timeStep *= 0.5;
 
         ++numLoopsDone;
 
         NVTX_RANGE_POP();
-    } while (error > properties.getErrorTolerance());
+    } while (error > properties.errorTolerance);
 
     // Holy crap this is ugly. Anyway, don't do the calculations, when stabilizing/equilibrating.
     if (useGasExchange)
     {
-        const dvec interval = properties.getTfr() - properties.getLbb();
         KERNEL_LAUNCH(pathLengthDistanceKernel, defaultPolicy,
                       numBubbles,
                       adp.s,
@@ -453,8 +436,7 @@ bool Simulator::integrate(bool useGasExchange)
     updateData();
 
     ++integrationStep;
-    properties.setTimeStep(timeStep);
-    simulationTime += timeStep;
+    simulationTime += properties.timeStep;
 
     CUDA_CALL(cudaEventSynchronize(blockingEvent1));
 
@@ -467,11 +449,11 @@ bool Simulator::integrate(bool useGasExchange)
     if (shouldDeleteBubbles || integrationStep % 50 == 0)
         updateCellsAndNeighbors();
 
-    bool continueSimulation = numBubbles > properties.getMinNumBubbles();
+    bool continueSimulation = numBubbles > properties.minNumBubbles;
 
     maxBubbleRadius = pinnedDouble.get()[0];
 #if (NUM_DIM == 3)
-    continueSimulation &= maxBubbleRadius < 0.5 * (properties.getTfr() - properties.getLbb()).getMinComponent();
+    continueSimulation &= maxBubbleRadius < 0.5 * interval.getMinComponent();
 #endif
 
     return continueSimulation;
@@ -544,13 +526,9 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
 
     CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
 
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
-
     KERNEL_LAUNCH(gasExchangeKernel, policy,
                   numBubbles,
-                  properties.getPi(),
+                  pi,
                   pairs.getRowPtr(0),
                   pairs.getRowPtr(1),
                   adp.rP,
@@ -565,14 +543,14 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
     );
 
     KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
-                  numBubbles, properties.getPi(), adp.rP, adp.dummy1, adp.error, adp.dummy2);
+                  numBubbles, pi, adp.rP, adp.dummy1, adp.error, adp.dummy2);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.error, dtfapr, numBubbles, gasExchangePolicy.stream);
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dta, numBubbles, gasExchangePolicy.stream);
 
     KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                  adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / properties.getPi(), properties.getKappa(), properties.getKParameter());
+                  adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / pi, properties.kappa, properties.kParameter;
 
     CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
     CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
@@ -580,12 +558,8 @@ void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventTo
 
 void Simulator::doVelocity(const ExecutionPolicy &policy)
 {
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
-
     KERNEL_LAUNCH(velocityPairKernel, policy,
-                  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
+                  properties.fZeroPerMuZero, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
                   interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
                   interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
 #if (NUM_DIM == 3)
@@ -596,7 +570,7 @@ void Simulator::doVelocity(const ExecutionPolicy &policy)
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
     KERNEL_LAUNCH(velocityWallKernel, policy,
-                  numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
+                  numBubbles, properties.fZeroPerMuZero, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
 #if (PBC_X == 0)
                   ,
                   interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
@@ -661,9 +635,6 @@ double Simulator::doError()
 
 void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
 {
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
     KERNEL_LAUNCH(boundaryWrapKernel, policy,
                   numBubbles
@@ -691,7 +662,7 @@ void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamT
                   numBubbles,
                   aboveMinRadFlags.getRowPtr(0),
                   adp.rP,
-                  properties.getMinRad());
+                  properties.minRad);
 
     cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, streamToUse);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, streamToUse));
@@ -706,11 +677,9 @@ void Simulator::generateBubbles()
 {
     std::cout << "Starting to generate data for bubbles." << std::endl;
 
-    const int rngSeed = properties.getRngSeed();
-    const double avgRad = properties.getAvgRad();
-    const double stdDevRad = properties.getStdDevRad();
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
+    const int rngSeed = properties.rngSeed;
+    const double avgRad = properties.avgRad;
+    const double stdDevRad = properties.stdDevRad;
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -735,7 +704,7 @@ void Simulator::generateBubbles()
     KERNEL_LAUNCH(assignDataToBubbles, defaultPolicy,
                   adp.x, adp.y, adp.z, adp.xP, adp.yP, adp.zP, adp.r, adp.rP,
                   aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
-                  tfr, lbb, avgRad, properties.getMinRad(), properties.getPi(), numBubbles);
+                  tfr, lbb, avgRad, properties.minRad, pi, numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.rP, dasai, numBubbles, defaultPolicy.stream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.rP), static_cast<void *>(adp.r),
@@ -763,7 +732,7 @@ void Simulator::updateCellsAndNeighbors()
     KERNEL_LAUNCH(assignBubblesToCells, defaultPolicy,
                   adp.x, adp.y, adp.z,
                   bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3),
-                  properties.getLbb(), properties.getTfr(), cellDim, numBubbles);
+                  lbb, tfr, cellDim, numBubbles);
 
     int *cellIndices = bubbleCellIndices.getRowPtr(0);
     int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
@@ -826,8 +795,6 @@ void Simulator::updateCellsAndNeighbors()
 
     CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
 
-    dvec interval = properties.getTfr() - properties.getLbb();
-
     ExecutionPolicy findPolicy;
     findPolicy.blockSize = dim3(128, 1, 1);
     findPolicy.gridSize = gridSize;
@@ -883,7 +850,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
     CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
     KERNEL_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
-                  adp.dummy1, adp.r, flag, properties.getPi(), numBubbles);
+                  adp.dummy1, adp.r, flag, pi, numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtv, numBubbles);
 
@@ -931,16 +898,16 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
 dim3 Simulator::getGridSize()
 {
-    const int totalNumCells = std::ceil((float)numBubbles / properties.getNumBubblesPerCell());
-    dvec interval = properties.getTfr() - properties.getLbb();
-    interval /= interval.x;
+    const int totalNumCells = std::ceil((float)numBubbles / properties.numBubblesPerCell);
+    dvec normalizedInterval = interval;
+    normalizedInterval /= normalizedInterval.x;
 #if (NUM_DIM == 3)
-    float nx = std::cbrt((float)totalNumCells / (interval.y * interval.z));
+    float nx = std::cbrt((float)totalNumCells / (normalizedInterval.y * normalizedInterval.z));
 #else
-    float nx = std::sqrt((float)totalNumCells / interval.y);
-    interval.z = 0;
+    float nx = std::sqrt((float)totalNumCells / normalizedInterval.y);
+    normalizedInterval.z = 0;
 #endif
-    ivec grid = (nx * interval).floor() + 1;
+    ivec grid = (nx * normalizedInterval).floor() + 1;
     assert(grid.x > 0);
     assert(grid.y > 0);
     assert(grid.z > 0);
@@ -955,10 +922,6 @@ void Simulator::calculateEnergy()
     pairPolicy.stream = 0;
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
-
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
 
     KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
                   numBubbles,
@@ -983,7 +946,7 @@ double Simulator::getVolumeOfBubbles()
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
     KERNEL_LAUNCH(calculateVolumes, defaultPolicy,
-                  adp.r, adp.dummy1, numBubbles, properties.getPi());
+                  adp.r, adp.dummy1, numBubbles, pi);
     double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, numBubbles);
 
     return volume;
@@ -1006,7 +969,7 @@ void Simulator::transformPositions(bool normalize)
     policy.sharedMemBytes = 0;
 
     KERNEL_LAUNCH(transformPositionsKernel, policy,
-                  normalize, numBubbles, properties.getLbb(), properties.getTfr(),
+                  normalize, numBubbles, lbb, tfr,
                   adp.x,
                   adp.y,
                   adp.z);
@@ -1034,11 +997,11 @@ void Simulator::saveSnapshotToFile()
 
     // Filename
     std::stringstream ss;
-    ss << properties.getSnapshotFilename() << "." << writer->GetDefaultFileExtension() << "." << numSnapshots;
+    ss << properties.snapshotFilename << "." << writer->GetDefaultFileExtension() << "." << numSnapshots;
     writer->SetFileName((ss.str()).c_str());
 
     // Time stamp
-    const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
+    const double scaledTime = simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad);
     timeArray->SetNumberOfTuples(1);
     timeArray->SetTuple1(0, scaledTime);
     timeArray->SetName("Time");
