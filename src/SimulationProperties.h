@@ -61,7 +61,7 @@ struct SimulationProperties
     do                                                       \
     {                                                        \
         p.param = j[#param];                                 \
-        std::cout << #paran << ": " << p.param << std::endl; \
+        std::cout << #param << ": " << p.param << std::endl; \
     } while (0)
     friend void from_json(const nlohmann::json &j, SimulationProperties &p)
     {
