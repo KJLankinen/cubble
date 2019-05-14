@@ -57,14 +57,16 @@ struct SimulationProperties
     }
 #undef TO_JSON
 
-#define FROM_JSON(j, p, param)             \
-    do                                     \
-    {                                      \
-        p.param = j[#param];               \
-        std::cout << p.param << std::endl; \
+#define FROM_JSON(j, p, param)                               \
+    do                                                       \
+    {                                                        \
+        p.param = j[#param];                                 \
+        std::cout << #paran << ": " << p.param << std::endl; \
     } while (0)
     friend void from_json(const nlohmann::json &j, SimulationProperties &p)
     {
+        std::cout << "Simulation parameters:\n"
+                  << std::endl;
         FROM_JSON(j, p, phiTarget);
         FROM_JSON(j, p, kappa);
         FROM_JSON(j, p, numBubbles);
