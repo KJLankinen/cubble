@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "SimulationProperties.h"
+#include "Env.h"
 #include "Vec.h"
 #include "DeviceArray.h"
 #include "PinnedHostArray.h"
@@ -17,18 +17,19 @@ namespace cubble
 {
 class Simulator
 {
-public:
+  public:
 	Simulator(){};
 	~Simulator(){};
 	bool init(const char *inputFileName, const char *outputFileName);
 	void deinit();
 	void run();
 
-private:
+  private:
 	void setupSimulation();
 	bool integrate(bool useGasExchange = false);
 	void calculateEnergy();
 	double getVolumeOfBubbles();
+	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
 	void transformPositions(bool normalize);
 	double getAverageProperty(double *p);
@@ -48,19 +49,13 @@ private:
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();
 	void saveSnapshotToFile();
-	double getScaledTime();
 
-	dvec lbb = dvec(0, 0, 0);
-	dvec tfr = dvec(0, 0, 0);
-	dvec interval = dvec(0, 0, 0);
-	const double pi = 3.1415926535897932384626433832795028841971693993;
 	double simulationTime = 0.0;
 	double elasticEnergy = 0.0;
 	uint32_t numSnapshots = 0;
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
-	double simulationBoxVolume = 0.0;
 
 	double maxBubbleRadius = 0;
 
@@ -83,7 +78,7 @@ private:
 	double *dta = nullptr;
 	double *dasai = nullptr;
 
-	SimulationProperties properties;
+	Env properties;
 	std::shared_ptr<CubWrapper> cubWrapper;
 
 	DeviceArray<int> aboveMinRadFlags;
