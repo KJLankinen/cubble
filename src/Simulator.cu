@@ -263,10 +263,9 @@ void Simulator::run()
     setStartingPositions();
 
     int timesPrinted = 1;
-    bool stopSimulation = false;
     std::stringstream dataStream;
 
-    while (!stopSimulation)
+    while (integrate(true))
     {
         const double scaledTime = getScaledTime();
         if ((int)scaledTime >= timesPrinted)
@@ -320,8 +319,6 @@ void Simulator::setupSimulation()
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    double timeStep = properties.timeStep;
-
     KERNEL_LAUNCH(resetKernel, defaultPolicy,
                   0.0, numBubbles,
                   adp.dxdtO,
@@ -344,7 +341,7 @@ void Simulator::setupSimulation()
     );
 
     KERNEL_LAUNCH(eulerKernel, defaultPolicy,
-                  numBubbles, timeStep,
+                  numBubbles, properties.timeStep,
                   adp.x, adp.dxdtO,
                   adp.y, adp.dydtO
 #if (NUM_DIM == 3)
