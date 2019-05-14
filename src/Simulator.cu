@@ -1056,4 +1056,9 @@ void Simulator::saveSnapshotToFile()
     ++numSnapshots;
 }
 
+double Simulator::getScaledTime()
+{
+    return simulationTime * properties.kParameter / (properties.avgRad * properties.avgRad);
+}
+
 } // namespace cubble
