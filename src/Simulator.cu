@@ -184,9 +184,9 @@ void Simulator::run()
 
     transformPositions(true);
     const dvec relativeSize = properties.boxRelativeDimensions;
-    const double divisor = NUM_DIM == 2 ? phiTarget * relativeSize.x * relativeSize.y
-                                        : phiTarget * relativeSize.x * relativeSize.y * relativeSize.z;
-    const double t = std::cbrt(getVolumeOfBubbles() / divisor);
+    const double temp = bubbleVolume / (NUM_DIM == 2 ? phiTarget * relativeSize.x * relativeSize.y
+                                                     : phiTarget * relativeSize.x * relativeSize.y * relativeSize.z);
+    const double t = NUM_DIM == 2 ? std::sqrt(temp) : std::cbrt(temp);
     tfr = dvec(t, t, t) * relativeSize;
     transformPositions(false);
     interval = tfr - lbb;
