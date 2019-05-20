@@ -50,8 +50,8 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 
     cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
-    CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceData), sizeof(double) * numBubbles * numAliases));
-    dataStride = numBubbles;
+    dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
+    CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceData), sizeof(double) * dataStride * numAliases));
     adp.x = deviceData;
     adp.y = deviceData + 1 * dataStride;
     adp.z = deviceData + 2 * dataStride;
@@ -87,10 +87,10 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
     adp.dummy7 = deviceData + 32 * dataStride;
     adp.dummy8 = deviceData + 33 * dataStride;
 
-    aboveMinRadFlags = DeviceArray<int>(numBubbles, 2u);
-    bubbleCellIndices = DeviceArray<int>(numBubbles, 4u);
-    pairs = DeviceArray<int>(8 * numBubbles, 4u);
-    wrappedFlags = DeviceArray<bool>(numBubbles, 6);
+    aboveMinRadFlags = DeviceArray<int>(dataStride, 2u);
+    bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
+    pairs = DeviceArray<int>(8 * dataStride, 4u);
+    wrappedFlags = DeviceArray<bool>(dataStride, 6);
     CUDA_CALL(cudaMemset(wrappedFlags.get(), 0, wrappedFlags.getSizeInBytes()));
 
     const dim3 gridSize = getGridSize();
