@@ -81,7 +81,7 @@ C_GPU := nvcc
 # External libraries to link
 # -----------------------------------------------------
 
-LIBS := -lcudart -lcurand -lnvToolsExt -lvtkCommonCore-8.0 -lvtkIOXML-8.0 -lvtkCommonDataModel-8.0
+LIBS := -lcudart -lcurand -lnvToolsExt
 
 
 # -----------------------------------------------------
