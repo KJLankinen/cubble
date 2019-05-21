@@ -38,6 +38,7 @@ def main():
 #SBATCH --mail-type=ALL\n\
 module purge\n\
 module load cuda/10.0.130 gcc/6.3.0\n\
+mkdir /tmp/$SLURM_JOB_ID\n\
 srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
@@ -54,7 +55,12 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
         print("\"" + array_param_file + "\" is not a file.")
         return 1
 
+    if not os.path.isdir(make_dir):
+	print("Make dir \"" + make_dir + "\" is not a directory.")
+	return 1
+
     print("Using " + root_dir + " as root dir.")
+    print("Using " + make_dir + " as the makefile directory.")
     print("Using " + default_input_file + " as the default input file.")
     print("Using " + array_param_file + " as the file to modify the default input file with.")
     print("Using " + data_dir + " as the data directory for this simulation run.")
