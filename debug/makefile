@@ -89,7 +89,7 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 CUDA_ARCH := sm_60
 CPU_FLAGS := -Wall -std=c++14 -m64 -g3
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -gG
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -g -G
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O0
 

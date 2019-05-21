@@ -21,6 +21,7 @@ def main():
     
     sub_dir = sys.argv[1]
     root_dir  = os.path.join(os.environ['WRKDIR'], "cubble")
+    make_dir = os.path.join(root_dir, "final")
     default_input_file = os.path.join(root_dir, "input_parameters.json")
     array_param_file = os.path.join(root_dir, "array_parameters.json")
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"), sub_dir)
@@ -36,8 +37,8 @@ def main():
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 module purge\n\
-module load cuda/10.0.130 vtk/8.0.1-opengl2-osmesa-python2 gcc/6.3.0\n\
-srun make final -C " + root_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
+module load cuda/10.0.130 gcc/6.3.0\n\
+srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
 
@@ -102,7 +103,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 module purge\n\
-module load cuda/10.0.130 vtk/8.0.1-opengl2-osmesa-python2 gcc/6.3.0\n\
+module load cuda/10.0.130 gcc/6.3.0\n\
 mkdir " + array_temp_dir + "\n\
 cd " + array_temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
