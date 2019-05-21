@@ -14,13 +14,6 @@
 #include <curand.h>
 #include <cuda_profiler_api.h>
 #include <nvToolsExt.h>
-#include <vtk-8.0/vtkPoints.h>
-#include <vtk-8.0/vtkSmartPointer.h>
-#include <vtk-8.0/vtkDoubleArray.h>
-#include <vtk-8.0/vtkUnstructuredGrid.h>
-#include <vtk-8.0/vtkXMLUnstructuredGridWriter.h>
-#include <vtk-8.0/vtkFieldData.h>
-#include <vtk-8.0/vtkPointData.h>
 
 namespace cubble
 {
@@ -1025,71 +1018,38 @@ void Simulator::setStartingPositions()
 
 void Simulator::saveSnapshotToFile()
 {
-    auto writer = vtkSmartPointer<vtkXMLUnstructuredGridWriter>::New();
-    auto dataSet = vtkSmartPointer<vtkUnstructuredGrid>::New();
-    auto points = vtkSmartPointer<vtkPoints>::New();
-    auto timeArray = vtkSmartPointer<vtkDoubleArray>::New();
-    auto radiiArray = vtkSmartPointer<vtkDoubleArray>::New();
-    auto velArray = vtkSmartPointer<vtkDoubleArray>::New();
-
-    // Filename
     std::stringstream ss;
-    ss << properties.getSnapshotFilename() << "." << writer->GetDefaultFileExtension() << "." << numSnapshots;
-    writer->SetFileName((ss.str()).c_str());
-
-    // Time stamp
-    const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
-    timeArray->SetNumberOfTuples(1);
-    timeArray->SetTuple1(0, scaledTime);
-    timeArray->SetName("Time");
-    dataSet->GetFieldData()->AddArray(timeArray);
-
-    // Points
-    const size_t numComp = 7;
-    hostData.clear();
-    hostData.resize(dataStride * numComp);
-    CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride, cudaMemcpyDeviceToHost));
-    points->SetNumberOfPoints(numBubbles);
-
-    radiiArray->SetNumberOfComponents(1);
-    radiiArray->SetNumberOfTuples(points->GetNumberOfPoints());
-    radiiArray->SetName("Radius");
-
-    velArray->SetNumberOfComponents(3);
-    velArray->SetNumberOfTuples(points->GetNumberOfPoints());
-    velArray->SetName("Velocity");
-
-    std::vector<double> t;
-    t.resize(3);
-
-    for (size_t i = 0; i < (size_t)points->GetNumberOfPoints(); ++i)
+    ss << properties.getSnapshotFilename() << ".csv." << numSnapshots;
+    std::ofstream file(ss.str().c_str(), std::ios::out);
+    if (file.is_open())
     {
-        t[0] = hostData[i + 0 * dataStride];
-        t[1] = hostData[i + 1 * dataStride];
-        t[2] = hostData[i + 2 * dataStride];
-        points->SetPoint(i, t.data());
+        const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
 
-        radiiArray->InsertValue(i, hostData[i + 3 * dataStride]);
+        const size_t numComp = 7;
+        hostData.clear();
+        hostData.resize(dataStride * numComp);
+        CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride, cudaMemcpyDeviceToHost));
 
-        t[0] = hostData[i + 4 * dataStride];
-        t[1] = hostData[i + 5 * dataStride];
-        t[2] = hostData[i + 6 * dataStride];
-        velArray->InsertTuple(i, t.data());
+        for (size_t i = 0; i < (size_t)numBubbles; ++i)
+        {
+            file << hostData[i + 0 * dataStride];
+            file << ",";
+            file << hostData[i + 1 * dataStride];
+            file << ",";
+            file << hostData[i + 2 * dataStride];
+            file << ",";
+            file << hostData[i + 3 * dataStride];
+            file << ",";
+            file << hostData[i + 4 * dataStride];
+            file << ",";
+            file << hostData[i + 5 * dataStride];
+            file << ",";
+            file << hostData[i + 6 * dataStride];
+            file << "\n";
+        }
+
+        ++numSnapshots;
     }
-
-    dataSet->GetPointData()->AddArray(radiiArray);
-    dataSet->GetPointData()->AddArray(velArray);
-    dataSet->SetPoints(points);
-
-    // Remove unused memory
-    dataSet->Squeeze();
-
-    // Write
-    writer->SetInputData(dataSet);
-    writer->SetDataModeToBinary();
-    writer->Write();
-
-    ++numSnapshots;
 }
 
 } // namespace cubble
