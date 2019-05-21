@@ -8,7 +8,7 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <curand.h>
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include "Macros.h"
 

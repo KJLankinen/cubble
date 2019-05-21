@@ -6,7 +6,7 @@
 #include <iostream>
 #include <assert.h>
 #include <cuda_runtime.h>
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include "Util.h"
 
