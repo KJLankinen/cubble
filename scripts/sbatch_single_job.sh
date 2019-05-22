@@ -6,9 +6,7 @@
 #SBATCH --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL
 
 module purge
-module load gcc/5.5.0
-module load cuda/9.2.88
-module load vtk/8.0.1-opengl2-osmesa-python2
+module load gcc/6.3.0 cuda/10.0.130
 
 srun make clean
 srun make final

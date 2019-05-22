@@ -79,7 +79,8 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # Preprocessor defines
 # -----------------------------------------------------
 
-DEFINES := -DNUM_DIM=$(NUM_DIM) -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z) -DUSE_FLOW=$(USE_FLOW)
+DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_FLOW=$(USE_FLOW) \
+			-DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 
@@ -101,12 +102,7 @@ OPTIM_FLAGS := -O2
 .PHONY : all
 all : $(EXEC)
 
-#-----------------------------------------------------
-# Execute the program with default input files
-#-----------------------------------------------------
-.PHONY : run
-run : $(EXEC)
-	$(EXEC) ../input_parameters.json ../output_parameters.json
+#LOAD_MODULES := source $$MODULESHOME/init/bash; module load cuda/10.0.130 gcc/6.3.0
 
 # -----------------------------------------------------
 # Rule for main executable.
@@ -138,6 +134,14 @@ $(BIN_PATH)%.o : $(SRC_PATH)%.cpp
 $(BIN_PATH)%.o : $(SRC_PATH)%.cu
 	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
+
+
+#-----------------------------------------------------
+# Execute the program with default input files
+#-----------------------------------------------------
+.PHONY : run
+run : $(EXEC)
+	$(EXEC) ../input_parameters.json ../output_parameters.json
 
 
 # -----------------------------------------------------
