@@ -252,20 +252,20 @@ void Simulator::run()
 
     while (!stopSimulation)
     {
-        if (numSteps == 2000)
+        /*if (numSteps == 2000)
         {
             CUDA_PROFILER_START();
-        }
+        }*/
 
         stopSimulation = !integrate(true);
 
-        if (numSteps == 2050)
+        /*if (numSteps == 2050)
         {
             CUDA_PROFILER_STOP();
 #if (USE_PROFILING == 1)
             break;
 #endif
-        }
+        }*/
 
         const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
         if ((int)scaledTime >= timesPrinted)
