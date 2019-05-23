@@ -13,11 +13,20 @@ PBC_X := 1
 PBC_Y := 1
 PBC_Z := 1
 
+
 # -----------------------------------------------------
 # Use flow or not?
 # -----------------------------------------------------
 
 USE_FLOW := 1
+
+
+# -----------------------------------------------------
+# Profile or not?
+# -----------------------------------------------------
+
+USE_PROFILING := 0
+
 
 # -----------------------------------------------------
 # Directories
@@ -80,7 +89,8 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 # -----------------------------------------------------
 
 DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_FLOW=$(USE_FLOW) \
-			-DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z)
+	   -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z) \
+	   -DNDEBUG
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 
@@ -90,9 +100,13 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 CUDA_ARCH := sm_60
 CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -lineinfo
 COMMON_FLAGS := $(INCL)
-OPTIM_FLAGS := -O2
+OPTIM_FLAGS := -O3
+PROFILING_FLAGS :=
+ifeq ($(USE_PROFILING), 1)
+PROFILING_FLAGS := -pg
+endif
 
 
 # -----------------------------------------------------
@@ -110,7 +124,7 @@ all : | $(BIN_PATH)
 
 # By default has some safety nets at place but also uses some optimizations.
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
-	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
+	$(C_CPU) $(PROFILING_FLAGS) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
 
 
 # -----------------------------------------------------
@@ -118,7 +132,7 @@ $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 # -----------------------------------------------------
 
 $(GPU_CODE) : $(GPU_OBJS)
-	$(C_GPU) -arch=$(CUDA_ARCH) -dlink $^ -o $@
+	$(C_GPU) $(PROFILING_FLAGS) -arch=$(CUDA_ARCH) -dlink $^ -o $@
 
 
 # -----------------------------------------------------
@@ -127,12 +141,14 @@ $(GPU_CODE) : $(GPU_OBJS)
 
 # CPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cpp
-	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES))
+	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) \
+	$(OPTIM_FLAGS) $(DEFINES) $(PROFILING_FLAGS))
 	$(C_CPU) $< $(OPTIONS) -c -o $@
 
 # GPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
-	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
+	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
+	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILING_FLAGS))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 

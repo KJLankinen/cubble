@@ -13,11 +13,13 @@ PBC_X := 1
 PBC_Y := 1
 PBC_Z := 1
 
+
 # -----------------------------------------------------
 # Use flow or not?
 # -----------------------------------------------------
 
 USE_FLOW := 1
+
 
 # -----------------------------------------------------
 # Directories
@@ -89,10 +91,10 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 # -----------------------------------------------------
 
 CUDA_ARCH := sm_60
-CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr
+CPU_FLAGS := -Wall -std=c++14 -m64 -g3
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -g -G
 COMMON_FLAGS := $(INCL)
-OPTIM_FLAGS := -O2
+OPTIM_FLAGS := -O0
 
 
 # -----------------------------------------------------
@@ -110,7 +112,7 @@ all : | $(BIN_PATH)
 
 # By default has some safety nets at place but also uses some optimizations.
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
-	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
+	$(C_CPU) -g3 $(OBJS) $(GPU_CODE) $(LIBS) -o $@
 
 
 # -----------------------------------------------------
@@ -127,12 +129,14 @@ $(GPU_CODE) : $(GPU_OBJS)
 
 # CPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cpp
-	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES))
+	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) \
+	$(OPTIM_FLAGS) $(DEFINES))
 	$(C_CPU) $< $(OPTIONS) -c -o $@
 
 # GPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
-	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) $(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
+	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
+	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 
