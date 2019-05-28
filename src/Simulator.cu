@@ -1025,10 +1025,11 @@ void Simulator::saveSnapshotToFile()
     {
         const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
 
-        const size_t numComp = 7;
+        const size_t numComp = 9;
         hostData.clear();
         hostData.resize(dataStride * numComp);
         CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride, cudaMemcpyDeviceToHost));
+		CUDA_CALL(cudaMemcpy(&hostData[dataStride * 7], adp.s, sizeof(double) * 2 * dataStride, cudaMemcpyDeviceToHost));
 
         for (size_t i = 0; i < (size_t)numBubbles; ++i)
         {
@@ -1045,6 +1046,10 @@ void Simulator::saveSnapshotToFile()
             file << hostData[i + 5 * dataStride];
             file << ",";
             file << hostData[i + 6 * dataStride];
+			file << ",";
+			file << hostData[i + 7 * dataStride];
+			file << ",";
+			file << hostData[i + 8 * dataStride];
             file << "\n";
         }
 
