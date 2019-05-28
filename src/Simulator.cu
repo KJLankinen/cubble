@@ -84,7 +84,6 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
     bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
     pairs = DeviceArray<int>(8 * dataStride, 4u);
     wrapMultipliers = DeviceArray<int>(dataStride, 6);
-    CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -244,6 +243,7 @@ void Simulator::run()
 
     simulationTime = 0;
     setStartingPositions();
+	CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
     numSteps = 0;
     int timesPrinted = 1;
