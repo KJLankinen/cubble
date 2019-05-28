@@ -8,7 +8,12 @@ import pwd
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
-    data.update((key, val) for (key, val) in inbound.items() if key in data.keys())
+    
+    for key, val in inbound.items():
+	if key in data.keys():
+	    data.update({key:val})
+	else:
+	    print("Key not found in default input file: " + key)
 
     with open(outfile_name, 'w') as outfile:
         json.dump(data, outfile, indent=4, sort_keys=True)
@@ -39,7 +44,7 @@ def main():
 module purge\n\
 module load cuda/10.0.130 gcc/6.3.0\n\
 mkdir /tmp/$SLURM_JOB_ID\n\
-srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID/\n\
+srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
 
@@ -130,6 +135,7 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
     print("Slurm queue of the current user:")
     print(squeue_process.communicate()[0])
     print("\nJob submission done!")
+
 
 if __name__ == "__main__":
     main()
