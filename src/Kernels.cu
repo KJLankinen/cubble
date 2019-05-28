@@ -221,12 +221,19 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
     return idxVec;
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, bool *wrappedFlags)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier)
 {
-    const double interval = maxValue - minValue;
-    double value = coordinate[idx];
-    value = value < minValue ? value + interval : (value > maxValue ? value - interval : value);
-    wrappedFlags[idx] = coordinate[idx] != value ? !wrappedFlags[idx] : wrappedFlags[idx];
+	const double interval = maxValue - minValue;
+	double value = coordinate[idx];
+	int multiplier = wrapMultiplier[idx];
+
+	const bool smaller = value < minValue;
+	const bool larger = value > maxValue;
+
+	value = smaller ? value + interval : (larger ? value - interval : value);
+	multiplier = smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
+	
+	wrapMultiplier[idx] = multiplier;
     coordinate[idx] = value;
 }
 
@@ -423,16 +430,15 @@ __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
     y[idx] += f[idx] * timeStep;
 }
 
-__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval)
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, int *wrapMultiplier, double interval)
 {
-    double distance = x[idx] - xStart[idx];
-    distance = wrapped[idx] ? (interval + (distance < 0 ? distance : -distance)) : distance;
-    DEVICE_ASSERT(distance < interval, "Distance is greater than dimension.");
+    double distance = x[idx] - xStart[idx] + wrapMultiplier[idx] * interval;
     return distance * distance;
 }
 
-__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, bool *wrapped, double interval)
+__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, int *wrapMultiplier, double interval)
 {
+	// Only works if done before boundary wrap
     const double diff = x[idx] - xPrev[idx];
     return diff * diff;
 }

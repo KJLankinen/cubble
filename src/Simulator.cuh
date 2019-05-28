@@ -85,7 +85,7 @@ class Simulator
 	DeviceArray<int> cellData;
 	DeviceArray<int> bubbleCellIndices;
 	DeviceArray<int> pairs;
-	DeviceArray<bool> wrappedFlags;
+	DeviceArray<int> wrapMultipliers;
 
 	PinnedHostArray<int> pinnedInt;
 	PinnedHostArray<double> pinnedDouble;

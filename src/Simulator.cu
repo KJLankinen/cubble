@@ -83,8 +83,8 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
     aboveMinRadFlags = DeviceArray<int>(dataStride, 2u);
     bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
     pairs = DeviceArray<int>(8 * dataStride, 4u);
-    wrappedFlags = DeviceArray<bool>(dataStride, 6);
-    CUDA_CALL(cudaMemset(wrappedFlags.get(), 0, wrappedFlags.getSizeInBytes()));
+    wrapMultipliers = DeviceArray<int>(dataStride, 6);
+    CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
     const dim3 gridSize = getGridSize();
     size_t numCells = gridSize.x * gridSize.y * gridSize.z;
@@ -361,15 +361,15 @@ void Simulator::setupSimulation()
                   numBubbles
 #if (PBC_X == 1)
                   ,
-                  adp.x, lbb.x, tfr.x, wrappedFlags.getRowPtr(3)
+                  adp.x, lbb.x, tfr.x, wrapMultipliers.getRowPtr(3)
 #endif
 #if (PBC_Y == 1)
                                            ,
-                  adp.y, lbb.y, tfr.y, wrappedFlags.getRowPtr(4)
+                  adp.y, lbb.y, tfr.y, wrapMultipliers.getRowPtr(4)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
                                            ,
-                  adp.z, lbb.z, tfr.z, wrappedFlags.getRowPtr(5)
+                  adp.z, lbb.z, tfr.z, wrapMultipliers.getRowPtr(5)
 #endif
     );
 #endif
@@ -433,11 +433,11 @@ bool Simulator::integrate(bool useGasExchange)
                       numBubbles,
                       adp.s,
                       adp.d,
-                      adp.xP, adp.x, adp.x0, wrappedFlags.getRowPtr(0), interval.x,
-                      adp.yP, adp.y, adp.y0, wrappedFlags.getRowPtr(1), interval.y
+                      adp.xP, adp.x, adp.x0, wrapMultipliers.getRowPtr(0), interval.x,
+                      adp.yP, adp.y, adp.y0, wrapMultipliers.getRowPtr(1), interval.y
 #if (NUM_DIM == 3)
                       ,
-                      adp.zP, adp.z, adp.z0, wrappedFlags.getRowPtr(2), interval.z
+                      adp.zP, adp.z, adp.z0, wrapMultipliers.getRowPtr(2), interval.z
 #endif
         );
     }
@@ -662,15 +662,15 @@ void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
                   numBubbles
 #if (PBC_X == 1)
                   ,
-                  adp.xP, lbb.x, tfr.x, wrappedFlags.getRowPtr(0)
+                  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(0)
 #endif
 #if (PBC_Y == 1)
                                             ,
-                  adp.yP, lbb.y, tfr.y, wrappedFlags.getRowPtr(1)
+                  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(1)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
                                             ,
-                  adp.zP, lbb.z, tfr.z, wrappedFlags.getRowPtr(2)
+                  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(2)
 #endif
     );
 #endif
@@ -801,9 +801,9 @@ void Simulator::updateCellsAndNeighbors()
                   adp.z0, adp.dummy6,
                   adp.s, adp.dummy7,
                   adp.d, adp.dummy8,
-                  wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
-                  wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
-                  wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
+                  wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3),
+                  wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4),
+                  wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x),
                               static_cast<void *>(adp.xP),
@@ -811,9 +811,9 @@ void Simulator::updateCellsAndNeighbors()
                               cudaMemcpyDeviceToDevice,
                               nonBlockingStream1));
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrappedFlags.getRowPtr(0)),
-                              static_cast<void *>(wrappedFlags.getRowPtr(3)),
-                              wrappedFlags.getSizeInBytes() / 2,
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
+                              static_cast<void *>(wrapMultipliers.getRowPtr(3)),
+                              wrapMultipliers.getSizeInBytes() / 2,
                               cudaMemcpyDeviceToDevice,
                               nonBlockingStream1));
 
@@ -902,18 +902,18 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                   adp.z0, adp.dummy6,
                   adp.s, adp.dummy7,
                   adp.d, adp.dummy8,
-                  wrappedFlags.getRowPtr(0), wrappedFlags.getRowPtr(3),
-                  wrappedFlags.getRowPtr(1), wrappedFlags.getRowPtr(4),
-                  wrappedFlags.getRowPtr(2), wrappedFlags.getRowPtr(5));
+                  wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3),
+                  wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4),
+                  wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x),
                               static_cast<void *>(adp.xP),
                               sizeof(double) * numAliases / 2 * dataStride,
                               cudaMemcpyDeviceToDevice));
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrappedFlags.getRowPtr(0)),
-                              static_cast<void *>(wrappedFlags.getRowPtr(3)),
-                              wrappedFlags.getSizeInBytes() / 2,
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
+                              static_cast<void *>(wrapMultipliers.getRowPtr(3)),
+                              wrapMultipliers.getSizeInBytes() / 2,
                               cudaMemcpyDeviceToDevice));
 
     numBubbles = numBubblesAboveMinRad;
