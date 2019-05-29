@@ -564,6 +564,9 @@ namespace cubble
 
 			CUDA_CALL(cudaEventRecord(blockingEvent1, defaultPolicy.stream));
 			CUDA_CALL(cudaStreamWaitEvent(defaultPolicy.stream, blockingEvent1, 0));
+
+			if (i % 50 == 0)
+				updateCellsAndNeighbors();
 		}
 
 		// Energy after stabilization
