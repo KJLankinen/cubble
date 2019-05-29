@@ -551,7 +551,7 @@ namespace cubble
 
 			// Update the current values with the calculated predictions
 			{
-				CUDA_CALL(cudaStreamWaitEvent(efaultPolicy.stream, energyEvent, 0));
+				CUDA_CALL(cudaStreamWaitEvent(defaultPolicy.stream, energyEvent, 0));
 
 				const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
 				CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice, defaultPolicy.stream));
