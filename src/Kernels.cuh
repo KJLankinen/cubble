@@ -395,25 +395,7 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 	double *posX, double *posY, double *posZ,
 	dvec flowVel,
 	dvec flowTfr,
-	dvec flowLbb)
-{
-	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
-	{
-		bool inside = posX[i] < flowTfr.x && posX[i] > flowLbb.x;
-		inside &= posY[i] < flowTfr.y && posY[i] > flowLbb.y;
-#if (NUM_DIM == 3)
-		inside &= posZ[i] < flowTfr.z && posZ[i] > flowLbb.z;
-#endif
-		flowVel = inside ? flowVel : dvec(0, 0, 0);
-
-		const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
-		velX[i] += multiplier * nVelX[i] + flowVel.x;
-		velY[i] += multiplier * nVelY[i] + flowVel.y;
-#if (NUM_DIM == 3)
-		velZ[i] += multiplier * nVelZ[i] + flowVel.z;
-#endif
-	}
-}
+	dvec flowLbb);
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
