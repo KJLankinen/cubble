@@ -41,6 +41,9 @@ class Env
 	CUBBLE_PROP(dvec, Lbb, dvec(0, 0, 0))
 	CUBBLE_PROP(dvec, Tfr, dvec(0, 0, 0))
 	CUBBLE_PROP(dvec, BoxRelativeDimensions, dvec(0, 0, 0))
+	CUBBLE_PROP(dvec, FlowLbb, dvec(0, 0, 0))
+	CUBBLE_PROP(dvec, FlowTfr, dvec(0, 0, 0))
+	CUBBLE_PROP(dvec, FlowVel, dvec(0, 0, 0))
 
   public:
 	Env(){};
@@ -62,6 +65,8 @@ class Env
 		assert(BoxRelativeDimensions.y > 0);
 		assert(BoxRelativeDimensions.z > 0);
 		FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
+
+		FlowVel *= FZeroPerMuZero;
 
 		MinRad = 0.1 * AvgRad;
 	}
@@ -116,6 +121,9 @@ class Env
 		CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
 		CUBBLE_IO_PARAMETER(read, params, DataFilename);
 		CUBBLE_IO_PARAMETER(read, params, BoxRelativeDimensions);
+		CUBBLE_IO_PARAMETER(read, params, FlowLbb)
+		CUBBLE_IO_PARAMETER(read, params, FlowTfr)
+		CUBBLE_IO_PARAMETER(read, params, FlowVel)
 
 		if (!read)
 		{

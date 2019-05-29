@@ -270,14 +270,6 @@ __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
     addNeighborVelocity(idx1, idx2, args...);
 }
 
-__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity);
-template <typename... Args>
-__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity, Args... args)
-{
-    addFlowVelocity(idx, numNeighbors, flowVelocity, velocity);
-    addFlowVelocity(idx, numNeighbors, args...);
-}
-
 template <typename... Args>
 __global__ void boundaryWrapKernel(int numValues, Args... args)
 {
@@ -397,11 +389,30 @@ __global__ void neighborVelocityKernel(int *first, int *second, int *numNeighbor
     }
 }
 
-template <typename... Args>
-__global__ void flowVelocityKernel(int numValues, int *numNeighbors, Args... args)
+__global__ void flowVelocityKernel(int numValues, int *numNeighbors,
+	double *velX, double *velY, double *velZ,
+	double *nVelX, double *nVelY, double *nVelZ,
+	double *posX, double *posY, double *posZ,
+	dvec flowVel,
+	dvec flowTfr,
+	dvec flowLbb)
 {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
-        addFlowVelocity(i, numNeighbors, args...);
+	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
+	{
+		bool inside = posX[i] < flowTfr.x && posX[i] > flowLbb.x;
+		inside &= posY[i] < flowTfr.y && posY[i] > flowLbb.y;
+#if (NUM_DIM == 3)
+		inside &= posZ[i] < flowTfr.z && posZ[i] > flowLbb.z;
+#endif
+		flowVel = inside ? flowVel : dvec(0, 0, 0);
+
+		const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
+		velX[i] += multiplier * nVelX[i] + flowVel.x;
+		velY[i] += multiplier * nVelY[i] + flowVel.y;
+#if (NUM_DIM == 3)
+		velZ[i] += multiplier * nVelZ[i] + flowVel.z;
+#endif
+	}
 }
 
 template <typename... Args>

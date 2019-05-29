@@ -41,6 +41,9 @@ namespace cubble
 		bubblesPerDimAtStart = bubblesPerDim;
 		tfr = d * bubblesPerDim.asType<double>();
 		properties.setTfr(tfr + properties.getLbb());
+		dvec interval = properties.getTfr() - properties.getLbb();
+		properties.setFlowTfr(interval * properties.getFlowTfr() + properties.getLbb());
+		properties.setFlowLbb(interval * properties.getFlowLbb() + properties.getLbb());
 
 		cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
@@ -714,13 +717,12 @@ namespace cubble
 
 				KERNEL_LAUNCH(flowVelocityKernel, pairPolicy,
 					numBubbles, numNeighbors,
-					adp.dummy1, adp.dxdtP,
-					adp.dummy2, adp.dydtP
-#if (NUM_DIM == 3)
-					,
-					adp.dummy3, adp.dzdtP
-#endif
-				);
+					adp.dxdtP, adp.dydtP, adp.dzdtP,
+					adp.dummy1, adp.dummy2, adp.dummy3,
+					adp.xP, adp.yP, adp.zP,
+					properties.getFlowVel(),
+					properties.getFlowTfr(),
+					properties.getFlowLbb());
 #endif
 			}
 

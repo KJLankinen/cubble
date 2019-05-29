@@ -270,11 +270,6 @@ __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
     atomicAdd(&sumOfVelocities[idx2], velocity[idx1]);
 }
 
-__device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity, double *velocity)
-{
-    velocity[idx] += (numNeighbors[idx] > 0 ? 1.0 / numNeighbors[idx] : 0.0) * flowVelocity[idx];
-}
-
 __global__ void calculateVolumes(double *r, double *volumes, int numValues)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
