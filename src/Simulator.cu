@@ -1150,6 +1150,7 @@ namespace cubble
 			hostData.resize(dataStride * numComp);
 			CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride, cudaMemcpyDeviceToHost));
 
+			file << "x,y,z,r,vx,vy,vz,path,dist\n";
 			for (size_t i = 0; i < (size_t)numBubbles; ++i)
 			{
 				file << hostData[i + 0 * dataStride];
