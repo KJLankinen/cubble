@@ -21,6 +21,7 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 {
     properties = Env(inputFileName, outputFileName);
     properties.readParameters();
+	timeScalingFactor = properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
 
     dvec relDim = properties.getBoxRelativeDimensions();
     relDim /= relDim.x;
@@ -144,160 +145,147 @@ void Simulator::deinit()
 void Simulator::run()
 {
     std::cout << "======\nSetup\n======" << std::endl;
+	{
+		setupSimulation();
+		saveSnapshotToFile();
 
-    setupSimulation();
-    saveSnapshotToFile();
+		std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
+		for (size_t i = 0; i < (size_t)properties.getNumStepsToRelax(); ++i)
+			integrate();
 
-    std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
-    for (size_t i = 0; i < (size_t)properties.getNumStepsToRelax(); ++i)
-        integrate();
+		saveSnapshotToFile();
 
-    saveSnapshotToFile();
+		const double phiTarget = properties.getPhiTarget();
+		double bubbleVolume = getVolumeOfBubbles();
+		double phi = bubbleVolume / properties.getSimulationBoxVolume();
 
-    const double phiTarget = properties.getPhiTarget();
-    double bubbleVolume = getVolumeOfBubbles();
-    double phi = bubbleVolume / properties.getSimulationBoxVolume();
+		std::cout << "Volume ratios: current: " << phi
+			<< ", target: " << phiTarget
+			<< std::endl;
 
-    std::cout << "Volume ratios: current: " << phi
-              << ", target: " << phiTarget
-              << std::endl;
+		std::cout << "Scaling the simulation box." << std::endl;
 
-    std::cout << "Scaling the simulation box." << std::endl;
-
-    transformPositions(true);
-    const dvec relativeSize = properties.getBoxRelativeDimensions();
+		transformPositions(true);
+		const dvec relativeSize = properties.getBoxRelativeDimensions();
 #if (NUM_DIM == 3)
-    const double t = std::cbrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
+		const double t = std::cbrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z));
 #else
-    const double t = std::sqrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
+		const double t = std::sqrt(getVolumeOfBubbles() / (phiTarget * relativeSize.x * relativeSize.y));
 #endif
-    properties.setTfr(dvec(t, t, t) * relativeSize);
-    transformPositions(false);
+		properties.setTfr(dvec(t, t, t) * relativeSize);
+		transformPositions(false);
 
-    phi = bubbleVolume / properties.getSimulationBoxVolume();
+		phi = bubbleVolume / properties.getSimulationBoxVolume();
 
-    std::cout << "Volume ratios: current: " << phi
-              << ", target: " << phiTarget
-              << std::endl;
+		std::cout << "Volume ratios: current: " << phi
+			<< ", target: " << phiTarget
+			<< std::endl;
 
-    saveSnapshotToFile();
+		saveSnapshotToFile();
+	}
 
     std::cout << "=============\nStabilization\n=============" << std::endl;
+	{
+		int numSteps = 0;
+		const int failsafe = 500;
 
-    int numSteps = 0;
-    const int failsafe = 500;
+		integrate();
+		calculateEnergy();
+		double energy2 = elasticEnergy;
 
-    integrate();
-    calculateEnergy();
-    double energy2 = elasticEnergy;
+		while (true)
+		{
+			double energy1 = energy2;
+			double time = 0;
 
-    while (true)
-    {
-        double energy1 = energy2;
-        double time = 0;
+			for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
+			{
+				integrate();
+				time += properties.getTimeStep();
+			}
 
-        for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
-        {
-            integrate();
-            time += properties.getTimeStep();
-        }
+			calculateEnergy();
+			energy2 = elasticEnergy;
+			double deltaEnergy = std::abs(energy2 - energy1) / time;
+			deltaEnergy *= 0.5 * properties.getSigmaZero();
 
-        calculateEnergy();
-        energy2 = elasticEnergy;
-        double deltaEnergy = std::abs(energy2 - energy1) / time;
-        deltaEnergy *= 0.5 * properties.getSigmaZero();
+			if (deltaEnergy < properties.getMaxDeltaEnergy())
+			{
+				std::cout << "Final delta energy " << deltaEnergy
+					<< " after " << (numSteps + 1) * properties.getNumStepsToRelax()
+					<< " steps."
+					<< " Energy before: " << energy1
+					<< ", energy after: " << energy2
+					<< ", time: " << time * timeScalingFactor
+					<< std::endl;
+				break;
+			}
+			else if (numSteps > failsafe)
+			{
+				std::cout << "Over " << failsafe * properties.getNumStepsToRelax()
+					<< " steps taken and required delta energy not reached."
+					<< " Check parameters."
+					<< std::endl;
+				break;
+			}
+			else
+				std::cout << "Number of simulation steps relaxed: "
+				<< (numSteps + 1) * properties.getNumStepsToRelax()
+				<< ", delta energy: " << deltaEnergy
+				<< ", energy before: " << energy1
+				<< ", energy after: " << energy2
+				<< std::endl;
 
-        if (deltaEnergy < properties.getMaxDeltaEnergy())
-        {
-            std::cout << "Final delta energy " << deltaEnergy
-                      << " after " << (numSteps + 1) * properties.getNumStepsToRelax()
-                      << " steps."
-                      << " Energy before: " << energy1
-                      << ", energy after: " << energy2
-                      << ", time: " << time * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad())
-                      << std::endl;
-            break;
-        }
-        else if (numSteps > failsafe)
-        {
-            std::cout << "Over " << failsafe * properties.getNumStepsToRelax()
-                      << " steps taken and required delta energy not reached."
-                      << " Check parameters."
-                      << std::endl;
-            break;
-        }
-        else
-            std::cout << "Number of simulation steps relaxed: "
-                      << (numSteps + 1) * properties.getNumStepsToRelax()
-                      << ", delta energy: " << deltaEnergy
-                      << ", energy before: " << energy1
-                      << ", energy after: " << energy2
-                      << std::endl;
+			++numSteps;
+		}
 
-        ++numSteps;
-    }
-
-    saveSnapshotToFile();
+		saveSnapshotToFile();
+	}
 
     std::cout << "==========\nSimulation\n==========" << std::endl;
+	std::stringstream dataStream;
+	{
+		// Set starting positions and reset wrapMultipliers to 0
+		const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
+		CUDA_CALL(cudaMemcpy(adp.x0, adp.x, numBytesToCopy, cudaMemcpyDeviceToDevice));
+		CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
-	// Set starting positions and reset wrapMultipliers to 0
-	const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
-	CUDA_CALL(cudaMemcpy(adp.x0, adp.x, numBytesToCopy, cudaMemcpyDeviceToDevice));
-	CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
+		simulationTime = 0;
+		int numSteps = 0;
+		int timesPrinted = 1;
 
-	simulationTime = 0;
-    numSteps = 0;
-    int timesPrinted = 1;
-    bool stopSimulation = false;
-    std::stringstream dataStream;
+		while (integrate(true))
+		{
+			const double scaledTime = simulationTime * timeScalingFactor;
+			if ((int)scaledTime >= timesPrinted)
+			{
+				double phi = getVolumeOfBubbles() / properties.getSimulationBoxVolume();
+				double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
+				dataStream << scaledTime
+					<< " " << relativeRadius
+					<< " " << getMaxBubbleRadius() / properties.getAvgRad()
+					<< " " << numBubbles
+					<< " " << 1.0 / (getInvRho() * properties.getAvgRad())
+					<< " " << getAverageProperty(adp.d)
+					<< " " << getAverageProperty(adp.s)
+					<< "\n";
 
-    while (!stopSimulation)
-    {
-        /*if (numSteps == 2000)
-        {
-            CUDA_PROFILER_START();
-        }*/
+				std::cout << "t*: " << scaledTime
+					<< " <R>/<R_in>: " << relativeRadius
+					<< " #b: " << numBubbles
+					<< " phi: " << phi
+					<< std::endl;
 
-        stopSimulation = !integrate(true);
+				// Only write snapshots when t* is a power of 2.
+				if ((timesPrinted & (timesPrinted - 1)) == 0)
+					saveSnapshotToFile();
 
-        /*if (numSteps == 2050)
-        {
-            CUDA_PROFILER_STOP();
-#if (USE_PROFILING == 1)
-            break;
-#endif
-        }*/
+				++timesPrinted;
+			}
 
-        const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
-        if ((int)scaledTime >= timesPrinted)
-        {
-            double phi = getVolumeOfBubbles() / properties.getSimulationBoxVolume();
-            double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
-            dataStream << scaledTime
-                       << " " << relativeRadius
-                       << " " << getMaxBubbleRadius() / properties.getAvgRad()
-                       << " " << numBubbles
-                       << " " << 1.0 / (getInvRho() * properties.getAvgRad())
-                       << " " << getAverageProperty(adp.d)
-                       << " " << getAverageProperty(adp.s)
-                       << "\n";
-
-            std::cout << "t*: " << scaledTime
-                      << " <R>/<R_in>: " << relativeRadius
-                      << " #b: " << numBubbles
-                      << " phi: " << phi
-                      << std::endl;
-
-            // Only write snapshots when t* is a power of 2.
-            if ((timesPrinted & (timesPrinted - 1)) == 0)
-                saveSnapshotToFile();
-
-            ++timesPrinted;
-        }
-
-        ++numSteps;
-    }
+			++numSteps;
+		}
+	}
 
     std::ofstream file(properties.getDataFilename());
     file << dataStream.str() << std::endl;
@@ -593,7 +581,6 @@ bool Simulator::integrate(bool useGasExchange)
     // Holy crap this is ugly. Anyway, don't do the calculations, when stabilizing/equilibrating.
     if (useGasExchange)
     {
-        const dvec interval = properties.getTfr() - properties.getLbb();
         KERNEL_LAUNCH(pathLengthDistanceKernel, defaultPolicy,
                       numBubbles,
                       adp.s,
@@ -923,9 +910,7 @@ void Simulator::calculateEnergy()
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
+    const dvec interval = properties.getTfr() - properties.getLbb();
 
     KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
                   numBubbles,
@@ -991,7 +976,7 @@ void Simulator::saveSnapshotToFile()
     std::ofstream file(ss.str().c_str(), std::ios::out);
     if (file.is_open())
     {
-        const double scaledTime = simulationTime * properties.getKParameter() / (properties.getAvgRad() * properties.getAvgRad());
+        const double scaledTime = simulationTime * timeScalingFactor;
 
         const size_t numComp = 9;
         hostData.clear();
