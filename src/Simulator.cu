@@ -435,106 +435,92 @@ namespace cubble
 			do
 			{
 				// Reset values to zero
-				KERNEL_LAUNCH(resetKernel, defaultPolicy,
-					0.0, numBubbles,
-					adp.dxdtP,
-					adp.dydtP,
-					adp.dzdtP,
-					adp.dummy1,
-					adp.dummy2);
+				{
+					KERNEL_LAUNCH(resetKernel, defaultPolicy,
+						0.0, numBubbles,
+						adp.dxdtP,
+						adp.dydtP,
+						adp.dzdtP,
+						adp.dummy1,
+						adp.dummy2);
+				}
 
 				// Predict
-				KERNEL_LAUNCH(predictKernel, defaultPolicy,
-					numBubbles, timeStep,
-					adp.xP, adp.x, adp.dxdt, adp.dxdtO,
-					adp.yP, adp.y, adp.dydt, adp.dydtO
+				{
+					KERNEL_LAUNCH(predictKernel, defaultPolicy,
+						numBubbles, timeStep,
+						adp.xP, adp.x, adp.dxdt, adp.dxdtO,
+						adp.yP, adp.y, adp.dydt, adp.dydtO
 #if (NUM_DIM == 3)
-					,
-					adp.zP, adp.z, adp.dzdt, adp.dzdtO
+						,
+						adp.zP, adp.z, adp.dzdt, adp.dzdtO
 #endif
-				);
+					);
 
-				CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+					CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+				}
 
 				// Velocity
-				KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
-					properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
-					interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
-					interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
+				{
+					KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
+						properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
+						interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
+						interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
 #if (NUM_DIM == 3)
-					,
-					interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+						,
+						interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
 #endif
-				);
+					);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-				KERNEL_LAUNCH(velocityWallKernel, pairPolicy,
-					numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
+					KERNEL_LAUNCH(velocityWallKernel, pairPolicy,
+						numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
 #if (PBC_X == 0)
-					,
-					interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
+						,
+						interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
 #endif
 #if (PBC_Y == 0)
-					,
-					interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
+						,
+						interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
 #endif
 #if (NUM_DIM == 3 && PBC_Z == 0)
-					,
-					interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+						,
+						interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
 #endif
-				);
+					);
 #endif
-
-#if USE_FLOW
-				int *numNeighbors = bubbleCellIndices.getRowPtr(0);
-
-				KERNEL_LAUNCH(neighborVelocityKernel, pairPolicy,
-					pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
-					adp.dummy1, adp.dxdtO,
-					adp.dummy2, adp.dydtO
-#if (NUM_DIM == 3)
-					,
-					adp.dummy3, adp.dzdtO
-#endif
-				);
-
-				KERNEL_LAUNCH(flowVelocityKernel, pairPolicy,
-					numBubbles, numNeighbors,
-					adp.dummy1, adp.dxdtP,
-					adp.dummy2, adp.dydtP
-#if (NUM_DIM == 3)
-					,
-					adp.dummy3, adp.dzdtP
-#endif
-				);
-#endif
+				}
 
 				// Correction
-				KERNEL_LAUNCH(correctKernel, defaultPolicy,
-					numBubbles, timeStep, adp.error,
-					adp.xP, adp.x, adp.dxdt, adp.dxdtP,
-					adp.yP, adp.y, adp.dydt, adp.dydtP
+				{
+					KERNEL_LAUNCH(correctKernel, defaultPolicy,
+						numBubbles, timeStep, adp.error,
+						adp.xP, adp.x, adp.dxdt, adp.dxdtP,
+						adp.yP, adp.y, adp.dydt, adp.dydtP
 #if (NUM_DIM == 3)
-					,
-					adp.zP, adp.z, adp.dzdt, adp.dzdtP
+						,
+						adp.zP, adp.z, adp.dzdt, adp.dzdtP
 #endif
-				);
+					);
 
-				CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
-				CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
+					CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+					CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
+				}
 
 				// Error
-				cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
-				CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
-				CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
-				CUDA_CALL(cudaEventSynchronize(blockingEvent2));
+				{
+					cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
+					CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
+					CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
+					CUDA_CALL(cudaEventSynchronize(blockingEvent2));
 
-				error = pinnedDouble.get()[0];
+					error = pinnedDouble.get()[0];
 
-				if (error < properties.getErrorTolerance() && timeStep < 0.1)
-					timeStep *= 1.9;
-				else if (error > properties.getErrorTolerance())
-					timeStep *= 0.5;
+					if (error < properties.getErrorTolerance() && timeStep < 0.1)
+						timeStep *= 1.9;
+					else if (error > properties.getErrorTolerance())
+						timeStep *= 0.5;
+				}
 
 			} while (error > properties.getErrorTolerance());
 
