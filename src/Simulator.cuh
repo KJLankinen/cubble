@@ -26,8 +26,8 @@ class Simulator
 
   private:
 	void setupSimulation();
-	bool integrate(bool useGasExchange = false);
-	void calculateEnergy();
+	double stabilize();
+	bool integrate();
 	double getVolumeOfBubbles();
 	double getMaxBubbleRadius() const { return maxBubbleRadius; }
 	double getInvRho();
@@ -41,7 +41,8 @@ class Simulator
 	void saveSnapshotToFile();
 
 	double simulationTime = 0.0;
-	double elasticEnergy = 0.0;
+	double energy1 = 0.0;
+	double energy2 = 0.0;
 	uint32_t numSnapshots = 0;
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
