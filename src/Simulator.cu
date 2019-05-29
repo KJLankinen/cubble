@@ -194,7 +194,7 @@ namespace cubble
 			int numSteps = 0;
 			const int failsafe = 500;
 
-			std::cout << "#steps\tdE\te1\te2\n" << std::endl;
+			std::cout << "#steps\tdE/t\te1\te2" << std::endl;
 			while (true)
 			{
 				double time = stabilize();
@@ -248,6 +248,7 @@ namespace cubble
 			int numSteps = 0;
 			int timesPrinted = 1;
 
+			std::cout << "T\tR\t#b" << std::endl;
 			while (integrate())
 			{
 				const double scaledTime = simulationTime * timeScalingFactor;
@@ -262,9 +263,9 @@ namespace cubble
 						<< " " << getAverageProperty(adp.s)
 						<< "\n";
 
-					std::cout << "t*: " << scaledTime
-						<< " <R>/<R_in>: " << relativeRadius
-						<< " #b: " << numBubbles
+					std::cout << scaledTime << "\t"
+						<< relativeRadius << "\t"
+						<< numBubbles
 						<< std::endl;
 
 					// Only write snapshots when t* is a power of 2.
