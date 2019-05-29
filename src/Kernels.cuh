@@ -20,6 +20,9 @@ enum class ReorganizeType
     NUM_VALUES
 };
 
+#define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
+#define CUBBLE_I_PI 1.0 / CUBBLE_PI
+
 extern __device__ bool dErrorEncountered;
 extern __device__ int dMaxBubblesPerCell;
 extern __device__ int dNumPairs;
@@ -283,7 +286,7 @@ __global__ void boundaryWrapKernel(int numValues, Args... args)
         wrapAround(tid, args...);
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi);
+__global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
 __global__ void assignDataToBubbles(double *x,
                                     double *y,
@@ -299,7 +302,6 @@ __global__ void assignDataToBubbles(double *x,
                                     dvec lbb,
                                     double avgRad,
                                     double minRad,
-                                    double pi,
                                     int numValues);
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim, int numValues);
@@ -423,7 +425,6 @@ __global__ void potentialEnergyKernel(int numValues,
 
 template <typename... Args>
 __global__ void gasExchangeKernel(int numValues,
-                                  double pi,
                                   int *first,
                                   int *second,
                                   double *r,
@@ -459,7 +460,7 @@ __global__ void gasExchangeKernel(int numValues,
                 DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
             }
 #if (NUM_DIM == 3)
-            overlapArea *= pi;
+            overlapArea *= CUBBLE_PI;
 #else
             overlapArea = 2.0 * sqrt(overlapArea);
 #endif
@@ -474,13 +475,12 @@ __global__ void gasExchangeKernel(int numValues,
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
+__global__ void freeAreaKernel(int numValues, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt,
                                             double *r,
                                             double *freeArea,
                                             int numValues,
-                                            double invPi,
                                             double kappa,
                                             double kParam);
 
@@ -489,7 +489,6 @@ __global__ void addVolume(double *r, int numValues);
 __global__ void calculateRedistributedGasVolume(double *volume,
                                                 double *r,
                                                 int *aboveMinRadFlags,
-                                                double pi,
                                                 int numValues);
 
 __device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *y, double *f, double *fPrevious);

@@ -275,12 +275,12 @@ __device__ void addFlowVelocity(int idx, int *numNeighbors, double *flowVelocity
     velocity[idx] += (numNeighbors[idx] > 0 ? 1.0 / numNeighbors[idx] : 0.0) * flowVelocity[idx];
 }
 
-__global__ void calculateVolumes(double *r, double *volumes, int numValues, double pi)
+__global__ void calculateVolumes(double *r, double *volumes, int numValues)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
         double radius = r[i];
-        double volume = radius * radius * pi;
+        double volume = radius * radius * CUBBLE_PI;
 #if (NUM_DIM == 3)
         volume *= radius * 1.33333333333333333333333333;
 #endif
@@ -299,7 +299,6 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     dvec lbb,
                                     double avgRad,
                                     double minRad,
-                                    double pi,
                                     int numValues)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
@@ -328,7 +327,7 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         yPrd[i] = pos.y;
         zPrd[i] = pos.z;
 
-        w[i] = 2.0 * pi * r[i] / numValues;
+        w[i] = 2.0 * CUBBLE_PI * r[i] / numValues;
 
 #if (NUM_DIM == 3)
         w[i] *= 2.0 * r[i];
@@ -347,11 +346,11 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
     }
 }
 
-__global__ void freeAreaKernel(int numValues, double pi, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
+__global__ void freeAreaKernel(int numValues, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
-        double totalArea = 2.0 * pi * r[i];
+        double totalArea = 2.0 * CUBBLE_PI * r[i];
 #if (NUM_DIM == 3)
         totalArea *= 2.0 * r[i];
 #endif
@@ -361,13 +360,13 @@ __global__ void freeAreaKernel(int numValues, double pi, double *r, double *free
     }
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double invPi, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double kappa, double kParam)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
         dInvRho = dTotalFreeAreaPerRadius / dTotalFreeArea;
         const double invRadius = 1.0 / r[i];
-        double invArea = 0.5 * invPi * invRadius;
+        double invArea = 0.5 * CUBBLE_I_PI * invRadius;
 #if (NUM_DIM == 3)
         invArea *= 0.5 * invRadius;
 #endif
@@ -392,12 +391,12 @@ __global__ void addVolume(double *r, int numValues)
     }
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, double pi, int numValues)
+__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, int numValues)
 {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
     {
         const double radius = r[i];
-        double vol = pi * radius * radius;
+        double vol = CUBBLE_PI * radius * radius;
 #if (NUM_DIM == 3)
         vol *= 1.333333333333333333333333 * radius;
 #endif

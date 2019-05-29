@@ -516,7 +516,6 @@ bool Simulator::integrate(bool useGasExchange)
 
 			KERNEL_LAUNCH(gasExchangeKernel, pairPolicy,
 				numBubbles,
-				properties.getPi(),
 				pairs.getRowPtr(0),
 				pairs.getRowPtr(1),
 				adp.rP,
@@ -531,7 +530,7 @@ bool Simulator::integrate(bool useGasExchange)
 			);
 
 			KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
-				numBubbles, properties.getPi(), adp.rP, adp.dummy1, adp.error, adp.dummy2);
+				numBubbles, adp.rP, adp.dummy1, adp.error, adp.dummy2);
 
 			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.error, dtfapr, numBubbles, gasExchangePolicy.stream);
 			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
@@ -712,7 +711,7 @@ void Simulator::generateBubbles()
     KERNEL_LAUNCH(assignDataToBubbles, defaultPolicy,
                   adp.x, adp.y, adp.z, adp.xP, adp.yP, adp.zP, adp.r, adp.rP,
                   aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart,
-                  tfr, lbb, avgRad, properties.getMinRad(), properties.getPi(), numBubbles);
+                  tfr, lbb, avgRad, properties.getMinRad(), numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.rP, dasai, numBubbles, defaultPolicy.stream);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.rP), static_cast<void *>(adp.r),
@@ -851,7 +850,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 
     CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
     KERNEL_LAUNCH(calculateRedistributedGasVolume, defaultPolicy,
-                  adp.dummy1, adp.r, flag, properties.getPi(), numBubbles);
+                  adp.dummy1, adp.r, flag, numBubbles);
 
     cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtv, numBubbles);
 
@@ -951,7 +950,7 @@ double Simulator::getVolumeOfBubbles()
 {
     ExecutionPolicy defaultPolicy(128, numBubbles);
     KERNEL_LAUNCH(calculateVolumes, defaultPolicy,
-                  adp.r, adp.dummy1, numBubbles, properties.getPi());
+                  adp.r, adp.dummy1, numBubbles);
     double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, numBubbles);
 
     return volume;
