@@ -412,7 +412,7 @@ namespace cubble
 #endif
 			);
 
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles, energyStream);
 			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]), static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost, energyStream));
 			CUDA_CALL(cudaEventRecord(energyEvent, energyStream));
 
@@ -592,7 +592,7 @@ namespace cubble
 #endif
 			);
 
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles, energyStream);
 			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[2]), static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost, energyStream));
 			CUDA_CALL(cudaEventRecord(energyEvent, energyStream));
 
