@@ -33,19 +33,9 @@ class Simulator
 	double getInvRho();
 	void transformPositions(bool normalize);
 	double getAverageProperty(double *p);
-	void setStartingPositions();
-	void doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark);
-	void doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait);
-	void doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait);
-	void doVelocity(const ExecutionPolicy &policy);
-	void doReset(const ExecutionPolicy &policy);
-	double doError();
-	void doBoundaryWrap(const ExecutionPolicy &policy);
-	void doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark);
 
 	void generateBubbles();
 	void updateCellsAndNeighbors();
-	void updateData();
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
 	dim3 getGridSize();
 	void saveSnapshotToFile();

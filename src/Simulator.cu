@@ -241,10 +241,12 @@ void Simulator::run()
 
     std::cout << "==========\nSimulation\n==========" << std::endl;
 
-    simulationTime = 0;
-    setStartingPositions();
+	// Set starting positions and reset wrapMultipliers to 0
+	const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
+	CUDA_CALL(cudaMemcpy(adp.x0, adp.x, numBytesToCopy, cudaMemcpyDeviceToDevice));
 	CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
+	simulationTime = 0;
     numSteps = 0;
     int timesPrinted = 1;
     bool stopSimulation = false;
@@ -399,6 +401,10 @@ bool Simulator::integrate(bool useGasExchange)
     pairPolicy.gridSize = dim3(256, 1, 1);
     pairPolicy.sharedMemBytes = 0;
 
+	const dvec tfr = properties.getTfr();
+	const dvec lbb = properties.getLbb();
+	const dvec interval = tfr - lbb;
+
     double timeStep = properties.getTimeStep();
     double error = 100000;
     size_t numLoopsDone = 0;
@@ -407,14 +413,174 @@ bool Simulator::integrate(bool useGasExchange)
     {
         NVTX_RANGE_PUSH_A("Integration step");
 
-        doReset(defaultPolicy);
-        doPrediction(defaultPolicy, timeStep, useGasExchange, blockingEvent2);
-        doVelocity(pairPolicy);
-        if (useGasExchange)
-            doGasExchange(pairPolicy, blockingEvent2, pairPolicy.stream);
-        doCorrection(defaultPolicy, timeStep, useGasExchange, nonBlockingStream2);
+		// Reset values to zero
+		KERNEL_LAUNCH(resetKernel, defaultPolicy,
+			0.0, numBubbles,
+			adp.dxdtP,
+			adp.dydtP,
+			adp.dzdtP,
+			adp.drdtP,
+			adp.dummy1,
+			adp.dummy2);
 
-        error = doError();
+		// Predict
+		if (useGasExchange)
+		{
+			KERNEL_LAUNCH(predictKernel, defaultPolicy,
+				numBubbles, timeStep,
+				adp.xP, adp.x, adp.dxdt, adp.dxdtO,
+				adp.yP, adp.y, adp.dydt, adp.dydtO,
+#if (NUM_DIM == 3)
+				adp.zP, adp.z, adp.dzdt, adp.dzdtO,
+#endif
+				adp.rP, adp.r, adp.drdt, adp.drdtO);
+		}
+		else
+		{
+			KERNEL_LAUNCH(predictKernel, defaultPolicy,
+				numBubbles, timeStep,
+				adp.xP, adp.x, adp.dxdt, adp.dxdtO,
+				adp.yP, adp.y, adp.dydt, adp.dydtO
+#if (NUM_DIM == 3)
+				,
+				adp.zP, adp.z, adp.dzdt, adp.dzdtO
+#endif
+			);
+		}
+
+		CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+
+		// Velocity
+		KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
+			properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
+			interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
+			interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
+#if (NUM_DIM == 3)
+			,
+			interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+#endif
+		);
+
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+		KERNEL_LAUNCH(velocityWallKernel, pairPolicy,
+			numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
+#if (PBC_X == 0)
+			,
+			interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
+#endif
+#if (PBC_Y == 0)
+			,
+			interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
+#endif
+#if (NUM_DIM == 3 && PBC_Z == 0)
+			,
+			interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+#endif
+		);
+#endif
+
+#if USE_FLOW
+		int *numNeighbors = bubbleCellIndices.getRowPtr(0);
+
+		KERNEL_LAUNCH(neighborVelocityKernel, pairPolicy,
+			pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
+			adp.dummy1, adp.dxdtO,
+			adp.dummy2, adp.dydtO
+#if (NUM_DIM == 3)
+			,
+			adp.dummy3, adp.dzdtO
+#endif
+		);
+
+		KERNEL_LAUNCH(flowVelocityKernel, pairPolicy,
+			numBubbles, numNeighbors,
+			adp.dummy1, adp.dxdtP,
+			adp.dummy2, adp.dydtP
+#if (NUM_DIM == 3)
+			,
+			adp.dummy3, adp.dzdtP
+#endif
+		);
+#endif
+
+		// Gas exchange
+		if (useGasExchange)
+		{
+			const cudaStream_t originalStream = pairPolicy.stream;
+
+			ExecutionPolicy gasExchangePolicy(128, numBubbles);
+			gasExchangePolicy.stream = nonBlockingStream2;
+			pairPolicy.stream = gasExchangePolicy.stream;
+
+			CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, blockingEvent2, 0));
+
+			KERNEL_LAUNCH(gasExchangeKernel, pairPolicy,
+				numBubbles,
+				properties.getPi(),
+				pairs.getRowPtr(0),
+				pairs.getRowPtr(1),
+				adp.rP,
+				adp.drdtP,
+				adp.dummy1,
+				interval.x, PBC_X == 1, adp.xP,
+				interval.y, PBC_Y == 1, adp.yP
+#if (NUM_DIM == 3)
+				,
+				interval.z, PBC_Z == 1, adp.zP
+#endif
+			);
+
+			KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
+				numBubbles, properties.getPi(), adp.rP, adp.dummy1, adp.error, adp.dummy2);
+
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.error, dtfapr, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dta, numBubbles, gasExchangePolicy.stream);
+
+			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
+				adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / properties.getPi(), properties.getKappa(), properties.getKParameter());
+
+			CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
+			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
+			pairPolicy.stream = originalStream;
+		}
+
+		// Correction
+		if (useGasExchange)
+		{
+			KERNEL_LAUNCH(correctKernel, defaultPolicy,
+				numBubbles, timeStep, adp.error,
+				adp.xP, adp.x, adp.dxdt, adp.dxdtP,
+				adp.yP, adp.y, adp.dydt, adp.dydtP,
+#if (NUM_DIM == 3)
+				adp.zP, adp.z, adp.dzdt, adp.dzdtP,
+#endif
+				adp.rP, adp.r, adp.drdt, adp.drdtP);
+		}
+		else
+		{
+			KERNEL_LAUNCH(correctKernel, defaultPolicy,
+				numBubbles, timeStep, adp.error,
+				adp.xP, adp.x, adp.dxdt, adp.dxdtP,
+				adp.yP, adp.y, adp.dydt, adp.dydtP
+#if (NUM_DIM == 3)
+				,
+				adp.zP, adp.z, adp.dzdt, adp.dzdtP
+#endif
+			);
+		}
+
+		CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+		CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
+
+		// Error
+		cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
+		CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
+		CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
+		CUDA_CALL(cudaEventSynchronize(blockingEvent2));
+
+		error = pinnedDouble.get()[0];
+
         if (error < properties.getErrorTolerance() && timeStep < 0.1)
             timeStep *= 1.9;
         else if (error > properties.getErrorTolerance())
@@ -441,9 +607,52 @@ bool Simulator::integrate(bool useGasExchange)
 #endif
         );
     }
-    doBoundaryWrap(defaultPolicy);
-    doBubbleSizeChecks(defaultPolicy, nonBlockingStream1, blockingEvent1);
-    updateData();
+    
+	// Boundary wrap
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+	KERNEL_LAUNCH(boundaryWrapKernel, defaultPolicy,
+		numBubbles
+#if (PBC_X == 1)
+		,
+		adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(0)
+#endif
+#if (PBC_Y == 1)
+		,
+		adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(1)
+#endif
+#if (PBC_Z == 1 && NUM_DIM == 3)
+		,
+		adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(2)
+#endif
+	);
+#endif
+
+	// Calculate how many bubbles are below the minimum size
+	const cudaStream_t originalStream = defaultPolicy.stream;
+	defaultPolicy.stream = nonBlockingStream1;
+
+	KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, defaultPolicy,
+		numBubbles,
+		aboveMinRadFlags.getRowPtr(0),
+		adp.rP,
+		properties.getMinRad());
+
+	cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, nonBlockingStream1);
+	CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, nonBlockingStream1));
+
+	cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.rP, static_cast<double *>(dtfa), numBubbles, nonBlockingStream1);
+	CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream1));
+
+	CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
+
+	defaultPolicy.stream = originalStream;
+
+	// Update the current values with the calculated predictions
+	CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
+	const size_t numBytesToCopy = 4 * sizeof(double) * dataStride;
+
+	CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
+	CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
 
     ++integrationStep;
     properties.setTimeStep(timeStep);
@@ -464,235 +673,10 @@ bool Simulator::integrate(bool useGasExchange)
 
     maxBubbleRadius = pinnedDouble.get()[0];
 #if (NUM_DIM == 3)
-    continueSimulation &= maxBubbleRadius < 0.5 * (properties.getTfr() - properties.getLbb()).getMinComponent();
+    continueSimulation &= maxBubbleRadius < 0.5 * (tfr - lbb).getMinComponent();
 #endif
 
     return continueSimulation;
-}
-
-void Simulator::doPrediction(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaEvent_t &eventToMark)
-{
-    if (useGasExchange)
-    {
-        KERNEL_LAUNCH(predictKernel, policy,
-                      numBubbles, timeStep,
-                      adp.xP, adp.x, adp.dxdt, adp.dxdtO,
-                      adp.yP, adp.y, adp.dydt, adp.dydtO,
-#if (NUM_DIM == 3)
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtO,
-#endif
-                      adp.rP, adp.r, adp.drdt, adp.drdtO);
-    }
-    else
-    {
-        KERNEL_LAUNCH(predictKernel, policy,
-                      numBubbles, timeStep,
-                      adp.xP, adp.x, adp.dxdt, adp.dxdtO,
-                      adp.yP, adp.y, adp.dydt, adp.dydtO
-#if (NUM_DIM == 3)
-                      ,
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtO
-#endif
-        );
-    }
-
-    CUDA_CALL(cudaEventRecord(eventToMark, policy.stream));
-}
-
-void Simulator::doCorrection(const ExecutionPolicy &policy, double timeStep, bool useGasExchange, cudaStream_t &streamThatShouldWait)
-{
-    if (useGasExchange)
-    {
-        KERNEL_LAUNCH(correctKernel, policy,
-                      numBubbles, timeStep, adp.error,
-                      adp.xP, adp.x, adp.dxdt, adp.dxdtP,
-                      adp.yP, adp.y, adp.dydt, adp.dydtP,
-#if (NUM_DIM == 3)
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtP,
-#endif
-                      adp.rP, adp.r, adp.drdt, adp.drdtP);
-    }
-    else
-    {
-        KERNEL_LAUNCH(correctKernel, policy,
-                      numBubbles, timeStep, adp.error,
-                      adp.xP, adp.x, adp.dxdt, adp.dxdtP,
-                      adp.yP, adp.y, adp.dydt, adp.dydtP
-#if (NUM_DIM == 3)
-                      ,
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtP
-#endif
-        );
-    }
-
-    CUDA_CALL(cudaEventRecord(blockingEvent2, policy.stream));
-    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
-}
-
-void Simulator::doGasExchange(ExecutionPolicy policy, const cudaEvent_t &eventToWaitOn, cudaStream_t &streamThatShouldWait)
-{
-    ExecutionPolicy gasExchangePolicy(128, numBubbles);
-    gasExchangePolicy.stream = nonBlockingStream2;
-    policy.stream = gasExchangePolicy.stream;
-
-    CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, eventToWaitOn, 0));
-
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
-
-    KERNEL_LAUNCH(gasExchangeKernel, policy,
-                  numBubbles,
-                  properties.getPi(),
-                  pairs.getRowPtr(0),
-                  pairs.getRowPtr(1),
-                  adp.rP,
-                  adp.drdtP,
-                  adp.dummy1,
-                  interval.x, PBC_X == 1, adp.xP,
-                  interval.y, PBC_Y == 1, adp.yP
-#if (NUM_DIM == 3)
-                  ,
-                  interval.z, PBC_Z == 1, adp.zP
-#endif
-    );
-
-    KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
-                  numBubbles, properties.getPi(), adp.rP, adp.dummy1, adp.error, adp.dummy2);
-
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.error, dtfapr, numBubbles, gasExchangePolicy.stream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dta, numBubbles, gasExchangePolicy.stream);
-
-    KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-                  adp.drdtP, adp.rP, adp.dummy1, numBubbles, 1.0 / properties.getPi(), properties.getKappa(), properties.getKParameter());
-
-    CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
-    CUDA_CALL(cudaStreamWaitEvent(streamThatShouldWait, blockingEvent2, 0));
-}
-
-void Simulator::doVelocity(const ExecutionPolicy &policy)
-{
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-    const dvec interval = tfr - lbb;
-
-    KERNEL_LAUNCH(velocityPairKernel, policy,
-                  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
-                  interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
-                  interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
-#if (NUM_DIM == 3)
-                  ,
-                  interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
-#endif
-    );
-
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    KERNEL_LAUNCH(velocityWallKernel, policy,
-                  numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
-#if (PBC_X == 0)
-                  ,
-                  interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
-#endif
-#if (PBC_Y == 0)
-                  ,
-                  interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
-#endif
-#if (NUM_DIM == 3 && PBC_Z == 0)
-                  ,
-                  interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
-#endif
-    );
-#endif
-
-#if USE_FLOW
-    int *numNeighbors = bubbleCellIndices.getRowPtr(0);
-
-    KERNEL_LAUNCH(neighborVelocityKernel, policy,
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
-                  adp.dummy1, adp.dxdtO,
-                  adp.dummy2, adp.dydtO
-#if (NUM_DIM == 3)
-                  ,
-                  adp.dummy3, adp.dzdtO
-#endif
-    );
-
-    KERNEL_LAUNCH(flowVelocityKernel, policy,
-                  numBubbles, numNeighbors,
-                  adp.dummy1, adp.dxdtP,
-                  adp.dummy2, adp.dydtP
-#if (NUM_DIM == 3)
-                  ,
-                  adp.dummy3, adp.dzdtP
-#endif
-    );
-#endif
-}
-
-void Simulator::doReset(const ExecutionPolicy &policy)
-{
-    KERNEL_LAUNCH(resetKernel, policy,
-                  0.0, numBubbles,
-                  adp.dxdtP,
-                  adp.dydtP,
-                  adp.dzdtP,
-                  adp.drdtP,
-                  adp.dummy1,
-                  adp.dummy2);
-}
-
-double Simulator::doError()
-{
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
-    CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
-    CUDA_CALL(cudaEventSynchronize(blockingEvent2));
-
-    return pinnedDouble.get()[0];
-}
-
-void Simulator::doBoundaryWrap(const ExecutionPolicy &policy)
-{
-    const dvec tfr = properties.getTfr();
-    const dvec lbb = properties.getLbb();
-
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    KERNEL_LAUNCH(boundaryWrapKernel, policy,
-                  numBubbles
-#if (PBC_X == 1)
-                  ,
-                  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(0)
-#endif
-#if (PBC_Y == 1)
-                                            ,
-                  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(1)
-#endif
-#if (PBC_Z == 1 && NUM_DIM == 3)
-                                            ,
-                  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(2)
-#endif
-    );
-#endif
-}
-
-void Simulator::doBubbleSizeChecks(ExecutionPolicy policy, cudaStream_t &streamToUse, cudaEvent_t &eventToMark)
-{
-    policy.stream = streamToUse;
-
-    KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, policy,
-                  numBubbles,
-                  aboveMinRadFlags.getRowPtr(0),
-                  adp.rP,
-                  properties.getMinRad());
-
-    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, streamToUse);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, streamToUse));
-
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.rP, static_cast<double *>(dtfa), numBubbles, streamToUse);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, streamToUse));
-
-    CUDA_CALL(cudaEventRecord(eventToMark, streamToUse));
 }
 
 void Simulator::generateBubbles()
@@ -858,15 +842,6 @@ void Simulator::updateCellsAndNeighbors()
                                     numPairs);
 }
 
-void Simulator::updateData()
-{
-    CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
-    const size_t numBytesToCopy = 4 * sizeof(double) * dataStride;
-
-    CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
-}
-
 void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
 {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
@@ -1008,12 +983,6 @@ void Simulator::transformPositions(bool normalize)
 double Simulator::getAverageProperty(double *p)
 {
     return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, numBubbles) / numBubbles;
-}
-
-void Simulator::setStartingPositions()
-{
-    const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
-    CUDA_CALL(cudaMemcpy(adp.x0, adp.x, numBytesToCopy, cudaMemcpyDeviceToDevice));
 }
 
 void Simulator::saveSnapshotToFile()
