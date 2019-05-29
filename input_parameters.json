@@ -1,15 +1,15 @@
 {
   "PhiTargetExpl": "The target volume fraction.",
-  "PhiTarget": 0.95,
+  "PhiTarget": 0.87,
 
   "KappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
   "Kappa": 0.1,
 
   "NumBubblesExpl": "Total number of bubbles to simulate.",
-  "NumBubbles": 1e6,
+  "NumBubbles": 1e4,
 
   "MinNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "MinNumBubbles": 900,
+  "MinNumBubbles": 300,
 
   "BoxRelativeDimensionsExpl": "The relative dimension of the box.",
   "BoxRelativeDimensions": {
@@ -67,7 +67,7 @@
   "NumStepsToRelax": 1e4,
 
   "MaxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "MaxDeltaEnergy": 1e-4,
+  "MaxDeltaEnergy": 1e-5,
 
   "KParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
   "KParameter": 0.001,

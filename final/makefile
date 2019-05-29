@@ -2,7 +2,7 @@
 # How many dimensions to simulate.
 # -----------------------------------------------------
 
-NUM_DIM := 3
+NUM_DIM := 2
 
 
 # -----------------------------------------------------
@@ -98,9 +98,10 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 # Flags
 # -----------------------------------------------------
 
-CUDA_ARCH := sm_60
 CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -lineinfo
+GPU_ARCH := -gencode arch=compute_60,code=sm_60 \
+	    -gencode arch=compute_70,code=sm_70
+GPU_FLAGS := $(GPU_ARCH) -std=c++11 --expt-relaxed-constexpr -lineinfo
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O3
 PROFILING_FLAGS :=
@@ -132,7 +133,7 @@ $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 # -----------------------------------------------------
 
 $(GPU_CODE) : $(GPU_OBJS)
-	$(C_GPU) $(PROFILING_FLAGS) -arch=$(CUDA_ARCH) -dlink $^ -o $@
+	$(C_GPU) $(PROFILING_FLAGS) $(GPU_ARCH) -dlink $^ -o $@
 
 
 # -----------------------------------------------------
