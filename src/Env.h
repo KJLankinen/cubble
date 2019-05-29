@@ -121,9 +121,9 @@ class Env
 		CUBBLE_IO_PARAMETER(read, params, MinNumBubbles);
 		CUBBLE_IO_PARAMETER(read, params, DataFilename);
 		CUBBLE_IO_PARAMETER(read, params, BoxRelativeDimensions);
-		CUBBLE_IO_PARAMETER(read, params, FlowLbb)
-		CUBBLE_IO_PARAMETER(read, params, FlowTfr)
-		CUBBLE_IO_PARAMETER(read, params, FlowVel)
+		CUBBLE_IO_PARAMETER(read, params, FlowLbb);
+		CUBBLE_IO_PARAMETER(read, params, FlowTfr);
+		CUBBLE_IO_PARAMETER(read, params, FlowVel);
 
 		if (!read)
 		{
