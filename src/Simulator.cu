@@ -576,8 +576,7 @@ namespace cubble
 
 			KERNEL_LAUNCH(resetKernel, defaultPolicy, 0.0, numBubbles, adp.dummy4);
 
-			CUDA_CALL(cudaStreamWaitEvent(defaultPolicy.stream, blockingEvent1, 0));
-
+			CUDA_CALL(cudaStreamWaitEvent(pairPolicy.stream, blockingEvent1, 0));
 			KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
 				numBubbles,
 				pairs.getRowPtr(0),
@@ -592,8 +591,8 @@ namespace cubble
 #endif
 			);
 
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles, energyStream);
-			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[2]), static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost, energyStream));
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dta, numBubbles, energyStream);
+			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[2]), static_cast<void *>(dta), sizeof(double), cudaMemcpyDeviceToHost, energyStream));
 			CUDA_CALL(cudaEventRecord(energyEvent, energyStream));
 
 			defaultPolicy.stream = 0;
