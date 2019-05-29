@@ -144,6 +144,14 @@ namespace cubble
 
 	void Simulator::run()
 	{
+		auto getVolumeOfBubbles = [this]() -> double
+		{
+			ExecutionPolicy defaultPolicy(128, numBubbles);
+			KERNEL_LAUNCH(calculateVolumes, defaultPolicy,
+				adp.r, adp.dummy1, numBubbles);
+			return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, numBubbles);
+		};
+
 		std::cout << "======\nSetup\n======" << std::endl;
 		{
 			setupSimulation();
@@ -151,7 +159,6 @@ namespace cubble
 
 			std::cout << "Letting bubbles settle after they've been created and before scaling or stabilization." << std::endl;
 			stabilize();
-
 			saveSnapshotToFile();
 
 			const double phiTarget = properties.getPhiTarget();
@@ -163,7 +170,6 @@ namespace cubble
 				<< std::endl;
 
 			std::cout << "Scaling the simulation box." << std::endl;
-
 			transformPositions(true);
 			const dvec relativeSize = properties.getBoxRelativeDimensions();
 #if (NUM_DIM == 3)
@@ -188,6 +194,7 @@ namespace cubble
 			int numSteps = 0;
 			const int failsafe = 500;
 
+			std::cout << "#steps\tdE\te1\te2\n" << std::endl;
 			while (true)
 			{
 				double time = stabilize();
@@ -214,12 +221,14 @@ namespace cubble
 					break;
 				}
 				else
-					std::cout << "Number of simulation steps relaxed: "
-					<< (numSteps + 1) * properties.getNumStepsToRelax()
-					<< ", delta energy: " << deltaEnergy
-					<< ", energy before: " << energy1
-					<< ", energy after: " << energy2
-					<< std::endl;
+				{
+					std::cout
+						<< (numSteps + 1) * properties.getNumStepsToRelax() << "\t"
+						<< deltaEnergy << "\t"
+						<< energy1 << "\t"
+						<< energy2
+						<< std::endl;
+				}
 
 				++numSteps;
 			}
@@ -244,13 +253,11 @@ namespace cubble
 				const double scaledTime = simulationTime * timeScalingFactor;
 				if ((int)scaledTime >= timesPrinted)
 				{
-					double phi = getVolumeOfBubbles() / properties.getSimulationBoxVolume();
 					double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
 					dataStream << scaledTime
 						<< " " << relativeRadius
-						<< " " << getMaxBubbleRadius() / properties.getAvgRad()
+						<< " " << maxBubbleRadius / properties.getAvgRad()
 						<< " " << numBubbles
-						<< " " << 1.0 / (getInvRho() * properties.getAvgRad())
 						<< " " << getAverageProperty(adp.d)
 						<< " " << getAverageProperty(adp.s)
 						<< "\n";
@@ -258,7 +265,6 @@ namespace cubble
 					std::cout << "t*: " << scaledTime
 						<< " <R>/<R_in>: " << relativeRadius
 						<< " #b: " << numBubbles
-						<< " phi: " << phi
 						<< std::endl;
 
 					// Only write snapshots when t* is a power of 2.
@@ -604,6 +610,9 @@ namespace cubble
 			CUDA_CALL(cudaEventSynchronize(energyEvent));
 			energy2 = pinnedDouble.get()[2];
 		}
+
+		CUDA_CALL(cudaStreamDestroy(energyStream));
+		CUDA_CALL(cudaEventDestroy(energyEvent));
 
 		return elapsedTime;
 	}
@@ -1120,24 +1129,6 @@ namespace cubble
 		return dim3(grid.x, grid.y, grid.z);
 	}
 
-	double Simulator::getVolumeOfBubbles()
-	{
-		ExecutionPolicy defaultPolicy(128, numBubbles);
-		KERNEL_LAUNCH(calculateVolumes, defaultPolicy,
-			adp.r, adp.dummy1, numBubbles);
-		double volume = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, numBubbles);
-
-		return volume;
-	}
-
-	double Simulator::getInvRho()
-	{
-		double invRho = 0;
-		CUDA_CALL(cudaMemcpy(static_cast<void *>(&invRho), static_cast<void *>(dir), sizeof(double), cudaMemcpyDeviceToHost));
-
-		return invRho;
-	}
-
 	void Simulator::transformPositions(bool normalize)
 	{
 		ExecutionPolicy policy;
@@ -1165,11 +1156,10 @@ namespace cubble
 		std::ofstream file(ss.str().c_str(), std::ios::out);
 		if (file.is_open())
 		{
-			const size_t numComp = 9;
+			const size_t numComp = 17;
 			hostData.clear();
 			hostData.resize(dataStride * numComp);
 			CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride, cudaMemcpyDeviceToHost));
-			CUDA_CALL(cudaMemcpy(&hostData[dataStride * 7], adp.s, sizeof(double) * 2 * dataStride, cudaMemcpyDeviceToHost));
 
 			for (size_t i = 0; i < (size_t)numBubbles; ++i)
 			{
@@ -1187,9 +1177,9 @@ namespace cubble
 				file << ",";
 				file << hostData[i + 6 * dataStride];
 				file << ",";
-				file << hostData[i + 7 * dataStride];
+				file << hostData[i + 15 * dataStride];
 				file << ",";
-				file << hostData[i + 8 * dataStride];
+				file << hostData[i + 16 * dataStride];
 				file << "\n";
 			}
 

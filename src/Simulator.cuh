@@ -26,17 +26,15 @@ class Simulator
 
   private:
 	void setupSimulation();
+	void generateBubbles();
+	
 	double stabilize();
 	bool integrate();
-	double getVolumeOfBubbles();
-	double getMaxBubbleRadius() const { return maxBubbleRadius; }
-	double getInvRho();
-	void transformPositions(bool normalize);
-	double getAverageProperty(double *p);
-
-	void generateBubbles();
 	void updateCellsAndNeighbors();
 	void deleteSmallBubbles(int numBubblesAboveMinRad);
+
+	void transformPositions(bool normalize);
+	double getAverageProperty(double *p);
 	dim3 getGridSize();
 	void saveSnapshotToFile();
 
