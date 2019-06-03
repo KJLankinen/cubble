@@ -6,10 +6,10 @@
   "Kappa": 0.1,
 
   "NumBubblesExpl": "Total number of bubbles to simulate.",
-  "NumBubbles": 1e4,
+  "NumBubbles": 1e6,
 
   "MinNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "MinNumBubbles": 300,
+  "MinNumBubbles": 900,
 
   "BoxRelativeDimensionsExpl": "The relative dimension of the box.",
   "BoxRelativeDimensions": {
@@ -27,9 +27,9 @@
 
   "FlowTfrExpl": "(Relative) Top-front-right of flow area.",
   "FlowTfr": {
-    "x": 1.0,
-    "y": 1.0,
-    "z": 1.0
+    "x": 0.1,
+    "y": 0.1,
+    "z": 0.1
   },
 
   "FlowVelExpl": "Flow velocity inside flow area.",
