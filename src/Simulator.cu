@@ -250,7 +250,7 @@ void Simulator::run()
 		int timesPrinted = 1;
 		uint32_t numSteps = 0;
 
-		std::cout << "T\tR\t#b\tE" << std::endl;
+		std::cout << "T\tR\t#b\tE\t#steps" << std::endl;
 		while (integrate())
 		{
 			// The if clause contains many slow operations, but it's only done
@@ -303,7 +303,8 @@ void Simulator::run()
 				std::cout << scaledTime << "\t"
 						  << relativeRadius << "\t"
 						  << numBubbles << "\t"
-						  << energy
+						  << energy << "\t"
+						  << numSteps
 						  << std::endl;
 
 				// Only write snapshots when t* is a power of 2.
