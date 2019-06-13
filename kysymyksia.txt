@@ -1,3 +1,0 @@
-Nature materialsin arvot:
-* lasketaanko dS ja dR² yksittäisten time steppien välein? Siis resetoidaanko aloitus paikka aina time steppien välillä edellisen timestepin arvoksi? Vai lasketaanko kasvavia arvoja simulaation alusta?
-

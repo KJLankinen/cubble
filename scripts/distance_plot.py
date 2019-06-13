@@ -24,30 +24,30 @@ def plot_avg(data_dir, ax):
     ax.loglog(data[:, 0], data[:, -1])
 
 def main():
-    if (len(sys.argv) < 2):
+    if (len(sys.argv) < 4):
         print("Give arguments:")
         print("1: Data directory.")
-        #print("2: First snapshot (a number).")
-        #print("3: Last snapshot (a number).")
+        print("2: First snapshot (a number).")
+        print("3: Last snapshot (a number).")
         return 1
 
     data_dir = sys.argv[1]
-    #first_snapshot = int(sys.argv[2])
-    #last_snapshot = int(sys.argv[3])
+    first_snapshot = int(sys.argv[2])
+    last_snapshot = int(sys.argv[3])
     print("Using " + data_dir + " as data directory.")
-    #print("Using snapshots in range " + str(first_snapshot) + "-" + str(last_snapshot))
+    print("Using snapshots in range " + str(first_snapshot) + "-" + str(last_snapshot))
     
-    fig = plt.figure()
+    fig = plt.figure(figsize=(15, 10))
     ax = fig.add_subplot(111)
-    #ax.set_xlabel("path length s")
-    #ax.set_ylabel("distance r²")
+    ax.set_xlabel("path length s")
+    ax.set_ylabel("distance r^2")
     ax.grid(1)
     
-    #plot_snapshots(data_dir, first_snapshot, last_snapshot, ax)
-    plot_avg(data_dir, ax)
+    plot_snapshots(data_dir, first_snapshot, last_snapshot, ax)
+    #plot_avg(data_dir, ax)
 
-    x = np.linspace(1.5, 1000, 1000)
-    y = pow(x, 1.2) * 0.25
+    x = np.linspace(0.01, 12, 100)
+    y = pow(x, 2.0)
     ax.loglog(x, y)
 
     plt.show()
