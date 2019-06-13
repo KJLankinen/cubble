@@ -250,12 +250,46 @@ void Simulator::run()
 		int timesPrinted = 1;
 		uint32_t numSteps = 0;
 
-		std::cout << "T\tR\t#b\t#restarts\t#steps" << std::endl;
+		std::cout << "T\tR\t#b\tE" << std::endl;
 		while (integrate())
 		{
+			// The if clause contains many slow operations, but it's only done
+			// very few times relative to the entire run time, so it should not
+			// have a huge cost. Roughly 6e4-1e5 integration steps are taken for each time step
+			// and the if clause is executed once per time step.
 			const double scaledTime = simulationTime * timeScalingFactor;
 			if ((int)scaledTime >= timesPrinted)
 			{
+				// Calculate total energy
+				ExecutionPolicy defaultPolicy(128, numBubbles);
+
+				ExecutionPolicy pairPolicy;
+				pairPolicy.blockSize = dim3(128, 1, 1);
+				pairPolicy.stream = 0;
+				pairPolicy.gridSize = dim3(256, 1, 1);
+				pairPolicy.sharedMemBytes = 0;
+
+				const dvec interval = properties.getTfr() - properties.getLbb();
+
+				KERNEL_LAUNCH(resetKernel, defaultPolicy, 0.0, numBubbles, adp.dummy4);
+
+				KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
+							  numBubbles,
+							  pairs.getRowPtr(0),
+							  pairs.getRowPtr(1),
+							  adp.r,
+							  adp.dummy4,
+							  interval.x, PBC_X == 1, adp.x,
+							  interval.y, PBC_Y == 1, adp.y
+#if (NUM_DIM == 3)
+							  ,
+							  interval.z, PBC_Z == 1, adp.z
+#endif
+				);
+
+				const double energy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+
+				// Add values to data stream
 				double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
 				dataStream << scaledTime
 						   << " " << relativeRadius
@@ -263,11 +297,13 @@ void Simulator::run()
 						   << " " << numBubbles
 						   << " " << getAverageProperty(adp.s)
 						   << " " << getAverageProperty(adp.d)
+						   << " " << energy
 						   << "\n";
 
 				std::cout << scaledTime << "\t"
 						  << relativeRadius << "\t"
-						  << numBubbles
+						  << numBubbles << "\t"
+						  << energy
 						  << std::endl;
 
 				// Only write snapshots when t* is a power of 2.
@@ -275,15 +311,7 @@ void Simulator::run()
 					saveSnapshotToFile();
 
 				++timesPrinted;
-
 				numSteps = 0;
-
-				std::ofstream file("loops.dat", std::ios::app);
-				for (auto &it : loopsDone)
-					file << it << " ";
-
-				file << std::endl;
-				loopsDone.clear();
 			}
 
 			++numSteps;
@@ -794,8 +822,6 @@ bool Simulator::integrate()
 
 		NVTX_RANGE_POP();
 	} while (error > properties.getErrorTolerance());
-
-	loopsDone.push_back(numLoopsDone);
 
 	// Path lengths & distances
 	{

@@ -54,7 +54,6 @@ class Simulator
 	cudaStream_t nonBlockingStream1;
 	cudaStream_t nonBlockingStream2;
 
-	std::vector<uint32_t> loopsDone;
 	std::vector<cudaStream_t> neighborStreamVec;
 	std::vector<cudaEvent_t> neighborEventVec;
 
