@@ -45,7 +45,7 @@ class Simulator
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
-	size_t numLoopsDone = 0;
+	uint32_t numMaxWhileLoops = 0;
 	double timeScalingFactor = 0.0;
 
 	double maxBubbleRadius = 0;
