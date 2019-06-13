@@ -390,12 +390,12 @@ __global__ void neighborVelocityKernel(int *first, int *second, int *numNeighbor
 }
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
-	double *velX, double *velY, double *velZ,
-	double *nVelX, double *nVelY, double *nVelZ,
-	double *posX, double *posY, double *posZ,
-	dvec flowVel,
-	dvec flowTfr,
-	dvec flowLbb);
+                                   double *velX, double *velY, double *velZ,
+                                   double *nVelX, double *nVelY, double *nVelZ,
+                                   double *posX, double *posY, double *posZ,
+                                   dvec flowVel,
+                                   dvec flowTfr,
+                                   dvec flowLbb);
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues,
@@ -410,9 +410,12 @@ __global__ void potentialEnergyKernel(int numValues,
         const int idx1 = first[i];
         const int idx2 = second[i];
         double e = r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
-        e *= e;
-        atomicAdd(&energy[idx1], e);
-        atomicAdd(&energy[idx2], e);
+        if (e > 0)
+        {
+            e *= e;
+            atomicAdd(&energy[idx1], e);
+            atomicAdd(&energy[idx2], e);
+        }
     }
 }
 
@@ -560,4 +563,4 @@ __global__ void pathLengthDistanceKernel(int numValues, double *pathLengths, dou
     }
 }
 
-}
+} // namespace cubble
