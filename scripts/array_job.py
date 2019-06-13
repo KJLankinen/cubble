@@ -108,7 +108,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --mem=4G\n\
 #SBATCH --time=72:00:00\n\
 #SBATCH --gres=gpu:1\n\
-#SBATCH --constraint=\"pascal|volta\"\n\
+#SBATCH --constraint=\"pascal\"\n\
 #SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
 #SBATCH --mail-type=ALL\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
