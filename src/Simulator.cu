@@ -276,7 +276,7 @@ void Simulator::run()
 #endif
 		);
 
-		energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+		energy1 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
 
 		// Start the simulation proper
 		std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
@@ -306,8 +306,8 @@ void Simulator::run()
 #endif
 				);
 
-				energy1 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
-				const double dE = (energy1 - energy2) / energy1;
+				energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+				const double dE = (energy2 - energy1) / energy2;
 
 				// Add values to data stream
 				double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
@@ -334,7 +334,7 @@ void Simulator::run()
 
 				++timesPrinted;
 				numSteps = 0;
-				energy2 = energy1;
+				energy1 = energy2;
 			}
 
 			++numSteps;
