@@ -249,8 +249,37 @@ void Simulator::run()
 		simulationTime = 0;
 		int timesPrinted = 1;
 		uint32_t numSteps = 0;
+		const dvec interval = properties.getTfr() - properties.getLbb();
 
-		std::cout << "T\tR\t#b\tE\t#steps" << std::endl;
+		ExecutionPolicy defaultPolicy(128, numBubbles);
+
+		ExecutionPolicy pairPolicy;
+		pairPolicy.blockSize = dim3(128, 1, 1);
+		pairPolicy.stream = 0;
+		pairPolicy.gridSize = dim3(256, 1, 1);
+		pairPolicy.sharedMemBytes = 0;
+
+		// Calculate the energy at simulation start
+		KERNEL_LAUNCH(resetKernel, defaultPolicy, 0.0, numBubbles, adp.dummy4);
+
+		KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
+					  numBubbles,
+					  pairs.getRowPtr(0),
+					  pairs.getRowPtr(1),
+					  adp.r,
+					  adp.dummy4,
+					  interval.x, PBC_X == 1, adp.x,
+					  interval.y, PBC_Y == 1, adp.y
+#if (NUM_DIM == 3)
+					  ,
+					  interval.z, PBC_Z == 1, adp.z
+#endif
+		);
+
+		energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+
+		// Start the simulation proper
+		std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
 		while (integrate())
 		{
 			// The if clause contains many slow operations, but it's only done
@@ -261,16 +290,6 @@ void Simulator::run()
 			if ((int)scaledTime >= timesPrinted)
 			{
 				// Calculate total energy
-				ExecutionPolicy defaultPolicy(128, numBubbles);
-
-				ExecutionPolicy pairPolicy;
-				pairPolicy.blockSize = dim3(128, 1, 1);
-				pairPolicy.stream = 0;
-				pairPolicy.gridSize = dim3(256, 1, 1);
-				pairPolicy.sharedMemBytes = 0;
-
-				const dvec interval = properties.getTfr() - properties.getLbb();
-
 				KERNEL_LAUNCH(resetKernel, defaultPolicy, 0.0, numBubbles, adp.dummy4);
 
 				KERNEL_LAUNCH(potentialEnergyKernel, pairPolicy,
@@ -287,7 +306,8 @@ void Simulator::run()
 #endif
 				);
 
-				const double energy = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+				energy1 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+				const double dE = (energy1 - energy2) / energy1;
 
 				// Add values to data stream
 				double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
@@ -297,13 +317,14 @@ void Simulator::run()
 						   << " " << numBubbles
 						   << " " << getAverageProperty(adp.s)
 						   << " " << getAverageProperty(adp.d)
-						   << " " << energy
+						   << " " << dE
 						   << "\n";
 
+				// Print some values
 				std::cout << scaledTime << "\t"
 						  << relativeRadius << "\t"
 						  << numBubbles << "\t"
-						  << energy << "\t"
+						  << dE << "\t"
 						  << numSteps
 						  << std::endl;
 
@@ -313,6 +334,7 @@ void Simulator::run()
 
 				++timesPrinted;
 				numSteps = 0;
+				energy2 = energy1;
 			}
 
 			++numSteps;
