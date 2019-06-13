@@ -45,7 +45,6 @@ class Simulator
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
-	uint32_t numMaxWhileLoops = 0;
 	double timeScalingFactor = 0.0;
 
 	double maxBubbleRadius = 0;
@@ -55,6 +54,7 @@ class Simulator
 	cudaStream_t nonBlockingStream1;
 	cudaStream_t nonBlockingStream2;
 
+	std::vector<uint32_t> loopsDone;
 	std::vector<cudaStream_t> neighborStreamVec;
 	std::vector<cudaEvent_t> neighborEventVec;
 

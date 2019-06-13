@@ -263,15 +263,11 @@ void Simulator::run()
 						   << " " << numBubbles
 						   << " " << getAverageProperty(adp.s)
 						   << " " << getAverageProperty(adp.d)
-						   << " " << numMaxWhileLoops
-						   << " " << numSteps
 						   << "\n";
 
 				std::cout << scaledTime << "\t"
 						  << relativeRadius << "\t"
-						  << numBubbles << "\t"
-						  << numMaxWhileLoops << "\t"
-						  << numSteps
+						  << numBubbles
 						  << std::endl;
 
 				// Only write snapshots when t* is a power of 2.
@@ -280,8 +276,14 @@ void Simulator::run()
 
 				++timesPrinted;
 
-				numMaxWhileLoops = 0;
 				numSteps = 0;
+
+				std::ofstream file("loops.dat", std::ios::app);
+				for (auto &it : loopsDone)
+					file << it << " ";
+
+				file << std::endl;
+				loopsDone.clear();
 			}
 
 			++numSteps;
@@ -793,7 +795,7 @@ bool Simulator::integrate()
 		NVTX_RANGE_POP();
 	} while (error > properties.getErrorTolerance());
 
-	numMaxWhileLoops = numMaxWhileLoops > numLoopsDone ? numMaxWhileLoops : numLoopsDone;
+	loopsDone.push_back(numLoopsDone);
 
 	// Path lengths & distances
 	{
