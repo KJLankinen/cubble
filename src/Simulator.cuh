@@ -27,7 +27,7 @@ class Simulator
   private:
 	void setupSimulation();
 	void generateBubbles();
-	
+
 	double stabilize();
 	bool integrate();
 	void updateCellsAndNeighbors();
@@ -45,6 +45,7 @@ class Simulator
 	int numBubbles = 0;
 	ivec bubblesPerDimAtStart = ivec(0, 0, 0);
 	size_t integrationStep = 0;
+	size_t numLoopsDone = 0;
 	double timeScalingFactor = 0.0;
 
 	double maxBubbleRadius = 0;
