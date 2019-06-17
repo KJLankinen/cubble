@@ -705,6 +705,7 @@ bool Simulator::integrate()
 						  adp.dydtP,
 						  adp.dzdtP,
 						  adp.drdtP,
+						  adp.error,
 						  adp.dummy1,
 						  adp.dummy2);
 		}
@@ -752,10 +753,7 @@ bool Simulator::integrate()
 #endif
 			);
 #endif
-		}
 
-		// Imposed flow
-		{
 #if USE_FLOW
 			int *numNeighbors = bubbleCellIndices.getRowPtr(0);
 
@@ -778,6 +776,16 @@ bool Simulator::integrate()
 						  properties.getFlowTfr(),
 						  properties.getFlowLbb());
 #endif
+
+			KERNEL_LAUNCH(correctKernel, defaultPolicy,
+						  numBubbles, timeStep, adp.error,
+						  adp.xP, adp.x, adp.dxdt, adp.dxdtP,
+						  adp.yP, adp.y, adp.dydt, adp.dydtP
+#if (NUM_DIM == 3)
+						  ,
+						  adp.zP, adp.z, adp.dzdt, adp.dzdtP,
+#endif
+			);
 		}
 
 		// Gas exchange
@@ -815,34 +823,18 @@ bool Simulator::integrate()
 			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
 						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
 
+			KERNEL_LAUNCH(correctKernel, gasExchangePolicy,
+						  numBubbles, timeStep, adp.error,
+						  adp.rP, adp.r, adp.drdt, adp.drdtP);
+
 			CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
 			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
 			pairPolicy.stream = originalStream;
 		}
 
-		// Correction
-		{
-			KERNEL_LAUNCH(correctKernel, defaultPolicy,
-						  numBubbles, timeStep, adp.error,
-						  adp.xP, adp.x, adp.dxdt, adp.dxdtP,
-						  adp.yP, adp.y, adp.dydt, adp.dydtP,
-#if (NUM_DIM == 3)
-						  adp.zP, adp.z, adp.dzdt, adp.dzdtP,
-#endif
-						  adp.rP, adp.r, adp.drdt, adp.drdtP);
-
-			CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
-			CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
-		}
-
 		// Error
 		{
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
-			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
-			CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
-			CUDA_CALL(cudaEventSynchronize(blockingEvent2));
-
-			error = pinnedDouble.get()[0];
+			error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, numBubbles);
 
 			if (error < properties.getErrorTolerance() && timeStep < 0.1)
 				timeStep *= 1.9;

@@ -519,7 +519,10 @@ __global__ void correctKernel(int numValues, double timeStep, double *errors, Ar
 {
     const int tid = getGlobalTid();
     if (tid < numValues)
-        errors[tid] = adamsMoulton(tid, timeStep, args...);
+    {
+        const double e = adamsMoulton(tid, timeStep, args...);
+        errors[tid] = e > errors[tid] ? e : errors[tid];
+    }
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
