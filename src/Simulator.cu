@@ -282,7 +282,7 @@ void Simulator::run()
 		std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
 		while (integrate())
 		{
-#if USE_PROFILING
+#if (USE_PROFILING == 1)
 			if (numSteps == 2000)
 				CUDA_PROFILER_START();
 			else if (numSteps == 2050)
