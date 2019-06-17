@@ -35,15 +35,22 @@ extern __device__ double dTotalArea;
 extern __device__ double dAverageSurfaceAreaIn;
 
 template <typename... Arguments>
-void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)(Arguments...), const ExecutionPolicy &p, Arguments... args)
+void cudaLaunch(const char *kernelNameStr,
+                const char *file,
+                int line,
+                void (*f)(Arguments...),
+                KernelSize kernelSize,
+                uin32_t sharedMemBytes,
+                cudaStream_t stream,
+                Arguments... args)
 {
 #ifndef NDEBUG
-    assertMemBelowLimit(kernelNameStr, file, line, p.sharedMemBytes);
-    assertBlockSizeBelowLimit(kernelNameStr, file, line, p.blockSize);
-    assertGridSizeBelowLimit(kernelNameStr, file, line, p.gridSize);
+    assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
+    assertBlockSizeBelowLimit(kernelNameStr, file, line, kernelSize.block);
+    assertGridSizeBelowLimit(kernelNameStr, file, line, kernelSize.grid);
 #endif
 
-    f<<<p.gridSize, p.blockSize, p.sharedMemBytes, p.stream>>>(args...);
+    f<<<kernelSize.grid, kernelSize.block, sharedMemBytes, stream>>>(args...);
 
 #ifndef NDEBUG
     CUDA_ASSERT(cudaDeviceSynchronize());

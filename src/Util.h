@@ -15,39 +15,22 @@
 namespace cubble
 {
 
-struct ExecutionPolicy
+struct KernelSize
 {
-	ExecutionPolicy(dim3 gridSize, dim3 blockSize, uint32_t sharedMemBytes, cudaStream_t stream)
-		: gridSize(gridSize), blockSize(blockSize), sharedMemBytes(sharedMemBytes), stream(stream)
+	dim3 grid = dim3(1, 1, 1);
+	dim3 block = dim3(1, 1, 1);
+
+	KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
 	{
+		update(numThreadsPerBlock, numTotalThreads);
 	}
 
-	ExecutionPolicy()
-		: ExecutionPolicy(dim3(1, 1, 1), dim3(1, 1, 1), 0, 0)
+	void update(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
 	{
+		block = dim3(numThreadsPerBlock, 1, 1);
+		grid = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
 	}
-
-	ExecutionPolicy(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
-	{
-		blockSize = dim3(numThreadsPerBlock, 1, 1);
-		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
-		sharedMemBytes = 0;
-		stream = 0;
-	}
-
-	ExecutionPolicy(uint32_t numThreadsPerBlock, uint32_t numTotalThreads, uint32_t bytes, cudaStream_t s)
-	{
-		blockSize = dim3(numThreadsPerBlock, 1, 1);
-		gridSize = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
-		sharedMemBytes = bytes;
-		stream = s;
-	}
-
-	dim3 gridSize;
-	dim3 blockSize;
-	uint32_t sharedMemBytes = 0;
-	cudaStream_t stream = 0;
-};
+}
 
 const double CUBBLE_EPSILON = 1.0e-10;
 #if NUM_DIM == 3
