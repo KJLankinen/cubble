@@ -40,7 +40,7 @@ void cudaLaunch(const char *kernelNameStr,
                 int line,
                 void (*f)(Arguments...),
                 KernelSize kernelSize,
-                uin32_t sharedMemBytes,
+                uint32_t sharedMemBytes,
                 cudaStream_t stream,
                 Arguments... args)
 {

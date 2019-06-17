@@ -20,6 +20,8 @@ struct KernelSize
 	dim3 grid = dim3(1, 1, 1);
 	dim3 block = dim3(1, 1, 1);
 
+	KernelSize() {}
+
 	KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
 	{
 		update(numThreadsPerBlock, numTotalThreads);
