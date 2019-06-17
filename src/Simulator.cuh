@@ -54,6 +54,9 @@ class Simulator
 	cudaStream_t nonBlockingStream1;
 	cudaStream_t nonBlockingStream2;
 
+	cudaStream_t velocityStream;
+	cudaStream_t gasExchangeStream;
+
 	KernelSize pairKernelSize;
 
 	std::vector<cudaStream_t> neighborStreamVec;

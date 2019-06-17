@@ -105,6 +105,10 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 
 	CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
 	CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
+
+	CUDA_ASSERT(cudaStreamCreate(&velocityStream));
+	CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
+
 	CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
 	CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
 
@@ -138,6 +142,9 @@ void Simulator::deinit()
 
 	CUDA_CALL(cudaStreamDestroy(nonBlockingStream1));
 	CUDA_CALL(cudaStreamDestroy(nonBlockingStream2));
+	CUDA_CALL(cudaStreamDestroy(velocityStream));
+	CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
+
 	CUDA_CALL(cudaEventDestroy(blockingEvent1));
 	CUDA_CALL(cudaEventDestroy(blockingEvent2));
 
@@ -697,12 +704,12 @@ bool Simulator::integrate()
 #endif
 						  adp.rP, adp.r, adp.drdt, adp.drdtO);
 
-			CUDA_CALL(cudaEventRecord(blockingEvent2, 0));
+			//CUDA_CALL(cudaEventRecord(blockingEvent2, 0));
 		}
 
 		// Velocity
 		{
-			KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0,
+			KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, velocityStream,
 						  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
 						  interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
 						  interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
@@ -713,7 +720,7 @@ bool Simulator::integrate()
 			);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-			KERNEL_LAUNCH(velocityWallKernel, pairKernelSize, 0, 0,
+			KERNEL_LAUNCH(velocityWallKernel, pairKernelSize, 0, velocityStream,
 						  numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
 #if (PBC_X == 0)
 						  ,
@@ -733,7 +740,7 @@ bool Simulator::integrate()
 #if USE_FLOW
 			int *numNeighbors = bubbleCellIndices.getRowPtr(0);
 
-			KERNEL_LAUNCH(neighborVelocityKernel, pairKernelSize, 0, 0,
+			KERNEL_LAUNCH(neighborVelocityKernel, pairKernelSize, 0, velocityStream,
 						  pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
 						  adp.dummy1, adp.dxdtO,
 						  adp.dummy2, adp.dydtO
@@ -743,7 +750,7 @@ bool Simulator::integrate()
 #endif
 			);
 
-			KERNEL_LAUNCH(flowVelocityKernel, pairKernelSize, 0, 0,
+			KERNEL_LAUNCH(flowVelocityKernel, pairKernelSize, 0, velocityStream,
 						  numBubbles, numNeighbors,
 						  adp.dxdtP, adp.dydtP, adp.dzdtP,
 						  adp.dummy1, adp.dummy2, adp.dummy3,
@@ -753,7 +760,7 @@ bool Simulator::integrate()
 						  properties.getFlowLbb());
 #endif
 
-			KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0,
+			KERNEL_LAUNCH(correctKernel, kernelSize, 0, velocityStream,
 						  numBubbles, timeStep, adp.error,
 						  adp.xP, adp.x, adp.dxdt, adp.dxdtP,
 						  adp.yP, adp.y, adp.dydt, adp.dydtP
@@ -766,11 +773,7 @@ bool Simulator::integrate()
 
 		// Gas exchange
 		{
-			KernelSize kernelSize(128, numBubbles);
-
-			CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
-
-			KERNEL_LAUNCH(gasExchangeKernel, pairKernelSize, 0, nonBlockingStream2,
+			KERNEL_LAUNCH(gasExchangeKernel, pairKernelSize, 0, gasExchangeStream,
 						  numBubbles,
 						  pairs.getRowPtr(0),
 						  pairs.getRowPtr(1),
@@ -785,22 +788,19 @@ bool Simulator::integrate()
 #endif
 			);
 
-			KERNEL_LAUNCH(freeAreaKernel, kernelSize, 0, nonBlockingStream2,
+			KERNEL_LAUNCH(freeAreaKernel, kernelSize, 0, gasExchangeStream,
 						  numBubbles, adp.rP, adp.dummy1, adp.dummy2, adp.dummy3);
 
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, nonBlockingStream2);
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dtfapr, numBubbles, nonBlockingStream2);
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta, numBubbles, nonBlockingStream2);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangeStream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dtfapr, numBubbles, gasExchangeStream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta, numBubbles, gasExchangeStream);
 
-			KERNEL_LAUNCH(finalRadiusChangeRateKernel, kernelSize, 0, nonBlockingStream2,
+			KERNEL_LAUNCH(finalRadiusChangeRateKernel, kernelSize, 0, gasExchangeStream,
 						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
 
-			KERNEL_LAUNCH(correctKernel, kernelSize, 0, nonBlockingStream2,
+			KERNEL_LAUNCH(correctKernel, kernelSize, 0, gasExchangeStream,
 						  numBubbles, timeStep, adp.error,
 						  adp.rP, adp.r, adp.drdt, adp.drdtP);
-
-			CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
-			CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent2, 0));
 		}
 
 		// Error
