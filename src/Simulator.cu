@@ -498,6 +498,8 @@ double Simulator::stabilize()
 		pairPolicy.stream = defaultPolicy.stream;
 	}
 
+	std::cout << "Asd" << std::endl;
+
 	for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
 	{
 		do
@@ -632,6 +634,8 @@ double Simulator::stabilize()
 		if (i % 50 == 0)
 			updateCellsAndNeighbors();
 	}
+
+	std::cout << "Asd2" << std::endl;
 
 	// Energy after stabilization
 	{
