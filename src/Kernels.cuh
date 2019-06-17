@@ -563,12 +563,12 @@ __device__ double calculatePathLength(int idx, double *x, double *xPrev, double 
 }
 
 template <typename... Args>
-__global__ void pathLengthDistanceKernel(int numValues, double *pathLengths, double *squaredDistances, Args... args)
+__global__ void pathLengthDistanceKernel(int numValues, double *pathLengths, double *pathLengthsPrev, double *squaredDistances, Args... args)
 {
     const int tid = getGlobalTid();
     if (tid < numValues)
     {
-        pathLengths[tid] += sqrt(calculatePathLength(tid, args...));
+        pathLengths[tid] = pathLengthsPrev[tid] + sqrt(calculatePathLength(tid, args...));
         squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
     }
 }

@@ -769,6 +769,20 @@ bool Simulator::integrate()
 						  adp.zP, adp.z, adp.dzdt, adp.dzdtP,
 #endif
 			);
+
+			// Path lengths & distances
+			KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, velocityStream,
+						  numBubbles,
+						  adp.dummy4,
+						  adp.s,
+						  adp.d,
+						  adp.xP, adp.x, adp.x0, wrapMultipliers.getRowPtr(0), interval.x,
+						  adp.yP, adp.y, adp.y0, wrapMultipliers.getRowPtr(1), interval.y
+#if (NUM_DIM == 3)
+						  ,
+						  adp.zP, adp.z, adp.z0, wrapMultipliers.getRowPtr(2), interval.z
+#endif
+			);
 		}
 
 		// Gas exchange
@@ -832,21 +846,6 @@ bool Simulator::integrate()
 		NVTX_RANGE_POP();
 	} while (error > properties.getErrorTolerance());
 
-	// Path lengths & distances
-	{
-		KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, 0,
-					  numBubbles,
-					  adp.s,
-					  adp.d,
-					  adp.xP, adp.x, adp.x0, wrapMultipliers.getRowPtr(0), interval.x,
-					  adp.yP, adp.y, adp.y0, wrapMultipliers.getRowPtr(1), interval.y
-#if (NUM_DIM == 3)
-					  ,
-					  adp.zP, adp.z, adp.z0, wrapMultipliers.getRowPtr(2), interval.z
-#endif
-		);
-	}
-
 	// Boundary wrap
 	{
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
@@ -874,6 +873,7 @@ bool Simulator::integrate()
 
 		CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
 		CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
+		CUDA_CALL(cudaMemcpyAsync(adp.s, adp.dummy4, sizeof(double) * dataStride, cudaMemcpyDeviceToDevice));
 	}
 
 	++integrationStep;
