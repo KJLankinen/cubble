@@ -801,6 +801,20 @@ bool Simulator::integrate()
 			KERNEL_LAUNCH(correctKernel, kernelSize, 0, gasExchangeStream,
 						  numBubbles, timeStep, adp.error,
 						  adp.rP, adp.r, adp.drdt, adp.drdtP);
+
+			// Calculate how many bubbles are below the minimum size.
+			// Also take note of maximum radius.
+			KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, kernelSize, 0, gasExchangeStream,
+						  numBubbles,
+						  aboveMinRadFlags.getRowPtr(0),
+						  adp.rP,
+						  properties.getMinRad());
+
+			cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, gasExchangeStream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.rP, static_cast<double *>(dtfa), numBubbles, gasExchangeStream);
+
+			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, gasExchangeStream));
+			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, gasExchangeStream));
 		}
 
 		// Error
@@ -854,26 +868,8 @@ bool Simulator::integrate()
 #endif
 	}
 
-	// Calculate how many bubbles are below the minimum size
-	{
-		KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, kernelSize, 0, nonBlockingStream1,
-					  numBubbles,
-					  aboveMinRadFlags.getRowPtr(0),
-					  adp.rP,
-					  properties.getMinRad());
-
-		cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles, nonBlockingStream1);
-		CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int), cudaMemcpyDeviceToHost, nonBlockingStream1));
-
-		cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.rP, static_cast<double *>(dtfa), numBubbles, nonBlockingStream1);
-		CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream1));
-
-		CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
-	}
-
 	// Update values
 	{
-		CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
 		const size_t numBytesToCopy = 4 * sizeof(double) * dataStride;
 
 		CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
@@ -884,7 +880,6 @@ bool Simulator::integrate()
 	properties.setTimeStep(timeStep);
 	simulationTime += timeStep;
 
-	CUDA_CALL(cudaEventSynchronize(blockingEvent1));
 	maxBubbleRadius = pinnedDouble.get()[0];
 
 	// Delete & reorder
