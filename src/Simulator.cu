@@ -774,7 +774,7 @@ bool Simulator::integrate()
 						  adp.yP, adp.y, adp.dydt, adp.dydtP
 #if (NUM_DIM == 3)
 						  ,
-						  adp.zP, adp.z, adp.dzdt, adp.dzdtP,
+						  adp.zP, adp.z, adp.dzdt, adp.dzdtP
 #endif
 			);
 
