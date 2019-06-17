@@ -725,6 +725,49 @@ bool Simulator::integrate()
 			CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
 		}
 
+		// Gas exchange
+		{
+			const cudaStream_t originalStream = pairPolicy.stream;
+
+			ExecutionPolicy gasExchangePolicy(128, numBubbles);
+			gasExchangePolicy.stream = nonBlockingStream2;
+			pairPolicy.stream = gasExchangePolicy.stream;
+
+			CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, blockingEvent2, 0));
+
+			KERNEL_LAUNCH(gasExchangeKernel, pairPolicy,
+						  numBubbles,
+						  pairs.getRowPtr(0),
+						  pairs.getRowPtr(1),
+						  adp.rP,
+						  adp.drdtP,
+						  adp.dummy1,
+						  interval.x, PBC_X == 1, adp.xP,
+						  interval.y, PBC_Y == 1, adp.yP
+#if (NUM_DIM == 3)
+						  ,
+						  interval.z, PBC_Z == 1, adp.zP
+#endif
+			);
+
+			KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
+						  numBubbles, adp.rP, adp.dummy1, adp.dummy2, adp.dummy3);
+
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dtfapr, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta, numBubbles, gasExchangePolicy.stream);
+
+			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
+						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
+
+			KERNEL_LAUNCH(correctKernel, gasExchangePolicy,
+						  numBubbles, timeStep, adp.error,
+						  adp.rP, adp.r, adp.drdt, adp.drdtP);
+
+			CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
+			pairPolicy.stream = originalStream;
+		}
+
 		// Velocity
 		{
 			KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
@@ -789,52 +832,9 @@ bool Simulator::integrate()
 			);
 		}
 
-		// Gas exchange
-		{
-			const cudaStream_t originalStream = pairPolicy.stream;
-
-			ExecutionPolicy gasExchangePolicy(128, numBubbles);
-			gasExchangePolicy.stream = nonBlockingStream2;
-			pairPolicy.stream = gasExchangePolicy.stream;
-
-			CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, blockingEvent2, 0));
-
-			KERNEL_LAUNCH(gasExchangeKernel, pairPolicy,
-						  numBubbles,
-						  pairs.getRowPtr(0),
-						  pairs.getRowPtr(1),
-						  adp.rP,
-						  adp.drdtP,
-						  adp.dummy1,
-						  interval.x, PBC_X == 1, adp.xP,
-						  interval.y, PBC_Y == 1, adp.yP
-#if (NUM_DIM == 3)
-						  ,
-						  interval.z, PBC_Z == 1, adp.zP
-#endif
-			);
-
-			KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
-						  numBubbles, adp.rP, adp.dummy1, adp.dummy2, adp.dummy3);
-
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dtfapr, numBubbles, gasExchangePolicy.stream);
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta, numBubbles, gasExchangePolicy.stream);
-
-			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
-						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
-
-			KERNEL_LAUNCH(correctKernel, gasExchangePolicy,
-						  numBubbles, timeStep, adp.error,
-						  adp.rP, adp.r, adp.drdt, adp.drdtP);
-
-			CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
-			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
-			pairPolicy.stream = originalStream;
-		}
-
 		// Error
 		{
+			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
 			error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, numBubbles);
 
 			if (error < properties.getErrorTolerance() && timeStep < 0.1)
