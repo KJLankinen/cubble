@@ -412,23 +412,25 @@ void Simulator::setupSimulation()
 #endif
 	);
 
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-	KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
-				  numBubbles
+	// Boundary wrap
+	if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+	{
+		KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
+					  numBubbles
 #if (PBC_X == 1)
-				  ,
-				  adp.x, lbb.x, tfr.x, wrapMultipliers.getRowPtr(3)
+					  ,
+					  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0)
 #endif
 #if (PBC_Y == 1)
-										   ,
-				  adp.y, lbb.y, tfr.y, wrapMultipliers.getRowPtr(4)
+																			  ,
+					  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-										   ,
-				  adp.z, lbb.z, tfr.z, wrapMultipliers.getRowPtr(5)
+																			  ,
+					  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2)
 #endif
-	);
-#endif
+		);
+	}
 
 	KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0,
 				  0.0, numBubbles,
@@ -587,24 +589,23 @@ double Simulator::stabilize()
 		} while (error > properties.getErrorTolerance());
 
 		// Boundary wrap
+		if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
 		{
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
 			KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
 						  numBubbles
 #if (PBC_X == 1)
 						  ,
-						  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(0)
+						  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0)
 #endif
 #if (PBC_Y == 1)
-													,
-						  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(1)
+																				  ,
+						  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1)
 #endif
 #if (PBC_Z == 1 && NUM_DIM == 3)
-													,
-						  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(2)
+																				  ,
+						  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2)
 #endif
 			);
-#endif
 		}
 
 		// Update the current values with the calculated predictions
@@ -615,6 +616,10 @@ double Simulator::stabilize()
 			CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
 			CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
 			CUDA_CALL(cudaMemcpyAsync(adp.dxdt, adp.dxdtP, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
+			CUDA_CALL(cudaMemcpyAsync(wrapMultipliers.getRowPtr(0),
+									  wrapMultipliers.getRowPtr(3),
+									  wrapMultipliers.getSizeInBytes() / 2,
+									  cudaMemcpyDeviceToDevice));
 		}
 
 		properties.setTimeStep(timeStep);
