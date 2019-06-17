@@ -30,7 +30,7 @@ struct KernelSize
 		block = dim3(numThreadsPerBlock, 1, 1);
 		grid = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
 	}
-}
+};
 
 const double CUBBLE_EPSILON = 1.0e-10;
 #if NUM_DIM == 3
