@@ -498,11 +498,8 @@ double Simulator::stabilize()
 		pairPolicy.stream = defaultPolicy.stream;
 	}
 
-	std::cout << "Asd" << std::endl;
-
 	for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
 	{
-		std::cout << "loopasd" << i << std::endl;
 		do
 		{
 			// Reset values to zero
@@ -512,6 +509,7 @@ double Simulator::stabilize()
 							  adp.dxdtP,
 							  adp.dydtP,
 							  adp.dzdtP,
+							  adp.error,
 							  adp.dummy1,
 							  adp.dummy2);
 			}
@@ -635,8 +633,6 @@ double Simulator::stabilize()
 		if (i % 50 == 0)
 			updateCellsAndNeighbors();
 	}
-
-	std::cout << "Asd2" << std::endl;
 
 	// Energy after stabilization
 	{
