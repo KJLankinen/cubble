@@ -856,8 +856,6 @@ bool Simulator::integrate()
 
 	// Calculate how many bubbles are below the minimum size
 	{
-		const cudaStream_t originalStream = 0;
-
 		KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, kernelSize, 0, nonBlockingStream1,
 					  numBubbles,
 					  aboveMinRadFlags.getRowPtr(0),
