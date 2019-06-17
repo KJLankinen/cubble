@@ -413,7 +413,7 @@ void Simulator::setupSimulation()
 	);
 
 	// Boundary wrap
-	if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
 	{
 		KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
 					  numBubbles
@@ -431,6 +431,7 @@ void Simulator::setupSimulation()
 #endif
 		);
 	}
+#endif
 
 	KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0,
 				  0.0, numBubbles,
@@ -589,7 +590,7 @@ double Simulator::stabilize()
 		} while (error > properties.getErrorTolerance());
 
 		// Boundary wrap
-		if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
 		{
 			KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
 						  numBubbles
@@ -607,6 +608,7 @@ double Simulator::stabilize()
 #endif
 			);
 		}
+#endif
 
 		// Update the current values with the calculated predictions
 		{
@@ -791,7 +793,7 @@ bool Simulator::integrate()
 			);
 
 			// Boundary wrap
-			if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
 			{
 				KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, velocityStream,
 							  numBubbles
@@ -809,6 +811,7 @@ bool Simulator::integrate()
 #endif
 				);
 			}
+#endif
 		}
 
 		// Gas exchange
