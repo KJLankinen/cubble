@@ -815,11 +815,11 @@ bool Simulator::integrate()
 			);
 
 			KERNEL_LAUNCH(freeAreaKernel, gasExchangePolicy,
-						  numBubbles, adp.rP, adp.dummy1, adp.error, adp.dummy2);
+						  numBubbles, adp.rP, adp.dummy1, adp.dummy2, adp.dummy3);
 
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.error, dtfapr, numBubbles, gasExchangePolicy.stream);
 			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa, numBubbles, gasExchangePolicy.stream);
-			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dta, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2, dtfapr, numBubbles, gasExchangePolicy.stream);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta, numBubbles, gasExchangePolicy.stream);
 
 			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
 						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
