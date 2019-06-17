@@ -709,20 +709,22 @@ bool Simulator::integrate()
 						  adp.dummy2);
 		}
 
-		// Velocity
+		// Predict
 		{
-			// Predicted velocity
 			KERNEL_LAUNCH(predictKernel, defaultPolicy,
 						  numBubbles, timeStep,
 						  adp.xP, adp.x, adp.dxdt, adp.dxdtO,
-						  adp.yP, adp.y, adp.dydt, adp.dydtO
+						  adp.yP, adp.y, adp.dydt, adp.dydtO,
 #if (NUM_DIM == 3)
-						  ,
-						  adp.zP, adp.z, adp.dzdt, adp.dzdtO
+						  adp.zP, adp.z, adp.dzdt, adp.dzdtO,
 #endif
-			);
+						  adp.rP, adp.r, adp.drdt, adp.drdtO);
 
-			// Velocity from neighbors
+			CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+		}
+
+		// Velocity
+		{
 			KERNEL_LAUNCH(velocityPairKernel, pairPolicy,
 						  properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
 						  interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP,
@@ -733,7 +735,6 @@ bool Simulator::integrate()
 #endif
 			);
 
-			// Velocity from walls, if no periodic boundary conditions
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
 			KERNEL_LAUNCH(velocityWallKernel, pairPolicy,
 						  numBubbles, properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP
@@ -751,11 +752,13 @@ bool Simulator::integrate()
 #endif
 			);
 #endif
+		}
 
+		// Imposed flow
+		{
 #if USE_FLOW
 			int *numNeighbors = bubbleCellIndices.getRowPtr(0);
 
-			// Average velocity of neighbors (= velocity of flow field)
 			KERNEL_LAUNCH(neighborVelocityKernel, pairPolicy,
 						  pairs.getRowPtr(0), pairs.getRowPtr(1), numNeighbors,
 						  adp.dummy1, adp.dxdtO,
@@ -766,7 +769,6 @@ bool Simulator::integrate()
 #endif
 			);
 
-			// Impose flow velocity
 			KERNEL_LAUNCH(flowVelocityKernel, pairPolicy,
 						  numBubbles, numNeighbors,
 						  adp.dxdtP, adp.dydtP, adp.dzdtP,
@@ -776,17 +778,6 @@ bool Simulator::integrate()
 						  properties.getFlowTfr(),
 						  properties.getFlowLbb());
 #endif
-
-			// Velocity correction
-			KERNEL_LAUNCH(correctKernel, defaultPolicy,
-						  numBubbles, timeStep, adp.error,
-						  adp.xP, adp.x, adp.dxdt, adp.dxdtP,
-						  adp.yP, adp.y, adp.dydt, adp.dydtP
-#if (NUM_DIM == 3)
-						  ,
-						  adp.zP, adp.z, adp.dzdt, adp.dzdtP
-#endif
-			);
 		}
 
 		// Gas exchange
@@ -797,10 +788,7 @@ bool Simulator::integrate()
 			gasExchangePolicy.stream = nonBlockingStream2;
 			pairPolicy.stream = gasExchangePolicy.stream;
 
-			// Predict radius change rate
-			KERNEL_LAUNCH(predictKernel, gasExchangePolicy,
-						  numBubbles, timeStep,
-						  adp.rP, adp.r, adp.drdt, adp.drdtO);
+			CUDA_CALL(cudaStreamWaitEvent(gasExchangePolicy.stream, blockingEvent2, 0));
 
 			KERNEL_LAUNCH(gasExchangeKernel, pairPolicy,
 						  numBubbles,
@@ -827,18 +815,34 @@ bool Simulator::integrate()
 			KERNEL_LAUNCH(finalRadiusChangeRateKernel, gasExchangePolicy,
 						  adp.drdtP, adp.rP, adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
 
-			KERNEL_LAUNCH(correctKernel, gasExchangePolicy,
-						  numBubbles, timeStep, adp.error,
-						  adp.rP, adp.r, adp.drdt, adp.drdtP);
-
 			CUDA_CALL(cudaEventRecord(blockingEvent2, gasExchangePolicy.stream));
 			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
 			pairPolicy.stream = originalStream;
 		}
 
+		// Correction
+		{
+			KERNEL_LAUNCH(correctKernel, defaultPolicy,
+						  numBubbles, timeStep, adp.error,
+						  adp.xP, adp.x, adp.dxdt, adp.dxdtP,
+						  adp.yP, adp.y, adp.dydt, adp.dydtP,
+#if (NUM_DIM == 3)
+						  adp.zP, adp.z, adp.dzdt, adp.dzdtP,
+#endif
+						  adp.rP, adp.r, adp.drdt, adp.drdtP);
+
+			CUDA_CALL(cudaEventRecord(blockingEvent2, defaultPolicy.stream));
+			CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
+		}
+
 		// Error
 		{
-			error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, numBubbles);
+			cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, dtfa, numBubbles, nonBlockingStream2);
+			CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), static_cast<void *>(dtfa), sizeof(double), cudaMemcpyDeviceToHost, nonBlockingStream2));
+			CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
+			CUDA_CALL(cudaEventSynchronize(blockingEvent2));
+
+			error = pinnedDouble.get()[0];
 
 			if (error < properties.getErrorTolerance() && timeStep < 0.1)
 				timeStep *= 1.9;
