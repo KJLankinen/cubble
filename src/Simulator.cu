@@ -834,7 +834,7 @@ bool Simulator::integrate()
 
 		// Error
 		{
-			CUDA_CALL(cudaStreamWaitEvent(originalStream, blockingEvent2, 0));
+			CUDA_CALL(cudaStreamWaitEvent(defaultPolicy.stream, blockingEvent2, 0));
 			error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error, numBubbles);
 
 			if (error < properties.getErrorTolerance() && timeStep < 0.1)
