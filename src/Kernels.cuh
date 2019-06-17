@@ -229,11 +229,11 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first, int *seco
     }
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier);
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier, int *wrapMultiplierPrev);
 template <typename... Args>
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier, Args... args)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier, int *wrapMultiplierPrev, Args... args)
 {
-    wrapAround(idx, coordinate, minValue, maxValue, wrapMultiplier);
+    wrapAround(idx, coordinate, minValue, maxValue, wrapMultiplier, wrapMultiplierPrev);
     wrapAround(idx, args...);
 }
 

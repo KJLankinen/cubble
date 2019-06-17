@@ -666,6 +666,7 @@ double Simulator::stabilize()
 
 bool Simulator::integrate()
 {
+	NVTX_RANGE_PUSH_A("Integration function");
 	KernelSize kernelSize(128, numBubbles);
 
 	const dvec tfr = properties.getTfr();
@@ -783,6 +784,26 @@ bool Simulator::integrate()
 						  adp.zP, adp.z, adp.z0, wrapMultipliers.getRowPtr(2), interval.z
 #endif
 			);
+
+			// Boundary wrap
+			if constexpr (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+			{
+				KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, velocityStream,
+							  numBubbles
+#if (PBC_X == 1)
+							  ,
+							  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0)
+#endif
+#if (PBC_Y == 1)
+																					  ,
+							  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1)
+#endif
+#if (PBC_Z == 1 && NUM_DIM == 3)
+																					  ,
+							  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2)
+#endif
+				);
+			}
 		}
 
 		// Gas exchange
@@ -846,27 +867,6 @@ bool Simulator::integrate()
 		NVTX_RANGE_POP();
 	} while (error > properties.getErrorTolerance());
 
-	// Boundary wrap
-	{
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-		KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0,
-					  numBubbles
-#if (PBC_X == 1)
-					  ,
-					  adp.xP, lbb.x, tfr.x, wrapMultipliers.getRowPtr(0)
-#endif
-#if (PBC_Y == 1)
-												,
-					  adp.yP, lbb.y, tfr.y, wrapMultipliers.getRowPtr(1)
-#endif
-#if (PBC_Z == 1 && NUM_DIM == 3)
-												,
-					  adp.zP, lbb.z, tfr.z, wrapMultipliers.getRowPtr(2)
-#endif
-		);
-#endif
-	}
-
 	// Update values
 	{
 		const size_t numBytesToCopy = 4 * sizeof(double) * dataStride;
@@ -874,6 +874,10 @@ bool Simulator::integrate()
 		CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
 		CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
 		CUDA_CALL(cudaMemcpyAsync(adp.s, adp.dummy4, sizeof(double) * dataStride, cudaMemcpyDeviceToDevice));
+		CUDA_CALL(cudaMemcpyAsync(wrapMultipliers.getRowPtr(0),
+								  wrapMultipliers.getRowPtr(3),
+								  wrapMultipliers.getSizeInBytes() / 2,
+								  cudaMemcpyDeviceToDevice));
 	}
 
 	++integrationStep;
@@ -898,6 +902,8 @@ bool Simulator::integrate()
 #if (NUM_DIM == 3)
 	continueSimulation &= maxBubbleRadius < 0.5 * (tfr - lbb).getMinComponent();
 #endif
+
+	NVTX_RANGE_POP();
 
 	return continueSimulation;
 }

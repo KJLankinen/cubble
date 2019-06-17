@@ -221,19 +221,19 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
     return idxVec;
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier, int *wrapMultiplierPrev)
 {
-	const double interval = maxValue - minValue;
-	double value = coordinate[idx];
-	int multiplier = wrapMultiplier[idx];
+    const double interval = maxValue - minValue;
+    double value = coordinate[idx];
+    int multiplier = wrapMultiplierPrev[idx];
 
-	const bool smaller = value < minValue;
-	const bool larger = value > maxValue;
+    const bool smaller = value < minValue;
+    const bool larger = value > maxValue;
 
-	value = smaller ? value + interval : (larger ? value - interval : value);
-	multiplier = smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
-	
-	wrapMultiplier[idx] = multiplier;
+    value = smaller ? value + interval : (larger ? value - interval : value);
+    multiplier = smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
+
+    wrapMultiplier[idx] = multiplier;
     coordinate[idx] = value;
 }
 
@@ -342,29 +342,29 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 }
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
-	double *velX, double *velY, double *velZ,
-	double *nVelX, double *nVelY, double *nVelZ,
-	double *posX, double *posY, double *posZ,
-	dvec flowVel,
-	dvec flowTfr,
-	dvec flowLbb)
+                                   double *velX, double *velY, double *velZ,
+                                   double *nVelX, double *nVelY, double *nVelZ,
+                                   double *posX, double *posY, double *posZ,
+                                   dvec flowVel,
+                                   dvec flowTfr,
+                                   dvec flowLbb)
 {
-	for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
-	{
-		bool inside = posX[i] < flowTfr.x && posX[i] > flowLbb.x;
-		inside &= posY[i] < flowTfr.y && posY[i] > flowLbb.y;
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
+    {
+        bool inside = posX[i] < flowTfr.x && posX[i] > flowLbb.x;
+        inside &= posY[i] < flowTfr.y && posY[i] > flowLbb.y;
 #if (NUM_DIM == 3)
-		inside &= posZ[i] < flowTfr.z && posZ[i] > flowLbb.z;
+        inside &= posZ[i] < flowTfr.z && posZ[i] > flowLbb.z;
 #endif
-		flowVel = inside ? flowVel : dvec(0, 0, 0);
+        flowVel = inside ? flowVel : dvec(0, 0, 0);
 
-		const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
-		velX[i] += multiplier * nVelX[i] + flowVel.x;
-		velY[i] += multiplier * nVelY[i] + flowVel.y;
+        const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
+        velX[i] += multiplier * nVelX[i] + flowVel.x;
+        velY[i] += multiplier * nVelY[i] + flowVel.y;
 #if (NUM_DIM == 3)
-		velZ[i] += multiplier * nVelZ[i] + flowVel.z;
+        velZ[i] += multiplier * nVelZ[i] + flowVel.z;
 #endif
-	}
+    }
 }
 
 __global__ void freeAreaKernel(int numValues, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
@@ -458,7 +458,7 @@ __device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, 
 
 __device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, int *wrapMultiplier, double interval)
 {
-	// Only works if done before boundary wrap
+    // Only works if done before boundary wrap
     const double diff = x[idx] - xPrev[idx];
     return diff * diff;
 }
