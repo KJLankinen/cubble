@@ -282,6 +282,15 @@ void Simulator::run()
 		std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
 		while (integrate())
 		{
+#if USE_PROFILING
+			if (numSteps == 2000)
+				CUDA_PROFILER_START();
+			else if (numSteps == 2050)
+			{
+				CUDA_PROFILER_STOP();
+				break;
+			}
+#endif
 			// The if clause contains many slow operations, but it's only done
 			// very few times relative to the entire run time, so it should not
 			// have a huge cost. Roughly 6e4-1e5 integration steps are taken for each time step
