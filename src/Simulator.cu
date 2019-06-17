@@ -502,6 +502,7 @@ double Simulator::stabilize()
 
 	for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
 	{
+		std::cout << "loopasd" << i << std::endl;
 		do
 		{
 			// Reset values to zero
