@@ -20,6 +20,7 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 {
   properties = Env(inputFileName, outputFileName);
   properties.readParameters();
+
   timeScalingFactor = properties.getKParameter() /
                       (properties.getAvgRad() * properties.getAvgRad());
 
@@ -41,11 +42,15 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
   numBubbles = bubblesPerDim.x * bubblesPerDim.y;
 #endif
   bubblesPerDimAtStart = bubblesPerDim;
-  tfr                  = d * bubblesPerDim.asType<double>();
+
+  tfr = d * bubblesPerDim.asType<double>();
   properties.setTfr(tfr + properties.getLbb());
+
   dvec interval = properties.getTfr() - properties.getLbb();
+
   properties.setFlowTfr(interval * properties.getFlowTfr() +
                         properties.getLbb());
+
   properties.setFlowLbb(interval * properties.getFlowLbb() +
                         properties.getLbb());
 
@@ -116,9 +121,7 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
                                    dAverageSurfaceAreaIn));
 
   CUDA_ASSERT(
-    cudaStreamCreateWithFlags(&nonBlockingStream1, cudaStreamNonBlocking));
-  CUDA_ASSERT(
-    cudaStreamCreateWithFlags(&nonBlockingStream2, cudaStreamNonBlocking));
+    cudaStreamCreateWithFlags(&nonBlockingStream, cudaStreamNonBlocking));
 
   CUDA_ASSERT(cudaStreamCreate(&velocityStream));
   CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
@@ -155,8 +158,7 @@ void Simulator::deinit()
 
   CUDA_CALL(cudaFree(static_cast<void *>(deviceData)));
 
-  CUDA_CALL(cudaStreamDestroy(nonBlockingStream1));
-  CUDA_CALL(cudaStreamDestroy(nonBlockingStream2));
+  CUDA_CALL(cudaStreamDestroy(nonBlockingStream));
   CUDA_CALL(cudaStreamDestroy(velocityStream));
   CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
 
@@ -449,144 +451,94 @@ double Simulator::stabilize()
 {
   // This function integrates only the positions of the bubbles.
   // Gas exchange is not used. This is used for equilibrating the foam.
-  double elapsedTime = 0.0;
 
   KernelSize kernelSize(128, numBubbles);
 
   const dvec tfr      = properties.getTfr();
   const dvec lbb      = properties.getLbb();
   const dvec interval = tfr - lbb;
-
-  double timeStep = properties.getTimeStep();
-  double error    = 100000;
-
-  // This is a relatively heavy weight operation, but this function is not
-  // called too many times
-  // so the cost should be negligible.
-  cudaEvent_t energyEvent;
-  cudaStream_t energyStream;
-  CUDA_ASSERT(cudaStreamCreateWithFlags(&energyStream, cudaStreamNonBlocking));
-  CUDA_ASSERT(cudaEventCreateWithFlags(&energyEvent, cudaEventBlockingSync));
+  double elapsedTime  = 0.0;
+  double timeStep     = properties.getTimeStep();
+  double error        = 100000;
 
   // Energy before stabilization
-  {
-    KERNEL_LAUNCH(resetKernel, kernelSize, 0, energyStream, 0.0, numBubbles,
-                  adp.dummy4);
-
-    KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, energyStream,
-                  numBubbles, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r,
-                  adp.dummy4, interval.x, PBC_X == 1, adp.x, interval.y,
-                  PBC_Y == 1, adp.y
+  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+  KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles,
+                pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, adp.dummy4,
+                interval.x, PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)
-                  ,
-                  interval.z, PBC_Z == 1, adp.z
+                ,
+                interval.z, PBC_Z == 1, adp.z
 #endif
-                  );
+                );
 
-    cubWrapper->reduceNoCopy<double, double *, double *>(
-      &cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles, energyStream);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]),
-                              static_cast<void *>(dtfapr), sizeof(double),
-                              cudaMemcpyDeviceToHost, energyStream));
-    CUDA_CALL(cudaEventRecord(energyEvent, energyStream));
-  }
+  cubWrapper->reduceNoCopy<double, double *, double *>(
+    &cub::DeviceReduce::Sum, adp.dummy4, dtfapr, numBubbles);
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]),
+                            static_cast<void *>(dtfapr), sizeof(double),
+                            cudaMemcpyDeviceToHost, 0));
 
   for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
   {
     do
     {
       // Reset values to zero
-      {
-        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP,
-                      adp.dydtP, adp.dzdtP, adp.error, adp.dummy1, adp.dummy2);
-      }
+      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP,
+                    adp.dydtP, adp.dzdtP, adp.error, adp.dummy1, adp.dummy2);
 
       // Predict
-      {
-        KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep,
-                      adp.xP, adp.x, adp.dxdt, adp.dxdtO, adp.yP, adp.y,
-                      adp.dydt, adp.dydtO
+      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep,
+                    adp.xP, adp.x, adp.dxdt, adp.dxdtO, adp.yP, adp.y, adp.dydt,
+                    adp.dydtO
 #if (NUM_DIM == 3)
-                      ,
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtO
+                    ,
+                    adp.zP, adp.z, adp.dzdt, adp.dzdtO
 #endif
-                      );
-
-        CUDA_CALL(cudaEventRecord(blockingEvent2, 0));
-      }
+                    );
 
       // Velocity
-      {
-        KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0,
-                      properties.getFZeroPerMuZero(), pairs.getRowPtr(0),
-                      pairs.getRowPtr(1), adp.rP, interval.x, lbb.x, PBC_X == 1,
-                      adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1, adp.yP,
-                      adp.dydtP
+      KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0,
+                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0),
+                    pairs.getRowPtr(1), adp.rP, interval.x, lbb.x, PBC_X == 1,
+                    adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1, adp.yP,
+                    adp.dydtP
 #if (NUM_DIM == 3)
-                      ,
-                      interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+                    ,
+                    interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
 #endif
-                      );
+                    );
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-        KERNEL_LAUNCH(velocityWallKernel, pairKernelSize, 0, 0, numBubbles,
-                      properties.getFZeroPerMuZero(), pairs.getRowPtr(0),
-                      pairs.getRowPtr(1), adp.rP
+      KERNEL_LAUNCH(velocityWallKernel, pairKernelSize, 0, 0, numBubbles,
+                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0),
+                    pairs.getRowPtr(1), adp.rP
 #if (PBC_X == 0)
-                      ,
-                      interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
+                    ,
+                    interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP
 #endif
 #if (PBC_Y == 0)
-                      ,
-                      interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
+                    ,
+                    interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP
 #endif
 #if (NUM_DIM == 3 && PBC_Z == 0)
-                      ,
-                      interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
+                    ,
+                    interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP
 #endif
-                      );
+                    );
 #endif
-      }
 
       // Correction
-      {
-        KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep,
-                      adp.error, adp.xP, adp.x, adp.dxdt, adp.dxdtP, adp.yP,
-                      adp.y, adp.dydt, adp.dydtP
+      KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep,
+                    adp.error, adp.xP, adp.x, adp.dxdt, adp.dxdtP, adp.yP,
+                    adp.y, adp.dydt, adp.dydtP
 #if (NUM_DIM == 3)
-                      ,
-                      adp.zP, adp.z, adp.dzdt, adp.dzdtP
+                    ,
+                    adp.zP, adp.z, adp.dzdt, adp.dzdtP
 #endif
-                      );
-
-        CUDA_CALL(cudaEventRecord(blockingEvent2, 0));
-        CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream2, blockingEvent2, 0));
-      }
-
-      // Error
-      {
-        cubWrapper->reduceNoCopy<double, double *, double *>(
-          &cub::DeviceReduce::Max, adp.error, dtfa, numBubbles,
-          nonBlockingStream2);
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()),
-                                  static_cast<void *>(dtfa), sizeof(double),
-                                  cudaMemcpyDeviceToHost, nonBlockingStream2));
-        CUDA_CALL(cudaEventRecord(blockingEvent2, nonBlockingStream2));
-        CUDA_CALL(cudaEventSynchronize(blockingEvent2));
-
-        error = pinnedDouble.get()[0];
-
-        if (error < properties.getErrorTolerance() && timeStep < 0.1)
-          timeStep *= 1.9;
-        else if (error > properties.getErrorTolerance())
-          timeStep *= 0.5;
-      }
-
-    } while (error > properties.getErrorTolerance());
+                    );
 
 // Boundary wrap
 #if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    {
       KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, 0, 0, numBubbles
 #if (PBC_X == 1)
                     ,
@@ -604,66 +556,50 @@ double Simulator::stabilize()
                     wrapMultipliers.getRowPtr(2)
 #endif
                       );
-    }
 #endif
 
-    // Update the current values with the calculated predictions
-    {
-      CUDA_CALL(cudaStreamWaitEvent(0, energyEvent, 0));
+      // Error
+      error = cubWrapper->reduce<double, double *, double *>(
+        &cub::DeviceReduce::Max, adp.error, numBubbles);
 
-      const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
-      CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy,
-                                cudaMemcpyDeviceToDevice, 0));
-      CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, numBytesToCopy,
-                                cudaMemcpyDeviceToDevice, 0));
-      CUDA_CALL(cudaMemcpyAsync(adp.dxdt, adp.dxdtP, numBytesToCopy,
-                                cudaMemcpyDeviceToDevice, 0));
-      CUDA_CALL(cudaMemcpyAsync(
-        wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3),
-        wrapMultipliers.getSizeInBytes() / 2, cudaMemcpyDeviceToDevice));
-    }
+      if (error < properties.getErrorTolerance() && timeStep < 0.1)
+        timeStep *= 1.9;
+      else if (error > properties.getErrorTolerance())
+        timeStep *= 0.5;
+
+    } while (error > properties.getErrorTolerance());
+
+    // Update the current values with the calculated predictions
+    const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
+    CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(adp.dxdt, adp.dxdtP, numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
 
     properties.setTimeStep(timeStep);
     elapsedTime += timeStep;
-
-    CUDA_CALL(cudaEventRecord(blockingEvent1, 0));
-    CUDA_CALL(cudaStreamWaitEvent(0, blockingEvent1, 0));
 
     if (i % 50 == 0)
       updateCellsAndNeighbors();
   }
 
   // Energy after stabilization
-  {
-    CUDA_CALL(cudaEventSynchronize(energyEvent));
-    energy1 = pinnedDouble.get()[1];
+  energy1 = pinnedDouble.get()[1];
 
-    KERNEL_LAUNCH(resetKernel, kernelSize, 0, energyStream, 0.0, numBubbles,
-                  adp.dummy4);
-
-    CUDA_CALL(cudaStreamWaitEvent(energyStream, blockingEvent1, 0));
-    KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles,
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, adp.dummy4,
-                  interval.x, PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
+  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+  KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles,
+                pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, adp.dummy4,
+                interval.x, PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)
-                  ,
-                  interval.z, PBC_Z == 1, adp.z
+                ,
+                interval.z, PBC_Z == 1, adp.z
 #endif
-                  );
+                );
 
-    cubWrapper->reduceNoCopy<double, double *, double *>(
-      &cub::DeviceReduce::Sum, adp.dummy4, dta, numBubbles, energyStream);
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[2]),
-                              static_cast<void *>(dta), sizeof(double),
-                              cudaMemcpyDeviceToHost, energyStream));
-    CUDA_CALL(cudaEventRecord(energyEvent, energyStream));
-
-    CUDA_CALL(cudaEventSynchronize(energyEvent));
-    energy2 = pinnedDouble.get()[2];
-  }
-
-  CUDA_CALL(cudaStreamDestroy(energyStream));
-  CUDA_CALL(cudaEventDestroy(energyEvent));
+  energy2 = cubWrapper->reduce<double, double *, double *>(
+    &cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
 
   return elapsedTime;
 }
@@ -673,10 +609,9 @@ bool Simulator::integrate()
   NVTX_RANGE_PUSH_A("Integration function");
   KernelSize kernelSize(128, numBubbles);
 
-  const dvec tfr      = properties.getTfr();
-  const dvec lbb      = properties.getLbb();
-  const dvec interval = tfr - lbb;
-
+  const dvec tfr        = properties.getTfr();
+  const dvec lbb        = properties.getLbb();
+  const dvec interval   = tfr - lbb;
   double timeStep       = properties.getTimeStep();
   double error          = 100000;
   uint32_t numLoopsDone = 0;
@@ -686,24 +621,18 @@ bool Simulator::integrate()
     NVTX_RANGE_PUSH_A("Integration step");
 
     // Reset
-    {
-      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP,
-                    adp.dydtP, adp.dzdtP, adp.drdtP, adp.error, adp.dummy1,
-                    adp.dummy2);
-    }
+    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP,
+                  adp.dydtP, adp.dzdtP, adp.drdtP, adp.error, adp.dummy1,
+                  adp.dummy2);
 
     // Predict
-    {
-      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep,
-                    adp.xP, adp.x, adp.dxdt, adp.dxdtO, adp.yP, adp.y, adp.dydt,
-                    adp.dydtO,
+    KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.xP,
+                  adp.x, adp.dxdt, adp.dxdtO, adp.yP, adp.y, adp.dydt,
+                  adp.dydtO,
 #if (NUM_DIM == 3)
-                    adp.zP, adp.z, adp.dzdt, adp.dzdtO,
+                  adp.zP, adp.z, adp.dzdt, adp.dzdtO,
 #endif
-                    adp.rP, adp.r, adp.drdt, adp.drdtO);
-
-      // CUDA_CALL(cudaEventRecord(blockingEvent2, 0));
-    }
+                  adp.rP, adp.r, adp.drdt, adp.drdtO);
 
     // Velocity
     {
@@ -895,16 +824,14 @@ bool Simulator::integrate()
   maxBubbleRadius = pinnedDouble.get()[0];
 
   // Delete & reorder
-  {
-    const int numBubblesAboveMinRad = pinnedInt.get()[0];
-    const bool shouldDeleteBubbles  = numBubblesAboveMinRad < numBubbles;
+  const int numBubblesAboveMinRad = pinnedInt.get()[0];
+  const bool shouldDeleteBubbles  = numBubblesAboveMinRad < numBubbles;
 
-    if (shouldDeleteBubbles)
-      deleteSmallBubbles(numBubblesAboveMinRad);
+  if (shouldDeleteBubbles)
+    deleteSmallBubbles(numBubblesAboveMinRad);
 
-    if (shouldDeleteBubbles || integrationStep % 50 == 0)
-      updateCellsAndNeighbors();
-  }
+  if (shouldDeleteBubbles || integrationStep % 50 == 0)
+    updateCellsAndNeighbors();
 
   bool continueSimulation = numBubbles > properties.getMinNumBubbles();
 #if (NUM_DIM == 3)
@@ -964,10 +891,9 @@ void Simulator::updateCellsAndNeighbors()
 {
   dim3 gridSize      = getGridSize();
   const int numCells = gridSize.x * gridSize.y * gridSize.z;
+  int *offsets       = cellData.getRowPtr((size_t)CellProperty::OFFSET);
+  int *sizes         = cellData.getRowPtr((size_t)CellProperty::SIZE);
   const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
-
-  int *offsets = cellData.getRowPtr((size_t)CellProperty::OFFSET);
-  int *sizes   = cellData.getRowPtr((size_t)CellProperty::SIZE);
 
   cellData.setBytesToZero();
   bubbleCellIndices.setBytesToZero();
@@ -988,7 +914,7 @@ void Simulator::updateCellsAndNeighbors()
     numBubbles);
 
   CUDA_CALL(cudaEventRecord(blockingEvent1));
-  CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream1, blockingEvent1, 0));
+  CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream, blockingEvent1, 0));
 
   cubWrapper->histogram<int *, int, int, int>(
     &cub::DeviceHistogram::HistogramEven, bubbleCellIndices.getRowPtr(2), sizes,
@@ -998,7 +924,7 @@ void Simulator::updateCellsAndNeighbors()
                                  numCells);
   CUDA_CALL(cudaEventRecord(blockingEvent2));
 
-  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, nonBlockingStream1, numBubbles,
+  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, nonBlockingStream, numBubbles,
                 ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                 adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP,
                 adp.dxdt, adp.dxdtP, adp.dydt, adp.dydtP, adp.dzdt, adp.dzdtP,
@@ -1013,14 +939,14 @@ void Simulator::updateCellsAndNeighbors()
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x),
                             static_cast<void *>(adp.xP),
                             sizeof(double) * numAliases / 2 * dataStride,
-                            cudaMemcpyDeviceToDevice, nonBlockingStream1));
+                            cudaMemcpyDeviceToDevice, nonBlockingStream));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
                             static_cast<void *>(wrapMultipliers.getRowPtr(3)),
                             wrapMultipliers.getSizeInBytes() / 2,
-                            cudaMemcpyDeviceToDevice, nonBlockingStream1));
+                            cudaMemcpyDeviceToDevice, nonBlockingStream));
 
-  CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream1));
+  CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream));
 
   dvec interval = properties.getTfr() - properties.getLbb();
 

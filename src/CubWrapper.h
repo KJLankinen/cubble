@@ -99,7 +99,7 @@ public:
       tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
     void *tempStoragePtr = static_cast<void *>(tempStorage.get());
-    (*func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData,
+    *(func)(tempStoragePtr, tempStorageBytes, deviceInputData, deviceOutputData,
             numValues, stream, debug);
 
 #ifndef NDEBUG

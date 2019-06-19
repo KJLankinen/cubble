@@ -40,19 +40,17 @@ private:
   double simulationTime     = 0.0;
   double energy1            = 0.0;
   double energy2            = 0.0;
+  double timeScalingFactor  = 0.0;
+  double maxBubbleRadius    = 0.0;
+  size_t integrationStep    = 0;
   uint32_t numSnapshots     = 0;
   int numBubbles            = 0;
   ivec bubblesPerDimAtStart = ivec(0, 0, 0);
-  size_t integrationStep    = 0;
-  double timeScalingFactor  = 0.0;
-
-  double maxBubbleRadius = 0;
 
   cudaEvent_t blockingEvent1;
   cudaEvent_t blockingEvent2;
-  cudaStream_t nonBlockingStream1;
-  cudaStream_t nonBlockingStream2;
 
+  cudaStream_t nonBlockingStream;
   cudaStream_t velocityStream;
   cudaStream_t gasExchangeStream;
 
