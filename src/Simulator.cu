@@ -949,7 +949,7 @@ void Simulator::updateCellsAndNeighbors()
     cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
     KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles,
                   numCells, static_cast<int>(pairs.getWidth()), offsets, sizes,
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, interval.x,
+                  pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x,
                   PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)
                   ,
@@ -958,14 +958,13 @@ void Simulator::updateCellsAndNeighbors()
                   );
   }
 
-  /*CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int),
+  CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int),
                        cudaMemcpyDeviceToHost));
   int numPairs = pinnedInt.get()[0];
   cubWrapper->sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs,
     const_cast<const int *>(pairs.getRowPtr(2)), pairs.getRowPtr(0),
     const_cast<const int *>(pairs.getRowPtr(3)), pairs.getRowPtr(1), numPairs);
-    */
 }
 
 void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
