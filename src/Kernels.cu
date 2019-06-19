@@ -222,21 +222,137 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
 
   return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
+
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim)
 {
-  return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
+// Linear encoding
+// return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
+
+// Morton encoding
+#if (NUM_DIM == 3)
+  return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
+                       (unsigned int)idxVec.z);
+#else
+  return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
 }
 
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
 {
   ivec idxVec(0, 0, 0);
-  idxVec.x = idx % cellDim.x;
-  idxVec.y = (idx / cellDim.x) % cellDim.y;
+// Linear decoding
+/*
+idxVec.x = idx % cellDim.x;
+idxVec.y = (idx / cellDim.x) % cellDim.y;
 #if (NUM_DIM == 3)
-  idxVec.z = idx / (cellDim.x * cellDim.y);
+idxVec.z = idx / (cellDim.x * cellDim.y);
 #endif
+*/
+#if (NUM_DIM == 3)
+  idxVec.x = decodeMorton3x((unsigned int)idx);
+  idxVec.y = decodeMorton3y((unsigned int)idx);
+  idxVec.z = decodeMorton3z((unsigned int)idx);
+#else
+  idxVec.x = decodeMorton2x((unsigned int)idx);
+  idxVec.y = decodeMorton2y((unsigned int)idx);
 
   return idxVec;
+}
+
+__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y)
+{
+  return (part1By1(y) << 1) + part1By1(x);
+}
+
+__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
+                                      unsigned int z)
+{
+  return (part1By2(z) << 2) + (part1By2(y) << 1) + part1By2(x);
+}
+
+__device__ __host__ unsigned int decodeMorton2x(unsigned int code)
+{
+  return compact1By1(code >> 0);
+}
+
+__device__ __host__ unsigned int decodeMorton2y(unsigned int code)
+{
+  return compact1By1(code >> 1);
+}
+
+__device__ __host__ unsigned int decodeMorton3x(unsigned int code)
+{
+  return compact1By2(code >> 0);
+}
+
+__device__ __host__ unsigned int decodeMorton3y(unsigned int code)
+{
+  return compact1By2(code >> 1);
+}
+
+__device__ __host__ unsigned int decodeMorton3z(unsigned int code)
+{
+  return compact1By2(code >> 2);
+}
+
+__device__ __host__ unsigned int part1By1(unsigned int x)
+{
+  // Mask the lowest 16 bits
+  x &= 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
+  x =
+    (x ^ (x << 8)) & 0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
+  x =
+    (x ^ (x << 4)) & 0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
+  x =
+    (x ^ (x << 2)) & 0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
+  x =
+    (x ^ (x << 1)) & 0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
+
+  return x;
+}
+
+__device__ __host__ unsigned int part1By2(unsigned int x)
+{
+  // Mask lowest 10 bits
+  x &= 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
+  x =
+    (x ^ (x << 16)) & 0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+  x =
+    (x ^ (x << 8)) & 0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+  x =
+    (x ^ (x << 4)) & 0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+  x =
+    (x ^ (x << 2)) & 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+
+  return x;
+}
+
+__device__ __host__ unsigned int compact1By1(unsigned int x)
+{
+  x &= 0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
+  x =
+    (x ^ (x >> 1)) & 0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
+  x =
+    (x ^ (x >> 2)) & 0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
+  x =
+    (x ^ (x >> 4)) & 0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
+  x =
+    (x ^ (x >> 8)) & 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
+  return x;
+}
+
+__device__ __host__ unsigned int compact1By2(unsigned int x)
+{
+  x &= 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+  x =
+    (x ^ (x >> 2)) & 0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+  x =
+    (x ^ (x >> 4)) & 0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+  x =
+    (x ^ (x >> 8)) & 0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+  x =
+    (x ^ (x >> 16)) & 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
+
+  return x;
 }
 
 __device__ void wrapAround(int idx, double *coordinate, double minValue,
@@ -445,9 +561,9 @@ __global__ void addVolume(double *r, int numValues)
 #if (NUM_DIM == 3)
     multiplier = cbrt(multiplier);
 #else
-    multiplier  = sqrt(multiplier);
+    multiplier = sqrt(multiplier);
 #endif
-    r[i] = r[i] * multiplier;
+    r[i]       = r[i] * multiplier;
   }
 }
 

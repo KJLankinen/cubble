@@ -232,6 +232,19 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
+__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y);
+__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
+                                               unsigned int z);
+__device__ __host__ unsigned int decodeMorton2x(unsigned int code);
+__device__ __host__ unsigned int decodeMorton2y(unsigned int code);
+__device__ __host__ unsigned int decodeMorton3x(unsigned int code);
+__device__ __host__ unsigned int decodeMorton3y(unsigned int code);
+__device__ __host__ unsigned int decodeMorton3z(unsigned int code);
+__device__ __host__ unsigned int part1By1(unsigned int x);
+__device__ __host__ unsigned int part1By2(unsigned int x);
+__device__ __host__ unsigned int compact1By1(unsigned int x);
+__device__ __host__ unsigned int compact1By2(unsigned int x);
+
 template <typename... Args>
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             int *second, Args... args)
