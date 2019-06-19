@@ -234,6 +234,7 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim)
                        (unsigned int)idxVec.z);
 #else
   return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
+#endif
 }
 
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim)
@@ -252,8 +253,9 @@ idxVec.z = idx / (cellDim.x * cellDim.y);
   idxVec.y = decodeMorton3y((unsigned int)idx);
   idxVec.z = decodeMorton3z((unsigned int)idx);
 #else
-  idxVec.x = decodeMorton2x((unsigned int)idx);
-  idxVec.y = decodeMorton2y((unsigned int)idx);
+  idxVec.x     = decodeMorton2x((unsigned int)idx);
+  idxVec.y     = decodeMorton2y((unsigned int)idx);
+#endif
 
   return idxVec;
 }
@@ -264,7 +266,7 @@ __device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y)
 }
 
 __device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
-                                      unsigned int z)
+                                               unsigned int z)
 {
   return (part1By2(z) << 2) + (part1By2(y) << 1) + part1By2(x);
 }
@@ -563,7 +565,7 @@ __global__ void addVolume(double *r, int numValues)
 #else
     multiplier = sqrt(multiplier);
 #endif
-    r[i]       = r[i] * multiplier;
+    r[i] = r[i] * multiplier;
   }
 }
 
