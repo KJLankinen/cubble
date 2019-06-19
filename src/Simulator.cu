@@ -122,21 +122,11 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
 
   CUDA_ASSERT(
     cudaStreamCreateWithFlags(&nonBlockingStream, cudaStreamNonBlocking));
-
   CUDA_ASSERT(cudaStreamCreate(&velocityStream));
   CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
 
   CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
   CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
-
-  for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
-  {
-    neighborStreamVec.emplace_back();
-    neighborEventVec.emplace_back();
-    CUDA_ASSERT(
-      cudaStreamCreateWithFlags(&neighborStreamVec[i], cudaStreamNonBlocking));
-    CUDA_ASSERT(cudaEventCreate(&neighborEventVec[i]));
-  }
 
   pinnedInt    = PinnedHostArray<int>(1);
   pinnedDouble = PinnedHostArray<double>(3);
@@ -164,12 +154,6 @@ void Simulator::deinit()
 
   CUDA_CALL(cudaEventDestroy(blockingEvent1));
   CUDA_CALL(cudaEventDestroy(blockingEvent2));
-
-  for (size_t i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
-  {
-    CUDA_CALL(cudaStreamDestroy(neighborStreamVec[i]));
-    CUDA_CALL(cudaEventDestroy(neighborEventVec[i]));
-  }
 }
 
 void Simulator::run()
@@ -914,7 +898,6 @@ void Simulator::updateCellsAndNeighbors()
     numBubbles);
 
   CUDA_CALL(cudaEventRecord(blockingEvent1));
-  CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream, blockingEvent1, 0));
 
   cubWrapper->histogram<int *, int, int, int>(
     &cub::DeviceHistogram::HistogramEven, bubbleCellIndices.getRowPtr(2), sizes,
@@ -924,6 +907,7 @@ void Simulator::updateCellsAndNeighbors()
                                  numCells);
   CUDA_CALL(cudaEventRecord(blockingEvent2));
 
+  CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream, blockingEvent1, 0));
   KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, nonBlockingStream, numBubbles,
                 ReorganizeType::COPY_FROM_INDEX, bubbleIndices, bubbleIndices,
                 adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP,
@@ -955,23 +939,23 @@ void Simulator::updateCellsAndNeighbors()
 
   CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
 
+  CUDA_CALL(cudaStreamWaitEvent(gasExchangeStream, blockingEvent1, 0));
+  CUDA_CALL(cudaStreamWaitEvent(gasExchangeStream, blockingEvent2, 0));
+  CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent1, 0));
+  CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent2, 0));
+
   for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
   {
-    CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent1, 0));
-    CUDA_CALL(cudaStreamWaitEvent(neighborStreamVec[i], blockingEvent2, 0));
-
-    KERNEL_LAUNCH(neighborSearch, kernelSize, 0, neighborStreamVec[i], i,
-                  numBubbles, numCells, static_cast<int>(pairs.getWidth()),
-                  offsets, sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r,
-                  interval.x, PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
+    cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
+    KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles,
+                  numCells, static_cast<int>(pairs.getWidth()), offsets, sizes,
+                  pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x,
+                  PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)
                   ,
                   interval.z, PBC_Z == 1, adp.z
 #endif
                   );
-
-    CUDA_CALL(cudaEventRecord(neighborEventVec[i], neighborStreamVec[i]));
-    CUDA_CALL(cudaStreamWaitEvent(0, neighborEventVec[i], 0));
   }
 
   CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int),
