@@ -958,13 +958,13 @@ void Simulator::updateCellsAndNeighbors()
                   );
   }
 
-  CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int),
-                       cudaMemcpyDeviceToHost));
-  int numPairs = pinnedInt.get()[0];
-  cubWrapper->sortPairs<int, int>(
-    &cub::DeviceRadixSort::SortPairs,
-    const_cast<const int *>(pairs.getRowPtr(2)), pairs.getRowPtr(0),
-    const_cast<const int *>(pairs.getRowPtr(3)), pairs.getRowPtr(1), numPairs);
+  // CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int),
+  //                       cudaMemcpyDeviceToHost));
+  // int numPairs = pinnedInt.get()[0];
+  // cubWrapper->sortPairs<int, int>(
+  //    &cub::DeviceRadixSort::SortPairs,
+  // const_cast<const int *>(pairs.getRowPtr(2)), pairs.getRowPtr(0),
+  // const_cast<const int *>(pairs.getRowPtr(3)), pairs.getRowPtr(1), numPairs);
 }
 
 void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
