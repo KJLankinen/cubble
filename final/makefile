@@ -18,14 +18,14 @@ PBC_Z := 1
 # Use flow or not?
 # -----------------------------------------------------
 
-USE_FLOW := 0
+USE_FLOW := 1
 
 
 # -----------------------------------------------------
 # Profile or not?
 # -----------------------------------------------------
 
-USE_PROFILING := 0
+USE_PROFILING := 1
 
 
 # -----------------------------------------------------
@@ -99,14 +99,14 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 # -----------------------------------------------------
 
 CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_ARCH := -gencode arch=compute_60,code=sm_60 \
-	    -gencode arch=compute_70,code=sm_70
+GPU_ARCH := -gencode=arch=compute_60,code=sm_60 \
+	    -gencode=arch=compute_70,code=sm_70
 GPU_FLAGS := $(GPU_ARCH) -std=c++11 --expt-relaxed-constexpr -lineinfo
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O3
 PROFILING_FLAGS :=
 ifeq ($(USE_PROFILING), 1)
-PROFILING_FLAGS := -pg
+PROFILING_FLAGS := -pg -DUSE_PROFILING=$(USE_PROFILING)
 endif
 
 

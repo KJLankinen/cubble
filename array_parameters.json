@@ -1,6 +1,8 @@
-{"Kappa" : 0.1}
-{"Kappa" : 0.0}
-{"Kappa" : 0.1, "KParameter" : 0.0001}
-{"Kappa" : 0.1, "KParameter" : 0.00001}
-{"Kappa" : 0.0, "KParameter" : 0.0001}
-{"Kappa" : 0.0, "KParameter" : 0.00001}
+{"KParameter" : 0.00100}
+{"KParameter" : 0.00075}
+{"KParameter" : 0.00050}
+{"KParameter" : 0.00025}
+{"Kappa" : 0.0, "KParameter" : 0.00100}
+{"Kappa" : 0.0, "KParameter" : 0.00075}
+{"Kappa" : 0.0, "KParameter" : 0.00050}
+{"Kappa" : 0.0, "KParameter" : 0.00025}
