@@ -56,9 +56,6 @@ private:
 
   KernelSize pairKernelSize;
 
-  std::vector<cudaStream_t> neighborStreamVec;
-  std::vector<cudaEvent_t> neighborEventVec;
-
   // Host pointers to device global variables
   int *mbpc      = nullptr;
   int *np        = nullptr;
