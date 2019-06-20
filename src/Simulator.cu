@@ -99,7 +99,7 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
   const int maxGridDim = gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z) : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
   maxNumCells = 1;
   while (maxNumCells < maxGridDim)
-	maxNumCells << 1;
+	maxNumCells = maxNumCells << 1;
   
   std::cout << "Morton: " << maxNumCells << " > " << maxGridDim << " > " << (maxNumCells >> 1) << std::endl;
 
