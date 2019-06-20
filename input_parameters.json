@@ -9,7 +9,7 @@
   "NumBubbles": 1e5,
 
   "MinNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "MinNumBubbles": 300,
+  "MinNumBubbles": 900,
 
   "BoxRelativeDimensionsExpl": "The relative dimension of the box.",
   "BoxRelativeDimensions": {
@@ -58,7 +58,7 @@
   "TimeStep": 1e-5,
 
   "RngSeedExpl": "The seed for the RNG.",
-  "RngSeed": 443,
+  "RngSeed": 441233,
 
   "NumBubblesPerCellExpl": "How many bubbles per cell.",
   "NumBubblesPerCell": 32,
