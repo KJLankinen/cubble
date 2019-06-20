@@ -299,9 +299,9 @@ void Simulator::run()
     while (integrate())
     {
 #if (USE_PROFILING == 1)
-      if (numSteps == 2000)
+      if (numSteps == 0)
         CUDA_PROFILER_START();
-      else if (numSteps == 22000)
+      else if (numSteps == 9000)
       {
         CUDA_PROFILER_STOP();
         break;
