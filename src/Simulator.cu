@@ -94,15 +94,21 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
   adp.dummy7 = deviceData + 32 * dataStride;
   adp.dummy8 = deviceData + 33 * dataStride;
 
+  // Determine the maximum number of Morton numbers for the cell
+  dim3 gridDim = getGridSize();
+  const int maxGridDim = gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z) : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
+  maxNumCells = 1;
+  while (maxNumCells < maxGridDim)
+	maxNumCells << 1;
+  
+  std::cout << "Morton: " << maxNumCells << " > " << maxGridDim << " > " << (maxNumCells >> 1) << std::endl;
+
   aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
   bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
   pairs             = DeviceArray<int>(8 * dataStride, 4u);
   wrapMultipliers   = DeviceArray<int>(dataStride, 6);
-
-  const dim3 gridSize = getGridSize();
-  size_t numCells     = gridSize.x * gridSize.y * gridSize.z;
-  cellData = DeviceArray<int>(numCells, (size_t)CellProperty::NUM_VALUES);
-
+  cellData = DeviceArray<int>(maxNumCells, (size_t)CellProperty::NUM_VALUES);
+  
   CUDA_ASSERT(
     cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfapr),
@@ -873,10 +879,9 @@ void Simulator::generateBubbles()
 
 void Simulator::updateCellsAndNeighbors()
 {
-  dim3 gridSize      = getGridSize();
-  const int numCells = gridSize.x * gridSize.y * gridSize.z;
   int *offsets       = cellData.getRowPtr((size_t)CellProperty::OFFSET);
   int *sizes         = cellData.getRowPtr((size_t)CellProperty::SIZE);
+  dim3 gridSize      = getGridSize();
   const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
   cellData.setBytesToZero();
@@ -901,10 +906,10 @@ void Simulator::updateCellsAndNeighbors()
 
   cubWrapper->histogram<int *, int, int, int>(
     &cub::DeviceHistogram::HistogramEven, bubbleCellIndices.getRowPtr(2), sizes,
-    numCells + 1, 0, numCells, numBubbles);
+    maxNumCells + 1, 0, maxNumCells, numBubbles);
 
   cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
-                                 numCells);
+                                 maxNumCells);
   CUDA_CALL(cudaEventRecord(blockingEvent2));
 
   CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream, blockingEvent1, 0));
@@ -948,7 +953,7 @@ void Simulator::updateCellsAndNeighbors()
   {
     cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
     KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles,
-                  numCells, static_cast<int>(pairs.getWidth()), offsets, sizes,
+                  maxNumCells, static_cast<int>(pairs.getWidth()), offsets, sizes,
                   pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x,
                   PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)

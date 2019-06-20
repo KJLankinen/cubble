@@ -299,7 +299,7 @@ __device__ __host__ unsigned int decodeMorton3z(unsigned int code)
 __device__ __host__ unsigned int part1By1(unsigned int x)
 {
   // Mask the lowest 16 bits
-  x &= 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
+  x &= 0x0000ffff;				 // x = ---- ---- ---- ---- fedc ba98 7654 3210
   x =
     (x ^ (x << 8)) & 0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
   x =
