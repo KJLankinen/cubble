@@ -100,8 +100,14 @@ bool Simulator::init(const char *inputFileName, const char *outputFileName)
   maxNumCells = 1;
   while (maxNumCells < maxGridDim)
 	maxNumCells = maxNumCells << 1;
+	
+#if (NUM_DIM == 3)
+  maxNumCells = maxNumCells * maxNumCells * maxNumCells;
+#else
+  maxNumCells = maxNumCells * maxNumCells;
+#endif
   
-  std::cout << "Morton: " << maxNumCells << " > " << maxGridDim << " > " << (maxNumCells >> 1) << std::endl;
+  std::cout << "Morton: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z << std::endl;
 
   aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
   bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
