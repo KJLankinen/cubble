@@ -301,7 +301,7 @@ void Simulator::run()
 #if (USE_PROFILING == 1)
       if (numSteps == 2000)
         CUDA_PROFILER_START();
-      else if (numSteps == 2050)
+      else if (numSteps == 22000)
       {
         CUDA_PROFILER_STOP();
         break;
@@ -577,7 +577,7 @@ double Simulator::stabilize()
     properties.setTimeStep(timeStep);
     elapsedTime += timeStep;
 
-    if (i % 50 == 0)
+    if (i % 200 == 0)
       updateCellsAndNeighbors();
   }
 
@@ -826,7 +826,7 @@ bool Simulator::integrate()
   if (shouldDeleteBubbles)
     deleteSmallBubbles(numBubblesAboveMinRad);
 
-  if (shouldDeleteBubbles || integrationStep % 50 == 0)
+  if (shouldDeleteBubbles || integrationStep % 200 == 0)
     updateCellsAndNeighbors();
 
   bool continueSimulation = numBubbles > properties.getMinNumBubbles();
