@@ -40,9 +40,10 @@ private:
                       int *mulY, int *mulZ, int *mulOldX, int *mulOldY,
                       int *mulOldZ);
   void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX,
-                      bool doY, bool doZ, int *first, int *second, double *r,
-                      double *x, double *y, double *z, double *dxdt,
-                      double *dydt, double *dzdt, dvec lbb, dvec tfr);
+                      bool doY, bool doZ, int numValues, int *first,
+                      int *second, double *r, double *x, double *y, double *z,
+                      double *dxdt, double *dydt, double *dzdt, dvec lbb,
+                      dvec tfr);
 
   double simulationTime  = 0.0;
   double energy1         = 0.0;
