@@ -7,13 +7,13 @@
 #if (USE_PROFILING == 1)
 #define NVTX_RANGE_PUSH_A(string) nvtxRangePushA(string)
 #define NVTX_RANGE_POP() nvtxRangePop()
-#define CUDA_PROFILER_START() cudaProfilerStart()
-#define CUDA_PROFILER_STOP() cudaProfilerStop()
+#define CUDA_PROFILER_START(start) startProfiling(start)
+#define CUDA_PROFILER_STOP(stop, continue) startProfiling(stop, continue)
 #else
 #define NVTX_RANGE_PUSH_A(string)
 #define NVTX_RANGE_POP()
-#define CUDA_PROFILER_START()
-#define CUDA_PROFILER_STOP()
+#define CUDA_PROFILER_START(start)
+#define CUDA_PROFILER_STOP(stop, continue)
 #endif
 
 // Macro for reading and writing parameters from/to .json file
