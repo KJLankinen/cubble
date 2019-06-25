@@ -19,34 +19,28 @@ class Simulator
 public:
   Simulator(){};
   ~Simulator(){};
-  bool init(const char *inputFileName, const char *outputFileName);
-  void deinit();
-  void run();
+  void run(const char *inputFileName, const char *outputFileName);
 
 private:
-  void setupSimulation();
-  void generateBubbles();
-
+  void setup();
+  void deinit();
   double stabilize();
   bool integrate();
   void updateCellsAndNeighbors();
   void deleteSmallBubbles(int numBubblesAboveMinRad);
-
   void transformPositions(bool normalize);
   double getAverageProperty(double *p);
   dim3 getGridSize();
   void saveSnapshotToFile();
 
-  double simulationTime     = 0.0;
-  double energy1            = 0.0;
-  double energy2            = 0.0;
-  double timeScalingFactor  = 0.0;
-  double maxBubbleRadius    = 0.0;
-  size_t integrationStep    = 0;
-  uint32_t numSnapshots     = 0;
-  int numBubbles            = 0;
-  ivec bubblesPerDimAtStart = ivec(0, 0, 0);
-  int maxNumCells = 0;
+  double simulationTime  = 0.0;
+  double energy1         = 0.0;
+  double energy2         = 0.0;
+  double maxBubbleRadius = 0.0;
+  size_t integrationStep = 0;
+  uint32_t numSnapshots  = 0;
+  int numBubbles         = 0;
+  int maxNumCells        = 0;
 
   cudaEvent_t blockingEvent1;
   cudaEvent_t blockingEvent2;

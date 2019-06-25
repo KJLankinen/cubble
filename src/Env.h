@@ -33,6 +33,7 @@ class Env
   CUBBLE_CONST_PROP(double, MaxDeltaEnergy, 0)
   CUBBLE_CONST_PROP(double, KParameter, 0)
   CUBBLE_CONST_PROP(double, Kappa, 0)
+  CUBBLE_CONST_PROP(double, TimeScalingFactor, 0)
   CUBBLE_PROP(double, TimeStep, 0)
 
   CUBBLE_CONST_PROP(std::string, SnapshotFilename, "")
@@ -63,11 +64,11 @@ public:
     assert(BoxRelativeDimensions.x > 0);
     assert(BoxRelativeDimensions.y > 0);
     assert(BoxRelativeDimensions.z > 0);
-    FZeroPerMuZero = SigmaZero * AvgRad / MuZero;
 
+    FZeroPerMuZero    = SigmaZero * AvgRad / MuZero;
+    MinRad            = 0.1 * AvgRad;
+    TimeScalingFactor = KParameter / (AvgRad * AvgRad);
     FlowVel *= FZeroPerMuZero;
-
-    MinRad = 0.1 * AvgRad;
   }
 
   void writeParameters() { readWriteParameters(false); }

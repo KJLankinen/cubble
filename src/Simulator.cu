@@ -16,159 +16,7 @@
 
 namespace cubble
 {
-bool Simulator::init(const char *inputFileName, const char *outputFileName)
-{
-  properties = Env(inputFileName, outputFileName);
-  properties.readParameters();
-
-  timeScalingFactor = properties.getKParameter() /
-                      (properties.getAvgRad() * properties.getAvgRad());
-
-  dvec relDim = properties.getBoxRelativeDimensions();
-  relDim /= relDim.x;
-  const float d = 2 * properties.getAvgRad();
-#if (NUM_DIM == 3)
-  const float x =
-    std::cbrt(properties.getNumBubbles() * d * d * d / (relDim.y * relDim.z));
-  dvec tfr = relDim * x;
-  const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d),
-                           std::ceil(tfr.z / d));
-  numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
-#else
-  const float x = std::sqrt(properties.getNumBubbles() * d * d / relDim.y);
-  dvec tfr      = relDim * x;
-  tfr.z         = 0;
-  const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
-  numBubbles = bubblesPerDim.x * bubblesPerDim.y;
-#endif
-  bubblesPerDimAtStart = bubblesPerDim;
-
-  tfr = d * bubblesPerDim.asType<double>();
-  properties.setTfr(tfr + properties.getLbb());
-
-  dvec interval = properties.getTfr() - properties.getLbb();
-
-  properties.setFlowTfr(interval * properties.getFlowTfr() +
-                        properties.getLbb());
-
-  properties.setFlowLbb(interval * properties.getFlowLbb() +
-                        properties.getLbb());
-
-  cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
-
-  dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
-  CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceData),
-                         sizeof(double) * dataStride * numAliases));
-  adp.x      = deviceData;
-  adp.y      = deviceData + 1 * dataStride;
-  adp.z      = deviceData + 2 * dataStride;
-  adp.r      = deviceData + 3 * dataStride;
-  adp.dxdt   = deviceData + 4 * dataStride;
-  adp.dydt   = deviceData + 5 * dataStride;
-  adp.dzdt   = deviceData + 6 * dataStride;
-  adp.drdt   = deviceData + 7 * dataStride;
-  adp.dxdtO  = deviceData + 8 * dataStride;
-  adp.dydtO  = deviceData + 9 * dataStride;
-  adp.dzdtO  = deviceData + 10 * dataStride;
-  adp.drdtO  = deviceData + 11 * dataStride;
-  adp.x0     = deviceData + 12 * dataStride;
-  adp.y0     = deviceData + 13 * dataStride;
-  adp.z0     = deviceData + 14 * dataStride;
-  adp.s      = deviceData + 15 * dataStride;
-  adp.d      = deviceData + 16 * dataStride;
-  adp.xP     = deviceData + 17 * dataStride;
-  adp.yP     = deviceData + 18 * dataStride;
-  adp.zP     = deviceData + 19 * dataStride;
-  adp.rP     = deviceData + 20 * dataStride;
-  adp.dxdtP  = deviceData + 21 * dataStride;
-  adp.dydtP  = deviceData + 22 * dataStride;
-  adp.dzdtP  = deviceData + 23 * dataStride;
-  adp.drdtP  = deviceData + 24 * dataStride;
-  adp.error  = deviceData + 25 * dataStride;
-  adp.dummy1 = deviceData + 26 * dataStride;
-  adp.dummy2 = deviceData + 27 * dataStride;
-  adp.dummy3 = deviceData + 28 * dataStride;
-  adp.dummy4 = deviceData + 29 * dataStride;
-  adp.dummy5 = deviceData + 30 * dataStride;
-  adp.dummy6 = deviceData + 31 * dataStride;
-  adp.dummy7 = deviceData + 32 * dataStride;
-  adp.dummy8 = deviceData + 33 * dataStride;
-
-  // Determine the maximum number of Morton numbers for the cell
-  dim3 gridDim = getGridSize();
-  const int maxGridDim = gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z) : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
-  maxNumCells = 1;
-  while (maxNumCells < maxGridDim)
-	maxNumCells = maxNumCells << 1;
-	
-#if (NUM_DIM == 3)
-  maxNumCells = maxNumCells * maxNumCells * maxNumCells;
-#else
-  maxNumCells = maxNumCells * maxNumCells;
-#endif
-  
-  std::cout << "Morton: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z << std::endl;
-
-  aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
-  bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
-  pairs             = DeviceArray<int>(8 * dataStride, 4u);
-  wrapMultipliers   = DeviceArray<int>(dataStride, 6);
-  cellData = DeviceArray<int>(maxNumCells, (size_t)CellProperty::NUM_VALUES);
-  
-  CUDA_ASSERT(
-    cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfapr),
-                                   dTotalFreeAreaPerRadius));
-  CUDA_ASSERT(
-    cudaGetSymbolAddress(reinterpret_cast<void **>(&mbpc), dMaxBubblesPerCell));
-  CUDA_ASSERT(
-    cudaGetSymbolAddress(reinterpret_cast<void **>(&dvm), dVolumeMultiplier));
-  CUDA_ASSERT(
-    cudaGetSymbolAddress(reinterpret_cast<void **>(&dtv), dTotalVolume));
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&np), dNumPairs));
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dir), dInvRho));
-  CUDA_ASSERT(
-    cudaGetSymbolAddress(reinterpret_cast<void **>(&dta), dTotalArea));
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dasai),
-                                   dAverageSurfaceAreaIn));
-
-  CUDA_ASSERT(
-    cudaStreamCreateWithFlags(&nonBlockingStream, cudaStreamNonBlocking));
-  CUDA_ASSERT(cudaStreamCreate(&velocityStream));
-  CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
-
-  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
-  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
-
-  pinnedInt    = PinnedHostArray<int>(1);
-  pinnedDouble = PinnedHostArray<double>(3);
-
-  printRelevantInfoOfCurrentDevice();
-
-  pairKernelSize.block = dim3(128, 1, 1);
-  pairKernelSize.grid  = dim3(256, 1, 1);
-
-  return true;
-}
-
-void Simulator::deinit()
-{
-  saveSnapshotToFile();
-  properties.writeParameters();
-
-  CUDA_CALL(cudaDeviceSynchronize());
-
-  CUDA_CALL(cudaFree(static_cast<void *>(deviceData)));
-
-  CUDA_CALL(cudaStreamDestroy(nonBlockingStream));
-  CUDA_CALL(cudaStreamDestroy(velocityStream));
-  CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
-
-  CUDA_CALL(cudaEventDestroy(blockingEvent1));
-  CUDA_CALL(cudaEventDestroy(blockingEvent2));
-}
-
-void Simulator::run()
+void Simulator::run(const char *inputFileName, const char *outputFileName)
 {
   auto getVolumeOfBubbles = [this]() -> double {
     KernelSize kernelSize(128, numBubbles);
@@ -180,9 +28,12 @@ void Simulator::run()
       &cub::DeviceReduce::Sum, adp.dummy1, numBubbles);
   };
 
+  properties = Env(inputFileName, outputFileName);
+  properties.readParameters();
+
   std::cout << "======\nSetup\n======" << std::endl;
   {
-    setupSimulation();
+    setup();
     saveSnapshotToFile();
 
     std::cout << "Letting bubbles settle after they've been created and before "
@@ -239,7 +90,8 @@ void Simulator::run()
                   << " steps."
                   << " Energy before: " << energy1
                   << ", energy after: " << energy2
-                  << ", time: " << time * timeScalingFactor << std::endl;
+                  << ", time: " << time * properties.getTimeScalingFactor()
+                  << std::endl;
         break;
       }
       else if (numSteps > failsafe)
@@ -295,13 +147,14 @@ void Simulator::run()
       &cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
 
     // Start the simulation proper
+    int numTotalSteps = 0;
     std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
     while (integrate())
     {
 #if (USE_PROFILING == 1)
-      if (numSteps == 0)
+      if (numTotalSteps == 0)
         CUDA_PROFILER_START();
-      else if (numSteps == 9000)
+      else if (numTotalSteps == 9000)
       {
         CUDA_PROFILER_STOP();
         break;
@@ -312,7 +165,8 @@ void Simulator::run()
       // have a huge cost. Roughly 6e4-1e5 integration steps are taken for each
       // time step
       // and the if clause is executed once per time step.
-      const double scaledTime = simulationTime * timeScalingFactor;
+      const double scaledTime =
+        simulationTime * properties.getTimeScalingFactor();
       if ((int)scaledTime >= timesPrinted)
       {
         // Calculate total energy
@@ -355,16 +209,181 @@ void Simulator::run()
       }
 
       ++numSteps;
+      ++numTotalSteps;
     }
   }
 
   std::ofstream file(properties.getDataFilename());
   file << dataStream.str() << std::endl;
+
+  deinit();
 }
 
-void Simulator::setupSimulation()
+void Simulator::setup()
 {
-  generateBubbles();
+  dvec relDim = properties.getBoxRelativeDimensions();
+  relDim /= relDim.x;
+  const float d = 2 * properties.getAvgRad();
+#if (NUM_DIM == 3)
+  const float x =
+    std::cbrt(properties.getNumBubbles() * d * d * d / (relDim.y * relDim.z));
+  dvec tfr = relDim * x;
+  const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d),
+                           std::ceil(tfr.z / d));
+  numBubbles = bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
+#else
+  const float x = std::sqrt(properties.getNumBubbles() * d * d / relDim.y);
+  dvec tfr      = relDim * x;
+  tfr.z         = 0;
+  const ivec bubblesPerDim(std::ceil(tfr.x / d), std::ceil(tfr.y / d), 0);
+  numBubbles  = bubblesPerDim.x * bubblesPerDim.y;
+#endif
+
+  tfr = d * bubblesPerDim.asType<double>();
+  properties.setTfr(tfr + properties.getLbb());
+
+  dvec interval = properties.getTfr() - properties.getLbb();
+
+  properties.setFlowTfr(interval * properties.getFlowTfr() +
+                        properties.getLbb());
+
+  properties.setFlowLbb(interval * properties.getFlowLbb() +
+                        properties.getLbb());
+
+  cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
+
+  dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
+  CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceData),
+                         sizeof(double) * dataStride * numAliases));
+  adp.x      = deviceData;
+  adp.y      = deviceData + 1 * dataStride;
+  adp.z      = deviceData + 2 * dataStride;
+  adp.r      = deviceData + 3 * dataStride;
+  adp.dxdt   = deviceData + 4 * dataStride;
+  adp.dydt   = deviceData + 5 * dataStride;
+  adp.dzdt   = deviceData + 6 * dataStride;
+  adp.drdt   = deviceData + 7 * dataStride;
+  adp.dxdtO  = deviceData + 8 * dataStride;
+  adp.dydtO  = deviceData + 9 * dataStride;
+  adp.dzdtO  = deviceData + 10 * dataStride;
+  adp.drdtO  = deviceData + 11 * dataStride;
+  adp.x0     = deviceData + 12 * dataStride;
+  adp.y0     = deviceData + 13 * dataStride;
+  adp.z0     = deviceData + 14 * dataStride;
+  adp.s      = deviceData + 15 * dataStride;
+  adp.d      = deviceData + 16 * dataStride;
+  adp.xP     = deviceData + 17 * dataStride;
+  adp.yP     = deviceData + 18 * dataStride;
+  adp.zP     = deviceData + 19 * dataStride;
+  adp.rP     = deviceData + 20 * dataStride;
+  adp.dxdtP  = deviceData + 21 * dataStride;
+  adp.dydtP  = deviceData + 22 * dataStride;
+  adp.dzdtP  = deviceData + 23 * dataStride;
+  adp.drdtP  = deviceData + 24 * dataStride;
+  adp.error  = deviceData + 25 * dataStride;
+  adp.dummy1 = deviceData + 26 * dataStride;
+  adp.dummy2 = deviceData + 27 * dataStride;
+  adp.dummy3 = deviceData + 28 * dataStride;
+  adp.dummy4 = deviceData + 29 * dataStride;
+  adp.dummy5 = deviceData + 30 * dataStride;
+  adp.dummy6 = deviceData + 31 * dataStride;
+  adp.dummy7 = deviceData + 32 * dataStride;
+  adp.dummy8 = deviceData + 33 * dataStride;
+
+  // Determine the maximum number of Morton numbers for the cell
+  dim3 gridDim         = getGridSize();
+  const int maxGridDim = gridDim.x > gridDim.y
+                           ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
+                           : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
+  maxNumCells = 1;
+  while (maxNumCells < maxGridDim)
+    maxNumCells = maxNumCells << 1;
+
+#if (NUM_DIM == 3)
+  maxNumCells = maxNumCells * maxNumCells * maxNumCells;
+#else
+  maxNumCells = maxNumCells * maxNumCells;
+#endif
+
+  std::cout << "Morton: " << maxNumCells << ", " << gridDim.x << ", "
+            << gridDim.y << ", " << gridDim.z << std::endl;
+
+  aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
+  bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
+  pairs             = DeviceArray<int>(8 * dataStride, 4u);
+  wrapMultipliers   = DeviceArray<int>(dataStride, 6);
+  cellData = DeviceArray<int>(maxNumCells, (size_t)CellProperty::NUM_VALUES);
+
+  CUDA_ASSERT(
+    cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
+  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfapr),
+                                   dTotalFreeAreaPerRadius));
+  CUDA_ASSERT(
+    cudaGetSymbolAddress(reinterpret_cast<void **>(&mbpc), dMaxBubblesPerCell));
+  CUDA_ASSERT(
+    cudaGetSymbolAddress(reinterpret_cast<void **>(&dvm), dVolumeMultiplier));
+  CUDA_ASSERT(
+    cudaGetSymbolAddress(reinterpret_cast<void **>(&dtv), dTotalVolume));
+  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&np), dNumPairs));
+  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dir), dInvRho));
+  CUDA_ASSERT(
+    cudaGetSymbolAddress(reinterpret_cast<void **>(&dta), dTotalArea));
+  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dasai),
+                                   dAverageSurfaceAreaIn));
+
+  CUDA_ASSERT(
+    cudaStreamCreateWithFlags(&nonBlockingStream, cudaStreamNonBlocking));
+  CUDA_ASSERT(cudaStreamCreate(&velocityStream));
+  CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
+
+  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
+  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
+
+  pinnedInt    = PinnedHostArray<int>(1);
+  pinnedDouble = PinnedHostArray<double>(3);
+
+  printRelevantInfoOfCurrentDevice();
+
+  pairKernelSize.block = dim3(128, 1, 1);
+  pairKernelSize.grid  = dim3(256, 1, 1);
+
+  std::cout << "Starting to generate data for bubbles." << std::endl;
+
+  double timeStep        = properties.getTimeStep();
+  const int rngSeed      = properties.getRngSeed();
+  const double avgRad    = properties.getAvgRad();
+  const double stdDevRad = properties.getStdDevRad();
+  tfr                    = properties.getTfr();
+  lbb                    = properties.getLbb();
+  interval               = tfr - lbb;
+
+  curandGenerator_t generator;
+  CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
+  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
+
+  CURAND_CALL(curandGenerateUniformDouble(generator, adp.x, numBubbles));
+  CURAND_CALL(curandGenerateUniformDouble(generator, adp.y, numBubbles));
+#if (NUM_DIM == 3)
+  CURAND_CALL(curandGenerateUniformDouble(generator, adp.z, numBubbles));
+#endif
+  CURAND_CALL(curandGenerateUniformDouble(generator, adp.rP, numBubbles));
+  CURAND_CALL(curandGenerateNormalDouble(generator, adp.r, numBubbles, avgRad,
+                                         stdDevRad));
+
+  CURAND_CALL(curandDestroyGenerator(generator));
+
+  KernelSize kernelSize(128, numBubbles);
+
+  KERNEL_LAUNCH(assignDataToBubbles, kernelSize, 0, 0, adp.x, adp.y, adp.z,
+                adp.xP, adp.yP, adp.zP, adp.r, adp.rP,
+                aboveMinRadFlags.getRowPtr(0), bubblesPerDim, tfr, lbb, avgRad,
+                properties.getMinRad(), numBubbles);
+
+  cubWrapper->reduceNoCopy<double, double *, double *>(
+    &cub::DeviceReduce::Sum, adp.rP, dasai, numBubbles, 0);
+  CUDA_CALL(
+    cudaMemcpyAsync(static_cast<void *>(adp.rP), static_cast<void *>(adp.r),
+                    sizeof(double) * dataStride, cudaMemcpyDeviceToDevice, 0));
 
   const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(
     &cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), numBubbles);
@@ -375,12 +394,6 @@ void Simulator::setupSimulation()
 
   // Calculate some initial values which are needed
   // for the two-step Adams-Bashforth-Moulton prEdictor-corrector method
-  const dvec tfr      = properties.getTfr();
-  const dvec lbb      = properties.getLbb();
-  const dvec interval = tfr - lbb;
-  double timeStep     = properties.getTimeStep();
-
-  KernelSize kernelSize(128, numBubbles);
 
   KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtO,
                 adp.dydtO, adp.dzdtO, adp.drdtO, adp.d, adp.s);
@@ -441,6 +454,23 @@ void Simulator::setupSimulation()
                 interval.z, lbb.z, PBC_Z == 1, adp.z, adp.dzdtO
 #endif
                 );
+}
+
+void Simulator::deinit()
+{
+  saveSnapshotToFile();
+  properties.writeParameters();
+
+  CUDA_CALL(cudaDeviceSynchronize());
+
+  CUDA_CALL(cudaFree(static_cast<void *>(deviceData)));
+
+  CUDA_CALL(cudaStreamDestroy(nonBlockingStream));
+  CUDA_CALL(cudaStreamDestroy(velocityStream));
+  CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
+
+  CUDA_CALL(cudaEventDestroy(blockingEvent1));
+  CUDA_CALL(cudaEventDestroy(blockingEvent2));
 }
 
 double Simulator::stabilize()
@@ -839,55 +869,11 @@ bool Simulator::integrate()
   return continueSimulation;
 }
 
-void Simulator::generateBubbles()
-{
-  std::cout << "Starting to generate data for bubbles." << std::endl;
-
-  const int rngSeed      = properties.getRngSeed();
-  const double avgRad    = properties.getAvgRad();
-  const double stdDevRad = properties.getStdDevRad();
-  const dvec tfr         = properties.getTfr();
-  const dvec lbb         = properties.getLbb();
-
-  curandGenerator_t generator;
-  CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
-  CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
-
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.x, numBubbles));
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.y, numBubbles));
-#if (NUM_DIM == 3)
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.z, numBubbles));
-#endif
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.rP, numBubbles));
-  CURAND_CALL(curandGenerateNormalDouble(generator, adp.r, numBubbles, avgRad,
-                                         stdDevRad));
-
-  CURAND_CALL(curandDestroyGenerator(generator));
-
-  KernelSize kernelSize(128, numBubbles);
-
-  assert(bubblesPerDimAtStart.x > 0);
-  assert(bubblesPerDimAtStart.y > 0);
-#if (NUM_DIM == 3)
-  assert(bubblesPerDimAtStart.z > 0);
-#endif
-  KERNEL_LAUNCH(assignDataToBubbles, kernelSize, 0, 0, adp.x, adp.y, adp.z,
-                adp.xP, adp.yP, adp.zP, adp.r, adp.rP,
-                aboveMinRadFlags.getRowPtr(0), bubblesPerDimAtStart, tfr, lbb,
-                avgRad, properties.getMinRad(), numBubbles);
-
-  cubWrapper->reduceNoCopy<double, double *, double *>(
-    &cub::DeviceReduce::Sum, adp.rP, dasai, numBubbles, 0);
-  CUDA_CALL(
-    cudaMemcpyAsync(static_cast<void *>(adp.rP), static_cast<void *>(adp.r),
-                    sizeof(double) * dataStride, cudaMemcpyDeviceToDevice, 0));
-}
-
 void Simulator::updateCellsAndNeighbors()
 {
-  int *offsets       = cellData.getRowPtr((size_t)CellProperty::OFFSET);
-  int *sizes         = cellData.getRowPtr((size_t)CellProperty::SIZE);
-  dim3 gridSize      = getGridSize();
+  int *offsets  = cellData.getRowPtr((size_t)CellProperty::OFFSET);
+  int *sizes    = cellData.getRowPtr((size_t)CellProperty::SIZE);
+  dim3 gridSize = getGridSize();
   const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
   cellData.setBytesToZero();
@@ -959,9 +945,9 @@ void Simulator::updateCellsAndNeighbors()
   {
     cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
     KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles,
-                  maxNumCells, static_cast<int>(pairs.getWidth()), offsets, sizes,
-                  pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x,
-                  PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
+                  maxNumCells, static_cast<int>(pairs.getWidth()), offsets,
+                  sizes, pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r,
+                  interval.x, PBC_X == 1, adp.x, interval.y, PBC_Y == 1, adp.y
 #if (NUM_DIM == 3)
                   ,
                   interval.z, PBC_Z == 1, adp.z
@@ -1032,8 +1018,8 @@ dim3 Simulator::getGridSize()
 #if (NUM_DIM == 3)
   float nx = std::cbrt((float)totalNumCells / (interval.y * interval.z));
 #else
-  float nx   = std::sqrt((float)totalNumCells / interval.y);
-  interval.z = 0;
+  float nx    = std::sqrt((float)totalNumCells / interval.y);
+  interval.z  = 0;
 #endif
   ivec grid = (nx * interval).floor() + 1;
   assert(grid.x > 0);

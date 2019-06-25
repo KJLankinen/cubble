@@ -36,9 +36,7 @@ int main(int argc, char **argv)
               << std::endl;
 
     cubble::Simulator simulator;
-    simulator.init(argv[1], argv[2]);
-    simulator.run();
-    simulator.deinit();
+    simulator.run(argv[1], argv[2]);
   }
   catch (const std::exception &e)
   {
