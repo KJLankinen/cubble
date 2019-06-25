@@ -354,7 +354,7 @@ void Simulator::setup()
   const double avgRad    = properties.getAvgRad();
   const double stdDevRad = properties.getStdDevRad();
   tfr                    = properties.getTfr();
-  lbb                    = properties.getLbb();
+  dvec lbb               = properties.getLbb();
   interval               = tfr - lbb;
 
   curandGenerator_t generator;
