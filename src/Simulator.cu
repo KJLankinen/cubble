@@ -1095,88 +1095,86 @@ void Simulator::stopProfiling(bool stop, bool &continueIntegration)
   }
 }
 
-void Simulator::doBoundaryWrap(KernelSize, kernelSize, int sm,
-                               cudaStream_t stream, bool wrapX, bool wrapY,
-                               bool wrapZ, int numValues, double *x, double *y,
-                               double *z, dvec lbb, dvec tfr, int *mulX,
-                               int *mulY, int *mulZ, int *mulOldX, int *mulOldY,
+void Simulator::doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream,
+                               bool wrapX, bool wrapY, bool wrapZ,
+                               int numValues, double *x, double *y, double *z,
+                               dvec lbb, dvec tfr, int *mulX, int *mulY,
+                               int *mulZ, int *mulOldX, int *mulOldY,
                                int *mulOldZ)
 {
   if (wrapX && wrapY && wrapZ)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, x,
-                  lbb.x, tfr.x, mulX, mulOldX, y, lbb.y, tfr.y, mulY, mulOldY,
-                  z, lbb.z, tfr.z, mulZ, mulOldZ);
-  else if (wrapX && wrapY)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, x,
-                  lbb.x, tfr.x, mulX, mulOldX, y, lbb.y, tfr.y, mulY, mulOldY);
-  else if (wrapX && wrapZ)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, x,
-                  lbb.x, tfr.x, mulX, mulOldX, z, lbb.z, tfr.z, mulZ, mulOldZ);
-  else if (wrapY && wrapZ)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, y,
-                  lbb.y, tfr.y, mulY, mulOldY, z, lbb.z, tfr.z, mulZ, mulOldZ);
-  else if (wrapX)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, x,
-                  lbb.x, tfr.x, mulX, mulOldX);
-  else if (wrapY)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, y,
-                  lbb.y, tfr.y, mulY, mulOldY);
-  else if (wrapZ)
-    KERNEL_LAUNCH(boundaryWrapKernel, kernelSize, sm, stream, numValues, z,
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, x, lbb.x,
+                  tfr.x, mulX, mulOldX, y, lbb.y, tfr.y, mulY, mulOldY, z,
                   lbb.z, tfr.z, mulZ, mulOldZ);
+  else if (wrapX && wrapY)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, x, lbb.x,
+                  tfr.x, mulX, mulOldX, y, lbb.y, tfr.y, mulY, mulOldY);
+  else if (wrapX && wrapZ)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, x, lbb.x,
+                  tfr.x, mulX, mulOldX, z, lbb.z, tfr.z, mulZ, mulOldZ);
+  else if (wrapY && wrapZ)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, y, lbb.y,
+                  tfr.y, mulY, mulOldY, z, lbb.z, tfr.z, mulZ, mulOldZ);
+  else if (wrapX)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, x, lbb.x,
+                  tfr.x, mulX, mulOldX);
+  else if (wrapY)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, y, lbb.y,
+                  tfr.y, mulY, mulOldY);
+  else if (wrapZ)
+    KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, z, lbb.z,
+                  tfr.z, mulZ, mulOldZ);
 }
 
-void Simulator::doWallVelocity(KernelSize, kernelSize, int sm,
-                               cudaStream_t stream, bool doX, bool doY,
-                               bool doZ, int numValues, int *first, int *second,
-                               double *r, double *x, double *y, double *z,
-                               double *dxdt, double *dydt, double *dzdt,
-                               dvec lbb, dvec tfr)
+void Simulator::doWallVelocity(KernelSize ks, int sm, cudaStream_t stream,
+                               bool doX, bool doY, bool doZ, int numValues,
+                               int *first, int *second, double *r, double *x,
+                               double *y, double *z, double *dxdt, double *dydt,
+                               double *dzdt, dvec lbb, dvec tfr)
 {
   dvec interval = tfr - lbb;
   if (doX && doY && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.x,
                   lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt,
                   interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doX && doY)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.x,
                   lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt);
   }
   else if (doX && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.x,
                   lbb.x, !doX, x, dxdt, interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doY && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.y,
                   lbb.y, !doY, y, dydt, interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doX)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.x,
                   lbb.x, !doX, x, dxdt);
   }
   else if (doY)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.y,
                   lbb.y, !doY, y, dydt);
   }
   else if (doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, kernelSize, sm, stream, numValues,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
                   properties.getFZeroPerMuZero(), first, second, r, interval.z,
                   lbb.z, !doZ, z, dzdt);
   }
 }
-
 } // namespace cubble
