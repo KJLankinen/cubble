@@ -1058,8 +1058,9 @@ void Simulator::reserveMemory()
   const uint32_t avgNumNeighbors = 8;
   pairStride                     = avgNumNeighbors * dataStride;
 
-  memReqI = sizeof(int) * (uint64_t)dataStride *
-            ((uint64_t)DIP::PAIR1 + avgNumNeighbors * (uint64_t)(DIP::NUM_VALUES - DIP::PAIR1));
+  memReqI =
+    sizeof(int) * (uint64_t)dataStride *
+    ((uint64_t)DIP::PAIR1 + avgNumNeighbors * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1));
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceInts), memReqI));
 
   for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
