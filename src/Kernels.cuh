@@ -231,10 +231,11 @@ __device__ __host__ unsigned int compact1By1(unsigned int x);
 __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Args>
-__device__ void comparePair(int idx1, int idx2, double *r, int *first, int *second, Args... args)
+__device__ void comparePair(double maxDistance, int idx1, int idx2, double *r, int *first,
+                            int *second, Args... args)
 {
-  const double radii = r[idx1] + r[idx2];
-  if (getDistanceSquared(idx1, idx2, args...) < 1.5 * radii * radii)
+  maxDistance += r[idx1] > r[idx2] ? r[idx1] : r[idx2];
+  if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance)
   {
     // Set the smaller idx to idx1 and larger to idx2
     int id = idx1 > idx2 ? idx1 : idx2;
@@ -321,8 +322,8 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
 
 template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber, int numValues, int numCells, int numMaxPairs,
-                               int *offsets, int *sizes, int *first, int *second, double *r,
-                               Args... args)
+                               double maxDistance, int *offsets, int *sizes, int *first,
+                               int *second, double *r, Args... args)
 {
   const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
   const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
@@ -354,11 +355,12 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues, int numCel
         DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
         DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-        comparePair(idx1, idx2, r, first, second, args...);
+        comparePair(maxDistance, idx1, idx2, r, first, second, args...);
+        DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
       }
     }
-    else // Compare all values of one cell to all values of other cell,
-         // resulting in n1 * n2 comparisons.
+    else // Compare all values of one cell to all values of other cell, resulting in n1 * n2
+         // comparisons.
     {
       const int size1   = sizes[cellIdx1];
       const int size2   = sizes[cellIdx2];
@@ -373,7 +375,8 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues, int numCel
         DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
         DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-        comparePair(idx1, idx2, r, first, second, args...);
+        comparePair(maxDistance, idx1, idx2, r, first, second, args...);
+        DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
       }
     }
   }

@@ -358,6 +358,9 @@ void Simulator::setup()
   if (numBubblesAboveMinRad < numBubbles)
     deleteSmallBubbles(numBubblesAboveMinRad);
 
+  maxBubbleRadius =
+    cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.r, numBubbles);
+
   updateCellsAndNeighbors();
 
   // Calculate some initial values which are needed
@@ -842,19 +845,21 @@ void Simulator::updateCellsAndNeighbors()
   CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent1, 0));
   CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent2, 0));
 
+  const double maxDistance = 1.5 * maxBubbleRadius;
+
   for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
   {
     cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
     if (NUM_DIM == 3)
       KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
-                    static_cast<int>(pairs.getWidth()), offsets, sizes, pairs.getRowPtr(2),
-                    pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x, interval.y,
-                    PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                    static_cast<int>(pairs.getWidth()), maxDistance, offsets, sizes,
+                    pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x,
+                    interval.y, PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
     else
       KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
-                    static_cast<int>(pairs.getWidth()), offsets, sizes, pairs.getRowPtr(2),
-                    pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x, interval.y,
-                    PBC_Y == 1, adp.y);
+                    static_cast<int>(pairs.getWidth()), maxDistance, offsets, sizes,
+                    pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x,
+                    interval.y, PBC_Y == 1, adp.y);
   }
 
   CUDA_CALL(
