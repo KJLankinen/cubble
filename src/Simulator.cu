@@ -838,11 +838,11 @@ void Simulator::updateCellsAndNeighbors()
   const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
 
   int *offsets             = dips[(uint32_t)DIP::PAIR1];
-  int *sizes               = dips[(uint32_t)DIP::PAIR1 + maxNumCells];
-  int *cellIndices         = dips[(uint32_t)DIP::TEMP1 + 0 * dataStride];
-  int *bubbleIndices       = dips[(uint32_t)DIP::TEMP1 + 1 * dataStride];
-  int *sortedCellIndices   = dips[(uint32_t)DIP::TEMP1 + 2 * dataStride];
-  int *sortedBubbleIndices = dips[(uint32_t)DIP::TEMP1 + 3 * dataStride];
+  int *sizes               = dips[(uint32_t)DIP::PAIR1] + maxNumCells;
+  int *cellIndices         = dips[(uint32_t)DIP::TEMP1] + 0 * dataStride;
+  int *bubbleIndices       = dips[(uint32_t)DIP::TEMP1] + 1 * dataStride;
+  int *sortedCellIndices   = dips[(uint32_t)DIP::TEMP1] + 2 * dataStride;
+  int *sortedBubbleIndices = dips[(uint32_t)DIP::TEMP1] + 3 * dataStride;
 
   const size_t resetBytes =
     sizeof(int) * pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
