@@ -22,9 +22,9 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
   auto getVolumeOfBubbles = [this]() -> double {
     KernelSize kernelSize(128, numBubbles);
 
-    KERNEL_LAUNCH(calculateVolumes, kernelSize, 0, 0, adp.r, adp.dummy1, numBubbles);
+    KERNEL_LAUNCH(calculateVolumes, kernelSize, 0, 0, ddps[DDP::R], ddps[DDP::TEMP1], numBubbles);
 
-    return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1,
+    return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP1],
                                                           numBubbles);
   };
 
@@ -109,7 +109,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
   {
     // Set starting positions and reset wrapMultipliers to 0
     const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
-    CUDA_CALL(cudaMemcpy(adp.x0, adp.x, numBytesToCopy, cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpy(ddps[DDP::X0], ddps[DDP::X], numBytesToCopy, cudaMemcpyDeviceToDevice));
     CUDA_CALL(cudaMemset(wrapMultipliers.get(), 0, wrapMultipliers.getSizeInBytes()));
 
     simulationTime      = 0;
@@ -120,23 +120,24 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     KernelSize kernelSize(128, numBubbles);
 
     // Calculate the energy at simulation start
-    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::TEMP4]);
 
     if (NUM_DIM == 3)
     {
       KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                    pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x,
-                    interval.y, PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                    pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                    ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y], interval.z, PBC_Z == 1,
+                    ddps[DDP::Z]);
     }
     else
     {
       KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                    pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x,
-                    interval.y, PBC_Y == 1, adp.y);
+                    pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                    ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y]);
     }
 
-    energy1 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4,
-                                                             numBubbles);
+    energy1 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                             ddps[DDP::TEMP4], numBubbles);
 
     // Start the simulation proper
     bool continueIntegration = true;
@@ -157,27 +158,28 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
       if ((int)scaledTime >= timesPrinted)
       {
         // Calculate total energy
-        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::TEMP4]);
 
         if (NUM_DIM == 3)
           KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                        pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x,
-                        interval.y, PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                        pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                        ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y], interval.z, PBC_Z == 1,
+                        ddps[DDP::Z]);
         else
           KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                        pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x,
-                        interval.y, PBC_Y == 1, adp.y);
+                        pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                        ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y]);
 
         energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                                 adp.dummy4, numBubbles);
+                                                                 ddps[DDP::TEMP4], numBubbles);
         const double dE = (energy2 - energy1) / energy2;
 
         // Add values to data stream
-        double relativeRadius = getAverageProperty(adp.r) / properties.getAvgRad();
+        double relativeRadius = getAverageProperty(ddps[DDP::R]) / properties.getAvgRad();
         dataStream << scaledTime << " " << relativeRadius << " "
                    << maxBubbleRadius / properties.getAvgRad() << " " << numBubbles << " "
-                   << getAverageProperty(adp.s) << " " << getAverageProperty(adp.d) << " " << dE
-                   << "\n";
+                   << getAverageProperty(ddps[DDP::PATH]) << " "
+                   << getAverageProperty(ddps[DDP::DISTANCE]) << " " << dE << "\n";
 
         // Print some values
         std::cout << scaledTime << "\t" << relativeRadius << "\t" << numBubbles << "\t" << dE
@@ -205,6 +207,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
 
 void Simulator::setup()
 {
+  // First calculate the size of the box and the starting number of bubbles
   dvec relDim        = properties.getBoxRelativeDimensions();
   relDim             = relDim / relDim.x;
   const float d      = 2 * properties.getAvgRad();
@@ -232,47 +235,13 @@ void Simulator::setup()
   properties.setFlowTfr(interval * properties.getFlowTfr() + properties.getLbb());
   properties.setFlowLbb(interval * properties.getFlowLbb() + properties.getLbb());
 
+  // Initialize CUB
   cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
-  dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
-  CUDA_ASSERT(
-    cudaMalloc(reinterpret_cast<void **>(&deviceData), sizeof(double) * dataStride * numAliases));
-  adp.x      = deviceData;
-  adp.y      = deviceData + 1 * dataStride;
-  adp.z      = deviceData + 2 * dataStride;
-  adp.r      = deviceData + 3 * dataStride;
-  adp.dxdt   = deviceData + 4 * dataStride;
-  adp.dydt   = deviceData + 5 * dataStride;
-  adp.dzdt   = deviceData + 6 * dataStride;
-  adp.drdt   = deviceData + 7 * dataStride;
-  adp.dxdtO  = deviceData + 8 * dataStride;
-  adp.dydtO  = deviceData + 9 * dataStride;
-  adp.dzdtO  = deviceData + 10 * dataStride;
-  adp.drdtO  = deviceData + 11 * dataStride;
-  adp.x0     = deviceData + 12 * dataStride;
-  adp.y0     = deviceData + 13 * dataStride;
-  adp.z0     = deviceData + 14 * dataStride;
-  adp.s      = deviceData + 15 * dataStride;
-  adp.d      = deviceData + 16 * dataStride;
-  adp.xP     = deviceData + 17 * dataStride;
-  adp.yP     = deviceData + 18 * dataStride;
-  adp.zP     = deviceData + 19 * dataStride;
-  adp.rP     = deviceData + 20 * dataStride;
-  adp.dxdtP  = deviceData + 21 * dataStride;
-  adp.dydtP  = deviceData + 22 * dataStride;
-  adp.dzdtP  = deviceData + 23 * dataStride;
-  adp.drdtP  = deviceData + 24 * dataStride;
-  adp.error  = deviceData + 25 * dataStride;
-  adp.dummy1 = deviceData + 26 * dataStride;
-  adp.dummy2 = deviceData + 27 * dataStride;
-  adp.dummy3 = deviceData + 28 * dataStride;
-  adp.dummy4 = deviceData + 29 * dataStride;
-  adp.dummy5 = deviceData + 30 * dataStride;
-  adp.dummy6 = deviceData + 31 * dataStride;
-  adp.dummy7 = deviceData + 32 * dataStride;
-  adp.dummy8 = deviceData + 33 * dataStride;
+  // Reserve memory for data
+  reserveMemory();
 
-  // Determine the maximum number of Morton numbers for the cell
+  // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize();
   const int maxGridDim = gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
                                                : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
@@ -288,12 +257,7 @@ void Simulator::setup()
   std::cout << "Morton: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", "
             << gridDim.z << std::endl;
 
-  aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
-  bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
-  pairs             = DeviceArray<int>(8 * dataStride, 4u);
-  wrapMultipliers   = DeviceArray<int>(dataStride, 6);
-  cellData          = DeviceArray<int>(maxNumCells, (size_t)CellProperty::NUM_VALUES);
-
+  // Get some device global symbol addresses to host pointers.
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfapr), dTotalFreeAreaPerRadius));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&mbpc), dMaxBubblesPerCell));
@@ -304,19 +268,17 @@ void Simulator::setup()
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dta), dTotalArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dasai), dAverageSurfaceAreaIn));
 
+  // Streams
   CUDA_ASSERT(cudaStreamCreate(&velocityStream));
   CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
-
-  pinnedInt    = PinnedHostArray<int>(1);
-  pinnedDouble = PinnedHostArray<double>(3);
 
   printRelevantInfoOfCurrentDevice();
 
   pairKernelSize.block = dim3(128, 1, 1);
   pairKernelSize.grid  = dim3(256, 1, 1);
+  KernelSize kernelSize(128, numBubbles);
 
   std::cout << "Starting to generate data for bubbles." << std::endl;
-
   double timeStep        = properties.getTimeStep();
   const int rngSeed      = properties.getRngSeed();
   const double avgRad    = properties.getAvgRad();
@@ -328,88 +290,91 @@ void Simulator::setup()
   curandGenerator_t generator;
   CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
   CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
-
   if (NUM_DIM == 3)
-    CURAND_CALL(curandGenerateUniformDouble(generator, adp.z, numBubbles));
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.x, numBubbles));
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.y, numBubbles));
-  CURAND_CALL(curandGenerateUniformDouble(generator, adp.rP, numBubbles));
-  CURAND_CALL(curandGenerateNormalDouble(generator, adp.r, numBubbles, avgRad, stdDevRad));
-
+    CURAND_CALL(curandGenerateUniformDouble(generator, ddps[DDP::Z], numBubbles));
+  CURAND_CALL(curandGenerateUniformDouble(generator, ddps[DDP::X], numBubbles));
+  CURAND_CALL(curandGenerateUniformDouble(generator, ddps[DDP::Y], numBubbles));
+  CURAND_CALL(curandGenerateUniformDouble(generator, ddps[DDP::RP], numBubbles));
+  CURAND_CALL(curandGenerateNormalDouble(generator, ddps[DDP::R], numBubbles, avgRad, stdDevRad));
   CURAND_CALL(curandDestroyGenerator(generator));
 
-  KernelSize kernelSize(128, numBubbles);
-
-  KERNEL_LAUNCH(assignDataToBubbles, kernelSize, 0, 0, adp.x, adp.y, adp.z, adp.xP, adp.yP, adp.zP,
-                adp.r, adp.rP, aboveMinRadFlags.getRowPtr(0), bubblesPerDim, tfr, lbb, avgRad,
+  KERNEL_LAUNCH(assignDataToBubbles, kernelSize, 0, 0, ddps[DDP::X], ddps[DDP::Y], ddps[DDP::Z],
+                ddps[DDP::XP], ddps[DDP::YP], ddps[DDP::ZP], ddps[DDP::R], ddps[DDP::RP],
+                aboveMinRadFlags.getRowPtr(0), bubblesPerDim, tfr, lbb, avgRad,
                 properties.getMinRad(), numBubbles);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.rP, dasai,
-                                                       numBubbles, 0);
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.rP), static_cast<void *>(adp.r),
+  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::RP],
+                                                       dasai, numBubbles, 0);
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[DDP::RP]), static_cast<void *>(ddps[DDP::R]),
                             sizeof(double) * dataStride, cudaMemcpyDeviceToDevice, 0));
 
+  // Delete small bubbles, if any
   const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(
     &cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), numBubbles);
   if (numBubblesAboveMinRad < numBubbles)
     deleteSmallBubbles(numBubblesAboveMinRad);
 
-  maxBubbleRadius =
-    cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.r, numBubbles);
+  maxBubbleRadius = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max,
+                                                                   ddps[DDP::R], numBubbles);
 
   updateCellsAndNeighbors();
 
   // Calculate some initial values which are needed
   // for the two-step Adams-Bashforth-Moulton prEdictor-corrector method
-
-  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtO, adp.dydtO, adp.dzdtO,
-                adp.drdtO, adp.d, adp.s);
+  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTO], ddps[DDP::DYDTO],
+                ddps[DDP::DZDTO], ddps[DDP::DRDTO], ddps[DDP::DISTANCE], ddps[DDP::PATH]);
 
   std::cout << "Calculating some initial values as a part of setup." << std::endl;
 
   if (NUM_DIM == 3)
   {
+    KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
+                  pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::R], interval.x, lbb.x,
+                  PBC_X == 1, ddps[DDP::X], ddps[DDP::DXDTO], interval.y, lbb.y, PBC_Y == 1,
+                  ddps[DDP::Y], ddps[DDP::DYDTO], interval.z, lbb.z, PBC_Z == 1, ddps[DDP::Z],
+                  ddps[DDP::DZDTO]);
+
+    KERNEL_LAUNCH(eulerKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::X],
+                  ddps[DDP::DXDTO], ddps[DDP::Y], ddps[DDP::DYDTO], ddps[DDP::Z], ddps[DDP::DZDTO]);
+
+    doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, numBubbles, ddps[DDP::XP],
+                   ddps[DDP::YP], ddps[DDP::ZP], lbb, tfr, wrapMultipliers.getRowPtr(3),
+                   wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(4),
+                   wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(5),
+                   wrapMultipliers.getRowPtr(2));
+
+    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTO],
+                  ddps[DDP::DYDTO], ddps[DDP::DZDTO], ddps[DDP::DRDTO]);
 
     KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, interval.x, lbb.x, PBC_X == 1,
-                  adp.x, adp.dxdtO, interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO, interval.z,
-                  lbb.z, PBC_Z == 1, adp.z, adp.dzdtO);
-
-    KERNEL_LAUNCH(eulerKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.x, adp.dxdtO, adp.y,
-                  adp.dydtO, adp.z, adp.dzdtO);
-
-    doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, numBubbles, adp.xP, adp.yP,
-                   adp.zP, lbb, tfr, wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0),
-                   wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1),
-                   wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2));
-
-    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtO, adp.dydtO, adp.dzdtO,
-                  adp.drdtO);
-
-    KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, interval.x, lbb.x, PBC_X == 1,
-                  adp.x, adp.dxdtO, interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO, interval.z,
-                  lbb.z, PBC_Z == 1, adp.z, adp.dzdtO);
+                  pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::R], interval.x, lbb.x,
+                  PBC_X == 1, ddps[DDP::X], ddps[DDP::DXDTO], interval.y, lbb.y, PBC_Y == 1,
+                  ddps[DDP::Y], ddps[DDP::DYDTO], interval.z, lbb.z, PBC_Z == 1, ddps[DDP::Z],
+                  ddps[DDP::DZDTO]);
   }
   else
   {
     KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, interval.x, lbb.x, PBC_X == 1,
-                  adp.x, adp.dxdtO, interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO);
+                  pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::R], interval.x, lbb.x,
+                  PBC_X == 1, ddps[DDP::X], ddps[DDP::DXDTO], interval.y, lbb.y, PBC_Y == 1,
+                  ddps[DDP::Y], ddps[DDP::DYDTO]);
 
-    KERNEL_LAUNCH(eulerKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.x, adp.dxdtO, adp.y,
-                  adp.dydtO);
+    KERNEL_LAUNCH(eulerKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::X],
+                  ddps[DDP::DXDTO], ddps[DDP::Y], ddps[DDP::DYDTO]);
 
-    doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, false, numBubbles, adp.xP, adp.yP,
-                   adp.zP, lbb, tfr, wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0),
-                   wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1),
-                   wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2));
+    doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, false, numBubbles, ddps[DDP::XP],
+                   ddps[DDP::YP], ddps[DDP::ZP], lbb, tfr, wrapMultipliers.getRowPtr(3),
+                   wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(4),
+                   wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(5),
+                   wrapMultipliers.getRowPtr(2));
 
-    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtO, adp.dydtO, adp.drdtO);
+    KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTO],
+                  ddps[DDP::DYDTO], ddps[DDP::DRDTO]);
 
     KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                  pairs.getRowPtr(0), pairs.getRowPtr(1), adp.r, interval.x, lbb.x, PBC_X == 1,
-                  adp.x, adp.dxdtO, interval.y, lbb.y, PBC_Y == 1, adp.y, adp.dydtO);
+                  pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::R], interval.x, lbb.x,
+                  PBC_X == 1, ddps[DDP::X], ddps[DDP::DXDTO], interval.y, lbb.y, PBC_Y == 1,
+                  ddps[DDP::Y], ddps[DDP::DYDTO]);
   }
 }
 
@@ -420,7 +385,7 @@ void Simulator::deinit()
 
   CUDA_CALL(cudaDeviceSynchronize());
 
-  CUDA_CALL(cudaFree(static_cast<void *>(deviceData)));
+  CUDA_CALL(cudaFree(static_cast<void *>(deviceDoubles)));
 
   CUDA_CALL(cudaStreamDestroy(velocityStream));
   CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
@@ -441,19 +406,20 @@ double Simulator::stabilize()
   double error        = 100000;
 
   // Energy before stabilization
-  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::TEMP4]);
 
   if (NUM_DIM == 3)
     KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                  pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x, interval.y,
-                  PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                  pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                  ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y], interval.z, PBC_Z == 1,
+                  ddps[DDP::Z]);
   else
     KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                  pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x, interval.y,
-                  PBC_Y == 1, adp.y);
+                  pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                  ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y]);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, dtfapr,
-                                                       numBubbles);
+  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP4],
+                                                       dtfapr, numBubbles);
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]),
                             static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost,
                             0));
@@ -464,55 +430,64 @@ double Simulator::stabilize()
     {
       if (NUM_DIM == 3)
       {
-        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP, adp.dydtP,
-                      adp.dzdtP, adp.error, adp.dummy1, adp.dummy2);
+        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTP],
+                      ddps[DDP::DYDTP], ddps[DDP::DZDTP], ddps[DDP::ERROR], ddps[DDP::TEMP1],
+                      ddps[DDP::TEMP2]);
 
-        KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.xP, adp.x,
-                      adp.dxdt, adp.dxdtO, adp.yP, adp.y, adp.dydt, adp.dydtO, adp.zP, adp.z,
-                      adp.dzdt, adp.dzdtO);
+        KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::XP],
+                      ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTO], ddps[DDP::YP], ddps[DDP::Y],
+                      ddps[DDP::DYDT], ddps[DDP::DYDTO], ddps[DDP::ZP], ddps[DDP::Z],
+                      ddps[DDP::DZDT], ddps[DDP::DZDTO]);
 
         KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                      pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, interval.x, lbb.x, PBC_X == 1,
-                      adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP,
-                      interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP);
+                      pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], interval.x, lbb.x,
+                      PBC_X == 1, ddps[DDP::XP], ddps[DDP::DXDTP], interval.y, lbb.y, PBC_Y == 1,
+                      ddps[DDP::YP], ddps[DDP::DYDTP], interval.z, lbb.z, PBC_Z == 1, ddps[DDP::ZP],
+                      ddps[DDP::DZDTP]);
 
         doWallVelocity(pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, numBubbles,
-                       pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.xP, adp.yP, adp.zP,
-                       adp.dxdtP, adp.dydtP, adp.dzdtP, lbb, tfr);
+                       pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], ddps[DDP::XP],
+                       ddps[DDP::YP], ddps[DDP::ZP], ddps[DDP::DXDTP], ddps[DDP::DYDTP],
+                       ddps[DDP::DZDTP], lbb, tfr);
 
-        KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.error, adp.xP,
-                      adp.x, adp.dxdt, adp.dxdtP, adp.yP, adp.y, adp.dydt, adp.dydtP, adp.zP, adp.z,
-                      adp.dzdt, adp.dzdtP);
+        KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::ERROR],
+                      ddps[DDP::XP], ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTP], ddps[DDP::YP],
+                      ddps[DDP::Y], ddps[DDP::DYDT], ddps[DDP::DYDTP], ddps[DDP::ZP], ddps[DDP::Z],
+                      ddps[DDP::DZDT], ddps[DDP::DZDTP]);
       }
       else // Two dimensional case
       {
-        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP, adp.dydtP,
-                      adp.error, adp.dummy1, adp.dummy2);
+        KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTP],
+                      ddps[DDP::DYDTP], ddps[DDP::ERROR], ddps[DDP::TEMP1], ddps[DDP::TEMP2]);
 
-        KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.xP, adp.x,
-                      adp.dxdt, adp.dxdtO, adp.yP, adp.y, adp.dydt, adp.dydtO);
+        KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::XP],
+                      ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTO], ddps[DDP::YP], ddps[DDP::Y],
+                      ddps[DDP::DYDT], ddps[DDP::DYDTO]);
 
         KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, 0, properties.getFZeroPerMuZero(),
-                      pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, interval.x, lbb.x, PBC_X == 1,
-                      adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1, adp.yP, adp.dydtP);
+                      pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], interval.x, lbb.x,
+                      PBC_X == 1, ddps[DDP::XP], ddps[DDP::DXDTP], interval.y, lbb.y, PBC_Y == 1,
+                      ddps[DDP::YP], ddps[DDP::DYDTP]);
 
         doWallVelocity(pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, numBubbles,
-                       pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.xP, adp.yP, adp.zP,
-                       adp.dxdtP, adp.dydtP, adp.dzdtP, lbb, tfr);
+                       pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], ddps[DDP::XP],
+                       ddps[DDP::YP], ddps[DDP::ZP], ddps[DDP::DXDTP], ddps[DDP::DYDTP],
+                       ddps[DDP::DZDTP], lbb, tfr);
 
-        KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.error, adp.xP,
-                      adp.x, adp.dxdt, adp.dxdtP, adp.yP, adp.y, adp.dydt, adp.dydtP);
+        KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::ERROR],
+                      ddps[DDP::XP], ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTP], ddps[DDP::YP],
+                      ddps[DDP::Y], ddps[DDP::DYDT], ddps[DDP::DYDTP]);
       }
 
-      doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, numBubbles, adp.xP,
-                     adp.yP, adp.zP, lbb, tfr, wrapMultipliers.getRowPtr(3),
-                     wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(4),
-                     wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(5),
-                     wrapMultipliers.getRowPtr(2));
+      doBoundaryWrap(kernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, numBubbles,
+                     ddps[DDP::XP], ddps[DDP::YP], ddps[DDP::ZP], lbb, tfr,
+                     wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0),
+                     wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1),
+                     wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2));
 
       // Error
-      error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error,
-                                                             numBubbles);
+      error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max,
+                                                             ddps[DDP::ERROR], numBubbles);
 
       if (error < properties.getErrorTolerance() && timeStep < 0.1)
         timeStep *= 1.9;
@@ -523,9 +498,12 @@ double Simulator::stabilize()
 
     // Update the current values with the calculated predictions
     const size_t numBytesToCopy = 3 * sizeof(double) * dataStride;
-    CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
-    CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
-    CUDA_CALL(cudaMemcpyAsync(adp.dxdt, adp.dxdtP, numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(ddps[DDP::DXDTO], ddps[DDP::DXDT], numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(
+      cudaMemcpyAsync(ddps[DDP::X], ddps[DDP::XP], numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(ddps[DDP::DXDT], ddps[DDP::DXDTP], numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
 
     properties.setTimeStep(timeStep);
     elapsedTime += timeStep;
@@ -537,19 +515,20 @@ double Simulator::stabilize()
   // Energy after stabilization
   energy1 = pinnedDouble.get()[1];
 
-  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dummy4);
+  KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::TEMP4]);
 
   if (NUM_DIM == 3)
     KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                  pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x, interval.y,
-                  PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                  pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                  ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y], interval.z, PBC_Z == 1,
+                  ddps[DDP::Z]);
   else
     KERNEL_LAUNCH(potentialEnergyKernel, pairKernelSize, 0, 0, numBubbles, pairs.getRowPtr(0),
-                  pairs.getRowPtr(1), adp.r, adp.dummy4, interval.x, PBC_X == 1, adp.x, interval.y,
-                  PBC_Y == 1, adp.y);
+                  pairs.getRowPtr(1), ddps[DDP::R], ddps[DDP::TEMP4], interval.x, PBC_X == 1,
+                  ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y]);
 
-  energy2 =
-    cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy4, numBubbles);
+  energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                           ddps[DDP::TEMP4], numBubbles);
 
   return elapsedTime;
 }
@@ -573,23 +552,28 @@ bool Simulator::integrate()
     if (NUM_DIM == 3)
     {
       // Reset
-      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP, adp.dydtP, adp.dzdtP,
-                    adp.drdtP, adp.error, adp.dummy1, adp.dummy2);
+      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTP],
+                    ddps[DDP::DYDTP], ddps[DDP::DZDTP], ddps[DDP::DRDTP], ddps[DDP::ERROR],
+                    ddps[DDP::TEMP1], ddps[DDP::TEMP2]);
 
       // Predict
-      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.xP, adp.x, adp.dxdt,
-                    adp.dxdtO, adp.yP, adp.y, adp.dydt, adp.dydtO, adp.zP, adp.z, adp.dzdt,
-                    adp.dzdtO, adp.rP, adp.r, adp.drdt, adp.drdtO);
+      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::XP],
+                    ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTO], ddps[DDP::YP], ddps[DDP::Y],
+                    ddps[DDP::DYDT], ddps[DDP::DYDTO], ddps[DDP::ZP], ddps[DDP::Z], ddps[DDP::DZDT],
+                    ddps[DDP::DZDTO], ddps[DDP::RP], ddps[DDP::R], ddps[DDP::DRDT],
+                    ddps[DDP::DRDTO]);
 
       // Velocity
       KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, velocityStream,
-                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
-                    interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1,
-                    adp.yP, adp.dydtP, interval.z, lbb.z, PBC_Z == 1, adp.zP, adp.dzdtP);
+                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1),
+                    ddps[DDP::RP], interval.x, lbb.x, PBC_X == 1, ddps[DDP::XP], ddps[DDP::DXDTP],
+                    interval.y, lbb.y, PBC_Y == 1, ddps[DDP::YP], ddps[DDP::DYDTP], interval.z,
+                    lbb.z, PBC_Z == 1, ddps[DDP::ZP], ddps[DDP::DZDTP]);
       // Wall velocity
       doWallVelocity(pairKernelSize, 0, velocityStream, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
-                     numBubbles, pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.xP, adp.yP,
-                     adp.zP, adp.dxdtP, adp.dydtP, adp.dzdtP, lbb, tfr);
+                     numBubbles, pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP],
+                     ddps[DDP::XP], ddps[DDP::YP], ddps[DDP::ZP], ddps[DDP::DXDTP],
+                     ddps[DDP::DYDTP], ddps[DDP::DZDTP], lbb, tfr);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -597,59 +581,67 @@ bool Simulator::integrate()
         int *numNeighbors = bubbleCellIndices.getRowPtr(0);
 
         KERNEL_LAUNCH(neighborVelocityKernel, pairKernelSize, 0, velocityStream, pairs.getRowPtr(0),
-                      pairs.getRowPtr(1), numNeighbors, adp.dummy1, adp.dxdtO, adp.dummy2,
-                      adp.dydtO, adp.dummy3, adp.dzdtO);
+                      pairs.getRowPtr(1), numNeighbors, ddps[DDP::TEMP1], ddps[DDP::DXDTO],
+                      ddps[DDP::TEMP2], ddps[DDP::DYDTO], ddps[DDP::TEMP3], ddps[DDP::DZDTO]);
 
         KERNEL_LAUNCH(flowVelocityKernel, pairKernelSize, 0, velocityStream, numBubbles,
-                      numNeighbors, adp.dxdtP, adp.dydtP, adp.dzdtP, adp.dummy1, adp.dummy2,
-                      adp.dummy3, adp.xP, adp.yP, adp.zP, properties.getFlowVel(),
+                      numNeighbors, ddps[DDP::DXDTP], ddps[DDP::DYDTP], ddps[DDP::DZDTP],
+                      ddps[DDP::TEMP1], ddps[DDP::TEMP2], ddps[DDP::TEMP3], ddps[DDP::XP],
+                      ddps[DDP::YP], ddps[DDP::ZP], properties.getFlowVel(),
                       properties.getFlowTfr(), properties.getFlowLbb());
       }
 
       // Correct
-      KERNEL_LAUNCH(correctKernel, kernelSize, 0, velocityStream, numBubbles, timeStep, adp.error,
-                    adp.xP, adp.x, adp.dxdt, adp.dxdtP, adp.yP, adp.y, adp.dydt, adp.dydtP, adp.zP,
-                    adp.z, adp.dzdt, adp.dzdtP);
+      KERNEL_LAUNCH(correctKernel, kernelSize, 0, velocityStream, numBubbles, timeStep,
+                    ddps[DDP::ERROR], ddps[DDP::XP], ddps[DDP::X], ddps[DDP::DXDT],
+                    ddps[DDP::DXDTP], ddps[DDP::YP], ddps[DDP::Y], ddps[DDP::DYDT],
+                    ddps[DDP::DYDTP], ddps[DDP::ZP], ddps[DDP::Z], ddps[DDP::DZDT],
+                    ddps[DDP::DZDTP]);
 
       // Path lenghts & distances
-      KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, velocityStream, numBubbles, adp.dummy4,
-                    adp.s, adp.d, adp.xP, adp.x, adp.x0, wrapMultipliers.getRowPtr(0), interval.x,
-                    adp.yP, adp.y, adp.y0, wrapMultipliers.getRowPtr(1), interval.y, adp.zP, adp.z,
-                    adp.z0, wrapMultipliers.getRowPtr(2), interval.z);
+      KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, velocityStream, numBubbles,
+                    ddps[DDP::TEMP4], ddps[DDP::PATH], ddps[DDP::DISTANCE], ddps[DDP::XP],
+                    ddps[DDP::X], ddps[DDP::X0], wrapMultipliers.getRowPtr(0), interval.x,
+                    ddps[DDP::YP], ddps[DDP::Y], ddps[DDP::Y0], wrapMultipliers.getRowPtr(1),
+                    interval.y, ddps[DDP::ZP], ddps[DDP::Z], ddps[DDP::Z0],
+                    wrapMultipliers.getRowPtr(2), interval.z);
 
       // Boundary wrap
       doBoundaryWrap(kernelSize, 0, velocityStream, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, numBubbles,
-                     adp.xP, adp.yP, adp.zP, lbb, tfr, wrapMultipliers.getRowPtr(3),
-                     wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(4),
-                     wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(5),
-                     wrapMultipliers.getRowPtr(2));
+                     ddps[DDP::XP], ddps[DDP::YP], ddps[DDP::ZP], lbb, tfr,
+                     wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0),
+                     wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1),
+                     wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2));
 
       // Gas exchange
       KERNEL_LAUNCH(gasExchangeKernel, pairKernelSize, 0, gasExchangeStream, numBubbles,
-                    pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.drdtP, adp.dummy1,
-                    interval.x, PBC_X == 1, adp.xP, interval.y, PBC_Y == 1, adp.yP, interval.z,
-                    PBC_Z == 1, adp.zP);
+                    pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], ddps[DDP::DRDTP],
+                    ddps[DDP::TEMP1], interval.x, PBC_X == 1, ddps[DDP::XP], interval.y, PBC_Y == 1,
+                    ddps[DDP::YP], interval.z, PBC_Z == 1, ddps[DDP::ZP]);
     }
     else // Two dimensions
     {
       // Reset
-      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, adp.dxdtP, adp.dydtP, adp.drdtP,
-                    adp.error, adp.dummy1, adp.dummy2);
+      KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[DDP::DXDTP],
+                    ddps[DDP::DYDTP], ddps[DDP::DRDTP], ddps[DDP::ERROR], ddps[DDP::TEMP1],
+                    ddps[DDP::TEMP2]);
 
       // Predict
-      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, adp.xP, adp.x, adp.dxdt,
-                    adp.dxdtO, adp.yP, adp.y, adp.dydt, adp.dydtO, adp.rP, adp.r, adp.drdt,
-                    adp.drdtO);
+      KERNEL_LAUNCH(predictKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[DDP::XP],
+                    ddps[DDP::X], ddps[DDP::DXDT], ddps[DDP::DXDTO], ddps[DDP::YP], ddps[DDP::Y],
+                    ddps[DDP::DYDT], ddps[DDP::DYDTO], ddps[DDP::RP], ddps[DDP::R], ddps[DDP::DRDT],
+                    ddps[DDP::DRDTO]);
 
       // Velocity
       KERNEL_LAUNCH(velocityPairKernel, pairKernelSize, 0, velocityStream,
-                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP,
-                    interval.x, lbb.x, PBC_X == 1, adp.xP, adp.dxdtP, interval.y, lbb.y, PBC_Y == 1,
-                    adp.yP, adp.dydtP);
+                    properties.getFZeroPerMuZero(), pairs.getRowPtr(0), pairs.getRowPtr(1),
+                    ddps[DDP::RP], interval.x, lbb.x, PBC_X == 1, ddps[DDP::XP], ddps[DDP::DXDTP],
+                    interval.y, lbb.y, PBC_Y == 1, ddps[DDP::YP], ddps[DDP::DYDTP]);
       // Wall velocity
       doWallVelocity(pairKernelSize, 0, velocityStream, PBC_X == 0, PBC_Y == 0, false, numBubbles,
-                     pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.xP, adp.yP, adp.zP,
-                     adp.dxdtP, adp.dydtP, adp.dzdtP, lbb, tfr);
+                     pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], ddps[DDP::XP],
+                     ddps[DDP::YP], ddps[DDP::ZP], ddps[DDP::DXDTP], ddps[DDP::DYDTP],
+                     ddps[DDP::DZDTP], lbb, tfr);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -657,65 +649,73 @@ bool Simulator::integrate()
         int *numNeighbors = bubbleCellIndices.getRowPtr(0);
 
         KERNEL_LAUNCH(neighborVelocityKernel, pairKernelSize, 0, velocityStream, pairs.getRowPtr(0),
-                      pairs.getRowPtr(1), numNeighbors, adp.dummy1, adp.dxdtO, adp.dummy2,
-                      adp.dydtO);
+                      pairs.getRowPtr(1), numNeighbors, ddps[DDP::TEMP1], ddps[DDP::DXDTO],
+                      ddps[DDP::TEMP2], ddps[DDP::DYDTO]);
 
         KERNEL_LAUNCH(flowVelocityKernel, pairKernelSize, 0, velocityStream, numBubbles,
-                      numNeighbors, adp.dxdtP, adp.dydtP, adp.dzdtP, adp.dummy1, adp.dummy2,
-                      adp.dummy3, adp.xP, adp.yP, adp.zP, properties.getFlowVel(),
+                      numNeighbors, ddps[DDP::DXDTP], ddps[DDP::DYDTP], ddps[DDP::DZDTP],
+                      ddps[DDP::TEMP1], ddps[DDP::TEMP2], ddps[DDP::TEMP3], ddps[DDP::XP],
+                      ddps[DDP::YP], ddps[DDP::ZP], properties.getFlowVel(),
                       properties.getFlowTfr(), properties.getFlowLbb());
       }
 
       // Correct
-      KERNEL_LAUNCH(correctKernel, kernelSize, 0, velocityStream, numBubbles, timeStep, adp.error,
-                    adp.xP, adp.x, adp.dxdt, adp.dxdtP, adp.yP, adp.y, adp.dydt, adp.dydtP);
+      KERNEL_LAUNCH(correctKernel, kernelSize, 0, velocityStream, numBubbles, timeStep,
+                    ddps[DDP::ERROR], ddps[DDP::XP], ddps[DDP::X], ddps[DDP::DXDT],
+                    ddps[DDP::DXDTP], ddps[DDP::YP], ddps[DDP::Y], ddps[DDP::DYDT],
+                    ddps[DDP::DYDTP]);
 
       // Path lenghts & distances
-      KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, velocityStream, numBubbles, adp.dummy4,
-                    adp.s, adp.d, adp.xP, adp.x, adp.x0, wrapMultipliers.getRowPtr(0), interval.x,
-                    adp.yP, adp.y, adp.y0, wrapMultipliers.getRowPtr(1), interval.y);
+      KERNEL_LAUNCH(pathLengthDistanceKernel, kernelSize, 0, velocityStream, numBubbles,
+                    ddps[DDP::TEMP4], ddps[DDP::PATH], ddps[DDP::DISTANCE], ddps[DDP::XP],
+                    ddps[DDP::X], ddps[DDP::X0], wrapMultipliers.getRowPtr(0), interval.x,
+                    ddps[DDP::YP], ddps[DDP::Y], ddps[DDP::Y0], wrapMultipliers.getRowPtr(1),
+                    interval.y);
 
       // Boundary wrap
       doBoundaryWrap(kernelSize, 0, velocityStream, PBC_X == 1, PBC_Y == 1, false, numBubbles,
-                     adp.xP, adp.yP, adp.zP, lbb, tfr, wrapMultipliers.getRowPtr(3),
-                     wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(4),
-                     wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(5),
-                     wrapMultipliers.getRowPtr(2));
+                     ddps[DDP::XP], ddps[DDP::YP], ddps[DDP::ZP], lbb, tfr,
+                     wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(0),
+                     wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(1),
+                     wrapMultipliers.getRowPtr(5), wrapMultipliers.getRowPtr(2));
 
       // Gas exchange
       KERNEL_LAUNCH(gasExchangeKernel, pairKernelSize, 0, gasExchangeStream, numBubbles,
-                    pairs.getRowPtr(0), pairs.getRowPtr(1), adp.rP, adp.drdtP, adp.dummy1,
-                    interval.x, PBC_X == 1, adp.xP, interval.y, PBC_Y == 1, adp.yP);
+                    pairs.getRowPtr(0), pairs.getRowPtr(1), ddps[DDP::RP], ddps[DDP::DRDTP],
+                    ddps[DDP::TEMP1], interval.x, PBC_X == 1, ddps[DDP::XP], interval.y, PBC_Y == 1,
+                    ddps[DDP::YP]);
     }
 
     // Free area
-    KERNEL_LAUNCH(freeAreaKernel, kernelSize, 0, gasExchangeStream, numBubbles, adp.rP, adp.dummy1,
-                  adp.dummy2, adp.dummy3);
+    KERNEL_LAUNCH(freeAreaKernel, kernelSize, 0, gasExchangeStream, numBubbles, ddps[DDP::RP],
+                  ddps[DDP::TEMP1], ddps[DDP::TEMP2], ddps[DDP::TEMP3]);
 
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtfa,
-                                                         numBubbles, gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy2,
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP1],
+                                                         dtfa, numBubbles, gasExchangeStream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP2],
                                                          dtfapr, numBubbles, gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy3, dta,
-                                                         numBubbles, gasExchangeStream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP3],
+                                                         dta, numBubbles, gasExchangeStream);
 
-    KERNEL_LAUNCH(finalRadiusChangeRateKernel, kernelSize, 0, gasExchangeStream, adp.drdtP, adp.rP,
-                  adp.dummy1, numBubbles, properties.getKappa(), properties.getKParameter());
+    KERNEL_LAUNCH(finalRadiusChangeRateKernel, kernelSize, 0, gasExchangeStream, ddps[DDP::DRDTP],
+                  ddps[DDP::RP], ddps[DDP::TEMP1], numBubbles, properties.getKappa(),
+                  properties.getKParameter());
 
     // Radius correct
-    KERNEL_LAUNCH(correctKernel, kernelSize, 0, gasExchangeStream, numBubbles, timeStep, adp.error,
-                  adp.rP, adp.r, adp.drdt, adp.drdtP);
+    KERNEL_LAUNCH(correctKernel, kernelSize, 0, gasExchangeStream, numBubbles, timeStep,
+                  ddps[DDP::ERROR], ddps[DDP::RP], ddps[DDP::R], ddps[DDP::DRDT], ddps[DDP::DRDTP]);
 
     // Calculate how many bubbles are below the minimum size.
     // Also take note of maximum radius.
     KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, kernelSize, 0, gasExchangeStream, numBubbles,
-                  aboveMinRadFlags.getRowPtr(0), adp.rP, properties.getMinRad());
+                  aboveMinRadFlags.getRowPtr(0), ddps[DDP::RP], properties.getMinRad());
 
     cubWrapper->reduceNoCopy<int, int *, int *>(
       &cub::DeviceReduce::Sum, aboveMinRadFlags.getRowPtr(0), static_cast<int *>(mbpc), numBubbles,
       gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(
-      &cub::DeviceReduce::Max, adp.rP, static_cast<double *>(dtfa), numBubbles, gasExchangeStream);
+    cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, ddps[DDP::RP],
+                                                         static_cast<double *>(dtfa), numBubbles,
+                                                         gasExchangeStream);
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int),
                               cudaMemcpyDeviceToHost, gasExchangeStream));
@@ -723,8 +723,8 @@ bool Simulator::integrate()
                               cudaMemcpyDeviceToHost, gasExchangeStream));
 
     // Error
-    error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max, adp.error,
-                                                           numBubbles);
+    error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max,
+                                                           ddps[DDP::ERROR], numBubbles);
 
     if (error < properties.getErrorTolerance() && timeStep < 0.1)
       timeStep *= 1.9;
@@ -739,10 +739,12 @@ bool Simulator::integrate()
   // Update values
   const size_t numBytesToCopy = 4 * sizeof(double) * dataStride;
 
-  CUDA_CALL(cudaMemcpyAsync(adp.dxdtO, adp.dxdt, numBytesToCopy, cudaMemcpyDeviceToDevice));
-  CUDA_CALL(cudaMemcpyAsync(adp.x, adp.xP, 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
   CUDA_CALL(
-    cudaMemcpyAsync(adp.s, adp.dummy4, sizeof(double) * dataStride, cudaMemcpyDeviceToDevice));
+    cudaMemcpyAsync(ddps[DDP::DXDTO], ddps[DDP::DXDT], numBytesToCopy, cudaMemcpyDeviceToDevice));
+  CUDA_CALL(
+    cudaMemcpyAsync(ddps[DDP::X], ddps[DDP::XP], 2 * numBytesToCopy, cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemcpyAsync(ddps[DDP::PATH], ddps[DDP::TEMP4], sizeof(double) * dataStride,
+                            cudaMemcpyDeviceToDevice));
   CUDA_CALL(cudaMemcpyAsync(wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3),
                             wrapMultipliers.getSizeInBytes() / 2, cudaMemcpyDeviceToDevice));
 
@@ -783,9 +785,9 @@ void Simulator::updateCellsAndNeighbors()
 
   KernelSize kernelSize(128, numBubbles);
 
-  KERNEL_LAUNCH(assignBubblesToCells, pairKernelSize, 0, 0, adp.x, adp.y, adp.z,
-                bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3), properties.getLbb(),
-                properties.getTfr(), cellDim, numBubbles);
+  KERNEL_LAUNCH(assignBubblesToCells, pairKernelSize, 0, 0, ddps[DDP::X], ddps[DDP::Y],
+                ddps[DDP::Z], bubbleCellIndices.getRowPtr(2), bubbleCellIndices.getRowPtr(3),
+                properties.getLbb(), properties.getTfr(), cellDim, numBubbles);
 
   int *cellIndices   = bubbleCellIndices.getRowPtr(0);
   int *bubbleIndices = bubbleCellIndices.getRowPtr(1);
@@ -803,14 +805,17 @@ void Simulator::updateCellsAndNeighbors()
 
   KERNEL_LAUNCH(
     reorganizeKernel, kernelSize, 0, 0, numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices,
-    bubbleIndices, adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP, adp.dxdt, adp.dxdtP,
-    adp.dydt, adp.dydtP, adp.dzdt, adp.dzdtP, adp.drdt, adp.drdtP, adp.dxdtO, adp.error, adp.dydtO,
-    adp.dummy1, adp.dzdtO, adp.dummy2, adp.drdtO, adp.dummy3, adp.x0, adp.dummy4, adp.y0,
-    adp.dummy5, adp.z0, adp.dummy6, adp.s, adp.dummy7, adp.d, adp.dummy8,
-    wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(1),
-    wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
+    bubbleIndices, ddps[DDP::X], ddps[DDP::XP], ddps[DDP::Y], ddps[DDP::YP], ddps[DDP::Z],
+    ddps[DDP::ZP], ddps[DDP::R], ddps[DDP::RP], ddps[DDP::DXDT], ddps[DDP::DXDTP], ddps[DDP::DYDT],
+    ddps[DDP::DYDTP], ddps[DDP::DZDT], ddps[DDP::DZDTP], ddps[DDP::DRDT], ddps[DDP::DRDTP],
+    ddps[DDP::DXDTO], ddps[DDP::ERROR], ddps[DDP::DYDTO], ddps[DDP::TEMP1], ddps[DDP::DZDTO],
+    ddps[DDP::TEMP2], ddps[DDP::DRDTO], ddps[DDP::TEMP3], ddps[DDP::X0], ddps[DDP::TEMP4],
+    ddps[DDP::Y0], ddps[DDP::TEMP5], ddps[DDP::Z0], ddps[DDP::TEMP6], ddps[DDP::PATH],
+    ddps[DDP::TEMP7], ddps[DDP::DISTANCE], ddps[DDP::TEMP8], wrapMultipliers.getRowPtr(0),
+    wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4),
+    wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x), static_cast<void *>(adp.xP),
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[DDP::X]), static_cast<void *>(ddps[DDP::XP]),
                             sizeof(double) * numAliases / 2 * dataStride,
                             cudaMemcpyDeviceToDevice));
 
@@ -833,13 +838,14 @@ void Simulator::updateCellsAndNeighbors()
     if (NUM_DIM == 3)
       KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
                     static_cast<int>(pairs.getWidth()), maxDistance, offsets, sizes,
-                    pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x,
-                    interval.y, PBC_Y == 1, adp.y, interval.z, PBC_Z == 1, adp.z);
+                    pairs.getRowPtr(2), pairs.getRowPtr(3), ddps[DDP::R], interval.x, PBC_X == 1,
+                    ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y], interval.z, PBC_Z == 1,
+                    ddps[DDP::Z]);
     else
       KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
                     static_cast<int>(pairs.getWidth()), maxDistance, offsets, sizes,
-                    pairs.getRowPtr(2), pairs.getRowPtr(3), adp.r, interval.x, PBC_X == 1, adp.x,
-                    interval.y, PBC_Y == 1, adp.y);
+                    pairs.getRowPtr(2), pairs.getRowPtr(3), ddps[DDP::R], interval.x, PBC_X == 1,
+                    ddps[DDP::X], interval.y, PBC_Y == 1, ddps[DDP::Y]);
   }
 
   CUDA_CALL(
@@ -858,25 +864,28 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
   int *flag = aboveMinRadFlags.getRowPtr(0);
 
   CUDA_CALL(cudaMemset(static_cast<void *>(dvm), 0, sizeof(double)));
-  KERNEL_LAUNCH(calculateRedistributedGasVolume, kernelSize, 0, 0, adp.dummy1, adp.r, flag,
-                numBubbles);
+  KERNEL_LAUNCH(calculateRedistributedGasVolume, kernelSize, 0, 0, ddps[DDP::TEMP1], ddps[DDP::R],
+                flag, numBubbles);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, adp.dummy1, dtv,
-                                                       numBubbles);
+  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[DDP::TEMP1],
+                                                       dtv, numBubbles);
 
   int *newIdx = aboveMinRadFlags.getRowPtr(1);
   cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flag, newIdx, numBubbles);
 
   KERNEL_LAUNCH(
     reorganizeKernel, kernelSize, 0, 0, numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
-    flag, adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP, adp.dxdt, adp.dxdtP, adp.dydt,
-    adp.dydtP, adp.dzdt, adp.dzdtP, adp.drdt, adp.drdtP, adp.dxdtO, adp.error, adp.dydtO,
-    adp.dummy1, adp.dzdtO, adp.dummy2, adp.drdtO, adp.dummy3, adp.x0, adp.dummy4, adp.y0,
-    adp.dummy5, adp.z0, adp.dummy6, adp.s, adp.dummy7, adp.d, adp.dummy8,
-    wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(1),
-    wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
+    flag, ddps[DDP::X], ddps[DDP::XP], ddps[DDP::Y], ddps[DDP::YP], ddps[DDP::Z], ddps[DDP::ZP],
+    ddps[DDP::R], ddps[DDP::RP], ddps[DDP::DXDT], ddps[DDP::DXDTP], ddps[DDP::DYDT],
+    ddps[DDP::DYDTP], ddps[DDP::DZDT], ddps[DDP::DZDTP], ddps[DDP::DRDT], ddps[DDP::DRDTP],
+    ddps[DDP::DXDTO], ddps[DDP::ERROR], ddps[DDP::DYDTO], ddps[DDP::TEMP1], ddps[DDP::DZDTO],
+    ddps[DDP::TEMP2], ddps[DDP::DRDTO], ddps[DDP::TEMP3], ddps[DDP::X0], ddps[DDP::TEMP4],
+    ddps[DDP::Y0], ddps[DDP::TEMP5], ddps[DDP::Z0], ddps[DDP::TEMP6], ddps[DDP::PATH],
+    ddps[DDP::TEMP7], ddps[DDP::DISTANCE], ddps[DDP::TEMP8], wrapMultipliers.getRowPtr(0),
+    wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4),
+    wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x), static_cast<void *>(adp.xP),
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[DDP::X]), static_cast<void *>(ddps[DDP::XP]),
                             sizeof(double) * numAliases / 2 * dataStride,
                             cudaMemcpyDeviceToDevice));
 
@@ -885,7 +894,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                             wrapMultipliers.getSizeInBytes() / 2, cudaMemcpyDeviceToDevice));
 
   numBubbles = numBubblesAboveMinRad;
-  KERNEL_LAUNCH(addVolume, kernelSize, 0, 0, adp.r, numBubbles);
+  KERNEL_LAUNCH(addVolume, kernelSize, 0, 0, ddps[DDP::R], numBubbles);
 
   NVTX_RANGE_POP();
 }
@@ -915,7 +924,7 @@ dim3 Simulator::getGridSize()
 void Simulator::transformPositions(bool normalize)
 {
   KERNEL_LAUNCH(transformPositionsKernel, pairKernelSize, 0, 0, normalize, numBubbles,
-                properties.getLbb(), properties.getTfr(), adp.x, adp.y, adp.z);
+                properties.getLbb(), properties.getTfr(), ddps[DDP::X], ddps[DDP::Y], ddps[DDP::Z]);
 }
 
 double Simulator::getAverageProperty(double *p)
@@ -934,7 +943,7 @@ void Simulator::saveSnapshotToFile()
     const size_t numComp = 17;
     hostData.clear();
     hostData.resize(dataStride * numComp);
-    CUDA_CALL(cudaMemcpy(hostData.data(), deviceData, sizeof(double) * numComp * dataStride,
+    CUDA_CALL(cudaMemcpy(hostData.data(), deviceDoubles, sizeof(double) * numComp * dataStride,
                          cudaMemcpyDeviceToHost));
 
     file << "x,y,z,r,vx,vy,vz,path,dist\n";
@@ -962,6 +971,30 @@ void Simulator::saveSnapshotToFile()
 
     ++numSnapshots;
   }
+}
+
+void Simulator::reserveMemory()
+{
+  // Reserve pinned memory
+  pinnedInt    = PinnedHostArray<int>(1);
+  pinnedDouble = PinnedHostArray<double>(3);
+
+  // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp size.
+  dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
+
+  // Doubles
+  CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceDoubles),
+                         sizeof(double) * dataStride * DDP::NUM_VALUES));
+
+  for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
+    ddps[i]       = deviceDoubles + i * dataStride;
+
+  // Integers
+  aboveMinRadFlags  = DeviceArray<int>(dataStride, 2u);
+  bubbleCellIndices = DeviceArray<int>(dataStride, 4u);
+  pairs             = DeviceArray<int>(8 * dataStride, 4u);
+  wrapMultipliers   = DeviceArray<int>(dataStride, 6);
+  cellData          = DeviceArray<int>(maxNumCells, (size_t)CellProperty::NUM_VALUES);
 }
 
 void Simulator::startProfiling(bool start)

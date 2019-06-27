@@ -32,6 +32,7 @@ private:
   double getAverageProperty(double *p);
   dim3 getGridSize();
   void saveSnapshotToFile();
+  void reserveMemory();
   void startProfiling(bool start);
   void stopProfiling(bool stop, bool &continueIntegration);
   void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool wrapY,
@@ -82,65 +83,59 @@ private:
 
   std::vector<double> hostData;
 
-  double *deviceData  = nullptr;
-  uint32_t dataStride = 0;
+  double *deviceDoubles = nullptr;
+  uint32_t dataStride   = 0;
 
-  struct AliasedDevicePointers
+  // Device double pointers
+  enum class DDP
   {
-    // Position & radius
-    double *x = nullptr;
-    double *y = nullptr;
-    double *z = nullptr;
-    double *r = nullptr;
+    X,
+    Y,
+    Z,
+    R,
 
-    // Change rate (= velocity)
-    double *dxdt = nullptr;
-    double *dydt = nullptr;
-    double *dzdt = nullptr;
-    double *drdt = nullptr;
+    DXDT,
+    DYDT,
+    DZDT,
+    DRDT,
 
-    // Old change rates
-    double *dxdtO = nullptr;
-    double *dydtO = nullptr;
-    double *dzdtO = nullptr;
-    double *drdtO = nullptr;
+    DXDTO,
+    DYDTO,
+    DZDTO,
+    DRDTO,
 
-    // Starting coordinates
-    double *x0 = nullptr;
-    double *y0 = nullptr;
-    double *z0 = nullptr;
+    X0,
+    Y0,
+    Z0,
 
-    // Path length & distance
-    double *s = nullptr;
-    double *d = nullptr;
+    PATH,
+    DISTANCE,
 
-    // Predicted coordinates
-    double *xP = nullptr;
-    double *yP = nullptr;
-    double *zP = nullptr;
-    double *rP = nullptr;
+    XP,
+    YP,
+    ZP,
+    RP,
 
-    // Predicted change rates
-    double *dxdtP = nullptr;
-    double *dydtP = nullptr;
-    double *dzdtP = nullptr;
-    double *drdtP = nullptr;
+    DXDTP,
+    DYDTP,
+    DZDTP,
+    DRDTP,
 
-    // Errors of predictions vs corrections
-    double *error = nullptr;
+    ERROR,
 
-    // Dummy for copying stuff & for temporary use
-    double *dummy1 = nullptr;
-    double *dummy2 = nullptr;
-    double *dummy3 = nullptr;
-    double *dummy4 = nullptr;
-    double *dummy5 = nullptr;
-    double *dummy6 = nullptr;
-    double *dummy7 = nullptr;
-    double *dummy8 = nullptr;
-  } adp;
-  static const uint32_t numAliases = 34;
-  static_assert(sizeof(adp) == sizeof(double *) * numAliases);
+    TEMP1,
+    TEMP2,
+    TEMP3,
+    TEMP4,
+    TEMP5,
+    TEMP6,
+    TEMP7,
+    TEMP8,
+
+    NUM_VALUES
+  };
+
+  std::array<double *, DDP::NUM_VALUES> ddps;
 };
 
 enum class CellProperty
