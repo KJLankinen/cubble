@@ -5,8 +5,6 @@
 #include "Simulator.cuh"
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
-#include <algorithm>
-#include <chrono>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <iostream>
@@ -26,13 +24,13 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                   ddps[(uint32_t)DDP::TEMP1], numBubbles);
 
     return cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                          ddps[(uint32_t)DDP::TEMP1], numBubbles);
+                                                         ddps[(uint32_t)DDP::TEMP1], numBubbles);
   };
 
   properties = Env(inputFileName, outputFileName);
   properties.readParameters();
 
-  std::cout << "\n=============\nSetup\n=============" << std::endl;
+  std::cout << "\n=====\nSetup\n=====" << std::endl;
   {
     setup();
     saveSnapshotToFile();
@@ -105,7 +103,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     saveSnapshotToFile();
   }
 
-  std::cout << "=\n============\nSimulation\n=============" << std::endl;
+  std::cout << "\n==========\nSimulation\n==========" << std::endl;
   std::stringstream dataStream;
   {
     // Set starting positions and reset wrap counts to 0
@@ -140,13 +138,13 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                     interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
     }
 
-    energy1 = cubWrapper.reduce<double, double *, double *>(
-      &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], numBubbles);
+    energy1 = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+                                                            ddps[(uint32_t)DDP::TEMP4], numBubbles);
 
     // Start the simulation proper
     bool continueIntegration = true;
     int numTotalSteps        = 0;
-    std::cout << "T\tR\t#b\tdE\t\t#steps\t#pairs/#b" << std::endl;
+    std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs/#b" << std::endl;
     while (continueIntegration)
     {
       continueIntegration = integrate();
@@ -188,8 +186,10 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                    << getAverageProperty(ddps[(uint32_t)DDP::DISTANCE]) << " " << dE << "\n";
 
         // Print some values
-        std::cout << scaledTime << "\t" << relativeRadius << "\t" << numBubbles << "\t" << dE
-                  << "\t" << numSteps << "\t" << (float)numPairs / numBubbles << std::endl;
+        std::cout << scaledTime << "\t"
+                  << getVolumeOfBubbles() / properties.getSimulationBoxVolume() << "\t"
+                  << relativeRadius << "\t" << numBubbles << "\t" << dE << "\t" << numSteps << "\t"
+                  << (float)numPairs / numBubbles << std::endl;
 
         // Only write snapshots when t* is a power of 2.
         if ((timesPrinted & (timesPrinted - 1)) == 0)
@@ -441,9 +441,8 @@ double Simulator::stabilize()
 
   cubWrapper.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], dtfapr, numBubbles);
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDoubles[1]),
-                            static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost,
-                            0));
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDoubles[1]), static_cast<void *>(dtfapr),
+                            sizeof(double), cudaMemcpyDeviceToHost, 0));
 
   for (int i = 0; i < properties.getNumStepsToRelax(); ++i)
   {
@@ -520,8 +519,8 @@ double Simulator::stabilize()
                      dips[(uint32_t)DIP::WRAP_COUNT_YP], dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Error
-      error = cubWrapper.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::ERROR], numBubbles);
+      error = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Max,
+                                                            ddps[(uint32_t)DDP::ERROR], numBubbles);
 
       if (error < properties.getErrorTolerance() && timeStep < 0.1)
         timeStep *= 1.9;
@@ -564,7 +563,7 @@ double Simulator::stabilize()
                   interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
 
   energy2 = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                           ddps[(uint32_t)DDP::TEMP4], numBubbles);
+                                                          ddps[(uint32_t)DDP::TEMP4], numBubbles);
 
   return elapsedTime;
 }
@@ -769,8 +768,8 @@ bool Simulator::integrate()
                   dips[(uint32_t)DIP::FLAGS], ddps[(uint32_t)DDP::RP], properties.getMinRad());
 
     cubWrapper.reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, dips[(uint32_t)DIP::FLAGS],
-                                                static_cast<int *>(mbpc), numBubbles,
-                                                gasExchangeStream);
+                                               static_cast<int *>(mbpc), numBubbles,
+                                               gasExchangeStream);
     cubWrapper.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::RP], static_cast<double *>(dtfa), numBubbles,
       gasExchangeStream);
@@ -782,7 +781,7 @@ bool Simulator::integrate()
 
     // Error
     error = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Max,
-                                                           ddps[(uint32_t)DDP::ERROR], numBubbles);
+                                                          ddps[(uint32_t)DDP::ERROR], numBubbles);
 
     if (error < properties.getErrorTolerance() && timeStep < 0.1)
       timeStep *= 1.9;
@@ -858,7 +857,7 @@ void Simulator::updateCellsAndNeighbors()
     const_cast<const int *>(bubbleIndices), sortedBubbleIndices, numBubbles);
 
   cubWrapper.histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven, cellIndices,
-                                              sizes, maxNumCells + 1, 0, maxNumCells, numBubbles);
+                                             sizes, maxNumCells + 1, 0, maxNumCells, numBubbles);
 
   cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, maxNumCells);
 
@@ -909,8 +908,7 @@ void Simulator::updateCellsAndNeighbors()
                     ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
   }
 
-  CUDA_CALL(
-    cudaMemcpy(static_cast<void *>(pinnedInts), np, sizeof(int), cudaMemcpyDeviceToHost));
+  CUDA_CALL(cudaMemcpy(static_cast<void *>(pinnedInts), np, sizeof(int), cudaMemcpyDeviceToHost));
   numPairs = pinnedInts[0];
   cubWrapper.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(dips[(uint32_t)DIP::TEMP1]),
@@ -928,11 +926,11 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
                 ddps[(uint32_t)DDP::R], dips[(uint32_t)DIP::FLAGS], numBubbles);
 
   cubWrapper.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                       ddps[(uint32_t)DDP::TEMP1], dtv, numBubbles);
+                                                      ddps[(uint32_t)DDP::TEMP1], dtv, numBubbles);
 
   int *newIdx = dips[(uint32_t)DIP::TEMP1];
   cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, dips[(uint32_t)DIP::FLAGS], newIdx,
-                                 numBubbles);
+                                numBubbles);
 
   KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, numBubbles,
                 ReorganizeType::CONDITIONAL_TO_INDEX, newIdx, dips[(uint32_t)DIP::FLAGS],
@@ -1051,7 +1049,7 @@ void Simulator::reserveMemory()
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceDoubles), memReqD));
 
   for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
-    ddps[i]       = deviceDoubles + i * dataStride;
+    ddps[i] = deviceDoubles + i * dataStride;
 
   // Integers
   const uint32_t avgNumNeighbors = 8;
@@ -1063,11 +1061,11 @@ void Simulator::reserveMemory()
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceInts), memReqI));
 
   for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
-    dips[i]       = deviceInts + i * dataStride;
+    dips[i] = deviceInts + i * dataStride;
 
   uint32_t j = 0;
   for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
-    dips[i]       = dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * dataStride;
+    dips[i] = dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * dataStride;
 }
 
 void Simulator::startProfiling(bool start)
