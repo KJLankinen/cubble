@@ -541,7 +541,7 @@ double Simulator::stabilize()
     properties.setTimeStep(timeStep);
     elapsedTime += timeStep;
 
-    if (i % 2000 == 0)
+    if (i % 5000 == 0)
       updateCellsAndNeighbors();
   }
 
@@ -816,10 +816,13 @@ bool Simulator::integrate()
   const bool shouldDeleteBubbles  = numBubblesAboveMinRad < numBubbles;
 
   if (shouldDeleteBubbles)
+  {
     deleteSmallBubbles(numBubblesAboveMinRad);
-
-  if (shouldDeleteBubbles || integrationStep % 2000 == 0)
     updateCellsAndNeighbors();
+  }
+
+  //if (shouldDeleteBubbles || integrationStep % 5000 == 0)
+    //updateCellsAndNeighbors();
 
   bool continueSimulation = numBubbles > properties.getMinNumBubbles();
   continueSimulation &=
