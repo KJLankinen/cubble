@@ -72,20 +72,18 @@ private:
   Env properties;
   std::shared_ptr<CubWrapper> cubWrapper;
 
-  DeviceArray<int> aboveMinRadFlags;
-  DeviceArray<int> cellData;
-  DeviceArray<int> bubbleCellIndices;
-  DeviceArray<int> pairs;
-  DeviceArray<int> wrapMultipliers;
-
   PinnedHostArray<int> pinnedInt;
   PinnedHostArray<double> pinnedDouble;
 
   std::vector<double> hostData;
 
+  // Device data
   double *deviceDoubles = nullptr;
+  int *deviceInts       = nullptr;
   uint32_t dataStride   = 0;
+  uint32_t pairStride   = 0;
   uint64_t memReqD      = 0;
+  uint64_t memReqI      = 0;
 
   // Device double pointers
   enum class DDP
@@ -136,14 +134,29 @@ private:
     NUM_VALUES
   };
 
+  // Device int pointers
+  enum class DIP
+  {
+    FLAGS,
+
+    WRAP_COUNT_X,
+    WRAP_COUNT_Y,
+    WRAP_COUNT_Z,
+
+    WRAP_COUNT_XP,
+    WRAP_COUNT_YP,
+    WRAP_COUNT_ZP,
+
+    PAIR1,
+    PAIR2,
+
+    TEMP1,
+    TEMP2,
+
+    NUM_VALUES
+  };
+
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
-};
-
-enum class CellProperty
-{
-  OFFSET,
-  SIZE,
-
-  NUM_VALUES
+  std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 };
 }; // namespace cubble
