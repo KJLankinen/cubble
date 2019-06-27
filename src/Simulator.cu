@@ -242,10 +242,6 @@ void Simulator::setup()
   // Initialize CUB
   cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
-  // Reserve memory for data
-  reserveMemory();
-  std::cout << "Memory requirement for double data: " << memReqD << " bytes" << std::endl;
-
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize();
   const int maxGridDim = gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
@@ -261,6 +257,10 @@ void Simulator::setup()
 
   std::cout << "Morton numbers: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", "
             << gridDim.z << std::endl;
+
+  // Reserve memory for data
+  reserveMemory();
+  std::cout << "Memory requirement for double data: " << memReqD << " bytes" << std::endl;
 
   // Get some device global symbol addresses to host pointers.
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dtfa), dTotalFreeArea));
