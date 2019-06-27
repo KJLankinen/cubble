@@ -451,17 +451,17 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors, double *vel
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
     int inside = (int)(posX[i] < flowTfr.x && posX[i] > flowLbb.x);
-    inside += (int)(posY[i] < flowTfr.y && posY[i] > flowLbb.y);
+    inside *= (int)(posY[i] < flowTfr.y && posY[i] > flowLbb.y);
 #if (NUM_DIM == 3)
-    inside += (int)(posZ[i] < flowTfr.z && posZ[i] > flowLbb.z);
+    inside *= (int)(posZ[i] < flowTfr.z && posZ[i] > flowLbb.z);
 #endif
     inside = !!inside;
 
-    const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
-    velX[i] += multiplier * nVelX[i] + flowVel.x * inside;
-    velY[i] += multiplier * nVelY[i] + flowVel.y * inside;
+    const double multiplier = (numNeighbors[i] > 0 ? (double)inside / numNeighbors[i] : 0.0);
+    velX[i] += multiplier * nVelX[i] + flowVel.x;
+    velY[i] += multiplier * nVelY[i] + flowVel.y;
 #if (NUM_DIM == 3)
-    velZ[i] += multiplier * nVelZ[i] + flowVel.z * inside;
+    velZ[i] += multiplier * nVelZ[i] + flowVel.z;
 #endif
   }
 }
