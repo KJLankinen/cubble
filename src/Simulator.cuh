@@ -85,7 +85,7 @@ private:
 
   double *deviceDoubles = nullptr;
   uint32_t dataStride   = 0;
-  uint32_t memReqD      = 0;
+  uint64_t memReqD      = 0;
 
   // Device double pointers
   enum class DDP

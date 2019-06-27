@@ -1041,7 +1041,7 @@ void Simulator::reserveMemory()
   dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
 
   // Doubles
-  memReqD = sizeof(double) * dataStride * DDP::NUM_VALUES;
+  memReqD = sizeof(double) * (uint64_t)dataStride * (uint64_t)DDP::NUM_VALUES;
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceDoubles), memReqD));
 
   for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
