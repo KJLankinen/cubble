@@ -844,7 +844,8 @@ void Simulator::updateCellsAndNeighbors()
   int *sortedCellIndices   = dips[(uint32_t)DIP::TEMP1 + 2 * dataStride];
   int *sortedBubbleIndices = dips[(uint32_t)DIP::TEMP1 + 3 * dataStride];
 
-  const size_t resetBytes = sizeof(int) * pairStride * (uint64_t)(DIP::NUM_VALUES - DIP::PAIR1);
+  const size_t resetBytes =
+    sizeof(int) * pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
   CUDA_CALL(cudaMemset(dips[(uint32_t)DIP::PAIR1], 0, resetBytes));
 
   KernelSize kernelSize(128, numBubbles);
@@ -897,14 +898,14 @@ void Simulator::updateCellsAndNeighbors()
   {
     cudaStream_t stream = (i % 2) ? velocityStream : gasExchangeStream;
     if (NUM_DIM == 3)
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells, pairStride,
-                    maxDistance, offsets, sizes, dips[(uint32_t)DIP::TEMP1],
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
+                    (int)pairStride, maxDistance, offsets, sizes, dips[(uint32_t)DIP::TEMP1],
                     dips[(uint32_t)DIP::TEMP2], ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1,
                     ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y],
                     interval.z, PBC_Z == 1, ddps[(uint32_t)DDP::Z]);
     else
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells, pairStride,
-                    maxDistance, offsets, sizes, dips[(uint32_t)DIP::TEMP1],
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, numBubbles, maxNumCells,
+                    (int)pairStride, maxDistance, offsets, sizes, dips[(uint32_t)DIP::TEMP1],
                     dips[(uint32_t)DIP::TEMP2], ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1,
                     ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
   }
@@ -1058,7 +1059,7 @@ void Simulator::reserveMemory()
   pairStride                     = avgNumNeighbors * dataStride;
 
   memReqI = sizeof(int) * (uint64_t)dataStride *
-            ((uint64_t)DIP::PAIR1 + avgNumNeighbors * (uint64_t)(DIP::NUM::VALUES - DIP::PAIR1));
+            ((uint64_t)DIP::PAIR1 + avgNumNeighbors * (uint64_t)(DIP::NUM_VALUES - DIP::PAIR1));
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceInts), memReqI));
 
   for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
