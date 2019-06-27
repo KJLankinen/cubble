@@ -52,10 +52,6 @@ private:
   int maxNumCells        = 0;
   int numPairs           = 0;
 
-  cudaEvent_t blockingEvent1;
-  cudaEvent_t blockingEvent2;
-
-  cudaStream_t nonBlockingStream;
   cudaStream_t velocityStream;
   cudaStream_t gasExchangeStream;
 

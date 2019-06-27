@@ -304,12 +304,8 @@ void Simulator::setup()
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dta), dTotalArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dasai), dAverageSurfaceAreaIn));
 
-  CUDA_ASSERT(cudaStreamCreateWithFlags(&nonBlockingStream, cudaStreamNonBlocking));
   CUDA_ASSERT(cudaStreamCreate(&velocityStream));
   CUDA_ASSERT(cudaStreamCreate(&gasExchangeStream));
-
-  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent1, cudaEventBlockingSync));
-  CUDA_ASSERT(cudaEventCreateWithFlags(&blockingEvent2, cudaEventBlockingSync));
 
   pinnedInt    = PinnedHostArray<int>(1);
   pinnedDouble = PinnedHostArray<double>(3);
@@ -426,12 +422,8 @@ void Simulator::deinit()
 
   CUDA_CALL(cudaFree(static_cast<void *>(deviceData)));
 
-  CUDA_CALL(cudaStreamDestroy(nonBlockingStream));
   CUDA_CALL(cudaStreamDestroy(velocityStream));
   CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
-
-  CUDA_CALL(cudaEventDestroy(blockingEvent1));
-  CUDA_CALL(cudaEventDestroy(blockingEvent2));
 }
 
 double Simulator::stabilize()
@@ -803,35 +795,28 @@ void Simulator::updateCellsAndNeighbors()
     cellIndices, const_cast<const int *>(bubbleCellIndices.getRowPtr(3)), bubbleIndices,
     numBubbles);
 
-  CUDA_CALL(cudaEventRecord(blockingEvent1));
-
   cubWrapper->histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven,
                                               bubbleCellIndices.getRowPtr(2), sizes,
                                               maxNumCells + 1, 0, maxNumCells, numBubbles);
 
   cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, maxNumCells);
-  CUDA_CALL(cudaEventRecord(blockingEvent2));
 
-  CUDA_CALL(cudaStreamWaitEvent(nonBlockingStream, blockingEvent1, 0));
   KERNEL_LAUNCH(
-    reorganizeKernel, kernelSize, 0, nonBlockingStream, numBubbles, ReorganizeType::COPY_FROM_INDEX,
-    bubbleIndices, bubbleIndices, adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP,
-    adp.dxdt, adp.dxdtP, adp.dydt, adp.dydtP, adp.dzdt, adp.dzdtP, adp.drdt, adp.drdtP, adp.dxdtO,
-    adp.error, adp.dydtO, adp.dummy1, adp.dzdtO, adp.dummy2, adp.drdtO, adp.dummy3, adp.x0,
-    adp.dummy4, adp.y0, adp.dummy5, adp.z0, adp.dummy6, adp.s, adp.dummy7, adp.d, adp.dummy8,
+    reorganizeKernel, kernelSize, 0, 0, numBubbles, ReorganizeType::COPY_FROM_INDEX, bubbleIndices,
+    bubbleIndices, adp.x, adp.xP, adp.y, adp.yP, adp.z, adp.zP, adp.r, adp.rP, adp.dxdt, adp.dxdtP,
+    adp.dydt, adp.dydtP, adp.dzdt, adp.dzdtP, adp.drdt, adp.drdtP, adp.dxdtO, adp.error, adp.dydtO,
+    adp.dummy1, adp.dzdtO, adp.dummy2, adp.drdtO, adp.dummy3, adp.x0, adp.dummy4, adp.y0,
+    adp.dummy5, adp.z0, adp.dummy6, adp.s, adp.dummy7, adp.d, adp.dummy8,
     wrapMultipliers.getRowPtr(0), wrapMultipliers.getRowPtr(3), wrapMultipliers.getRowPtr(1),
     wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(adp.x), static_cast<void *>(adp.xP),
-                            sizeof(double) * numAliases / 2 * dataStride, cudaMemcpyDeviceToDevice,
-                            nonBlockingStream));
+                            sizeof(double) * numAliases / 2 * dataStride,
+                            cudaMemcpyDeviceToDevice));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
                             static_cast<void *>(wrapMultipliers.getRowPtr(3)),
-                            wrapMultipliers.getSizeInBytes() / 2, cudaMemcpyDeviceToDevice,
-                            nonBlockingStream));
-
-  CUDA_CALL(cudaEventRecord(blockingEvent1, nonBlockingStream));
+                            wrapMultipliers.getSizeInBytes() / 2, cudaMemcpyDeviceToDevice));
 
   dvec interval = properties.getTfr() - properties.getLbb();
 
@@ -839,11 +824,6 @@ void Simulator::updateCellsAndNeighbors()
   kernelSize.grid  = gridSize;
 
   CUDA_CALL(cudaMemset(np, 0, sizeof(int)));
-
-  CUDA_CALL(cudaStreamWaitEvent(gasExchangeStream, blockingEvent1, 0));
-  CUDA_CALL(cudaStreamWaitEvent(gasExchangeStream, blockingEvent2, 0));
-  CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent1, 0));
-  CUDA_CALL(cudaStreamWaitEvent(velocityStream, blockingEvent2, 0));
 
   const double maxDistance = 1.5 * maxBubbleRadius;
 
