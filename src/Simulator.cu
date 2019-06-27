@@ -1064,11 +1064,17 @@ void Simulator::reserveMemory()
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceInts), memReqI));
 
   for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
+  {
     dips[i]       = deviceInts + i * dataStride;
+    std::cout << "int " << i << std::endl;
+  }
 
   uint32_t j = 0;
   for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
+  {
     dips[i]       = dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * dataStride;
+    std::cout << "int " << i << std::endl;
+  }
 }
 
 void Simulator::startProfiling(bool start)
