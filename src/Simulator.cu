@@ -144,12 +144,12 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     // Start the simulation proper
     bool continueIntegration = true;
     int numTotalSteps        = 0;
-    std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs/#b" << std::endl;
+    std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
     while (continueIntegration)
     {
       continueIntegration = integrate();
-      CUDA_PROFILER_START(numTotalSteps == 0);
-      CUDA_PROFILER_STOP(numTotalSteps == 9000, continueIntegration);
+      CUDA_PROFILER_START(numTotalSteps == 2000);
+      CUDA_PROFILER_STOP(numTotalSteps == 2200, continueIntegration);
 
       // The if clause contains many slow operations, but it's only done
       // very few times relative to the entire run time, so it should not
@@ -189,7 +189,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
         std::cout << (int)scaledTime << "\t"
                   << getVolumeOfBubbles() / properties.getSimulationBoxVolume() << "\t"
                   << relativeRadius << "\t" << numBubbles << "\t" << dE << "\t" << numSteps << "\t"
-                  << (float)numPairs / numBubbles << std::endl;
+                  << numPairs << std::endl;
 
         // Only write snapshots when t* is a power of 2.
         if ((timesPrinted & (timesPrinted - 1)) == 0)
