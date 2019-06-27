@@ -34,16 +34,13 @@ private:
   void saveSnapshotToFile();
   void startProfiling(bool start);
   void stopProfiling(bool stop, bool &continueIntegration);
-  void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX,
-                      bool wrapY, bool wrapZ, int numValues, double *x,
-                      double *y, double *z, dvec lbb, dvec tfr, int *mulX,
-                      int *mulY, int *mulZ, int *mulOldX, int *mulOldY,
+  void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool wrapY,
+                      bool wrapZ, int numValues, double *x, double *y, double *z, dvec lbb,
+                      dvec tfr, int *mulX, int *mulY, int *mulZ, int *mulOldX, int *mulOldY,
                       int *mulOldZ);
-  void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX,
-                      bool doY, bool doZ, int numValues, int *first,
-                      int *second, double *r, double *x, double *y, double *z,
-                      double *dxdt, double *dydt, double *dzdt, dvec lbb,
-                      dvec tfr);
+  void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX, bool doY, bool doZ,
+                      int numValues, int *first, int *second, double *r, double *x, double *y,
+                      double *z, double *dxdt, double *dydt, double *dzdt, dvec lbb, dvec tfr);
 
   double simulationTime  = 0.0;
   double energy1         = 0.0;

@@ -20,8 +20,8 @@ public:
   PinnedHostArray(const PinnedHostArray<T> &other)
     : PinnedHostArray(other.size)
   {
-    memcpy(static_cast<void *>(dataPtr.get()),
-           static_cast<void *>(other.dataPtr.get()), other.getSizeInBytes());
+    memcpy(static_cast<void *>(dataPtr.get()), static_cast<void *>(other.dataPtr.get()),
+           other.getSizeInBytes());
   }
 
   PinnedHostArray(PinnedHostArray<T> &&other)

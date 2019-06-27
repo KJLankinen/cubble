@@ -23,8 +23,8 @@ public:
     : DeviceArray(other.width, other.height, other.depth)
   {
     CUDA_ASSERT(cudaMemcpy(static_cast<void *>(dataPtr.get()),
-                           static_cast<void *>(other.dataPtr.get()),
-                           other.getSizeInBytes(), cudaMemcpyDeviceToDevice));
+                           static_cast<void *>(other.dataPtr.get()), other.getSizeInBytes(),
+                           cudaMemcpyDeviceToDevice));
   }
 
   DeviceArray(DeviceArray<T> &&other)
@@ -77,8 +77,7 @@ public:
   size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
   void setBytesToZero()
   {
-    CUDA_ASSERT(
-      cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes()));
+    CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes()));
   }
 
 private:
