@@ -244,6 +244,7 @@ void Simulator::setup()
 
   // Reserve memory for data
   reserveMemory();
+  std::cout << "Memory requirement for double data: " << memReqD << " kt" << std::endl;
 
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize();
@@ -258,7 +259,7 @@ void Simulator::setup()
   else
     maxNumCells = maxNumCells * maxNumCells;
 
-  std::cout << "Morton: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", "
+  std::cout << "Morton numbers: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", "
             << gridDim.z << std::endl;
 
   // Get some device global symbol addresses to host pointers.
@@ -865,9 +866,9 @@ void Simulator::updateCellsAndNeighbors()
                 wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4),
                 wrapMultipliers.getRowPtr(2), wrapMultipliers.getRowPtr(5));
 
-  CUDA_CALL(cudaMemcpyAsync(
-    static_cast<void *>(ddps[(uint32_t)DDP::X]), static_cast<void *>(ddps[(uint32_t)DDP::XP]),
-    sizeof(double) * numAliases / 2 * dataStride, cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[(uint32_t)DDP::X]),
+                            static_cast<void *>(ddps[(uint32_t)DDP::XP]), memReqD / 2,
+                            cudaMemcpyDeviceToDevice));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
                             static_cast<void *>(wrapMultipliers.getRowPtr(3)),
@@ -941,9 +942,9 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
     wrapMultipliers.getRowPtr(1), wrapMultipliers.getRowPtr(4), wrapMultipliers.getRowPtr(2),
     wrapMultipliers.getRowPtr(5));
 
-  CUDA_CALL(cudaMemcpyAsync(
-    static_cast<void *>(ddps[(uint32_t)DDP::X]), static_cast<void *>(ddps[(uint32_t)DDP::XP]),
-    sizeof(double) * numAliases / 2 * dataStride, cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[(uint32_t)DDP::X]),
+                            static_cast<void *>(ddps[(uint32_t)DDP::XP]), memReqD,
+                            cudaMemcpyDeviceToDevice));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
                             static_cast<void *>(wrapMultipliers.getRowPtr(3)),
@@ -1040,10 +1041,10 @@ void Simulator::reserveMemory()
   dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
 
   // Doubles
-  CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceDoubles),
-                         sizeof(double) * dataStride * (uint32_t)DDP::NUM_VALUES));
+  memReqD = sizeof(double) * dataStride * DDP::NUM_VALUES;
+  CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceDoubles), memReqD));
 
-  for (uint32_t i = 0; i < (uint32_t)(uint32_t)DDP::NUM_VALUES; ++i)
+  for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
     ddps[i]       = deviceDoubles + i * dataStride;
 
   // Integers
