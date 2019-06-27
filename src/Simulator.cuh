@@ -50,6 +50,7 @@ private:
   uint32_t numSnapshots  = 0;
   int numBubbles         = 0;
   int maxNumCells        = 0;
+  int numPairs           = 0;
 
   cudaEvent_t blockingEvent1;
   cudaEvent_t blockingEvent2;

@@ -141,7 +141,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     // Start the simulation proper
     bool continueIntegration = true;
     int numTotalSteps        = 0;
-    std::cout << "T\tR\t#b\tdE\t#steps" << std::endl;
+    std::cout << "T\tR\t#b\tdE\t\t#steps\t#pairs/#b" << std::endl;
     while (continueIntegration)
     {
       continueIntegration = integrate();
@@ -181,7 +181,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
 
         // Print some values
         std::cout << scaledTime << "\t" << relativeRadius << "\t" << numBubbles << "\t" << dE
-                  << "\t" << numSteps << std::endl;
+                  << "\t" << numSteps << "\t" << (float)numPairs / numBubbles << std::endl;
 
         // Only write snapshots when t* is a power of 2.
         if ((timesPrinted & (timesPrinted - 1)) == 0)
@@ -864,7 +864,7 @@ void Simulator::updateCellsAndNeighbors()
 
   CUDA_CALL(
     cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
-  int numPairs = pinnedInt.get()[0];
+  numPairs = pinnedInt.get()[0];
   cubWrapper->sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(pairs.getRowPtr(2)),
     pairs.getRowPtr(0), const_cast<const int *>(pairs.getRowPtr(3)), pairs.getRowPtr(1), numPairs);
