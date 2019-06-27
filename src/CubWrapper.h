@@ -12,10 +12,10 @@ namespace cubble
 class CubWrapper
 {
 public:
-  CubWrapper(size_t tempStorageSizeInBytes)
+  CubWrapper()
   {
     outData     = DeviceArray<char>(sizeof(double));
-    tempStorage = DeviceArray<char>(tempStorageSizeInBytes);
+    tempStorage = DeviceArray<char>(1024);
   }
   ~CubWrapper() {}
 

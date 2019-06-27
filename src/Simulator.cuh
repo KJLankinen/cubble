@@ -3,13 +3,9 @@
 #pragma once
 
 #include "CubWrapper.h"
-#include "DeviceArray.h"
 #include "Env.h"
-#include "PinnedHostArray.h"
 #include "Util.h"
 #include "Vec.h"
-#include <memory>
-#include <utility>
 #include <vector>
 
 namespace cubble
@@ -32,6 +28,7 @@ private:
   double getAverageProperty(double *p);
   dim3 getGridSize();
   void saveSnapshotToFile();
+  void reserveMemory();
   void startProfiling(bool start);
   void stopProfiling(bool stop, bool &continueIntegration);
   void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool wrapY,
@@ -50,11 +47,8 @@ private:
   uint32_t numSnapshots  = 0;
   int numBubbles         = 0;
   int maxNumCells        = 0;
+  int numPairs           = 0;
 
-  cudaEvent_t blockingEvent1;
-  cudaEvent_t blockingEvent2;
-
-  cudaStream_t nonBlockingStream;
   cudaStream_t velocityStream;
   cudaStream_t gasExchangeStream;
 
@@ -72,85 +66,92 @@ private:
   double *dasai  = nullptr;
 
   Env properties;
-  std::shared_ptr<CubWrapper> cubWrapper;
-
-  DeviceArray<int> aboveMinRadFlags;
-  DeviceArray<int> cellData;
-  DeviceArray<int> bubbleCellIndices;
-  DeviceArray<int> pairs;
-  DeviceArray<int> wrapMultipliers;
-
-  PinnedHostArray<int> pinnedInt;
-  PinnedHostArray<double> pinnedDouble;
+  CubWrapper cubWrapper;
 
   std::vector<double> hostData;
 
-  double *deviceData  = nullptr;
-  uint32_t dataStride = 0;
+  // Device data
+  double *pinnedDoubles = nullptr;
+  int *pinnedInts       = nullptr;
+  double *deviceDoubles = nullptr;
+  int *deviceInts       = nullptr;
+  uint32_t dataStride   = 0;
+  uint32_t pairStride   = 0;
+  uint64_t memReqD      = 0;
+  uint64_t memReqI      = 0;
 
-  struct AliasedDevicePointers
+  // Device double pointers
+  enum class DDP
   {
-    // Position & radius
-    double *x = nullptr;
-    double *y = nullptr;
-    double *z = nullptr;
-    double *r = nullptr;
+    X,
+    Y,
+    Z,
+    R,
 
-    // Change rate (= velocity)
-    double *dxdt = nullptr;
-    double *dydt = nullptr;
-    double *dzdt = nullptr;
-    double *drdt = nullptr;
+    DXDT,
+    DYDT,
+    DZDT,
+    DRDT,
 
-    // Old change rates
-    double *dxdtO = nullptr;
-    double *dydtO = nullptr;
-    double *dzdtO = nullptr;
-    double *drdtO = nullptr;
+    DXDTO,
+    DYDTO,
+    DZDTO,
+    DRDTO,
 
-    // Starting coordinates
-    double *x0 = nullptr;
-    double *y0 = nullptr;
-    double *z0 = nullptr;
+    X0,
+    Y0,
+    Z0,
 
-    // Path length & distance
-    double *s = nullptr;
-    double *d = nullptr;
+    PATH,
+    DISTANCE,
 
-    // Predicted coordinates
-    double *xP = nullptr;
-    double *yP = nullptr;
-    double *zP = nullptr;
-    double *rP = nullptr;
+    XP,
+    YP,
+    ZP,
+    RP,
 
-    // Predicted change rates
-    double *dxdtP = nullptr;
-    double *dydtP = nullptr;
-    double *dzdtP = nullptr;
-    double *drdtP = nullptr;
+    DXDTP,
+    DYDTP,
+    DZDTP,
+    DRDTP,
 
-    // Errors of predictions vs corrections
-    double *error = nullptr;
+    ERROR,
 
-    // Dummy for copying stuff & for temporary use
-    double *dummy1 = nullptr;
-    double *dummy2 = nullptr;
-    double *dummy3 = nullptr;
-    double *dummy4 = nullptr;
-    double *dummy5 = nullptr;
-    double *dummy6 = nullptr;
-    double *dummy7 = nullptr;
-    double *dummy8 = nullptr;
-  } adp;
-  static const uint32_t numAliases = 34;
-  static_assert(sizeof(adp) == sizeof(double *) * numAliases);
-};
+    TEMP1,
+    TEMP2,
+    TEMP3,
+    TEMP4,
+    TEMP5,
+    TEMP6,
+    TEMP7,
+    TEMP8,
 
-enum class CellProperty
-{
-  OFFSET,
-  SIZE,
+    NUM_VALUES
+  };
 
-  NUM_VALUES
+  // Device int pointers
+  enum class DIP
+  {
+    FLAGS,
+
+    WRAP_COUNT_X,
+    WRAP_COUNT_Y,
+    WRAP_COUNT_Z,
+
+    WRAP_COUNT_XP,
+    WRAP_COUNT_YP,
+    WRAP_COUNT_ZP,
+
+    PAIR1,
+    PAIR2,
+
+    TEMP1,
+    TEMP2,
+
+    NUM_VALUES
+  };
+
+  std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
+  std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 };
 }; // namespace cubble
