@@ -816,13 +816,10 @@ bool Simulator::integrate()
   const bool shouldDeleteBubbles  = numBubblesAboveMinRad < numBubbles;
 
   if (shouldDeleteBubbles)
-  {
     deleteSmallBubbles(numBubblesAboveMinRad);
-    updateCellsAndNeighbors();
-  }
 
-  //if (shouldDeleteBubbles || integrationStep % 5000 == 0)
-    //updateCellsAndNeighbors();
+  if (shouldDeleteBubbles || integrationStep % 5000 == 0)
+    updateCellsAndNeighbors();
 
   bool continueSimulation = numBubbles > properties.getMinNumBubbles();
   continueSimulation &=
