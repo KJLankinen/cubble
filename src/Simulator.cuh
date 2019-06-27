@@ -3,12 +3,10 @@
 #pragma once
 
 #include "CubWrapper.h"
-#include "DeviceArray.h"
 #include "Env.h"
 #include "PinnedHostArray.h"
 #include "Util.h"
 #include "Vec.h"
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -70,7 +68,7 @@ private:
   double *dasai  = nullptr;
 
   Env properties;
-  std::shared_ptr<CubWrapper> cubWrapper;
+  CubWrapper cubWrapper;
 
   PinnedHostArray<int> pinnedInt;
   PinnedHostArray<double> pinnedDouble;

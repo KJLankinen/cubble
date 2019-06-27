@@ -25,14 +25,14 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     KERNEL_LAUNCH(calculateVolumes, kernelSize, 0, 0, ddps[(uint32_t)DDP::R],
                   ddps[(uint32_t)DDP::TEMP1], numBubbles);
 
-    return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+    return cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
                                                           ddps[(uint32_t)DDP::TEMP1], numBubbles);
   };
 
   properties = Env(inputFileName, outputFileName);
   properties.readParameters();
 
-  std::cout << "======\nSetup\n======" << std::endl;
+  std::cout << "\n=============\nSetup\n=============" << std::endl;
   {
     setup();
     saveSnapshotToFile();
@@ -66,7 +66,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     saveSnapshotToFile();
   }
 
-  std::cout << "=============\nStabilization\n=============" << std::endl;
+  std::cout << "\n=============\nStabilization\n=============" << std::endl;
   {
     int numSteps       = 0;
     const int failsafe = 500;
@@ -105,7 +105,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
     saveSnapshotToFile();
   }
 
-  std::cout << "==========\nSimulation\n==========" << std::endl;
+  std::cout << "=\n============\nSimulation\n=============" << std::endl;
   std::stringstream dataStream;
   {
     // Set starting positions and reset wrap counts to 0
@@ -140,7 +140,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                     interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
     }
 
-    energy1 = cubWrapper->reduce<double, double *, double *>(
+    energy1 = cubWrapper.reduce<double, double *, double *>(
       &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], numBubbles);
 
     // Start the simulation proper
@@ -176,7 +176,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                         ddps[(uint32_t)DDP::R], ddps[(uint32_t)DDP::TEMP4], interval.x, PBC_X == 1,
                         ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
 
-        energy2 = cubWrapper->reduce<double, double *, double *>(
+        energy2 = cubWrapper.reduce<double, double *, double *>(
           &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], numBubbles);
         const double dE = (energy2 - energy1) / energy2;
 
@@ -240,9 +240,6 @@ void Simulator::setup()
   dvec interval = properties.getTfr() - properties.getLbb();
   properties.setFlowTfr(interval * properties.getFlowTfr() + properties.getLbb());
   properties.setFlowLbb(interval * properties.getFlowLbb() + properties.getLbb());
-
-  // Initialize CUB
-  cubWrapper = std::make_shared<CubWrapper>(numBubbles * sizeof(double));
 
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize();
@@ -314,19 +311,19 @@ void Simulator::setup()
                 ddps[(uint32_t)DDP::RP], dips[(uint32_t)DIP::FLAGS], bubblesPerDim, tfr, lbb,
                 avgRad, properties.getMinRad(), numBubbles);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(
+  cubWrapper.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::RP], dasai, numBubbles, 0);
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[(uint32_t)DDP::RP]),
                             static_cast<void *>(ddps[(uint32_t)DDP::R]),
                             sizeof(double) * dataStride, cudaMemcpyDeviceToDevice, 0));
 
   // Delete small bubbles, if any
-  const int numBubblesAboveMinRad = cubWrapper->reduce<int, int *, int *>(
+  const int numBubblesAboveMinRad = cubWrapper.reduce<int, int *, int *>(
     &cub::DeviceReduce::Sum, dips[(uint32_t)DIP::FLAGS], numBubbles);
   if (numBubblesAboveMinRad < numBubbles)
     deleteSmallBubbles(numBubblesAboveMinRad);
 
-  maxBubbleRadius = cubWrapper->reduce<double, double *, double *>(
+  maxBubbleRadius = cubWrapper.reduce<double, double *, double *>(
     &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::R], numBubbles);
 
   updateCellsAndNeighbors();
@@ -440,7 +437,7 @@ double Simulator::stabilize()
                   ddps[(uint32_t)DDP::TEMP4], interval.x, PBC_X == 1, ddps[(uint32_t)DDP::X],
                   interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(
+  cubWrapper.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], dtfapr, numBubbles);
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]),
                             static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost,
@@ -521,7 +518,7 @@ double Simulator::stabilize()
                      dips[(uint32_t)DIP::WRAP_COUNT_YP], dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Error
-      error = cubWrapper->reduce<double, double *, double *>(
+      error = cubWrapper.reduce<double, double *, double *>(
         &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::ERROR], numBubbles);
 
       if (error < properties.getErrorTolerance() && timeStep < 0.1)
@@ -564,7 +561,7 @@ double Simulator::stabilize()
                   ddps[(uint32_t)DDP::TEMP4], interval.x, PBC_X == 1, ddps[(uint32_t)DDP::X],
                   interval.y, PBC_Y == 1, ddps[(uint32_t)DDP::Y]);
 
-  energy2 = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
+  energy2 = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
                                                            ddps[(uint32_t)DDP::TEMP4], numBubbles);
 
   return elapsedTime;
@@ -748,11 +745,11 @@ bool Simulator::integrate()
                   ddps[(uint32_t)DDP::RP], ddps[(uint32_t)DDP::TEMP1], ddps[(uint32_t)DDP::TEMP2],
                   ddps[(uint32_t)DDP::TEMP3]);
 
-    cubWrapper->reduceNoCopy<double, double *, double *>(
+    cubWrapper.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP1], dtfa, numBubbles, gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(
+    cubWrapper.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP2], dtfapr, numBubbles, gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(
+    cubWrapper.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP3], dta, numBubbles, gasExchangeStream);
 
     KERNEL_LAUNCH(finalRadiusChangeRateKernel, kernelSize, 0, gasExchangeStream,
@@ -769,10 +766,10 @@ bool Simulator::integrate()
     KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, kernelSize, 0, gasExchangeStream, numBubbles,
                   dips[(uint32_t)DIP::FLAGS], ddps[(uint32_t)DDP::RP], properties.getMinRad());
 
-    cubWrapper->reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, dips[(uint32_t)DIP::FLAGS],
+    cubWrapper.reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, dips[(uint32_t)DIP::FLAGS],
                                                 static_cast<int *>(mbpc), numBubbles,
                                                 gasExchangeStream);
-    cubWrapper->reduceNoCopy<double, double *, double *>(
+    cubWrapper.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::RP], static_cast<double *>(dtfa), numBubbles,
       gasExchangeStream);
 
@@ -782,7 +779,7 @@ bool Simulator::integrate()
                               cudaMemcpyDeviceToHost, gasExchangeStream));
 
     // Error
-    error = cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Max,
+    error = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Max,
                                                            ddps[(uint32_t)DDP::ERROR], numBubbles);
 
     if (error < properties.getErrorTolerance() && timeStep < 0.1)
@@ -854,14 +851,14 @@ void Simulator::updateCellsAndNeighbors()
                 ddps[(uint32_t)DDP::Y], ddps[(uint32_t)DDP::Z], cellIndices, bubbleIndices,
                 properties.getLbb(), properties.getTfr(), cellDim, numBubbles);
 
-  cubWrapper->sortPairs<int, int>(
+  cubWrapper.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(cellIndices), sortedCellIndices,
     const_cast<const int *>(bubbleIndices), sortedBubbleIndices, numBubbles);
 
-  cubWrapper->histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven, cellIndices,
+  cubWrapper.histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven, cellIndices,
                                               sizes, maxNumCells + 1, 0, maxNumCells, numBubbles);
 
-  cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, maxNumCells);
+  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, maxNumCells);
 
   KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, numBubbles, ReorganizeType::COPY_FROM_INDEX,
                 sortedBubbleIndices, sortedBubbleIndices, ddps[(uint32_t)DDP::X],
@@ -913,7 +910,7 @@ void Simulator::updateCellsAndNeighbors()
   CUDA_CALL(
     cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
   numPairs = pinnedInt.get()[0];
-  cubWrapper->sortPairs<int, int>(
+  cubWrapper.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(dips[(uint32_t)DIP::TEMP1]),
     dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(dips[(uint32_t)DIP::TEMP2]),
     dips[(uint32_t)DIP::PAIR2], numPairs);
@@ -928,11 +925,11 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
   KERNEL_LAUNCH(calculateRedistributedGasVolume, kernelSize, 0, 0, ddps[(uint32_t)DDP::TEMP1],
                 ddps[(uint32_t)DDP::R], dips[(uint32_t)DIP::FLAGS], numBubbles);
 
-  cubWrapper->reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum,
+  cubWrapper.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum,
                                                        ddps[(uint32_t)DDP::TEMP1], dtv, numBubbles);
 
   int *newIdx = dips[(uint32_t)DIP::TEMP1];
-  cubWrapper->scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, dips[(uint32_t)DIP::FLAGS], newIdx,
+  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, dips[(uint32_t)DIP::FLAGS], newIdx,
                                  numBubbles);
 
   KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, numBubbles,
@@ -994,7 +991,7 @@ void Simulator::transformPositions(bool normalize)
 
 double Simulator::getAverageProperty(double *p)
 {
-  return cubWrapper->reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, numBubbles) /
+  return cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, numBubbles) /
          numBubbles;
 }
 
@@ -1064,17 +1061,11 @@ void Simulator::reserveMemory()
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceInts), memReqI));
 
   for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
-  {
     dips[i]       = deviceInts + i * dataStride;
-    std::cout << "int " << i << std::endl;
-  }
 
   uint32_t j = 0;
   for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
-  {
     dips[i]       = dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * dataStride;
-    std::cout << "int " << i << std::endl;
-  }
 }
 
 void Simulator::startProfiling(bool start)
