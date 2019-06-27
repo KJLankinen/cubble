@@ -4,7 +4,6 @@
 
 #include "CubWrapper.h"
 #include "Env.h"
-#include "PinnedHostArray.h"
 #include "Util.h"
 #include "Vec.h"
 #include <utility>
@@ -70,12 +69,11 @@ private:
   Env properties;
   CubWrapper cubWrapper;
 
-  PinnedHostArray<int> pinnedInt;
-  PinnedHostArray<double> pinnedDouble;
-
   std::vector<double> hostData;
 
   // Device data
+  double *pinnedDoubles = nullptr;
+  int *pinnedInts       = nullptr;
   double *deviceDoubles = nullptr;
   int *deviceInts       = nullptr;
   uint32_t dataStride   = 0;

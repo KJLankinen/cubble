@@ -403,6 +403,8 @@ void Simulator::deinit()
 
   CUDA_CALL(cudaFree(static_cast<void *>(deviceDoubles)));
   CUDA_CALL(cudaFree(static_cast<void *>(deviceInts)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(pinnedInts)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(pinnedDoubles)));
 
   CUDA_CALL(cudaStreamDestroy(velocityStream));
   CUDA_CALL(cudaStreamDestroy(gasExchangeStream));
@@ -1038,8 +1040,8 @@ void Simulator::saveSnapshotToFile()
 void Simulator::reserveMemory()
 {
   // Reserve pinned memory
-  pinnedInt    = PinnedHostArray<int>(1);
-  pinnedDouble = PinnedHostArray<double>(3);
+  CUDA_ASSERT(cudaMallocHost(reinterpret_cast<void **>(&pinnedDoubles), 3 * sizeof(double)));
+  CUDA_ASSERT(cudaMallocHost(reinterpret_cast<void **>(&pinnedInts), 1 * sizeof(int)));
 
   // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp size.
   dataStride = numBubbles + !!(numBubbles % 32) * (32 - numBubbles % 32);
