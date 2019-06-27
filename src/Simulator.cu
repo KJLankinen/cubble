@@ -255,8 +255,9 @@ void Simulator::setup()
   else
     maxNumCells = maxNumCells * maxNumCells;
 
-  std::cout << "Morton numbers: " << maxNumCells << ", " << gridDim.x << ", " << gridDim.y << ", "
-            << gridDim.z << std::endl;
+  std::cout << "Maximum (theoretical) number of cells: " << maxNumCells
+            << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z
+            << std::endl;
 
   // Reserve memory for data
   reserveMemory();
