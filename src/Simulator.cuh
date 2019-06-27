@@ -135,7 +135,7 @@ private:
     NUM_VALUES
   };
 
-  std::array<double *, DDP::NUM_VALUES> ddps;
+  std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
 };
 
 enum class CellProperty
