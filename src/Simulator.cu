@@ -1052,7 +1052,7 @@ void Simulator::reserveMemory()
     ddps[i] = deviceDoubles + i * dataStride;
 
   // Integers
-  const uint32_t avgNumNeighbors = 4 * NUM_DIM;
+  const uint32_t avgNumNeighbors = 1 << (NUM_DIM + 1);
   pairStride                     = avgNumNeighbors * dataStride;
 
   memReqI =
