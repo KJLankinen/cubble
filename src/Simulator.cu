@@ -244,7 +244,7 @@ void Simulator::setup()
 
   // Reserve memory for data
   reserveMemory();
-  std::cout << "Memory requirement for double data: " << memReqD << " kt" << std::endl;
+  std::cout << "Memory requirement for double data: " << memReqD << " bytes" << std::endl;
 
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize();
@@ -943,7 +943,7 @@ void Simulator::deleteSmallBubbles(int numBubblesAboveMinRad)
     wrapMultipliers.getRowPtr(5));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(ddps[(uint32_t)DDP::X]),
-                            static_cast<void *>(ddps[(uint32_t)DDP::XP]), memReqD,
+                            static_cast<void *>(ddps[(uint32_t)DDP::XP]), memReqD / 2,
                             cudaMemcpyDeviceToDevice));
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(wrapMultipliers.getRowPtr(0)),
