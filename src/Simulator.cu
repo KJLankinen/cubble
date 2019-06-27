@@ -186,7 +186,7 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
                    << getAverageProperty(ddps[(uint32_t)DDP::DISTANCE]) << " " << dE << "\n";
 
         // Print some values
-        std::cout << scaledTime << "\t"
+        std::cout << (int)scaledTime << "\t"
                   << getVolumeOfBubbles() / properties.getSimulationBoxVolume() << "\t"
                   << relativeRadius << "\t" << numBubbles << "\t" << dE << "\t" << numSteps << "\t"
                   << (float)numPairs / numBubbles << std::endl;
