@@ -441,7 +441,7 @@ double Simulator::stabilize()
 
   cubWrapper.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::TEMP4], dtfapr, numBubbles);
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDouble.get()[1]),
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&pinnedDoubles[1]),
                             static_cast<void *>(dtfapr), sizeof(double), cudaMemcpyDeviceToHost,
                             0));
 
@@ -547,7 +547,7 @@ double Simulator::stabilize()
   }
 
   // Energy after stabilization
-  energy1 = pinnedDouble.get()[1];
+  energy1 = pinnedDoubles[1];
 
   KERNEL_LAUNCH(resetKernel, kernelSize, 0, 0, 0.0, numBubbles, ddps[(uint32_t)DDP::TEMP4]);
 
@@ -775,9 +775,9 @@ bool Simulator::integrate()
       &cub::DeviceReduce::Max, ddps[(uint32_t)DDP::RP], static_cast<double *>(dtfa), numBubbles,
       gasExchangeStream);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInt.get()), mbpc, sizeof(int),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedInts), mbpc, sizeof(int),
                               cudaMemcpyDeviceToHost, gasExchangeStream));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDouble.get()), dtfa, sizeof(double),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(pinnedDoubles), dtfa, sizeof(double),
                               cudaMemcpyDeviceToHost, gasExchangeStream));
 
     // Error
@@ -810,10 +810,10 @@ bool Simulator::integrate()
   properties.setTimeStep(timeStep);
   simulationTime += timeStep;
 
-  maxBubbleRadius = pinnedDouble.get()[0];
+  maxBubbleRadius = pinnedDoubles[0];
 
   // Delete & reorder
-  const int numBubblesAboveMinRad = pinnedInt.get()[0];
+  const int numBubblesAboveMinRad = pinnedInts[0];
   const bool shouldDeleteBubbles  = numBubblesAboveMinRad < numBubbles;
 
   if (shouldDeleteBubbles)
@@ -910,8 +910,8 @@ void Simulator::updateCellsAndNeighbors()
   }
 
   CUDA_CALL(
-    cudaMemcpy(static_cast<void *>(pinnedInt.get()), np, sizeof(int), cudaMemcpyDeviceToHost));
-  numPairs = pinnedInt.get()[0];
+    cudaMemcpy(static_cast<void *>(pinnedInts), np, sizeof(int), cudaMemcpyDeviceToHost));
+  numPairs = pinnedInts[0];
   cubWrapper.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(dips[(uint32_t)DIP::TEMP1]),
     dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(dips[(uint32_t)DIP::TEMP2]),
