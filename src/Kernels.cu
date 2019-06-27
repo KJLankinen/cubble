@@ -457,11 +457,11 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors, double *vel
 #endif
     inside = !!inside;
 
-    const double multiplier = (numNeighbors[i] > 0 ? (double)inside / numNeighbors[i] : 0.0);
-    velX[i] += multiplier * nVelX[i] + flowVel.x;
-    velY[i] += multiplier * nVelY[i] + flowVel.y;
+    const double multiplier = (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
+    velX[i] += multiplier * nVelX[i] + flowVel.x * inside;
+    velY[i] += multiplier * nVelY[i] + flowVel.y * inside;
 #if (NUM_DIM == 3)
-    velZ[i] += multiplier * nVelZ[i] + flowVel.z;
+    velZ[i] += multiplier * nVelZ[i] + flowVel.z * inside;
 #endif
   }
 }
