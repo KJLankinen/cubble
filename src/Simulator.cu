@@ -12,6 +12,13 @@
 #include <sstream>
 #include <vector>
 
+namespace cubble
+{
+struct SimulationState;
+enum class DIP;
+enum class DDP;
+} // namespace cubble
+
 namespace // anonymous
 {
 using namespace cubble;
