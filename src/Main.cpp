@@ -1,10 +1,8 @@
+#include "Util.h"
 #include <cuda.h>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
-
-//#include "Simulator.cuh"
-#include "Util.h"
 
 namespace cubble
 {

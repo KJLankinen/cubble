@@ -1,4 +1,3 @@
-//-*- C++ -*-
 #pragma once
 
 #define CUBBLE_XSTRINGIFY(s) CUBBLE_STRINGIFY(s)
@@ -37,8 +36,7 @@
 #define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
 #define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
 #define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
-#define KERNEL_LAUNCH(kernel, ...) \
-  cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
+#define KERNEL_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
 
 // Macro for device assert.
 #ifndef NDEBUG

@@ -1,5 +1,3 @@
-// -*- C++ -*-
-
 #pragma once
 
 #include "nlohmann/json.hpp"
@@ -86,8 +84,7 @@ public:
 private:
   void readWriteParameters(bool read)
   {
-    std::string msg = read ? "\nReading parameters from file " + inputFile
-                           : "\nSaving parameters to file " + saveFile;
+    std::string msg = read ? "\nReading parameters from file " + inputFile : "\nSaving parameters to file " + saveFile;
 
     std::cout << msg << std::endl;
     nlohmann::json params;
