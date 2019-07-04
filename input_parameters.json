@@ -6,10 +6,10 @@
   "kappa": 0.1,
 
   "numBubblesInExpl": "Total number of bubbles to simulate.",
-  "numBubblesIn": 1e5,
+  "numBubblesIn": 1e4,
 
   "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "minNumBubbles": 900,
+  "minNumBubbles": 300,
 
   "boxRelDimExpl": "The relative dimension of the box.",
   "boxRelDim": {

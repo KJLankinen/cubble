@@ -17,7 +17,7 @@ PBC_Z := 1
 # Use flow or not?
 # -----------------------------------------------------
 
-USE_FLOW := 1
+USE_FLOW := 0
 
 # -----------------------------------------------------
 # Directories
@@ -141,7 +141,7 @@ $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) ../input_parameters.json ../output_parameters.json
+	$(EXEC) ../input_parameters.json
 
 
 # -----------------------------------------------------

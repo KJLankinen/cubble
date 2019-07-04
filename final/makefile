@@ -2,7 +2,7 @@
 # How many dimensions to simulate.
 # -----------------------------------------------------
 
-NUM_DIM := 3
+NUM_DIM := 2
 
 
 # -----------------------------------------------------
@@ -158,7 +158,7 @@ $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 #-----------------------------------------------------
 .PHONY : run
 run : $(EXEC)
-	$(EXEC) ../input_parameters.json ../output_parameters.json
+	$(EXEC) ../input_parameters.json
 
 
 # -----------------------------------------------------
