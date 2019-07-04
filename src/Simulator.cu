@@ -525,7 +525,6 @@ void setup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   std::cout << "Starting to generate data for bubbles." << std::endl;
-  double timeStep        = params.inputs.timeStep;
   const int rngSeed      = params.inputs.rngSeed;
   const double avgRad    = params.inputs.avgRad;
   const double stdDevRad = params.inputs.stdDevRad;
@@ -548,7 +547,7 @@ void setup(Params &params)
                 params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                 params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::R],
                 params.state.ddps[(uint32_t)DDP::RP], params.state.dips[(uint32_t)DIP::FLAGS], bubblesPerDim,
-                params.state.tfr, lbb, avgRad, params.inputs.minRad, params.state.numBubbles);
+                params.state.tfr, params.state.lbb, avgRad, params.inputs.minRad, params.state.numBubbles);
 
   params.cw.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::RP],
                                                      params.state.dasai, params.state.numBubbles, 0);
@@ -585,7 +584,7 @@ void setup(Params &params)
                   PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO], interval.z,
                   lbb.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
 
-    KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+    KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO],
                   params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO],
                   params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
@@ -616,7 +615,7 @@ void setup(Params &params)
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
                   PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO]);
 
-    KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+    KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO],
                   params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO]);
 
@@ -1163,7 +1162,7 @@ void deinit(Params &params)
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
 }
 
-void getSimulationBoxVolume(Params &params)
+double getSimulationBoxVolume(Params &params)
 {
   dvec temp = params.state.tfr - params.state.lbb;
   return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
@@ -1171,7 +1170,7 @@ void getSimulationBoxVolume(Params &params)
 
 #define JSON_READ(i, j, arg) \
   i.arg = j[#arg];           \
-  std::cout << #arg << ": " << arg << std::endl
+  std::cout << #arg << ": " << i.arg << std::endl
 
 void readInputs(SimulationInputs &inputs, const char *inputFileName)
 {
@@ -1189,7 +1188,7 @@ void readInputs(SimulationInputs &inputs, const char *inputFileName)
     JSON_READ(inputs, j, avgRad);
     JSON_READ(inputs, j, stdDevRad);
     JSON_READ(inputs, j, errorTolerance);
-    JSON_READ(inputs, j, timeStep);
+    JSON_READ(inputs, j, timeStepIn);
     JSON_READ(inputs, j, rngSeed);
     JSON_READ(inputs, j, numBubblesPerCell);
     JSON_READ(inputs, j, snapshotFilename);
@@ -1291,7 +1290,7 @@ void run(const char *inputFileName)
       }
       else
       {
-        std::cout << (numSteps + 1) * params.inputs.mumStepsToRelax << "\t" << deltaEnergy << "\t"
+        std::cout << (numSteps + 1) * params.inputs.numStepsToRelax << "\t" << deltaEnergy << "\t"
                   << params.state.energy1 << "\t" << params.state.energy2 << std::endl;
       }
 

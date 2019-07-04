@@ -6,7 +6,7 @@
 
 namespace cubble
 {
-void run(const char *inputFileName, const char *outputFileName);
+void run(const char *inputFileName);
 }
 
 int main(int argc, char **argv)
