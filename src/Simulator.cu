@@ -81,6 +81,21 @@ void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX, bool d
                   interval.z, lbb.z, !doZ, z, dzdt);
   }
 }
+
+void startProfiling(bool start)
+{
+  if (start)
+    cudaProfilerStart();
+}
+
+void stopProfiling(bool stop, bool &continueIntegration)
+{
+  if (stop)
+  {
+    cudaProfilerStop();
+    continueIntegration = false;
+  }
+}
 } // namespace
 
 namespace cubble
@@ -153,8 +168,6 @@ void Simulator::setup()
 
   printRelevantInfoOfCurrentDevice();
 
-  pairKernelSize.block = dim3(128, 1, 1);
-  pairKernelSize.grid  = dim3(256, 1, 1);
   KernelSize kernelSize(128, numBubbles);
 
   std::cout << "Starting to generate data for bubbles." << std::endl;
@@ -809,11 +822,6 @@ void Simulator::transformPositions(bool normalize)
                 properties.getTfr(), ddps[(uint32_t)DDP::X], ddps[(uint32_t)DDP::Y], ddps[(uint32_t)DDP::Z]);
 }
 
-double Simulator::getAverageProperty(double *p)
-{
-  return cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, numBubbles) / numBubbles;
-}
-
 void Simulator::saveSnapshotToFile()
 {
   std::stringstream ss;
@@ -884,21 +892,6 @@ void Simulator::reserveMemory()
   uint32_t j = 0;
   for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
     dips[i] = dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * dataStride;
-}
-
-void Simulator::startProfiling(bool start)
-{
-  if (start)
-    cudaProfilerStart();
-}
-
-void Simulator::stopProfiling(bool stop, bool &continueIntegration)
-{
-  if (stop)
-  {
-    cudaProfilerStop();
-    continueIntegration = false;
-  }
 }
 
 void Simulator::run(const char *inputFileName, const char *outputFileName)
@@ -1058,10 +1051,18 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
         const double dE = (energy2 - energy1) / energy2;
 
         // Add values to data stream
-        double relativeRadius = getAverageProperty(ddps[(uint32_t)DDP::R]) / properties.getAvgRad();
+        const double averageRadius = return cubWrapper.reduce<double, double *, double *>(
+                                              &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::R], numBubbles) /
+                                            numBubbles;
+        const double averagePath = return cubWrapper.reduce<double, double *, double *>(
+                                            &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::PATH], numBubbles) /
+                                          numBubbles;
+        const double averageDistance = return cubWrapper.reduce<double, double *, double *>(
+                                                &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::DISTANCE], numBubbles) /
+                                              numBubbles;
+        const double relativeRadius = averageRadius / properties.getAvgRad();
         dataStream << scaledTime << " " << relativeRadius << " " << maxBubbleRadius / properties.getAvgRad() << " "
-                   << numBubbles << " " << getAverageProperty(ddps[(uint32_t)DDP::PATH]) << " "
-                   << getAverageProperty(ddps[(uint32_t)DDP::DISTANCE]) << " " << dE << "\n";
+                   << numBubbles << " " << averagePath << " " << averageDistance << " " << dE << "\n";
 
         // Print some values
         std::cout << (int)scaledTime << "\t" << getVolumeOfBubbles() / properties.getSimulationBoxVolume() << "\t"

@@ -21,10 +21,13 @@ struct KernelSize
 
   KernelSize() {}
 
-  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
+  KernelSize(dim3 grid, dim3 block)
+    : grid(grid)
+    , block(block)
   {
-    update(numThreadsPerBlock, numTotalThreads);
   }
+
+  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads) { update(numThreadsPerBlock, numTotalThreads); }
 
   void update(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
   {
@@ -63,17 +66,15 @@ inline void handleException(const std::exception_ptr pExc)
   }
 }
 
-inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file,
-                                        int line, std::basic_ostream<char> &outStream)
+inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line,
+                                        std::basic_ostream<char> &outStream)
 {
   outStream << "Cuda error encountered."
-            << "\n\tType: " << cudaGetErrorName(result)
-            << "\n\tDescription: " << cudaGetErrorString(result) << "\n\tLocation: " << file << ":"
-            << line << "\n\tCall: " << callStr << std::endl;
+            << "\n\tType: " << cudaGetErrorName(result) << "\n\tDescription: " << cudaGetErrorString(result)
+            << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr << std::endl;
 }
 
-inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file,
-                           int line) noexcept
+inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file, int line) noexcept
 {
   if (result != cudaSuccess)
   {
@@ -94,14 +95,13 @@ inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char
   }
 }
 
-inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file,
-                             int line) noexcept
+inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file, int line) noexcept
 {
   if (result != CURAND_STATUS_SUCCESS)
   {
     std::cerr << "Curand error encountered."
-              << "\n\tType: " << result << "\n\tLocation: " << file << ":" << line
-              << "\n\tCall: " << callStr << std::endl;
+              << "\n\tType: " << result << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr
+              << std::endl;
 
     return false;
   }
@@ -125,8 +125,7 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 #endif
 }
 
-inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes,
-                                bool abort = true)
+inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes, bool abort = true)
 {
 #ifndef NDEBUG
   int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
@@ -150,8 +149,8 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, int lin
 #endif
 }
 
-inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line,
-                                      dim3 blockSize, bool abort = true)
+inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 blockSize,
+                                      bool abort = true)
 {
 #ifndef NDEBUG
   dim3 temp;
@@ -179,8 +178,8 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, i
 #endif
 }
 
-inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line,
-                                     dim3 gridSize, bool abort = true)
+inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 gridSize,
+                                     bool abort = true)
 {
 #ifndef NDEBUG
   dim3 temp;
@@ -220,21 +219,19 @@ inline void printRelevantInfoOfCurrentDevice()
   std::cout << "\n----------Properties of current device----------"
             << "\n\n\tGeneral"
             << "\n\t-------"
-            << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major << "."
-            << prop.minor << "\n\n\tMemory"
+            << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major << "." << prop.minor
+            << "\n\n\tMemory"
             << "\n\t------"
             << "\n\tTotal global memory (bytes): " << prop.totalGlobalMem
             << "\n\tShared memory per block (bytes): " << prop.sharedMemPerBlock
             << "\n\tTotal constant memory (bytes): " << prop.totalConstMem
-            << "\n\tMaximum number of registers per block: " << prop.regsPerBlock
-            << "\n\n\tWarp, threads, blocks, grid"
+            << "\n\tMaximum number of registers per block: " << prop.regsPerBlock << "\n\n\tWarp, threads, blocks, grid"
             << "\n\t---------------------------"
             << "\n\tWarp size: " << prop.warpSize
-            << "\n\tMaximum number of threads per block: " << prop.maxThreadsPerBlock
-            << "\n\tMaximum block size: (" << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1]
-            << ", " << prop.maxThreadsDim[2] << ")"
-            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", " << prop.maxGridSize[1]
-            << ", " << prop.maxGridSize[2] << ")"
+            << "\n\tMaximum number of threads per block: " << prop.maxThreadsPerBlock << "\n\tMaximum block size: ("
+            << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1] << ", " << prop.maxThreadsDim[2] << ")"
+            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", "
+            << prop.maxGridSize[2] << ")"
             << "\n\tMultiprocessor count: " << prop.multiProcessorCount << "\n"
             << "\nIf you want more info, see " << __FILE__ << ":" << __LINE__
             << "\nand 'Device Management' section of the CUDA Runtime API docs."

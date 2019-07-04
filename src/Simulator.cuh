@@ -25,12 +25,9 @@ private:
   void updateCellsAndNeighbors();
   void deleteSmallBubbles(int numBubblesAboveMinRad);
   void transformPositions(bool normalize);
-  double getAverageProperty(double *p);
   dim3 getGridSize();
   void saveSnapshotToFile();
   void reserveMemory();
-  void startProfiling(bool start);
-  void stopProfiling(bool stop, bool &continueIntegration);
 
   double simulationTime  = 0.0;
   double energy1         = 0.0;
@@ -45,7 +42,7 @@ private:
   cudaStream_t velocityStream;
   cudaStream_t gasExchangeStream;
 
-  KernelSize pairKernelSize;
+  KernelSize pairKernelSize = KernelSize(dim3(256, 1, 1), dim3(128, 1, 1));
 
   // Host pointers to device global variables
   int *mbpc      = nullptr;
