@@ -6,7 +6,10 @@
 //#include "Simulator.cuh"
 #include "Util.h"
 
-void cubble::run(const char *inputFileName, const char *outputFileName);
+namespace cubble
+{
+void run(const char *inputFileName, const char *outputFileName);
+}
 
 int main(int argc, char **argv)
 {
