@@ -133,7 +133,7 @@ struct Params
 
   KernelSize pairKernelSize = KernelSize(dim3(256, 1, 1), dim3(128, 1, 1));
   KernelSize defaultKernelSize;
-}
+};
 
 } // namespace cubble
 
@@ -167,7 +167,7 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool
 
 void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX, bool doY, bool doZ, int numValues, int *first,
                     int *second, double *r, double *x, double *y, double *z, double *dxdt, double *dydt, double *dzdt,
-                    dvec lbb, dvec tfr, Env properties)
+                    dvec lbb, dvec tfr, Params &params)
 {
   dvec interval = tfr - lbb;
   if (doX && doY && doZ)
@@ -709,7 +709,7 @@ double stabilize(Params &params)
                        params.state.ddps[(uint32_t)DDP::RP], params.state.ddps[(uint32_t)DDP::XP],
                        params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP],
                        params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, properties);
+                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, params);
 
         KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
                       params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
@@ -744,7 +744,7 @@ double stabilize(Params &params)
                        params.state.ddps[(uint32_t)DDP::RP], params.state.ddps[(uint32_t)DDP::XP],
                        params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP],
                        params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, properties);
+                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, params);
 
         KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
                       params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
@@ -862,7 +862,7 @@ bool integrate(Params &params)
                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                      params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DXDTP],
                      params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
-                     properties);
+                     params);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -952,7 +952,7 @@ bool integrate(Params &params)
                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                      params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DXDTP],
                      params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
-                     properties);
+                     params);
 
       // Flow velocity
       if (USE_FLOW == 1)
