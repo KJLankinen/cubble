@@ -131,6 +131,154 @@ void reserveMemory(SimulationState &state)
     state.dips[i] = state.dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * state.dataStride;
 }
 
+dim3 getGridSize(SimulationState &state, Env &properties)
+{
+  const int totalNumCells = std::ceil((float)state.numBubbles / properties.getNumBubblesPerCell());
+  dvec interval           = properties.getTfr() - properties.getLbb();
+  interval                = interval / interval.x;
+  float nx                = (float)totalNumCells / interval.y;
+  if (NUM_DIM == 3)
+    nx = std::cbrt(nx / interval.z);
+  else
+  {
+    nx         = std::sqrt(nx);
+    interval.z = 0;
+  }
+
+  ivec grid = (nx * interval).floor() + 1;
+  assert(grid.x > 0);
+  assert(grid.y > 0);
+  assert(grid.z > 0);
+
+  return dim3(grid.x, grid.y, grid.z);
+}
+
+void updateCellsAndNeighbors(SimulationState &state, Env &properties)
+{
+  dim3 gridSize = getGridSize(state, properties);
+  const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
+
+  int *offsets             = state.dips[(uint32_t)DIP::PAIR1];
+  int *sizes               = state.dips[(uint32_t)DIP::PAIR1] + state.maxNumCells;
+  int *cellIndices         = state.dips[(uint32_t)DIP::TEMP1] + 0 * state.dataStride;
+  int *bubbleIndices       = state.dips[(uint32_t)DIP::TEMP1] + 1 * state.dataStride;
+  int *sortedCellIndices   = state.dips[(uint32_t)DIP::TEMP1] + 2 * state.dataStride;
+  int *sortedBubbleIndices = state.dips[(uint32_t)DIP::TEMP1] + 3 * state.dataStride;
+
+  const size_t resetBytes = sizeof(int) * state.pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
+  CUDA_CALL(cudaMemset(state.dips[(uint32_t)DIP::PAIR1], 0, resetBytes));
+
+  KernelSize kernelSize(128, state.numBubbles);
+
+  KERNEL_LAUNCH(assignBubblesToCells, state.pairKernelSize, 0, 0, state.ddps[(uint32_t)DDP::X],
+                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::Z], cellIndices, bubbleIndices,
+                properties.getLbb(), properties.getTfr(), cellDim, state.numBubbles);
+
+  cubWrapper.sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs, const_cast<const int *>(cellIndices),
+                                 sortedCellIndices, const_cast<const int *>(bubbleIndices), sortedBubbleIndices,
+                                 state.numBubbles);
+
+  cubWrapper.histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven, cellIndices, sizes,
+                                             state.maxNumCells + 1, 0, state.maxNumCells, state.numBubbles);
+
+  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, state.maxNumCells);
+
+  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
+                sortedBubbleIndices, sortedBubbleIndices, state.ddps[(uint32_t)DDP::X], state.ddps[(uint32_t)DDP::XP],
+                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::Z],
+                state.ddps[(uint32_t)DDP::ZP], state.ddps[(uint32_t)DDP::R], state.ddps[(uint32_t)DDP::RP],
+                state.ddps[(uint32_t)DDP::DXDT], state.ddps[(uint32_t)DDP::DXDTP], state.ddps[(uint32_t)DDP::DYDT],
+                state.ddps[(uint32_t)DDP::DYDTP], state.ddps[(uint32_t)DDP::DZDT], state.ddps[(uint32_t)DDP::DZDTP],
+                state.ddps[(uint32_t)DDP::DRDT], state.ddps[(uint32_t)DDP::DRDTP], state.ddps[(uint32_t)DDP::DXDTO],
+                state.ddps[(uint32_t)DDP::ERROR], state.ddps[(uint32_t)DDP::DYDTO], state.ddps[(uint32_t)DDP::TEMP1],
+                state.ddps[(uint32_t)DDP::DZDTO], state.ddps[(uint32_t)DDP::TEMP2], state.ddps[(uint32_t)DDP::DRDTO],
+                state.ddps[(uint32_t)DDP::TEMP3], state.ddps[(uint32_t)DDP::X0], state.ddps[(uint32_t)DDP::TEMP4],
+                state.ddps[(uint32_t)DDP::Y0], state.ddps[(uint32_t)DDP::TEMP5], state.ddps[(uint32_t)DDP::Z0],
+                state.ddps[(uint32_t)DDP::TEMP6], state.ddps[(uint32_t)DDP::PATH], state.ddps[(uint32_t)DDP::TEMP7],
+                state.ddps[(uint32_t)DDP::DISTANCE], state.ddps[(uint32_t)DDP::TEMP8],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_X], state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_Y], state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_Z], state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(state.ddps[(uint32_t)DDP::X]),
+                            static_cast<void *>(state.ddps[(uint32_t)DDP::XP]), state.memReqD / 2,
+                            cudaMemcpyDeviceToDevice));
+
+  dvec interval = properties.getTfr() - properties.getLbb();
+
+  kernelSize.block = dim3(128, 1, 1);
+  kernelSize.grid  = gridSize;
+
+  CUDA_CALL(cudaMemset(state.np, 0, sizeof(int)));
+
+  const double maxDistance = 1.5 * state.maxBubbleRadius;
+
+  for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
+  {
+    cudaStream_t stream = (i % 2) ? state.velocityStream : state.gasExchangeStream;
+    if (NUM_DIM == 3)
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
+                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
+                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
+                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y], interval.z, PBC_Z == 1, state.ddps[(uint32_t)DDP::Z]);
+    else
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
+                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
+                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
+                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y]);
+  }
+
+  CUDA_CALL(cudaMemcpy(static_cast<void *>(state.pinnedInts), state.np, sizeof(int), cudaMemcpyDeviceToHost));
+  state.numPairs = state.pinnedInts[0];
+  cubWrapper.sortPairs<int, int>(
+    &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(state.dips[(uint32_t)DIP::TEMP1]),
+    state.dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(state.dips[(uint32_t)DIP::TEMP2]),
+    state.dips[(uint32_t)DIP::PAIR2], state.numPairs);
+}
+
+void deleteSmallBubbles(SimulationState &state, CubWrapper &cubWrapper, int numBubblesAboveMinRad)
+{
+  NVTX_RANGE_PUSH_A("BubbleRemoval");
+  KernelSize kernelSize(128, state.numBubbles);
+
+  CUDA_CALL(cudaMemset(static_cast<void *>(state.dvm), 0, sizeof(double)));
+  KERNEL_LAUNCH(calculateRedistributedGasVolume, kernelSize, 0, 0, state.ddps[(uint32_t)DDP::TEMP1],
+                state.ddps[(uint32_t)DDP::R], state.dips[(uint32_t)DIP::FLAGS], state.numBubbles);
+
+  cubWrapper.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, state.ddps[(uint32_t)DDP::TEMP1],
+                                                      state.dtv, state.numBubbles);
+
+  int *newIdx = state.dips[(uint32_t)DIP::TEMP1];
+  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, state.dips[(uint32_t)DIP::FLAGS], newIdx,
+                                state.numBubbles);
+
+  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, state.numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
+                state.dips[(uint32_t)DIP::FLAGS], state.ddps[(uint32_t)DDP::X], state.ddps[(uint32_t)DDP::XP],
+                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::Z],
+                state.ddps[(uint32_t)DDP::ZP], state.ddps[(uint32_t)DDP::R], state.ddps[(uint32_t)DDP::RP],
+                state.ddps[(uint32_t)DDP::DXDT], state.ddps[(uint32_t)DDP::DXDTP], state.ddps[(uint32_t)DDP::DYDT],
+                state.ddps[(uint32_t)DDP::DYDTP], state.ddps[(uint32_t)DDP::DZDT], state.ddps[(uint32_t)DDP::DZDTP],
+                state.ddps[(uint32_t)DDP::DRDT], state.ddps[(uint32_t)DDP::DRDTP], state.ddps[(uint32_t)DDP::DXDTO],
+                state.ddps[(uint32_t)DDP::ERROR], state.ddps[(uint32_t)DDP::DYDTO], state.ddps[(uint32_t)DDP::TEMP1],
+                state.ddps[(uint32_t)DDP::DZDTO], state.ddps[(uint32_t)DDP::TEMP2], state.ddps[(uint32_t)DDP::DRDTO],
+                state.ddps[(uint32_t)DDP::TEMP3], state.ddps[(uint32_t)DDP::X0], state.ddps[(uint32_t)DDP::TEMP4],
+                state.ddps[(uint32_t)DDP::Y0], state.ddps[(uint32_t)DDP::TEMP5], state.ddps[(uint32_t)DDP::Z0],
+                state.ddps[(uint32_t)DDP::TEMP6], state.ddps[(uint32_t)DDP::PATH], state.ddps[(uint32_t)DDP::TEMP7],
+                state.ddps[(uint32_t)DDP::DISTANCE], state.ddps[(uint32_t)DDP::TEMP8],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_X], state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_Y], state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+                state.dips[(uint32_t)DIP::WRAP_COUNT_Z], state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+
+  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(state.ddps[(uint32_t)DDP::X]),
+                            static_cast<void *>(state.ddps[(uint32_t)DDP::XP]), state.memReqD / 2,
+                            cudaMemcpyDeviceToDevice));
+
+  state.numBubbles = numBubblesAboveMinRad;
+  KERNEL_LAUNCH(addVolume, kernelSize, 0, 0, state.ddps[(uint32_t)DDP::R], state.numBubbles);
+
+  NVTX_RANGE_POP();
+}
+
 void setup(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
 {
   // First calculate the size of the box and the starting number of bubbles
@@ -307,20 +455,44 @@ void setup(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
   }
 }
 
-void deinit(SimulationState &state, Env &properties)
+void saveSnapshotToFile(SimulationState &state, Env &properties)
 {
-  saveSnapshotToFile(state, properties);
-  properties.writeParameters();
+  std::stringstream ss;
+  ss << properties.getSnapshotFilename() << ".csv." << state.numSnapshots;
+  std::ofstream file(ss.str().c_str(), std::ios::out);
+  if (file.is_open())
+  {
+    std::vector<double> hostData;
+    const size_t numComp = 17;
+    hostData.resize(state.dataStride * numComp);
+    CUDA_CALL(cudaMemcpy(hostData.data(), state.deviceDoubles, sizeof(double) * numComp * state.dataStride,
+                         cudaMemcpyDeviceToHost));
 
-  CUDA_CALL(cudaDeviceSynchronize());
+    file << "x,y,z,r,vx,vy,vz,path,dist\n";
+    for (size_t i = 0; i < (size_t)state.numBubbles; ++i)
+    {
+      file << hostData[i + 0 * state.dataStride];
+      file << ",";
+      file << hostData[i + 1 * state.dataStride];
+      file << ",";
+      file << hostData[i + 2 * state.dataStride];
+      file << ",";
+      file << hostData[i + 3 * state.dataStride];
+      file << ",";
+      file << hostData[i + 4 * state.dataStride];
+      file << ",";
+      file << hostData[i + 5 * state.dataStride];
+      file << ",";
+      file << hostData[i + 6 * state.dataStride];
+      file << ",";
+      file << hostData[i + 15 * state.dataStride];
+      file << ",";
+      file << hostData[i + 16 * state.dataStride];
+      file << "\n";
+    }
 
-  CUDA_CALL(cudaFree(static_cast<void *>(state.deviceDoubles)));
-  CUDA_CALL(cudaFree(static_cast<void *>(state.deviceInts)));
-  CUDA_CALL(cudaFreeHost(static_cast<void *>(state.pinnedInts)));
-  CUDA_CALL(cudaFreeHost(static_cast<void *>(state.pinnedDoubles)));
-
-  CUDA_CALL(cudaStreamDestroy(state.velocityStream));
-  CUDA_CALL(cudaStreamDestroy(state.gasExchangeStream));
+    ++state.numSnapshots;
+  }
 }
 
 double stabilize(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
@@ -733,154 +905,6 @@ bool integrate(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
   return continueSimulation;
 }
 
-void updateCellsAndNeighbors(SimulationState &state, Env &properties)
-{
-  dim3 gridSize = getGridSize(state, properties);
-  const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
-
-  int *offsets             = state.dips[(uint32_t)DIP::PAIR1];
-  int *sizes               = state.dips[(uint32_t)DIP::PAIR1] + state.maxNumCells;
-  int *cellIndices         = state.dips[(uint32_t)DIP::TEMP1] + 0 * state.dataStride;
-  int *bubbleIndices       = state.dips[(uint32_t)DIP::TEMP1] + 1 * state.dataStride;
-  int *sortedCellIndices   = state.dips[(uint32_t)DIP::TEMP1] + 2 * state.dataStride;
-  int *sortedBubbleIndices = state.dips[(uint32_t)DIP::TEMP1] + 3 * state.dataStride;
-
-  const size_t resetBytes = sizeof(int) * state.pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
-  CUDA_CALL(cudaMemset(state.dips[(uint32_t)DIP::PAIR1], 0, resetBytes));
-
-  KernelSize kernelSize(128, state.numBubbles);
-
-  KERNEL_LAUNCH(assignBubblesToCells, state.pairKernelSize, 0, 0, state.ddps[(uint32_t)DDP::X],
-                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::Z], cellIndices, bubbleIndices,
-                properties.getLbb(), properties.getTfr(), cellDim, state.numBubbles);
-
-  cubWrapper.sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs, const_cast<const int *>(cellIndices),
-                                 sortedCellIndices, const_cast<const int *>(bubbleIndices), sortedBubbleIndices,
-                                 state.numBubbles);
-
-  cubWrapper.histogram<int *, int, int, int>(&cub::DeviceHistogram::HistogramEven, cellIndices, sizes,
-                                             state.maxNumCells + 1, 0, state.maxNumCells, state.numBubbles);
-
-  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets, state.maxNumCells);
-
-  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
-                sortedBubbleIndices, sortedBubbleIndices, state.ddps[(uint32_t)DDP::X], state.ddps[(uint32_t)DDP::XP],
-                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::Z],
-                state.ddps[(uint32_t)DDP::ZP], state.ddps[(uint32_t)DDP::R], state.ddps[(uint32_t)DDP::RP],
-                state.ddps[(uint32_t)DDP::DXDT], state.ddps[(uint32_t)DDP::DXDTP], state.ddps[(uint32_t)DDP::DYDT],
-                state.ddps[(uint32_t)DDP::DYDTP], state.ddps[(uint32_t)DDP::DZDT], state.ddps[(uint32_t)DDP::DZDTP],
-                state.ddps[(uint32_t)DDP::DRDT], state.ddps[(uint32_t)DDP::DRDTP], state.ddps[(uint32_t)DDP::DXDTO],
-                state.ddps[(uint32_t)DDP::ERROR], state.ddps[(uint32_t)DDP::DYDTO], state.ddps[(uint32_t)DDP::TEMP1],
-                state.ddps[(uint32_t)DDP::DZDTO], state.ddps[(uint32_t)DDP::TEMP2], state.ddps[(uint32_t)DDP::DRDTO],
-                state.ddps[(uint32_t)DDP::TEMP3], state.ddps[(uint32_t)DDP::X0], state.ddps[(uint32_t)DDP::TEMP4],
-                state.ddps[(uint32_t)DDP::Y0], state.ddps[(uint32_t)DDP::TEMP5], state.ddps[(uint32_t)DDP::Z0],
-                state.ddps[(uint32_t)DDP::TEMP6], state.ddps[(uint32_t)DDP::PATH], state.ddps[(uint32_t)DDP::TEMP7],
-                state.ddps[(uint32_t)DDP::DISTANCE], state.ddps[(uint32_t)DDP::TEMP8],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_X], state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_Y], state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_Z], state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
-
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(state.ddps[(uint32_t)DDP::X]),
-                            static_cast<void *>(state.ddps[(uint32_t)DDP::XP]), state.memReqD / 2,
-                            cudaMemcpyDeviceToDevice));
-
-  dvec interval = properties.getTfr() - properties.getLbb();
-
-  kernelSize.block = dim3(128, 1, 1);
-  kernelSize.grid  = gridSize;
-
-  CUDA_CALL(cudaMemset(state.np, 0, sizeof(int)));
-
-  const double maxDistance = 1.5 * state.maxBubbleRadius;
-
-  for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i)
-  {
-    cudaStream_t stream = (i % 2) ? state.velocityStream : state.gasExchangeStream;
-    if (NUM_DIM == 3)
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
-                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
-                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
-                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y], interval.z, PBC_Z == 1, state.ddps[(uint32_t)DDP::Z]);
-    else
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
-                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
-                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
-                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y]);
-  }
-
-  CUDA_CALL(cudaMemcpy(static_cast<void *>(state.pinnedInts), state.np, sizeof(int), cudaMemcpyDeviceToHost));
-  state.numPairs = state.pinnedInts[0];
-  cubWrapper.sortPairs<int, int>(
-    &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(state.dips[(uint32_t)DIP::TEMP1]),
-    state.dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(state.dips[(uint32_t)DIP::TEMP2]),
-    state.dips[(uint32_t)DIP::PAIR2], state.numPairs);
-}
-
-void deleteSmallBubbles(SimulationState &state, CubWrapper &cubWrapper, int numBubblesAboveMinRad)
-{
-  NVTX_RANGE_PUSH_A("BubbleRemoval");
-  KernelSize kernelSize(128, state.numBubbles);
-
-  CUDA_CALL(cudaMemset(static_cast<void *>(state.dvm), 0, sizeof(double)));
-  KERNEL_LAUNCH(calculateRedistributedGasVolume, kernelSize, 0, 0, state.ddps[(uint32_t)DDP::TEMP1],
-                state.ddps[(uint32_t)DDP::R], state.dips[(uint32_t)DIP::FLAGS], state.numBubbles);
-
-  cubWrapper.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, state.ddps[(uint32_t)DDP::TEMP1],
-                                                      state.dtv, state.numBubbles);
-
-  int *newIdx = state.dips[(uint32_t)DIP::TEMP1];
-  cubWrapper.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, state.dips[(uint32_t)DIP::FLAGS], newIdx,
-                                state.numBubbles);
-
-  KERNEL_LAUNCH(reorganizeKernel, kernelSize, 0, 0, state.numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
-                state.dips[(uint32_t)DIP::FLAGS], state.ddps[(uint32_t)DDP::X], state.ddps[(uint32_t)DDP::XP],
-                state.ddps[(uint32_t)DDP::Y], state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::Z],
-                state.ddps[(uint32_t)DDP::ZP], state.ddps[(uint32_t)DDP::R], state.ddps[(uint32_t)DDP::RP],
-                state.ddps[(uint32_t)DDP::DXDT], state.ddps[(uint32_t)DDP::DXDTP], state.ddps[(uint32_t)DDP::DYDT],
-                state.ddps[(uint32_t)DDP::DYDTP], state.ddps[(uint32_t)DDP::DZDT], state.ddps[(uint32_t)DDP::DZDTP],
-                state.ddps[(uint32_t)DDP::DRDT], state.ddps[(uint32_t)DDP::DRDTP], state.ddps[(uint32_t)DDP::DXDTO],
-                state.ddps[(uint32_t)DDP::ERROR], state.ddps[(uint32_t)DDP::DYDTO], state.ddps[(uint32_t)DDP::TEMP1],
-                state.ddps[(uint32_t)DDP::DZDTO], state.ddps[(uint32_t)DDP::TEMP2], state.ddps[(uint32_t)DDP::DRDTO],
-                state.ddps[(uint32_t)DDP::TEMP3], state.ddps[(uint32_t)DDP::X0], state.ddps[(uint32_t)DDP::TEMP4],
-                state.ddps[(uint32_t)DDP::Y0], state.ddps[(uint32_t)DDP::TEMP5], state.ddps[(uint32_t)DDP::Z0],
-                state.ddps[(uint32_t)DDP::TEMP6], state.ddps[(uint32_t)DDP::PATH], state.ddps[(uint32_t)DDP::TEMP7],
-                state.ddps[(uint32_t)DDP::DISTANCE], state.ddps[(uint32_t)DDP::TEMP8],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_X], state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_Y], state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                state.dips[(uint32_t)DIP::WRAP_COUNT_Z], state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
-
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(state.ddps[(uint32_t)DDP::X]),
-                            static_cast<void *>(state.ddps[(uint32_t)DDP::XP]), state.memReqD / 2,
-                            cudaMemcpyDeviceToDevice));
-
-  state.numBubbles = numBubblesAboveMinRad;
-  KERNEL_LAUNCH(addVolume, kernelSize, 0, 0, state.ddps[(uint32_t)DDP::R], state.numBubbles);
-
-  NVTX_RANGE_POP();
-}
-
-dim3 getGridSize(SimulationState &state, Env &properties)
-{
-  const int totalNumCells = std::ceil((float)state.numBubbles / properties.getNumBubblesPerCell());
-  dvec interval           = properties.getTfr() - properties.getLbb();
-  interval                = interval / interval.x;
-  float nx                = (float)totalNumCells / interval.y;
-  if (NUM_DIM == 3)
-    nx = std::cbrt(nx / interval.z);
-  else
-  {
-    nx         = std::sqrt(nx);
-    interval.z = 0;
-  }
-
-  ivec grid = (nx * interval).floor() + 1;
-  assert(grid.x > 0);
-  assert(grid.y > 0);
-  assert(grid.z > 0);
-
-  return dim3(grid.x, grid.y, grid.z);
-}
-
 void transformPositions(SimulationState &state, Env &properties, bool normalize)
 {
   KERNEL_LAUNCH(transformPositionsKernel, state.pairKernelSize, 0, 0, normalize, state.numBubbles, properties.getLbb(),
@@ -899,48 +923,26 @@ void calculateVolumeOfBubbles(SimulationState &state, CubWrapper &cubWrapper)
                                                        state.numBubbles);
 }
 
-void saveSnapshotToFile(SimulationState &state, Env &properties)
+void deinit(SimulationState &state, Env &properties)
 {
-  std::stringstream ss;
-  ss << properties.getSnapshotFilename() << ".csv." << state.numSnapshots;
-  std::ofstream file(ss.str().c_str(), std::ios::out);
-  if (file.is_open())
-  {
-    std::vector<double> hostData;
-    const size_t numComp = 17;
-    hostData.resize(state.dataStride * numComp);
-    CUDA_CALL(cudaMemcpy(hostData.data(), state.deviceDoubles, sizeof(double) * numComp * state.dataStride,
-                         cudaMemcpyDeviceToHost));
+  saveSnapshotToFile(state, properties);
+  properties.writeParameters();
 
-    file << "x,y,z,r,vx,vy,vz,path,dist\n";
-    for (size_t i = 0; i < (size_t)state.numBubbles; ++i)
-    {
-      file << hostData[i + 0 * state.dataStride];
-      file << ",";
-      file << hostData[i + 1 * state.dataStride];
-      file << ",";
-      file << hostData[i + 2 * state.dataStride];
-      file << ",";
-      file << hostData[i + 3 * state.dataStride];
-      file << ",";
-      file << hostData[i + 4 * state.dataStride];
-      file << ",";
-      file << hostData[i + 5 * state.dataStride];
-      file << ",";
-      file << hostData[i + 6 * state.dataStride];
-      file << ",";
-      file << hostData[i + 15 * state.dataStride];
-      file << ",";
-      file << hostData[i + 16 * state.dataStride];
-      file << "\n";
-    }
+  CUDA_CALL(cudaDeviceSynchronize());
 
-    ++state.numSnapshots;
-  }
+  CUDA_CALL(cudaFree(static_cast<void *>(state.deviceDoubles)));
+  CUDA_CALL(cudaFree(static_cast<void *>(state.deviceInts)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(state.pinnedInts)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(state.pinnedDoubles)));
+
+  CUDA_CALL(cudaStreamDestroy(state.velocityStream));
+  CUDA_CALL(cudaStreamDestroy(state.gasExchangeStream));
 }
 } // namespace
 
-void cubble::run(const char *inputFileName, const char *outputFileName)
+namespace cubble
+{
+void run(const char *inputFileName, const char *outputFileName)
 {
   CubWrapper cubWrapper;
   SimulationState state;
@@ -1135,3 +1137,4 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
 
   deinit(state, properties);
 }
+} // namespace cubble
