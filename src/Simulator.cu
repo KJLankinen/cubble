@@ -579,10 +579,11 @@ void setup(Params &params)
   {
     KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                  params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
-                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
-                  PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO], interval.z,
-                  lbb.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
+                  params.state.ddps[(uint32_t)DDP::R], interval.x, params.state.lbb.x, PBC_X == 1,
+                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y,
+                  params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y],
+                  params.state.ddps[(uint32_t)DDP::DYDTO], interval.z, params.state.lbb.z, PBC_Z == 1,
+                  params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
 
     KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO],
@@ -591,7 +592,7 @@ void setup(Params &params)
 
     doBoundaryWrap(params.defaultKernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, params.state.numBubbles,
                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                   params.state.ddps[(uint32_t)DDP::ZP], lbb, params.state.tfr,
+                   params.state.ddps[(uint32_t)DDP::ZP], params.state.lbb, params.state.tfr,
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
@@ -602,18 +603,20 @@ void setup(Params &params)
 
     KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                  params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
-                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
-                  PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO], interval.z,
-                  lbb.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
+                  params.state.ddps[(uint32_t)DDP::R], interval.x, params.state.lbb.x, PBC_X == 1,
+                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y,
+                  params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y],
+                  params.state.ddps[(uint32_t)DDP::DYDTO], interval.z, params.state.lbb.z, PBC_Z == 1,
+                  params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDTO]);
   }
   else
   {
     KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                  params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
-                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
-                  PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO]);
+                  params.state.ddps[(uint32_t)DDP::R], interval.x, params.state.lbb.x, PBC_X == 1,
+                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y,
+                  params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y],
+                  params.state.ddps[(uint32_t)DDP::DYDTO]);
 
     KERNEL_LAUNCH(eulerKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO],
@@ -621,7 +624,7 @@ void setup(Params &params)
 
     doBoundaryWrap(params.defaultKernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, false, params.state.numBubbles,
                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                   params.state.ddps[(uint32_t)DDP::ZP], lbb, params.state.tfr,
+                   params.state.ddps[(uint32_t)DDP::ZP], params.state.lbb, params.state.tfr,
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
                    params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
@@ -632,9 +635,10 @@ void setup(Params &params)
 
     KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                  params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
-                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
-                  PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDTO]);
+                  params.state.ddps[(uint32_t)DDP::R], interval.x, params.state.lbb.x, PBC_X == 1,
+                  params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y,
+                  params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y],
+                  params.state.ddps[(uint32_t)DDP::DYDTO]);
   }
 }
 
@@ -1204,15 +1208,15 @@ void readInputs(SimulationInputs &inputs, const char *inputFileName)
     JSON_READ(inputs, j, flowTfr);
     JSON_READ(inputs, j, flowVel);
 
-    assert(muZero > 0);
-    assert(boxRelDim.x > 0);
-    assert(boxRelDim.y > 0);
-    assert(boxRelDim.z > 0);
+    assert(inputs.muZero > 0);
+    assert(inputs.boxRelDim.x > 0);
+    assert(inputs.boxRelDim.y > 0);
+    assert(inputs.boxRelDim.z > 0);
 
-    fZeroPerMuZero    = sigmaZero * avgRad / muZero;
-    minRad            = 0.1 * avgRad;
-    timeScalingFactor = kParameter / (avgRad * avgRad);
-    flowVel *= fZeroPerMuZero;
+    inputs.fZeroPerMuZero    = inputs.sigmaZero * inputs.avgRad / inputs.muZero;
+    inputs.minRad            = 0.1 * inputs.avgRad;
+    inputs.timeScalingFactor = inputs.kParameter / (inputs.avgRad * inputs.avgRad);
+    inputs.flowVel *= inputs.fZeroPerMuZero;
   }
   else
     throw std::runtime_error("Couldn't open input file!");
