@@ -1,5 +1,7 @@
 // -*- C++ -*-
 
+#include "CubWrapper.h"
+#include "Env.h"
 #include "Kernels.cuh"
 #include "Macros.h"
 #include "Simulator.cuh"
@@ -129,7 +131,7 @@ void reserveMemory(SimulationState &state)
     state.dips[i] = state.dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * state.dataStride;
 }
 
-void setup(SimulationState &state, Env &properties)
+void setup(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
 {
   // First calculate the size of the box and the starting number of bubbles
   dvec relDim        = properties.getBoxRelativeDimensions();
@@ -237,7 +239,7 @@ void setup(SimulationState &state, Env &properties)
   const int numBubblesAboveMinRad =
     cubWrapper.reduce<int, int *, int *>(&cub::DeviceReduce::Sum, state.dips[(uint32_t)DIP::FLAGS], state.numBubbles);
   if (numBubblesAboveMinRad < state.numBubbles)
-    deleteSmallBubbles(state, numBubblesAboveMinRad);
+    deleteSmallBubbles(state, cubWrapper, numBubblesAboveMinRad);
 
   state.maxBubbleRadius = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Max,
                                                                         state.ddps[(uint32_t)DDP::R], state.numBubbles);
@@ -321,7 +323,7 @@ void deinit(SimulationState &state, Env &properties)
   CUDA_CALL(cudaStreamDestroy(state.gasExchangeStream));
 }
 
-double stabilize(SimulationState &state, Env &properties)
+double stabilize(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
 {
   // This function integrates only the positions of the bubbles.
   // Gas exchange is not used. This is used for equilibrating the foam.
@@ -472,7 +474,7 @@ double stabilize(SimulationState &state, Env &properties)
   return elapsedTime;
 }
 
-bool integrate(SimulationState &state, Env &properties)
+bool integrate(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
 {
   NVTX_RANGE_PUSH_A("Integration function");
   KernelSize kernelSize(128, state.numBubbles);
@@ -718,7 +720,7 @@ bool integrate(SimulationState &state, Env &properties)
   const bool shouldDeleteBubbles  = numBubblesAboveMinRad < state.numBubbles;
 
   if (shouldDeleteBubbles)
-    deleteSmallBubbles(state, numBubblesAboveMinRad);
+    deleteSmallBubbles(state, cubWrapper, numBubblesAboveMinRad);
 
   if (shouldDeleteBubbles || state.integrationStep % 5000 == 0)
     updateCellsAndNeighbors(state, properties);
@@ -814,7 +816,7 @@ void updateCellsAndNeighbors(SimulationState &state, Env &properties)
     state.dips[(uint32_t)DIP::PAIR2], state.numPairs);
 }
 
-void deleteSmallBubbles(SimulationState &state, int numBubblesAboveMinRad)
+void deleteSmallBubbles(SimulationState &state, CubWrapper &cubWrapper, int numBubblesAboveMinRad)
 {
   NVTX_RANGE_PUSH_A("BubbleRemoval");
   KernelSize kernelSize(128, state.numBubbles);
@@ -886,7 +888,7 @@ void transformPositions(SimulationState &state, Env &properties, bool normalize)
                 state.ddps[(uint32_t)DDP::Z]);
 }
 
-void calculateVolumeOfBubbles(SimulationState &state)
+void calculateVolumeOfBubbles(SimulationState &state, CubWrapper &cubWrapper)
 {
   KernelSize kernelSize(128, state.numBubbles);
 
@@ -947,17 +949,17 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
   {
-    setup(state, properties);
+    setup(state, properties, cubWrapper);
     saveSnapshotToFile(state, properties);
 
     std::cout << "Letting bubbles settle after they've been created and before "
                  "scaling or stabilization."
               << std::endl;
-    stabilize(state, properties);
+    stabilize(state, properties, cubWrapper);
     saveSnapshotToFile(state, properties);
 
     const double phiTarget = properties.getPhiTarget();
-    double bubbleVolume    = calculateVolumeOfBubbles(state);
+    double bubbleVolume    = calculateVolumeOfBubbles(state, cubWrapper);
     double phi             = bubbleVolume / properties.getSimulationBoxVolume();
 
     std::cout << "Volume ratios: current: " << phi << ", target: " << phiTarget << std::endl;
@@ -966,8 +968,9 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
     transformPositions(state, properties, true);
     dvec relativeSize = properties.getBoxRelativeDimensions();
     relativeSize.z    = (NUM_DIM == 2) ? 1 : relativeSize.z;
-    double t = calculateVolumeOfBubbles(state) / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z);
-    t        = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
+    double t =
+      calculateVolumeOfBubbles(state, cubWrapper) / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z);
+    t = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
     properties.setTfr(dvec(t, t, t) * relativeSize);
     transformPositions(state, properties, false);
 
@@ -986,7 +989,7 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
     std::cout << "#steps\tdE/t\te1\te2" << std::endl;
     while (true)
     {
-      double time        = stabilize(state, properties);
+      double time        = stabilize(state, properties, cubWrapper);
       double deltaEnergy = std::abs(state.energy2 - state.energy1) / time;
       deltaEnergy *= 0.5 * properties.getSigmaZero();
 
@@ -1060,7 +1063,7 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
     std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
     while (continueIntegration)
     {
-      continueIntegration = integrate(state, properties);
+      continueIntegration = integrate(state, properties, cubWrapper);
       CUDA_PROFILER_START(numTotalSteps == 2000);
       CUDA_PROFILER_STOP(numTotalSteps == 2200, continueIntegration);
 
@@ -1108,8 +1111,9 @@ void cubble::run(const char *inputFileName, const char *outputFileName)
                    << " " << state.numBubbles << " " << averagePath << " " << averageDistance << " " << dE << "\n";
 
         // Print some values
-        std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(state) / properties.getSimulationBoxVolume()
-                  << "\t" << relativeRadius << "\t" << state.numBubbles << "\t" << dE << "\t" << numSteps << "\t"
+        std::cout << (int)scaledTime << "\t"
+                  << calculateVolumeOfBubbles(state, cubWrapper) / properties.getSimulationBoxVolume() << "\t"
+                  << relativeRadius << "\t" << state.numBubbles << "\t" << dE << "\t" << numSteps << "\t"
                   << state.numPairs << std::endl;
 
         // Only write snapshots when t* is a power of 2.
