@@ -1051,15 +1051,15 @@ void Simulator::run(const char *inputFileName, const char *outputFileName)
         const double dE = (energy2 - energy1) / energy2;
 
         // Add values to data stream
-        const double averageRadius = return cubWrapper.reduce<double, double *, double *>(
-                                              &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::R], numBubbles) /
-                                            numBubbles;
-        const double averagePath = return cubWrapper.reduce<double, double *, double *>(
-                                            &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::PATH], numBubbles) /
-                                          numBubbles;
-        const double averageDistance = return cubWrapper.reduce<double, double *, double *>(
-                                                &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::DISTANCE], numBubbles) /
-                                              numBubbles;
+        const double averageRadius =
+          cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::R], numBubbles) /
+          numBubbles;
+        const double averagePath = cubWrapper.reduce<double, double *, double *>(
+                                     &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::PATH], numBubbles) /
+                                   numBubbles;
+        const double averageDistance = cubWrapper.reduce<double, double *, double *>(
+                                         &cub::DeviceReduce::Sum, ddps[(uint32_t)DDP::DISTANCE], numBubbles) /
+                                       numBubbles;
         const double relativeRadius = averageRadius / properties.getAvgRad();
         dataStream << scaledTime << " " << relativeRadius << " " << maxBubbleRadius / properties.getAvgRad() << " "
                    << numBubbles << " " << averagePath << " " << averageDistance << " " << dE << "\n";
