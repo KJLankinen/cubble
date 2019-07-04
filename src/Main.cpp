@@ -3,8 +3,10 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "Simulator.cuh"
+//#include "Simulator.cuh"
 #include "Util.h"
+
+void cubble::run(const char *inputFileName, const char *outputFileName);
 
 int main(int argc, char **argv)
 {
@@ -34,8 +36,7 @@ int main(int argc, char **argv)
                  "-----------\n"
               << std::endl;
 
-    cubble::Simulator simulator;
-    simulator.run(argv[1], argv[2]);
+    cubble::run(argv[1], argv[2]);
   }
   catch (const std::exception &e)
   {

@@ -2,33 +2,84 @@
 
 #pragma once
 
-#include "CubWrapper.h"
-#include "Env.h"
 #include "Util.h"
-#include "Vec.h"
-#include <vector>
+#include <array>
 
 namespace cubble
 {
-class Simulator
+// Device double pointers
+enum class DDP
 {
-public:
-  Simulator(){};
-  ~Simulator(){};
-  void run(const char *inputFileName, const char *outputFileName);
+  X,
+  Y,
+  Z,
+  R,
 
-private:
-  void setup();
-  void deinit();
-  double stabilize();
-  bool integrate();
-  void updateCellsAndNeighbors();
-  void deleteSmallBubbles(int numBubblesAboveMinRad);
-  void transformPositions(bool normalize);
-  dim3 getGridSize();
-  void saveSnapshotToFile();
-  void reserveMemory();
+  DXDT,
+  DYDT,
+  DZDT,
+  DRDT,
 
+  DXDTO,
+  DYDTO,
+  DZDTO,
+  DRDTO,
+
+  X0,
+  Y0,
+  Z0,
+
+  PATH,
+  DISTANCE,
+
+  XP,
+  YP,
+  ZP,
+  RP,
+
+  DXDTP,
+  DYDTP,
+  DZDTP,
+  DRDTP,
+
+  ERROR,
+
+  TEMP1,
+  TEMP2,
+  TEMP3,
+  TEMP4,
+  TEMP5,
+  TEMP6,
+  TEMP7,
+  TEMP8,
+
+  NUM_VALUES
+};
+
+// Device int pointers
+enum class DIP
+{
+  FLAGS,
+
+  WRAP_COUNT_X,
+  WRAP_COUNT_Y,
+  WRAP_COUNT_Z,
+
+  WRAP_COUNT_XP,
+  WRAP_COUNT_YP,
+  WRAP_COUNT_ZP,
+
+  PAIR1,
+  PAIR2,
+
+  TEMP1,
+  TEMP2,
+
+  NUM_VALUES
+};
+
+struct SimulationState
+{
   double simulationTime  = 0.0;
   double energy1         = 0.0;
   double energy2         = 0.0;
@@ -55,93 +106,17 @@ private:
   double *dta    = nullptr;
   double *dasai  = nullptr;
 
-  Env properties;
-  CubWrapper cubWrapper;
-
-  std::vector<double> hostData;
-
   // Device data
   double *pinnedDoubles = nullptr;
-  int *pinnedInts       = nullptr;
   double *deviceDoubles = nullptr;
   int *deviceInts       = nullptr;
+  int *pinnedInts       = nullptr;
   uint32_t dataStride   = 0;
   uint32_t pairStride   = 0;
   uint64_t memReqD      = 0;
   uint64_t memReqI      = 0;
 
-  // Device double pointers
-  enum class DDP
-  {
-    X,
-    Y,
-    Z,
-    R,
-
-    DXDT,
-    DYDT,
-    DZDT,
-    DRDT,
-
-    DXDTO,
-    DYDTO,
-    DZDTO,
-    DRDTO,
-
-    X0,
-    Y0,
-    Z0,
-
-    PATH,
-    DISTANCE,
-
-    XP,
-    YP,
-    ZP,
-    RP,
-
-    DXDTP,
-    DYDTP,
-    DZDTP,
-    DRDTP,
-
-    ERROR,
-
-    TEMP1,
-    TEMP2,
-    TEMP3,
-    TEMP4,
-    TEMP5,
-    TEMP6,
-    TEMP7,
-    TEMP8,
-
-    NUM_VALUES
-  };
-
-  // Device int pointers
-  enum class DIP
-  {
-    FLAGS,
-
-    WRAP_COUNT_X,
-    WRAP_COUNT_Y,
-    WRAP_COUNT_Z,
-
-    WRAP_COUNT_XP,
-    WRAP_COUNT_YP,
-    WRAP_COUNT_ZP,
-
-    PAIR1,
-    PAIR2,
-
-    TEMP1,
-    TEMP2,
-
-    NUM_VALUES
-  };
-
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 };
-}; // namespace cubble
+} // namespace cubble
