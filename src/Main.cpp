@@ -13,14 +13,11 @@ int main(int argc, char **argv)
 {
   std::exception_ptr pExc = nullptr;
 
-  if (argc != 3)
+  if (argc != 2)
   {
-    std::cerr << "Two arguments are required."
-              << "\nUsage: " << argv[0] << " inputFile saveFile"
+    std::cout << "\nUsage: " << argv[0] << " inputFile"
               << "\ninputFile = the name of the (.json) file that contains"
-              << " the necessary inputs."
-              << "\nsaveFile = file that can be used as a input file"
-              << " to continue from an earlier run" << std::endl;
+              << " the necessary inputs." << std::endl;
 
     return EXIT_FAILURE;
   }
@@ -37,7 +34,7 @@ int main(int argc, char **argv)
                  "-----------\n"
               << std::endl;
 
-    cubble::run(argv[1], argv[2]);
+    cubble::run(argv[1]);
   }
   catch (const std::exception &e)
   {

@@ -1,15 +1,17 @@
 #include "CubWrapper.h"
-#include "Env.h"
 #include "Kernels.cuh"
 #include "Macros.h"
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
+#include "nlohmann/json.hpp"
 #include <array>
 #include <cuda_profiler_api.h>
 #include <curand.h>
+#include <fstream>
 #include <iostream>
 #include <nvToolsExt.h>
 #include <sstream>
+#include <string>
 #include <vector>
 
 namespace cubble
@@ -91,11 +93,14 @@ struct SimulationState
   double energy1         = 0.0;
   double energy2         = 0.0;
   double maxBubbleRadius = 0.0;
+  double timeStep        = 0.0;
   size_t integrationStep = 0;
   uint32_t numSnapshots  = 0;
   int numBubbles         = 0;
   int maxNumCells        = 0;
   int numPairs           = 0;
+  dvec lbb               = dvec(0.0, 0.0, 0.0);
+  dvec tfr               = dvec(0.0, 0.0, 0.0);
 
   // Host pointers to device global variables
   int *mbpc      = nullptr;
@@ -122,11 +127,42 @@ struct SimulationState
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 };
 
+struct SimulationInputs
+{
+  int numBubblesPerCell = 0;
+  int rngSeed           = 0;
+  int numStepsToRelax   = 0;
+  int numBubblesIn      = 0;
+  int minNumBubbles     = 0;
+
+  double avgRad            = 0.0;
+  double stdDevRad         = 0.0;
+  double minRad            = 0.0;
+  double phiTarget         = 0.0;
+  double muZero            = 0.0;
+  double sigmaZero         = 0.0;
+  double fZeroPerMuZero    = 0.0;
+  double errorTolerance    = 0.0;
+  double maxDeltaEnergy    = 0.0;
+  double kParameter        = 0.0;
+  double kappa             = 0.0;
+  double timeScalingFactor = 0.0;
+  double timeStepIn        = 0.0;
+
+  std::string snapshotFilename = "";
+  std::string dataFilename     = "";
+
+  dvec boxRelDim = dvec(0.0, 0.0, 0.0);
+  dvec flowLbb   = dvec(0.0, 0.0, 0.0);
+  dvec flowTfr   = dvec(0.0, 0.0, 0.0);
+  dvec flowVel   = dvec(0.0, 0.0, 0.0);
+};
+
 struct Params
 {
   SimulationState state;
+  SimulationInputs inputs;
   CubWrapper cw;
-  Env env;
 
   cudaStream_t velocityStream;
   cudaStream_t gasStream;
@@ -172,37 +208,37 @@ void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX, bool d
   dvec interval = tfr - lbb;
   if (doX && doY && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.x, lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt, interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doX && doY)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.x, lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt);
   }
   else if (doX && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.x, lbb.x, !doX, x, dxdt, interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doY && doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.y, lbb.y, !doY, y, dydt, interval.z, lbb.z, !doZ, z, dzdt);
   }
   else if (doX)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.x, lbb.x, !doX, x, dxdt);
   }
   else if (doY)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.y, lbb.y, !doY, y, dydt);
   }
   else if (doZ)
   {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.env.getFZeroPerMuZero(), first, second, r,
+    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues, params.inputs.fZeroPerMuZero, first, second, r,
                   interval.z, lbb.z, !doZ, z, dzdt);
   }
 }
@@ -257,8 +293,8 @@ void reserveMemory(Params &params)
 
 dim3 getGridSize(Params &params)
 {
-  const int totalNumCells = std::ceil((float)params.state.numBubbles / params.env.getNumBubblesPerCell());
-  dvec interval           = params.env.getTfr() - params.env.getLbb();
+  const int totalNumCells = std::ceil((float)params.state.numBubbles / params.inputs.numBubblesPerCell);
+  dvec interval           = params.state.tfr - params.state.lbb;
   interval                = interval / interval.x;
   float nx                = (float)totalNumCells / interval.y;
   if (NUM_DIM == 3)
@@ -294,7 +330,7 @@ void updateCellsAndNeighbors(Params &params)
 
   KERNEL_LAUNCH(assignBubblesToCells, params.pairKernelSize, 0, 0, params.state.ddps[(uint32_t)DDP::X],
                 params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::Z], cellIndices, bubbleIndices,
-                params.env.getLbb(), params.env.getTfr(), cellDim, params.state.numBubbles);
+                params.state.lbb, params.state.tfr, cellDim, params.state.numBubbles);
 
   params.cw.sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs, const_cast<const int *>(cellIndices),
                                 sortedCellIndices, const_cast<const int *>(bubbleIndices), sortedBubbleIndices,
@@ -332,7 +368,7 @@ void updateCellsAndNeighbors(Params &params)
                             static_cast<void *>(params.state.ddps[(uint32_t)DDP::XP]), params.state.memReqD / 2,
                             cudaMemcpyDeviceToDevice));
 
-  dvec interval                 = params.env.getTfr() - params.env.getLbb();
+  dvec interval                 = params.state.tfr - params.state.lbb;
   KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
   const double maxDistance      = 1.5 * params.state.maxBubbleRadius;
 
@@ -418,11 +454,12 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
 
 void setup(Params &params)
 {
+  params.state.timeStep = params.inputs.timeStepIn;
   // First calculate the size of the box and the starting number of bubbles
-  dvec relDim        = params.env.getBoxRelativeDimensions();
+  dvec relDim        = params.inputs.boxRelDim;
   relDim             = relDim / relDim.x;
-  const float d      = 2 * params.env.getAvgRad();
-  float x            = params.env.getNumBubbles() * d * d / relDim.y;
+  const float d      = 2 * params.inputs.avgRad;
+  float x            = params.inputs.numBubblesIn * d * d / relDim.y;
   ivec bubblesPerDim = ivec(0, 0, 0);
 
   if (NUM_DIM == 3)
@@ -442,10 +479,10 @@ void setup(Params &params)
   }
 
   params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
-  params.env.setTfr(d * bubblesPerDim.asType<double>() + params.env.getLbb());
-  dvec interval = params.env.getTfr() - params.env.getLbb();
-  params.env.setFlowTfr(interval * params.env.getFlowTfr() + params.env.getLbb());
-  params.env.setFlowLbb(interval * params.env.getFlowLbb() + params.env.getLbb());
+  params.state.tfr         = d * bubblesPerDim.asType<double>() + params.state.lbb;
+  dvec interval            = params.state.tfr - params.state.lbb;
+  params.inputs.flowTfr    = interval * params.inputs.flowTfr + params.state.lbb;
+  params.inputs.flowLbb    = interval * params.inputs.flowLbb + params.state.lbb;
 
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize(params);
@@ -488,13 +525,11 @@ void setup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   std::cout << "Starting to generate data for bubbles." << std::endl;
-  double timeStep        = params.env.getTimeStep();
-  const int rngSeed      = params.env.getRngSeed();
-  const double avgRad    = params.env.getAvgRad();
-  const double stdDevRad = params.env.getStdDevRad();
-  const dvec tfr         = params.env.getTfr();
-  const dvec lbb         = params.env.getLbb();
-  interval               = tfr - lbb;
+  double timeStep        = params.inputs.timeStep;
+  const int rngSeed      = params.inputs.rngSeed;
+  const double avgRad    = params.inputs.avgRad;
+  const double stdDevRad = params.inputs.stdDevRad;
+  interval               = params.state.tfr - params.state.lbb;
 
   curandGenerator_t generator;
   CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -512,8 +547,8 @@ void setup(Params &params)
                 params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::Z],
                 params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                 params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::R],
-                params.state.ddps[(uint32_t)DDP::RP], params.state.dips[(uint32_t)DIP::FLAGS], bubblesPerDim, tfr, lbb,
-                avgRad, params.env.getMinRad(), params.state.numBubbles);
+                params.state.ddps[(uint32_t)DDP::RP], params.state.dips[(uint32_t)DIP::FLAGS], bubblesPerDim,
+                params.state.tfr, lbb, avgRad, params.inputs.minRad, params.state.numBubbles);
 
   params.cw.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::RP],
                                                      params.state.dasai, params.state.numBubbles, 0);
@@ -543,7 +578,7 @@ void setup(Params &params)
 
   if (NUM_DIM == 3)
   {
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                   params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
@@ -557,16 +592,16 @@ void setup(Params &params)
 
     doBoundaryWrap(params.defaultKernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, params.state.numBubbles,
                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                   params.state.ddps[(uint32_t)DDP::ZP], lbb, tfr, params.state.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                   params.state.ddps[(uint32_t)DDP::ZP], lbb, params.state.tfr,
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
                   params.state.ddps[(uint32_t)DDP::DXDTO], params.state.ddps[(uint32_t)DDP::DYDTO],
                   params.state.ddps[(uint32_t)DDP::DZDTO], params.state.ddps[(uint32_t)DDP::DRDTO]);
 
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                   params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
@@ -575,7 +610,7 @@ void setup(Params &params)
   }
   else
   {
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                   params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
@@ -587,16 +622,16 @@ void setup(Params &params)
 
     doBoundaryWrap(params.defaultKernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, false, params.state.numBubbles,
                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                   params.state.ddps[(uint32_t)DDP::ZP], lbb, tfr, params.state.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                   params.state.ddps[(uint32_t)DDP::ZP], lbb, params.state.tfr,
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                   params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
                   params.state.ddps[(uint32_t)DDP::DXDTO], params.state.ddps[(uint32_t)DDP::DYDTO],
                   params.state.ddps[(uint32_t)DDP::DRDTO]);
 
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                   params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                   params.state.ddps[(uint32_t)DDP::R], interval.x, lbb.x, PBC_X == 1,
                   params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDTO], interval.y, lbb.y,
@@ -607,7 +642,7 @@ void setup(Params &params)
 void saveSnapshotToFile(Params &params)
 {
   std::stringstream ss;
-  ss << params.env.getSnapshotFilename() << ".csv." << params.state.numSnapshots;
+  ss << params.inputs.snapshotFilename << ".csv." << params.state.numSnapshots;
   std::ofstream file(ss.str().c_str(), std::ios::out);
   if (file.is_open())
   {
@@ -649,11 +684,8 @@ double stabilize(Params &params)
   // This function integrates only the positions of the bubbles.
   // Gas exchange is not used. This is used for equilibrating the foam.
 
-  const dvec tfr      = params.env.getTfr();
-  const dvec lbb      = params.env.getLbb();
-  const dvec interval = tfr - lbb;
+  const dvec interval = params.state.tfr - params.state.lbb;
   double elapsedTime  = 0.0;
-  double timeStep     = params.env.getTimeStep();
   double error        = 100000;
 
   // Energy before stabilization
@@ -677,7 +709,7 @@ double stabilize(Params &params)
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.state.pinnedDoubles[1]),
                             static_cast<void *>(params.state.dtfapr), sizeof(double), cudaMemcpyDeviceToHost, 0));
 
-  for (int i = 0; i < params.env.getNumStepsToRelax(); ++i)
+  for (int i = 0; i < params.inputs.numStepsToRelax; ++i)
   {
     do
     {
@@ -688,7 +720,7 @@ double stabilize(Params &params)
                       params.state.ddps[(uint32_t)DDP::DZDTP], params.state.ddps[(uint32_t)DDP::ERROR],
                       params.state.ddps[(uint32_t)DDP::TEMP1], params.state.ddps[(uint32_t)DDP::TEMP2]);
 
-        KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+        KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                       params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
                       params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTO],
                       params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
@@ -696,22 +728,22 @@ double stabilize(Params &params)
                       params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::Z],
                       params.state.ddps[(uint32_t)DDP::DZDT], params.state.ddps[(uint32_t)DDP::DZDTO]);
 
-        KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+        KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                       params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                      params.state.ddps[(uint32_t)DDP::RP], interval.x, lbb.x, PBC_X == 1,
-                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y, lbb.y,
-                      PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                      interval.z, lbb.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::ZP],
-                      params.state.ddps[(uint32_t)DDP::DZDTP]);
+                      params.state.ddps[(uint32_t)DDP::RP], interval.x, params.state.lbb.x, PBC_X == 1,
+                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y,
+                      params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP],
+                      params.state.ddps[(uint32_t)DDP::DYDTP], interval.z, params.state.lbb.z, PBC_Z == 1,
+                      params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DZDTP]);
 
         doWallVelocity(params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, params.state.numBubbles,
                        params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                        params.state.ddps[(uint32_t)DDP::RP], params.state.ddps[(uint32_t)DDP::XP],
                        params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP],
                        params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, params);
+                       params.state.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr, params);
 
-        KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+        KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                       params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
                       params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDT],
                       params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::YP],
@@ -727,26 +759,27 @@ double stabilize(Params &params)
                       params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::TEMP1],
                       params.state.ddps[(uint32_t)DDP::TEMP2]);
 
-        KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+        KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                       params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
                       params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTO],
                       params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
                       params.state.ddps[(uint32_t)DDP::DYDT], params.state.ddps[(uint32_t)DDP::DYDTO]);
 
-        KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.env.getFZeroPerMuZero(),
+        KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0, params.inputs.fZeroPerMuZero,
                       params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                      params.state.ddps[(uint32_t)DDP::RP], interval.x, lbb.x, PBC_X == 1,
-                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y, lbb.y,
-                      PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::DYDTP]);
+                      params.state.ddps[(uint32_t)DDP::RP], interval.x, params.state.lbb.x, PBC_X == 1,
+                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y,
+                      params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP],
+                      params.state.ddps[(uint32_t)DDP::DYDTP]);
 
         doWallVelocity(params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, params.state.numBubbles,
                        params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
                        params.state.ddps[(uint32_t)DDP::RP], params.state.ddps[(uint32_t)DDP::XP],
                        params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP],
                        params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                       params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr, params);
+                       params.state.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr, params);
 
-        KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+        KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                       params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
                       params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDT],
                       params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::YP],
@@ -756,21 +789,21 @@ double stabilize(Params &params)
 
       doBoundaryWrap(params.defaultKernelSize, 0, 0, PBC_X == 1, PBC_Y == 1, PBC_Z == 1, params.state.numBubbles,
                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                     params.state.ddps[(uint32_t)DDP::ZP], lbb, tfr, params.state.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                     params.state.ddps[(uint32_t)DDP::ZP], params.state.lbb, params.state.tfr,
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Error
       error = params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Max, params.state.ddps[(uint32_t)DDP::ERROR], params.state.numBubbles);
 
-      if (error < params.env.getErrorTolerance() && timeStep < 0.1)
-        timeStep *= 1.9;
-      else if (error > params.env.getErrorTolerance())
-        timeStep *= 0.5;
+      if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
+        params.state.timeStep *= 1.9;
+      else if (error > params.inputs.errorTolerance)
+        params.state.timeStep *= 0.5;
 
-    } while (error > params.env.getErrorTolerance());
+    } while (error > params.inputs.errorTolerance);
 
     // Update the current values with the calculated predictions
     const size_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
@@ -781,8 +814,7 @@ double stabilize(Params &params)
     CUDA_CALL(cudaMemcpyAsync(params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTP],
                               numBytesToCopy, cudaMemcpyDeviceToDevice, 0));
 
-    params.env.setTimeStep(timeStep);
-    elapsedTime += timeStep;
+    elapsedTime += params.state.timeStep;
 
     if (i % 5000 == 0)
       updateCellsAndNeighbors(params);
@@ -816,10 +848,7 @@ bool integrate(Params &params)
 {
   NVTX_RANGE_PUSH_A("Integration function");
 
-  const dvec tfr        = params.env.getTfr();
-  const dvec lbb        = params.env.getLbb();
-  const dvec interval   = tfr - lbb;
-  double timeStep       = params.env.getTimeStep();
+  const dvec interval   = params.state.tfr - params.state.lbb;
   double error          = 100000;
   uint32_t numLoopsDone = 0;
 
@@ -837,7 +866,7 @@ bool integrate(Params &params)
                     params.state.ddps[(uint32_t)DDP::TEMP2]);
 
       // Predict
-      KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+      KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                     params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
                     params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTO],
                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
@@ -848,21 +877,21 @@ bool integrate(Params &params)
                     params.state.ddps[(uint32_t)DDP::DRDT], params.state.ddps[(uint32_t)DDP::DRDTO]);
 
       // Velocity
-      KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.velocityStream, params.env.getFZeroPerMuZero(),
+      KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.velocityStream, params.inputs.fZeroPerMuZero,
                     params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                    params.state.ddps[(uint32_t)DDP::RP], interval.x, lbb.x, PBC_X == 1,
-                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y, lbb.y,
-                    PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::DYDTP],
-                    interval.z, lbb.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::ZP],
-                    params.state.ddps[(uint32_t)DDP::DZDTP]);
+                    params.state.ddps[(uint32_t)DDP::RP], interval.x, params.state.lbb.x, PBC_X == 1,
+                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y,
+                    params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP],
+                    params.state.ddps[(uint32_t)DDP::DYDTP], interval.z, params.state.lbb.z, PBC_Z == 1,
+                    params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DZDTP]);
       // Wall velocity
       doWallVelocity(params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
                      params.state.numBubbles, params.state.dips[(uint32_t)DIP::PAIR1],
                      params.state.dips[(uint32_t)DIP::PAIR2], params.state.ddps[(uint32_t)DDP::RP],
                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                      params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DXDTP],
-                     params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
-                     params);
+                     params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], params.state.lbb,
+                     params.state.tfr, params);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -881,19 +910,19 @@ bool integrate(Params &params)
                       params.state.ddps[(uint32_t)DDP::DZDTP], params.state.ddps[(uint32_t)DDP::TEMP1],
                       params.state.ddps[(uint32_t)DDP::TEMP2], params.state.ddps[(uint32_t)DDP::TEMP3],
                       params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                      params.state.ddps[(uint32_t)DDP::ZP], params.env.getFlowVel(), params.env.getFlowTfr(),
-                      params.env.getFlowLbb());
+                      params.state.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel, params.inputs.flowTfr,
+                      params.inputs.flowLbb);
       }
 
       // Correct
       KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, params.velocityStream, params.state.numBubbles,
-                    timeStep, params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
-                    params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDT],
-                    params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::YP],
-                    params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDT],
-                    params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::ZP],
-                    params.state.ddps[(uint32_t)DDP::Z], params.state.ddps[(uint32_t)DDP::DZDT],
-                    params.state.ddps[(uint32_t)DDP::DZDTP]);
+                    params.state.timeStep, params.state.ddps[(uint32_t)DDP::ERROR],
+                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
+                    params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTP],
+                    params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
+                    params.state.ddps[(uint32_t)DDP::DYDT], params.state.ddps[(uint32_t)DDP::DYDTP],
+                    params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::Z],
+                    params.state.ddps[(uint32_t)DDP::DZDT], params.state.ddps[(uint32_t)DDP::DZDTP]);
 
       // Path lenghts & distances
       KERNEL_LAUNCH(pathLengthDistanceKernel, params.defaultKernelSize, 0, params.velocityStream,
@@ -909,10 +938,11 @@ bool integrate(Params &params)
       // Boundary wrap
       doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream, PBC_X == 1, PBC_Y == 1, PBC_Z == 1,
                      params.state.numBubbles, params.state.ddps[(uint32_t)DDP::XP],
-                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP], lbb, tfr,
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP], params.state.lbb,
+                     params.state.tfr, params.state.dips[(uint32_t)DIP::WRAP_COUNT_X],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Gas exchange
       KERNEL_LAUNCH(gasExchangeKernel, params.pairKernelSize, 0, params.gasStream, params.state.numBubbles,
@@ -931,7 +961,7 @@ bool integrate(Params &params)
                     params.state.ddps[(uint32_t)DDP::TEMP1], params.state.ddps[(uint32_t)DDP::TEMP2]);
 
       // Predict
-      KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, timeStep,
+      KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles, params.state.timeStep,
                     params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
                     params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTO],
                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
@@ -940,19 +970,20 @@ bool integrate(Params &params)
                     params.state.ddps[(uint32_t)DDP::DRDT], params.state.ddps[(uint32_t)DDP::DRDTO]);
 
       // Velocity
-      KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.velocityStream, params.env.getFZeroPerMuZero(),
+      KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.velocityStream, params.inputs.fZeroPerMuZero,
                     params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                    params.state.ddps[(uint32_t)DDP::RP], interval.x, lbb.x, PBC_X == 1,
-                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y, lbb.y,
-                    PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::DYDTP]);
+                    params.state.ddps[(uint32_t)DDP::RP], interval.x, params.state.lbb.x, PBC_X == 1,
+                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::DXDTP], interval.y,
+                    params.state.lbb.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::YP],
+                    params.state.ddps[(uint32_t)DDP::DYDTP]);
       // Wall velocity
       doWallVelocity(params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0, false,
                      params.state.numBubbles, params.state.dips[(uint32_t)DIP::PAIR1],
                      params.state.dips[(uint32_t)DIP::PAIR2], params.state.ddps[(uint32_t)DDP::RP],
                      params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
                      params.state.ddps[(uint32_t)DDP::ZP], params.state.ddps[(uint32_t)DDP::DXDTP],
-                     params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
-                     params);
+                     params.state.ddps[(uint32_t)DDP::DYDTP], params.state.ddps[(uint32_t)DDP::DZDTP], params.state.lbb,
+                     params.state.tfr, params);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -970,17 +1001,17 @@ bool integrate(Params &params)
                       params.state.ddps[(uint32_t)DDP::DZDTP], params.state.ddps[(uint32_t)DDP::TEMP1],
                       params.state.ddps[(uint32_t)DDP::TEMP2], params.state.ddps[(uint32_t)DDP::TEMP3],
                       params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::YP],
-                      params.state.ddps[(uint32_t)DDP::ZP], params.env.getFlowVel(), params.env.getFlowTfr(),
-                      params.env.getFlowLbb());
+                      params.state.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel, params.inputs.flowTfr,
+                      params.inputs.flowLbb);
       }
 
       // Correct
       KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, params.velocityStream, params.state.numBubbles,
-                    timeStep, params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::XP],
-                    params.state.ddps[(uint32_t)DDP::X], params.state.ddps[(uint32_t)DDP::DXDT],
-                    params.state.ddps[(uint32_t)DDP::DXDTP], params.state.ddps[(uint32_t)DDP::YP],
-                    params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::DYDT],
-                    params.state.ddps[(uint32_t)DDP::DYDTP]);
+                    params.state.timeStep, params.state.ddps[(uint32_t)DDP::ERROR],
+                    params.state.ddps[(uint32_t)DDP::XP], params.state.ddps[(uint32_t)DDP::X],
+                    params.state.ddps[(uint32_t)DDP::DXDT], params.state.ddps[(uint32_t)DDP::DXDTP],
+                    params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::Y],
+                    params.state.ddps[(uint32_t)DDP::DYDT], params.state.ddps[(uint32_t)DDP::DYDTP]);
 
       // Path lenghts & distances
       KERNEL_LAUNCH(pathLengthDistanceKernel, params.defaultKernelSize, 0, params.velocityStream,
@@ -994,10 +1025,11 @@ bool integrate(Params &params)
       // Boundary wrap
       doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream, PBC_X == 1, PBC_Y == 1, false,
                      params.state.numBubbles, params.state.ddps[(uint32_t)DDP::XP],
-                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP], lbb, tfr,
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z], params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                     params.state.ddps[(uint32_t)DDP::YP], params.state.ddps[(uint32_t)DDP::ZP], params.state.lbb,
+                     params.state.tfr, params.state.dips[(uint32_t)DIP::WRAP_COUNT_X],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_Y], params.state.dips[(uint32_t)DIP::WRAP_COUNT_Z],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+                     params.state.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Gas exchange
       KERNEL_LAUNCH(gasExchangeKernel, params.pairKernelSize, 0, params.gasStream, params.state.numBubbles,
@@ -1021,12 +1053,12 @@ bool integrate(Params &params)
 
     KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.defaultKernelSize, 0, params.gasStream,
                   params.state.ddps[(uint32_t)DDP::DRDTP], params.state.ddps[(uint32_t)DDP::RP],
-                  params.state.ddps[(uint32_t)DDP::TEMP1], params.state.numBubbles, params.env.getKappa(),
-                  params.env.getKParameter());
+                  params.state.ddps[(uint32_t)DDP::TEMP1], params.state.numBubbles, params.inputs.kappa,
+                  params.inputs.kParameter);
 
     // Radius correct
-    KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, params.gasStream, params.state.numBubbles, timeStep,
-                  params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::RP],
+    KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, params.gasStream, params.state.numBubbles,
+                  params.state.timeStep, params.state.ddps[(uint32_t)DDP::ERROR], params.state.ddps[(uint32_t)DDP::RP],
                   params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::DRDT],
                   params.state.ddps[(uint32_t)DDP::DRDTP]);
 
@@ -1034,7 +1066,7 @@ bool integrate(Params &params)
     // Also take note of maximum radius.
     KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize, 0, params.gasStream,
                   params.state.numBubbles, params.state.dips[(uint32_t)DIP::FLAGS],
-                  params.state.ddps[(uint32_t)DDP::RP], params.env.getMinRad());
+                  params.state.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
 
     params.cw.reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, params.state.dips[(uint32_t)DIP::FLAGS],
                                               static_cast<int *>(params.state.mbpc), params.state.numBubbles,
@@ -1052,15 +1084,15 @@ bool integrate(Params &params)
     error = params.cw.reduce<double, double *, double *>(
       &cub::DeviceReduce::Max, params.state.ddps[(uint32_t)DDP::ERROR], params.state.numBubbles);
 
-    if (error < params.env.getErrorTolerance() && timeStep < 0.1)
-      timeStep *= 1.9;
-    else if (error > params.env.getErrorTolerance())
-      timeStep *= 0.5;
+    if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
+      params.state.timeStep *= 1.9;
+    else if (error > params.inputs.errorTolerance)
+      params.state.timeStep *= 0.5;
 
     ++numLoopsDone;
 
     NVTX_RANGE_POP();
-  } while (error > params.env.getErrorTolerance());
+  } while (error > params.inputs.errorTolerance);
 
   // Update values
   const size_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
@@ -1076,9 +1108,7 @@ bool integrate(Params &params)
                             cudaMemcpyDeviceToDevice));
 
   ++params.state.integrationStep;
-  params.env.setTimeStep(timeStep);
-  params.state.simulationTime += timeStep;
-
+  params.state.simulationTime += params.state.timeStep;
   params.state.maxBubbleRadius = params.state.pinnedDoubles[0];
 
   // Delete & reorder
@@ -1091,8 +1121,10 @@ bool integrate(Params &params)
   if (shouldDeleteBubbles || params.state.integrationStep % 5000 == 0)
     updateCellsAndNeighbors(params);
 
-  bool continueSimulation = params.state.numBubbles > params.env.getMinNumBubbles();
-  continueSimulation &= (NUM_DIM == 3) ? params.state.maxBubbleRadius < 0.5 * (tfr - lbb).getMinComponent() : true;
+  bool continueSimulation = params.state.numBubbles > params.inputs.minNumBubbles;
+  continueSimulation &= (NUM_DIM == 3)
+                          ? params.state.maxBubbleRadius < 0.5 * (params.state.tfr - params.state.lbb).getMinComponent()
+                          : true;
 
   NVTX_RANGE_POP();
 
@@ -1102,7 +1134,7 @@ bool integrate(Params &params)
 void transformPositions(Params &params, bool normalize)
 {
   KERNEL_LAUNCH(transformPositionsKernel, params.pairKernelSize, 0, 0, normalize, params.state.numBubbles,
-                params.env.getLbb(), params.env.getTfr(), params.state.ddps[(uint32_t)DDP::X],
+                params.state.lbb, params.state.tfr, params.state.ddps[(uint32_t)DDP::X],
                 params.state.ddps[(uint32_t)DDP::Y], params.state.ddps[(uint32_t)DDP::Z]);
 }
 
@@ -1119,7 +1151,6 @@ double calculateVolumeOfBubbles(Params &params)
 void deinit(Params &params)
 {
   saveSnapshotToFile(params);
-  params.env.writeParameters();
 
   CUDA_CALL(cudaDeviceSynchronize());
 
@@ -1131,15 +1162,72 @@ void deinit(Params &params)
   CUDA_CALL(cudaStreamDestroy(params.velocityStream));
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
 }
+
+void getSimulationBoxVolume(Params &params)
+{
+  dvec temp = params.state.tfr - params.state.lbb;
+  return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
+}
+
+#define JSON_READ(i, j, arg) \
+  i.arg = j[#arg];           \
+  std::cout << #arg << ": " << arg << std::endl
+
+void readInputs(SimulationInputs &inputs, const char *inputFileName)
+{
+  std::cout << "Reading inputs from file \"" << inputFileName << "\"" << std::endl;
+  nlohmann::json j;
+  std::fstream file(inputFileName, std::ios::in);
+
+  if (file.is_open())
+  {
+    file >> j;
+
+    JSON_READ(inputs, j, phiTarget);
+    JSON_READ(inputs, j, muZero);
+    JSON_READ(inputs, j, sigmaZero);
+    JSON_READ(inputs, j, avgRad);
+    JSON_READ(inputs, j, stdDevRad);
+    JSON_READ(inputs, j, errorTolerance);
+    JSON_READ(inputs, j, timeStep);
+    JSON_READ(inputs, j, rngSeed);
+    JSON_READ(inputs, j, numBubblesPerCell);
+    JSON_READ(inputs, j, snapshotFilename);
+    JSON_READ(inputs, j, numStepsToRelax);
+    JSON_READ(inputs, j, maxDeltaEnergy);
+    JSON_READ(inputs, j, kParameter);
+    JSON_READ(inputs, j, numBubblesIn);
+    JSON_READ(inputs, j, kappa);
+    JSON_READ(inputs, j, minNumBubbles);
+    JSON_READ(inputs, j, dataFilename);
+    JSON_READ(inputs, j, boxRelDim);
+    JSON_READ(inputs, j, flowLbb);
+    JSON_READ(inputs, j, flowTfr);
+    JSON_READ(inputs, j, flowVel);
+
+    assert(muZero > 0);
+    assert(boxRelDim.x > 0);
+    assert(boxRelDim.y > 0);
+    assert(boxRelDim.z > 0);
+
+    fZeroPerMuZero    = sigmaZero * avgRad / muZero;
+    minRad            = 0.1 * avgRad;
+    timeScalingFactor = kParameter / (avgRad * avgRad);
+    flowVel *= fZeroPerMuZero;
+  }
+  else
+    throw std::runtime_error("Couldn't open input file!");
+}
+#undef JSON_READ
+
 } // namespace
 
 namespace cubble
 {
-void run(const char *inputFileName, const char *outputFileName)
+void run(const char *inputFileName)
 {
   Params params;
-  params.env = Env(inputFileName, outputFileName);
-  params.env.readParameters();
+  readInputs(params.inputs, inputFileName);
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
   {
@@ -1152,22 +1240,22 @@ void run(const char *inputFileName, const char *outputFileName)
     stabilize(params);
     saveSnapshotToFile(params);
 
-    const double phiTarget = params.env.getPhiTarget();
+    const double phiTarget = params.inputs.phiTarget;
     double bubbleVolume    = calculateVolumeOfBubbles(params);
-    double phi             = bubbleVolume / params.env.getSimulationBoxVolume();
+    double phi             = bubbleVolume / getSimulationBoxVolume(params);
 
     std::cout << "Volume ratios: current: " << phi << ", target: " << phiTarget << std::endl;
 
     std::cout << "Scaling the simulation box." << std::endl;
     transformPositions(params, true);
-    dvec relativeSize = params.env.getBoxRelativeDimensions();
+    dvec relativeSize = params.inputs.boxRelDim;
     relativeSize.z    = (NUM_DIM == 2) ? 1 : relativeSize.z;
     double t = calculateVolumeOfBubbles(params) / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z);
     t        = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
-    params.env.setTfr(dvec(t, t, t) * relativeSize);
+    params.state.tfr = dvec(t, t, t) * relativeSize;
     transformPositions(params, false);
 
-    phi = bubbleVolume / params.env.getSimulationBoxVolume();
+    phi = bubbleVolume / getSimulationBoxVolume(params);
 
     std::cout << "Volume ratios: current: " << phi << ", target: " << phiTarget << std::endl;
 
@@ -1184,26 +1272,26 @@ void run(const char *inputFileName, const char *outputFileName)
     {
       double time        = stabilize(params);
       double deltaEnergy = std::abs(params.state.energy2 - params.state.energy1) / time;
-      deltaEnergy *= 0.5 * params.env.getSigmaZero();
+      deltaEnergy *= 0.5 * params.inputs.sigmaZero;
 
-      if (deltaEnergy < params.env.getMaxDeltaEnergy())
+      if (deltaEnergy < params.inputs.maxDeltaEnergy)
       {
-        std::cout << "Final delta energy " << deltaEnergy << " after "
-                  << (numSteps + 1) * params.env.getNumStepsToRelax() << " steps."
+        std::cout << "Final delta energy " << deltaEnergy << " after " << (numSteps + 1) * params.inputs.numStepsToRelax
+                  << " steps."
                   << " Energy before: " << params.state.energy1 << ", energy after: " << params.state.energy2
-                  << ", time: " << time * params.env.getTimeScalingFactor() << std::endl;
+                  << ", time: " << time * params.inputs.timeScalingFactor << std::endl;
         break;
       }
       else if (numSteps > failsafe)
       {
-        std::cout << "Over " << failsafe * params.env.getNumStepsToRelax()
+        std::cout << "Over " << failsafe * params.inputs.numStepsToRelax
                   << " steps taken and required delta energy not reached."
                   << " Check parameters." << std::endl;
         break;
       }
       else
       {
-        std::cout << (numSteps + 1) * params.env.getNumStepsToRelax() << "\t" << deltaEnergy << "\t"
+        std::cout << (numSteps + 1) * params.inputs.mumStepsToRelax << "\t" << deltaEnergy << "\t"
                   << params.state.energy1 << "\t" << params.state.energy2 << std::endl;
       }
 
@@ -1225,7 +1313,7 @@ void run(const char *inputFileName, const char *outputFileName)
     params.state.simulationTime = 0;
     int timesPrinted            = 1;
     uint32_t numSteps           = 0;
-    const dvec interval         = params.env.getTfr() - params.env.getLbb();
+    const dvec interval         = params.state.tfr - params.state.lbb;
 
     // Calculate the energy at simulation start
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
@@ -1266,7 +1354,7 @@ void run(const char *inputFileName, const char *outputFileName)
       // have a huge cost. Roughly 6e4-1e5 integration steps are taken for each
       // time step
       // and the if clause is executed once per time step.
-      const double scaledTime = params.state.simulationTime * params.env.getTimeScalingFactor();
+      const double scaledTime = params.state.simulationTime * params.inputs.timeScalingFactor;
       if ((int)scaledTime >= timesPrinted)
       {
         // Calculate total energy
@@ -1304,13 +1392,13 @@ void run(const char *inputFileName, const char *outputFileName)
           params.cw.reduce<double, double *, double *>(
             &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::DISTANCE], params.state.numBubbles) /
           params.state.numBubbles;
-        const double relativeRadius = averageRadius / params.env.getAvgRad();
-        dataStream << scaledTime << " " << relativeRadius << " "
-                   << params.state.maxBubbleRadius / params.env.getAvgRad() << " " << params.state.numBubbles << " "
-                   << averagePath << " " << averageDistance << " " << dE << "\n";
+        const double relativeRadius = averageRadius / params.inputs.avgRad;
+        dataStream << scaledTime << " " << relativeRadius << " " << params.state.maxBubbleRadius / params.inputs.avgRad
+                   << " " << params.state.numBubbles << " " << averagePath << " " << averageDistance << " " << dE
+                   << "\n";
 
         // Print some values
-        std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / params.env.getSimulationBoxVolume()
+        std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params)
                   << "\t" << relativeRadius << "\t" << params.state.numBubbles << "\t" << dE << "\t" << numSteps << "\t"
                   << params.state.numPairs << std::endl;
 
@@ -1328,7 +1416,7 @@ void run(const char *inputFileName, const char *outputFileName)
     }
   }
 
-  std::ofstream file(params.env.getDataFilename());
+  std::ofstream file(params.inputs.dataFilename);
   file << dataStream.str() << std::endl;
 
   deinit(params);

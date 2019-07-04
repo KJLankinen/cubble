@@ -15,24 +15,6 @@
 #define CUDA_PROFILER_STOP(stop, continue)
 #endif
 
-// Macro for reading and writing parameters from/to .json file
-#define CUBBLE_IO_PARAMETER(read, j, param) \
-  do                                        \
-  {                                         \
-    if (read)                               \
-    {                                       \
-      param = j[#param];                    \
-      std::string s(#param);                \
-      s += "Expl";                          \
-      std::cout << j[s] << ": " << param;   \
-      std::cout << std::endl;               \
-    }                                       \
-    else                                    \
-    {                                       \
-      j[#param] = param;                    \
-    }                                       \
-  } while (0)
-
 #define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
 #define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
 #define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
@@ -44,30 +26,3 @@
 #else
 #define DEVICE_ASSERT(statement, msg)
 #endif
-
-// Macro for (arbitrary) class member variable with getter and setter for CPU
-#define CUBBLE_PROP(type, var, defVal)  \
-private:                                \
-  type var = defVal;                    \
-                                        \
-public:                                 \
-  type get##var() const { return var; } \
-  void set##var(const type &val) { var = val; }
-
-// Macro for (arbitrary) const class member variable with getter for CPU
-#define CUBBLE_CONST_PROP(type, var, defVal) \
-private:                                     \
-  type var = defVal;                         \
-                                             \
-public:                                      \
-  type get##var() const { return var; }
-
-// Macro for (arbitrary) class member variable with getter and setter, for CPU &
-// GPU
-#define CUBBLE_HOST_DEVICE_PROP(type, var, defVal) \
-private:                                           \
-  type var = defVal;                               \
-                                                   \
-public:                                            \
-  __host__ type get##var() const { return var; }   \
-  __host__ void set##var(const type &val) { var = val; }
