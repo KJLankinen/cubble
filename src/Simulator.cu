@@ -14,6 +14,8 @@
 
 namespace // anonymous
 {
+using namespace cubble;
+
 void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool wrapY, bool wrapZ, int numValues,
                     double *x, double *y, double *z, dvec lbb, dvec tfr, int *mulX, int *mulY, int *mulZ, int *mulOldX,
                     int *mulOldY, int *mulOldZ)
