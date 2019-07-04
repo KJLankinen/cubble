@@ -153,7 +153,7 @@ dim3 getGridSize(SimulationState &state, Env &properties)
   return dim3(grid.x, grid.y, grid.z);
 }
 
-void updateCellsAndNeighbors(SimulationState &state, Env &properties)
+void updateCellsAndNeighbors(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
 {
   dim3 gridSize = getGridSize(state, properties);
   const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
@@ -217,15 +217,16 @@ void updateCellsAndNeighbors(SimulationState &state, Env &properties)
   {
     cudaStream_t stream = (i % 2) ? state.velocityStream : state.gasExchangeStream;
     if (NUM_DIM == 3)
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
-                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
-                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
-                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y], interval.z, PBC_Z == 1, state.ddps[(uint32_t)DDP::Z]);
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells,
+                    (int)state.pairStride, maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1],
+                    state.dips[(uint32_t)DIP::TEMP2], state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1,
+                    state.ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, state.ddps[(uint32_t)DDP::Y], interval.z,
+                    PBC_Z == 1, state.ddps[(uint32_t)DDP::Z]);
     else
-      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells, (int)pairStride,
-                    maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1], state.dips[(uint32_t)DIP::TEMP2],
-                    state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1, state.ddps[(uint32_t)DDP::X], interval.y,
-                    PBC_Y == 1, state.ddps[(uint32_t)DDP::Y]);
+      KERNEL_LAUNCH(neighborSearch, kernelSize, 0, stream, i, state.numBubbles, state.maxNumCells,
+                    (int)state.pairStride, maxDistance, offsets, sizes, state.dips[(uint32_t)DIP::TEMP1],
+                    state.dips[(uint32_t)DIP::TEMP2], state.ddps[(uint32_t)DDP::R], interval.x, PBC_X == 1,
+                    state.ddps[(uint32_t)DDP::X], interval.y, PBC_Y == 1, state.ddps[(uint32_t)DDP::Y]);
   }
 
   CUDA_CALL(cudaMemcpy(static_cast<void *>(state.pinnedInts), state.np, sizeof(int), cudaMemcpyDeviceToHost));
@@ -392,7 +393,7 @@ void setup(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
   state.maxBubbleRadius = cubWrapper.reduce<double, double *, double *>(&cub::DeviceReduce::Max,
                                                                         state.ddps[(uint32_t)DDP::R], state.numBubbles);
 
-  updateCellsAndNeighbors(state, properties);
+  updateCellsAndNeighbors(state, properties, cubWrapper);
 
   // Calculate some initial values which are needed
   // for the two-step Adams-Bashforth-Moulton prEdictor-corrector method
@@ -621,7 +622,7 @@ double stabilize(SimulationState &state, Env &properties, CubWrapper &cubWrapper
     elapsedTime += timeStep;
 
     if (i % 5000 == 0)
-      updateCellsAndNeighbors(state, properties);
+      updateCellsAndNeighbors(state, properties, cubWrapper);
   }
 
   // Energy after stabilization
@@ -764,7 +765,7 @@ bool integrate(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
                     interval.x, lbb.x, PBC_X == 1, state.ddps[(uint32_t)DDP::XP], state.ddps[(uint32_t)DDP::DXDTP],
                     interval.y, lbb.y, PBC_Y == 1, state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::DYDTP]);
       // Wall velocity
-      doWallVelocity(pairKernelSize, 0, state.velocityStream, PBC_X == 0, PBC_Y == 0, false, state.numBubbles,
+      doWallVelocity(state.pairKernelSize, 0, state.velocityStream, PBC_X == 0, PBC_Y == 0, false, state.numBubbles,
                      state.dips[(uint32_t)DIP::PAIR1], state.dips[(uint32_t)DIP::PAIR2], state.ddps[(uint32_t)DDP::RP],
                      state.ddps[(uint32_t)DDP::XP], state.ddps[(uint32_t)DDP::YP], state.ddps[(uint32_t)DDP::ZP],
                      state.ddps[(uint32_t)DDP::DXDTP], state.ddps[(uint32_t)DDP::DYDTP],
@@ -864,7 +865,7 @@ bool integrate(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
     else if (error > properties.getErrorTolerance())
       timeStep *= 0.5;
 
-    ++state.numLoopsDone;
+    ++numLoopsDone;
 
     NVTX_RANGE_POP();
   } while (error > properties.getErrorTolerance());
@@ -895,7 +896,7 @@ bool integrate(SimulationState &state, Env &properties, CubWrapper &cubWrapper)
     deleteSmallBubbles(state, cubWrapper, numBubblesAboveMinRad);
 
   if (shouldDeleteBubbles || state.integrationStep % 5000 == 0)
-    updateCellsAndNeighbors(state, properties);
+    updateCellsAndNeighbors(state, properties, cubWrapper);
 
   bool continueSimulation = state.numBubbles > properties.getMinNumBubbles();
   continueSimulation &= (NUM_DIM == 3) ? state.maxBubbleRadius < 0.5 * (tfr - lbb).getMinComponent() : true;
@@ -912,7 +913,7 @@ void transformPositions(SimulationState &state, Env &properties, bool normalize)
                 state.ddps[(uint32_t)DDP::Z]);
 }
 
-void calculateVolumeOfBubbles(SimulationState &state, CubWrapper &cubWrapper)
+double calculateVolumeOfBubbles(SimulationState &state, CubWrapper &cubWrapper)
 {
   KernelSize kernelSize(128, state.numBubbles);
 
