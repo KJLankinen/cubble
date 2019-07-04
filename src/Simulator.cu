@@ -42,7 +42,7 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX, bool
 
 void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX, bool doY, bool doZ, int numValues, int *first,
                     int *second, double *r, double *x, double *y, double *z, double *dxdt, double *dydt, double *dzdt,
-                    dvec lbb, dvec tfr)
+                    dvec lbb, dvec tfr, Env properties)
 {
   dvec interval = tfr - lbb;
   if (doX && doY && doZ)
@@ -332,7 +332,7 @@ double Simulator::stabilize()
         doWallVelocity(pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, numBubbles, dips[(uint32_t)DIP::PAIR1],
                        dips[(uint32_t)DIP::PAIR2], ddps[(uint32_t)DDP::RP], ddps[(uint32_t)DDP::XP],
                        ddps[(uint32_t)DDP::YP], ddps[(uint32_t)DDP::ZP], ddps[(uint32_t)DDP::DXDTP],
-                       ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr);
+                       ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr, properties);
 
         KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[(uint32_t)DDP::ERROR],
                       ddps[(uint32_t)DDP::XP], ddps[(uint32_t)DDP::X], ddps[(uint32_t)DDP::DXDT],
@@ -359,7 +359,7 @@ double Simulator::stabilize()
         doWallVelocity(pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, numBubbles, dips[(uint32_t)DIP::PAIR1],
                        dips[(uint32_t)DIP::PAIR2], ddps[(uint32_t)DDP::RP], ddps[(uint32_t)DDP::XP],
                        ddps[(uint32_t)DDP::YP], ddps[(uint32_t)DDP::ZP], ddps[(uint32_t)DDP::DXDTP],
-                       ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr);
+                       ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr, properties);
 
         KERNEL_LAUNCH(correctKernel, kernelSize, 0, 0, numBubbles, timeStep, ddps[(uint32_t)DDP::ERROR],
                       ddps[(uint32_t)DDP::XP], ddps[(uint32_t)DDP::X], ddps[(uint32_t)DDP::DXDT],
@@ -462,7 +462,8 @@ bool Simulator::integrate()
       doWallVelocity(pairKernelSize, 0, velocityStream, PBC_X == 0, PBC_Y == 0, PBC_Z == 0, numBubbles,
                      dips[(uint32_t)DIP::PAIR1], dips[(uint32_t)DIP::PAIR2], ddps[(uint32_t)DDP::RP],
                      ddps[(uint32_t)DDP::XP], ddps[(uint32_t)DDP::YP], ddps[(uint32_t)DDP::ZP],
-                     ddps[(uint32_t)DDP::DXDTP], ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr);
+                     ddps[(uint32_t)DDP::DXDTP], ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
+                     properties);
 
       // Flow velocity
       if (USE_FLOW == 1)
@@ -533,7 +534,8 @@ bool Simulator::integrate()
       doWallVelocity(pairKernelSize, 0, velocityStream, PBC_X == 0, PBC_Y == 0, false, numBubbles,
                      dips[(uint32_t)DIP::PAIR1], dips[(uint32_t)DIP::PAIR2], ddps[(uint32_t)DDP::RP],
                      ddps[(uint32_t)DDP::XP], ddps[(uint32_t)DDP::YP], ddps[(uint32_t)DDP::ZP],
-                     ddps[(uint32_t)DDP::DXDTP], ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr);
+                     ddps[(uint32_t)DDP::DXDTP], ddps[(uint32_t)DDP::DYDTP], ddps[(uint32_t)DDP::DZDTP], lbb, tfr,
+                     properties);
 
       // Flow velocity
       if (USE_FLOW == 1)
