@@ -16,7 +16,7 @@
 
 namespace cubble
 {
-// Device double pointers
+// Device double pointer names
 enum class DDP
 {
   X,
@@ -65,7 +65,7 @@ enum class DDP
   NUM_VALUES
 };
 
-// Device int pointers
+// Device int pointer names
 enum class DIP
 {
   FLAGS,
@@ -89,42 +89,42 @@ enum class DIP
 
 struct SimulationState
 {
+  int numBubbles        = 0;
+  int maxNumCells       = 0;
+  int numPairs          = 0;
+  uint32_t numSnapshots = 0;
+  uint32_t timesPrinted = 0;
+  uint32_t dataStride   = 0;
+  uint32_t pairStride   = 0;
+
+  uint64_t memReqD             = 0;
+  uint64_t memReqI             = 0;
+  uint64_t numIntegrationSteps = 0;
+  uint64_t numStepsInTimeStep  = 0;
   double simulationTime        = 0.0;
   double energy1               = 0.0;
   double energy2               = 0.0;
   double maxBubbleRadius       = 0.0;
   double timeStep              = 0.0;
-  uint64_t numIntegrationSteps = 0;
-  uint64_t numStepsInTimeStep  = 0;
-  uint32_t numSnapshots        = 0;
-  uint32_t timesPrinted        = 0;
-  int numBubbles               = 0;
-  int maxNumCells              = 0;
-  int numPairs                 = 0;
-  dvec lbb                     = dvec(0.0, 0.0, 0.0);
-  dvec tfr                     = dvec(0.0, 0.0, 0.0);
-  dvec interval                = dvec(0.0, 0.0, 0.0);
 
-  // Host pointers to device global variables
-  int *mbpc      = nullptr;
-  int *np        = nullptr;
-  double *dtfapr = nullptr;
-  double *dtfa   = nullptr;
-  double *dvm    = nullptr;
-  double *dtv    = nullptr;
-  double *dir    = nullptr;
-  double *dta    = nullptr;
-  double *dasai  = nullptr;
+  dvec lbb      = dvec(0.0, 0.0, 0.0);
+  dvec tfr      = dvec(0.0, 0.0, 0.0);
+  dvec interval = dvec(0.0, 0.0, 0.0);
 
-  // Device data
+  int *mbpc       = nullptr;
+  int *np         = nullptr;
+  int *deviceInts = nullptr;
+  int *pinnedInts = nullptr;
+
+  double *dtfapr        = nullptr;
+  double *dtfa          = nullptr;
+  double *dvm           = nullptr;
+  double *dtv           = nullptr;
+  double *dir           = nullptr;
+  double *dta           = nullptr;
+  double *dasai         = nullptr;
   double *pinnedDoubles = nullptr;
   double *deviceDoubles = nullptr;
-  int *deviceInts       = nullptr;
-  int *pinnedInts       = nullptr;
-  uint32_t dataStride   = 0;
-  uint32_t pairStride   = 0;
-  uint64_t memReqD      = 0;
-  uint64_t memReqI      = 0;
 
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
@@ -152,13 +152,13 @@ struct SimulationInputs
   double timeScalingFactor = 0.0;
   double timeStepIn        = 0.0;
 
-  std::string snapshotFilename = "";
-  std::string dataFilename     = "";
-
   dvec boxRelDim = dvec(0.0, 0.0, 0.0);
   dvec flowLbb   = dvec(0.0, 0.0, 0.0);
   dvec flowTfr   = dvec(0.0, 0.0, 0.0);
   dvec flowVel   = dvec(0.0, 0.0, 0.0);
+
+  std::string snapshotFilename = "";
+  std::string dataFilename     = "";
 };
 
 struct Params
@@ -935,8 +935,6 @@ double calculateVolumeOfBubbles(Params &params)
 
 void deinit(Params &params)
 {
-  saveSnapshotToFile(params);
-
   CUDA_CALL(cudaDeviceSynchronize());
 
   CUDA_CALL(cudaFree(static_cast<void *>(params.state.deviceDoubles)));
@@ -1027,12 +1025,11 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     params.state.numBubbles = bubblesPerDim.x * bubblesPerDim.y;
   }
 
-  params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
-  params.state.tfr         = d * bubblesPerDim.asType<double>() + params.state.lbb;
-  params.state.interval    = params.state.tfr - params.state.lbb;
-  params.inputs.flowTfr    = params.state.interval * params.inputs.flowTfr + params.state.lbb;
-  params.inputs.flowLbb    = params.state.interval * params.inputs.flowLbb + params.state.lbb;
-  params.state.timeStep    = params.inputs.timeStepIn;
+  params.state.tfr      = d * bubblesPerDim.asType<double>() + params.state.lbb;
+  params.state.interval = params.state.tfr - params.state.lbb;
+  params.inputs.flowTfr = params.state.interval * params.inputs.flowTfr + params.state.lbb;
+  params.inputs.flowLbb = params.state.interval * params.inputs.flowLbb + params.state.lbb;
+  params.state.timeStep = params.inputs.timeStepIn;
 
   // Determine the maximum number of Morton numbers for the simulation box
   dim3 gridDim         = getGridSize(params);
@@ -1056,6 +1053,8 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 
 void commonSetup(Params &params)
 {
+  params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
+
   // Get some device global symbol addresses to host pointers.
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dtfa), dTotalFreeArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dtfapr), dTotalFreeAreaPerRadius));
@@ -1436,6 +1435,9 @@ void run(const char *inputFileName)
 
     ++params.state.numStepsInTimeStep;
   }
+
+  // Only save when actually ending, and not due to time running out
+  saveSnapshotToFile(params);
 
   // Append when continued
   std::ofstream file(params.inputs.dataFilename);
