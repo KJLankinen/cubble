@@ -1248,7 +1248,7 @@ void initializeFromJson(const char *inputFileName, Params &params, std::stringst
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
   ivec bubblesPerDim = ivec(0, 0, 0);
-  readInputs(params.inputs, inputFileName, bubblesPerDim);
+  readInputs(params, inputFileName, bubblesPerDim);
   commonSetup(params);
   generateStartingData(params, bubblesPerDim);
   saveSnapshotToFile(params); // 0
