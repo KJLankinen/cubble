@@ -1259,7 +1259,8 @@ void run(const char *inputFileName)
     relativeSize.z    = (NUM_DIM == 2) ? 1 : relativeSize.z;
     double t = calculateVolumeOfBubbles(params) / (phiTarget * relativeSize.x * relativeSize.y * relativeSize.z);
     t        = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
-    params.state.tfr = dvec(t, t, t) * relativeSize;
+    params.state.tfr      = dvec(t, t, t) * relativeSize;
+    params.state.interval = params.state.tfr - params.state.lbb;
     transformPositions(params, false);
 
     phi = bubbleVolume / getSimulationBoxVolume(params);
