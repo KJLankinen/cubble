@@ -97,6 +97,7 @@ struct SimulationState
   uint64_t numIntegrationSteps = 0;
   uint64_t numStepsInTimeStep  = 0;
   uint32_t numSnapshots        = 0;
+  uint32_t timesPrinted        = 0;
   int numBubbles               = 0;
   int maxNumCells              = 0;
   int numPairs                 = 0;
@@ -1389,20 +1390,20 @@ void run(const char *inputFileName)
                         params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X],
                         params.state.interval.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y]);
 
-        auto getSum = [this](double *p) -> double {
+        auto getSum = [](double *p, Params &params) -> double {
           return params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, params.state.numBubbles);
         };
-        auto getAvg = [this](double *p) -> double { return getSum(p) / params.state.numBubbles; };
+        auto getAvg = [this](double *p, Params &params) -> double { return getSum(p) / params.state.numBubbles; };
 
-        params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4]);
+        params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4], params);
         const double dE             = (params.state.energy2 - params.state.energy1) / params.state.energy2;
-        const double relativeRadius = getAvg(params.state.ddps[(uint32_t)DDP::R]) / params.inputs.avgRad;
+        const double relativeRadius = getAvg(params.state.ddps[(uint32_t)DDP::R], params) / params.inputs.avgRad;
 
         // Add values to data stream
         dataStream << (int)scaledTime << " " << relativeRadius << " "
                    << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
-                   << getAvg(params.state.ddps[(uint32_t)DDP::PATH]) << " "
-                   << getAvg(params.state.ddps[(uint32_t)DDP::DISTANCE]) << " " << dE << "\n";
+                   << getAvg(params.state.ddps[(uint32_t)DDP::PATH], params) << " "
+                   << getAvg(params.state.ddps[(uint32_t)DDP::DISTANCE], params) << " " << dE << "\n";
 
         // Print some values
         std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params)
