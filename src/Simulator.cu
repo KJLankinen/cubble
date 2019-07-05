@@ -1229,25 +1229,10 @@ void readInputs(SimulationInputs &inputs, const char *inputFileName)
 }
 #undef JSON_READ
 
-void initializeFromJson(const char *inputFileName, Params &params)
+void initializeFromJson(const char *inputFileName, Params &params, std::stringstream &dataStream)
 {
   // Initialize everything, starting with an input .json file.
   // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
-}
-
-void initializeFromBinary(const char *inputFileName, Params &params)
-{
-  // This function initializes the simulation state from a binary dump.
-  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
-}
-
-} // namespace
-
-namespace cubble
-{
-void run(const char *inputFileName)
-{
-  Params params;
   readInputs(params.inputs, inputFileName);
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
@@ -1323,109 +1308,125 @@ void run(const char *inputFileName)
     saveSnapshotToFile(params);
   }
 
-  std::cout << "\n==========\nSimulation\n==========" << std::endl;
-  std::stringstream dataStream;
+  // Set starting positions and reset wrap counts to 0
+  const size_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
+  CUDA_CALL(cudaMemcpy(params.state.ddps[(uint32_t)DDP::X0], params.state.ddps[(uint32_t)DDP::X], numBytesToCopy,
+                       cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemset(params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], 0, 6 * params.state.dataStride * sizeof(int)));
+
+  // Calculate the energy at simulation start
+  KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
+                params.state.ddps[(uint32_t)DDP::TEMP4]);
+
+  if (NUM_DIM == 3)
   {
-    // Set starting positions and reset wrap counts to 0
-    const size_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
-    CUDA_CALL(cudaMemcpy(params.state.ddps[(uint32_t)DDP::X0], params.state.ddps[(uint32_t)DDP::X], numBytesToCopy,
-                         cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemset(params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], 0, 6 * params.state.dataStride * sizeof(int)));
-
-    // Calculate the energy at simulation start
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
-                  params.state.ddps[(uint32_t)DDP::TEMP4]);
-
-    if (NUM_DIM == 3)
-    {
-      KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-                    params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                    params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
-                    params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y,
-                    PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
-                    params.state.ddps[(uint32_t)DDP::Z]);
-    }
-    else
-    {
-      KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-                    params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                    params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
-                    params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y,
-                    PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y]);
-    }
-
-    params.state.energy1 = params.cw.reduce<double, double *, double *>(
-      &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4], params.state.numBubbles);
-    params.state.simulationTime      = 0.0;
-    params.state.timesPrinted        = 1;
-    params.state.numIntegrationSteps = 0;
-
-    // After this point everything should be equal regardless of initialization method.
-    bool continueIntegration = true;
-    std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
-    while (continueIntegration)
-    {
-      continueIntegration = integrate(params);
-      CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
-      CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 2200, continueIntegration);
-
-      const double scaledTime = params.state.simulationTime * params.inputs.timeScalingFactor;
-      if ((int)scaledTime >= params.state.timesPrinted)
-      {
-        // Calculate total energy
-        KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
-                      params.state.ddps[(uint32_t)DDP::TEMP4]);
-
-        if (NUM_DIM == 3)
-          KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-                        params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                        params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
-                        params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X],
-                        params.state.interval.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y],
-                        params.state.interval.z, PBC_Z == 1, params.state.ddps[(uint32_t)DDP::Z]);
-        else
-          KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-                        params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
-                        params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
-                        params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X],
-                        params.state.interval.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y]);
-
-        auto getSum = [](double *p, Params &params) -> double {
-          return params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, params.state.numBubbles);
-        };
-
-        auto getAvg = [getSum](double *p, Params &params) -> double {
-          return getSum(p, params) / params.state.numBubbles;
-        };
-
-        params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4], params);
-        const double dE             = (params.state.energy2 - params.state.energy1) / params.state.energy2;
-        const double relativeRadius = getAvg(params.state.ddps[(uint32_t)DDP::R], params) / params.inputs.avgRad;
-
-        // Add values to data stream
-        dataStream << (int)scaledTime << " " << relativeRadius << " "
-                   << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
-                   << getAvg(params.state.ddps[(uint32_t)DDP::PATH], params) << " "
-                   << getAvg(params.state.ddps[(uint32_t)DDP::DISTANCE], params) << " " << dE << "\n";
-
-        // Print some values
-        std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params)
-                  << "\t" << relativeRadius << "\t" << params.state.numBubbles << "\t" << dE << "\t"
-                  << params.state.numStepsInTimeStep << "\t" << params.state.numPairs << std::endl;
-
-        // Only write snapshots when t* is a power of 2.
-        if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
-          saveSnapshotToFile(params);
-
-        ++params.state.timesPrinted;
-        params.state.numStepsInTimeStep = 0;
-        params.state.energy1            = params.state.energy2;
-      }
-
-      ++params.state.numStepsInTimeStep;
-    }
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+                  params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
+                  params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
+                  PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
+                  params.state.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
+                  params.state.ddps[(uint32_t)DDP::Z]);
+  }
+  else
+  {
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+                  params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
+                  params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
+                  PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
+                  params.state.ddps[(uint32_t)DDP::Y]);
   }
 
+  params.state.energy1 = params.cw.reduce<double, double *, double *>(
+    &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4], params.state.numBubbles);
+  params.state.simulationTime      = 0.0;
+  params.state.timesPrinted        = 1;
+  params.state.numIntegrationSteps = 0;
+}
+
+void initializeFromBinary(const char *inputFileName, Params &params, std::stringstream &dataStream)
+{
+  // This function initializes the simulation state from a binary dump.
+  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
+}
+
+} // namespace
+
+namespace cubble
+{
+void run(const char *inputFileName)
+{
+  Params params;
+  std::stringstream dataStream;
+
+  initializeFromJson(inputFileName, params, dataStream);
+  // initializeFromBinary(inputFileName, params, dataStream);
+
+  std::cout << "\n==========\nIntegration\n==========" << std::endl;
+  bool continueIntegration = true;
+  std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
+  while (continueIntegration)
+  {
+    continueIntegration = integrate(params);
+    CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
+    CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 2200, continueIntegration);
+
+    const double scaledTime = params.state.simulationTime * params.inputs.timeScalingFactor;
+    if ((int)scaledTime >= params.state.timesPrinted)
+    {
+      // Calculate total energy
+      KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
+                    params.state.ddps[(uint32_t)DDP::TEMP4]);
+
+      if (NUM_DIM == 3)
+        KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+                      params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
+                      params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
+                      params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y,
+                      PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
+                      params.state.ddps[(uint32_t)DDP::Z]);
+      else
+        KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+                      params.state.dips[(uint32_t)DIP::PAIR1], params.state.dips[(uint32_t)DIP::PAIR2],
+                      params.state.ddps[(uint32_t)DDP::R], params.state.ddps[(uint32_t)DDP::TEMP4],
+                      params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y,
+                      PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y]);
+
+      auto getSum = [](double *p, Params &params) -> double {
+        return params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, params.state.numBubbles);
+      };
+
+      auto getAvg = [getSum](double *p, Params &params) -> double {
+        return getSum(p, params) / params.state.numBubbles;
+      };
+
+      params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4], params);
+      const double dE             = (params.state.energy2 - params.state.energy1) / params.state.energy2;
+      const double relativeRadius = getAvg(params.state.ddps[(uint32_t)DDP::R], params) / params.inputs.avgRad;
+
+      // Add values to data stream
+      dataStream << (int)scaledTime << " " << relativeRadius << " "
+                 << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
+                 << getAvg(params.state.ddps[(uint32_t)DDP::PATH], params) << " "
+                 << getAvg(params.state.ddps[(uint32_t)DDP::DISTANCE], params) << " " << dE << "\n";
+
+      // Print some values
+      std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params) << "\t"
+                << relativeRadius << "\t" << params.state.numBubbles << "\t" << dE << "\t"
+                << params.state.numStepsInTimeStep << "\t" << params.state.numPairs << std::endl;
+
+      // Only write snapshots when t* is a power of 2.
+      if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
+        saveSnapshotToFile(params);
+
+      ++params.state.timesPrinted;
+      params.state.numStepsInTimeStep = 0;
+      params.state.energy1            = params.state.energy2;
+    }
+
+    ++params.state.numStepsInTimeStep;
+  }
+
+  // Append when continued
   std::ofstream file(params.inputs.dataFilename);
   file << dataStream.str() << std::endl;
 
