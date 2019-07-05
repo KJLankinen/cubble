@@ -89,19 +89,20 @@ enum class DIP
 
 struct SimulationState
 {
-  double simulationTime  = 0.0;
-  double energy1         = 0.0;
-  double energy2         = 0.0;
-  double maxBubbleRadius = 0.0;
-  double timeStep        = 0.0;
-  size_t integrationStep = 0;
-  uint32_t numSnapshots  = 0;
-  int numBubbles         = 0;
-  int maxNumCells        = 0;
-  int numPairs           = 0;
-  dvec lbb               = dvec(0.0, 0.0, 0.0);
-  dvec tfr               = dvec(0.0, 0.0, 0.0);
-  dvec interval          = dvec(0.0, 0.0, 0.0);
+  double simulationTime        = 0.0;
+  double energy1               = 0.0;
+  double energy2               = 0.0;
+  double maxBubbleRadius       = 0.0;
+  double timeStep              = 0.0;
+  uint64_t numIntegrationSteps = 0;
+  uint64_t numStepsInTimeStep  = 0;
+  uint32_t numSnapshots        = 0;
+  int numBubbles               = 0;
+  int maxNumCells              = 0;
+  int numPairs                 = 0;
+  dvec lbb                     = dvec(0.0, 0.0, 0.0);
+  dvec tfr                     = dvec(0.0, 0.0, 0.0);
+  dvec interval                = dvec(0.0, 0.0, 0.0);
 
   // Host pointers to device global variables
   int *mbpc      = nullptr;
@@ -1114,7 +1115,7 @@ bool integrate(Params &params)
                             params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], params.state.dataStride * 3 * sizeof(int),
                             cudaMemcpyDeviceToDevice));
 
-  ++params.state.integrationStep;
+  ++params.state.numIntegrationSteps;
   params.state.simulationTime += params.state.timeStep;
   params.state.maxBubbleRadius = params.state.pinnedDoubles[0];
 
@@ -1125,7 +1126,7 @@ bool integrate(Params &params)
   if (shouldDeleteBubbles)
     deleteSmallBubbles(params, numBubblesAboveMinRad);
 
-  if (shouldDeleteBubbles || params.state.integrationStep % 5000 == 0)
+  if (shouldDeleteBubbles || params.state.numIntegrationSteps % 5000 == 0)
     updateCellsAndNeighbors(params);
 
   bool continueSimulation = params.state.numBubbles > params.inputs.minNumBubbles;
@@ -1227,6 +1228,18 @@ void readInputs(SimulationInputs &inputs, const char *inputFileName)
 }
 #undef JSON_READ
 
+void initializeFromJson(const char *inputFileName, Params &params)
+{
+  // Initialize everything, starting with an input .json file.
+  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
+}
+
+void initializeFromBinary(const char *inputFileName, Params &params)
+{
+  // This function initializes the simulation state from a binary dump.
+  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
+}
+
 } // namespace
 
 namespace cubble
@@ -1318,10 +1331,6 @@ void run(const char *inputFileName)
                          cudaMemcpyDeviceToDevice));
     CUDA_CALL(cudaMemset(params.state.dips[(uint32_t)DIP::WRAP_COUNT_X], 0, 6 * params.state.dataStride * sizeof(int)));
 
-    params.state.simulationTime = 0;
-    int timesPrinted            = 1;
-    uint32_t numSteps           = 0;
-
     // Calculate the energy at simulation start
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
                   params.state.ddps[(uint32_t)DDP::TEMP4]);
@@ -1346,24 +1355,21 @@ void run(const char *inputFileName)
 
     params.state.energy1 = params.cw.reduce<double, double *, double *>(
       &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4], params.state.numBubbles);
+    params.state.simulationTime      = 0.0;
+    params.state.timesPrinted        = 1;
+    params.state.numIntegrationSteps = 0;
 
-    // Start the simulation proper
+    // After this point everything should be equal regardless of initialization method.
     bool continueIntegration = true;
-    int numTotalSteps        = 0;
     std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
     while (continueIntegration)
     {
       continueIntegration = integrate(params);
-      CUDA_PROFILER_START(numTotalSteps == 2000);
-      CUDA_PROFILER_STOP(numTotalSteps == 2200, continueIntegration);
+      CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
+      CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 2200, continueIntegration);
 
-      // The if clause contains many slow operations, but it's only done
-      // very few times relative to the entire run time, so it should not
-      // have a huge cost. Roughly 6e4-1e5 integration steps are taken for each
-      // time step
-      // and the if clause is executed once per time step.
       const double scaledTime = params.state.simulationTime * params.inputs.timeScalingFactor;
-      if ((int)scaledTime >= timesPrinted)
+      if ((int)scaledTime >= params.state.timesPrinted)
       {
         // Calculate total energy
         KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
@@ -1383,46 +1389,36 @@ void run(const char *inputFileName)
                         params.state.interval.x, PBC_X == 1, params.state.ddps[(uint32_t)DDP::X],
                         params.state.interval.y, PBC_Y == 1, params.state.ddps[(uint32_t)DDP::Y]);
 
-        params.state.energy2 = params.cw.reduce<double, double *, double *>(
-          &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4], params.state.numBubbles);
-        const double dE = (params.state.energy2 - params.state.energy1) / params.state.energy2;
+        auto getSum = [this](double *p) -> double {
+          return params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, params.state.numBubbles);
+        };
+        auto getAvg = [this](double *p) -> double { return getSum(p) / params.state.numBubbles; };
 
-        const double averageRadius =
-          params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::R],
-                                                       params.state.numBubbles) /
-          params.state.numBubbles;
-        const double averagePath =
-          params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::PATH],
-                                                       params.state.numBubbles) /
-          params.state.numBubbles;
-
-        const double averageDistance =
-          params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::DISTANCE], params.state.numBubbles) /
-          params.state.numBubbles;
-        const double relativeRadius = averageRadius / params.inputs.avgRad;
+        params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4]);
+        const double dE             = (params.state.energy2 - params.state.energy1) / params.state.energy2;
+        const double relativeRadius = getAvg(params.state.ddps[(uint32_t)DDP::R]) / params.inputs.avgRad;
 
         // Add values to data stream
         dataStream << (int)scaledTime << " " << relativeRadius << " "
                    << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
-                   << averagePath << " " << averageDistance << " " << dE << "\n";
+                   << getAvg(params.state.ddps[(uint32_t)DDP::PATH]) << " "
+                   << getAvg(params.state.ddps[(uint32_t)DDP::DISTANCE]) << " " << dE << "\n";
 
         // Print some values
         std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params)
-                  << "\t" << relativeRadius << "\t" << params.state.numBubbles << "\t" << dE << "\t" << numSteps << "\t"
-                  << params.state.numPairs << std::endl;
+                  << "\t" << relativeRadius << "\t" << params.state.numBubbles << "\t" << dE << "\t"
+                  << params.state.numStepsInTimeStep << "\t" << params.state.numPairs << std::endl;
 
         // Only write snapshots when t* is a power of 2.
-        if ((timesPrinted & (timesPrinted - 1)) == 0)
+        if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
           saveSnapshotToFile(params);
 
-        ++timesPrinted;
-        numSteps             = 0;
-        params.state.energy1 = params.state.energy2;
+        ++params.state.timesPrinted;
+        params.state.numStepsInTimeStep = 0;
+        params.state.energy1            = params.state.energy2;
       }
 
-      ++numSteps;
-      ++numTotalSteps;
+      ++params.state.numStepsInTimeStep;
     }
   }
 
