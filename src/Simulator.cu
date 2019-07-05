@@ -958,7 +958,7 @@ double getSimulationBoxVolume(Params &params)
   i.arg = j[#arg];           \
   std::cout << #arg << ": " << i.arg << std::endl
 
-void readInputs(SimulationInputs &inputs, const char *inputFileName)
+void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 {
   std::cout << "Reading inputs from file \"" << inputFileName << "\"" << std::endl;
   nlohmann::json j;
@@ -967,6 +967,7 @@ void readInputs(SimulationInputs &inputs, const char *inputFileName)
   if (file.is_open())
   {
     file >> j;
+    SimulationInputs &inputs = params.inputs;
 
     JSON_READ(inputs, j, phiTarget);
     JSON_READ(inputs, j, muZero);
@@ -1110,7 +1111,7 @@ void commonSetup(Params &params)
             << " bytes\ntotal: " << params.state.memReqI + params.state.memReqD << " bytes" << std::endl;
 }
 
-void generateStartingData(Params &params)
+void generateStartingData(Params &params, ivec bubblesPerDim)
 {
   std::cout << "Starting to generate data for bubbles." << std::endl;
   const int rngSeed      = params.inputs.rngSeed;
@@ -1246,9 +1247,10 @@ void initializeFromJson(const char *inputFileName, Params &params, std::stringst
   // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
-  readInputs(params.inputs, inputFileName);
+  ivec bubblesPerDim = ivec(0, 0, 0);
+  readInputs(params.inputs, inputFileName, bubblesPerDim);
   commonSetup(params);
-  generateStartingData(params);
+  generateStartingData(params, bubblesPerDim);
   saveSnapshotToFile(params); // 0
 
   std::cout << "Letting bubbles settle after they've been created and before "
