@@ -1393,7 +1393,10 @@ void run(const char *inputFileName)
         auto getSum = [](double *p, Params &params) -> double {
           return params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum, p, params.state.numBubbles);
         };
-        auto getAvg = [=](double *p, Params &params) -> double { return getSum(p) / params.state.numBubbles; };
+
+        auto getAvg = [getSum](double *p, Params &params) -> double {
+          return getSum(p, params) / params.state.numBubbles;
+        };
 
         params.state.energy2        = getSum(params.state.ddps[(uint32_t)DDP::TEMP4], params);
         const double dE             = (params.state.energy2 - params.state.energy1) / params.state.energy2;
