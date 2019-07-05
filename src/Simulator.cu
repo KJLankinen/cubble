@@ -1005,11 +1005,11 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     throw std::runtime_error("Couldn't open input file!");
 
   // First calculate the size of the box and the starting number of bubbles
-  dvec relDim        = params.inputs.boxRelDim;
-  relDim             = relDim / relDim.x;
-  const float d      = 2 * params.inputs.avgRad;
-  float x            = params.inputs.numBubblesIn * d * d / relDim.y;
-  ivec bubblesPerDim = ivec(0, 0, 0);
+  dvec relDim   = params.inputs.boxRelDim;
+  relDim        = relDim / relDim.x;
+  const float d = 2 * params.inputs.avgRad;
+  float x       = params.inputs.numBubblesIn * d * d / relDim.y;
+  bubblesPerDim = ivec(0, 0, 0);
 
   if (NUM_DIM == 3)
   {
