@@ -1355,7 +1355,7 @@ void initializeFromBinary(const char *inputFileName, Params &params, std::string
   // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
   deserializeState(params, inputFileName);
   commonSetup(params);
-  deserializeData(params, oldDataStride, oldPairStride);
+  deserializeData(params, inputFileName);
 }
 
 } // namespace
