@@ -1301,6 +1301,7 @@ namespace cubble
 {
 void run(const char *inputFileName)
 {
+  std::cout << sizeof(dvec) << ", " << sizeof(fvec) << ", " << sizeof(ivec) << ", " << sizeof(uvec) << std::endl;
   Params params;
   std::stringstream dataStream;
 
