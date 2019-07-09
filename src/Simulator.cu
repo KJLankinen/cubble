@@ -1409,7 +1409,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
   std::ofstream outFile(outputFileName, std::ofstream::binary);
   if (outFile.is_open())
   {
-    const uint32_t numDoubleComponents = DDP::NUM_VALUES / 2;
+    const uint32_t numDoubleComponents = (uint32_t)DDP::NUM_VALUES / 2;
     std::vector<double> doubleData;
     doubleData.resize(params.state.dataStride * numDoubleComponents);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(doubleData.data()), static_cast<void *>(params.deviceDoubleMemory),
