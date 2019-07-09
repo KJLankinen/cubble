@@ -1374,17 +1374,18 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // This function reserves memory & sets up the device pointers.
     commonSetup(params);
 
-    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + params.state.memReqI + params.state.memReqD)
+    const uint64_t doubleBytes = params.state.memReqD / 2;
+    const uint64_t intBytes    = sizeof(int) * 3 * params.state.dataStride;
+
+    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes)
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
 
     // Copy doubles
-    const uint64_t doubleBytes = params.state.memReqD / 2;
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory), static_cast<void *>(byteData.data() + offset),
                          doubleBytes, cudaMemcpyHostToDevice));
     offset += doubleBytes;
 
     // Copy ints
-    const uint64_t intBytes = sizeof(int) * 3 * params.state.dataStride;
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
                          static_cast<void *>(byteData.data() + offset), intBytes, cudaMemcpyHostToDevice));
     offset += intBytes;
