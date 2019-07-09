@@ -23,7 +23,6 @@ enum class ReorganizeType
 #define CUBBLE_I_PI 1.0 / CUBBLE_PI
 
 extern __device__ bool dErrorEncountered;
-extern __device__ int dMaxBubblesPerCell;
 extern __device__ int dNumPairs;
 extern __device__ double dTotalFreeArea;
 extern __device__ double dTotalFreeAreaPerRadius;

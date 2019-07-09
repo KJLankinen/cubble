@@ -111,8 +111,7 @@ struct SimulationState
   dvec tfr      = dvec(0.0, 0.0, 0.0);
   dvec interval = dvec(0.0, 0.0, 0.0);
 
-  int *mbpc = nullptr;
-  int *np   = nullptr;
+  int *np = nullptr;
 
   int *deviceInts = nullptr;
 
@@ -853,12 +852,13 @@ bool integrate(Params &params)
                   params.state.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
 
     params.cw.reduceNoCopy<int, int *, int *>(&cub::DeviceReduce::Sum, params.state.dips[(uint32_t)DIP::FLAGS],
-                                              params.state.mbpc, params.state.numBubbles, params.gasStream);
+                                              params.state.dips[(uint32_t)DIP::TEMP1], params.state.numBubbles,
+                                              params.gasStream);
     params.cw.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, params.state.ddps[(uint32_t)DDP::RP],
                                                        params.state.dtfa, params.state.numBubbles, params.gasStream);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&numBubblesAboveMinRad), params.state.mbpc, sizeof(int),
-                              cudaMemcpyDeviceToHost, params.gasStream));
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&numBubblesAboveMinRad), params.state.dips[(uint32_t)DIP::TEMP1],
+                              sizeof(int), cudaMemcpyDeviceToHost, params.gasStream));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.state.maxBubbleRadius), params.state.dtfa, sizeof(double),
                               cudaMemcpyDeviceToHost, params.gasStream));
 
@@ -1052,7 +1052,6 @@ void commonSetup(Params &params)
   // Get some device global symbol addresses to host pointers.
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dtfa), dTotalFreeArea));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dtfapr), dTotalFreeAreaPerRadius));
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.mbpc), dMaxBubblesPerCell));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dvm), dVolumeMultiplier));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.dtv), dTotalVolume));
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.state.np), dNumPairs));
@@ -1097,7 +1096,7 @@ void commonSetup(Params &params)
 
   std::cout << "Memory requirement for data:\n\tdouble: " << params.state.memReqD
             << " bytes\n\tint: " << params.state.memReqI
-            << " bytes\ntotal: " << params.state.memReqI + params.state.memReqD << " bytes" << std::endl;
+            << " bytes\n\ttotal: " << params.state.memReqI + params.state.memReqD << " bytes" << std::endl;
 }
 
 void generateStartingData(Params &params, ivec bubblesPerDim)
