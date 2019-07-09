@@ -2,16 +2,14 @@
 
 namespace cubble
 {
-
+__constant__ __device__ double dTotalArea;
+__constant__ __device__ double dTotalFreeArea;
+__constant__ __device__ double dTotalFreeAreaPerRadius;
+__constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
-__device__ double dTotalFreeArea;
-__device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
-__device__ double dTotalVolume;
 __device__ double dInvRho;
-__device__ double dTotalArea;
-__device__ double dAverageSurfaceAreaIn;
 
 __device__ void logError(bool condition, const char *statement, const char *errMsg)
 {
@@ -471,7 +469,7 @@ __global__ void freeAreaKernel(int numValues, double *r, double *freeArea, doubl
 }
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double kappa,
-                                            double kParam)
+                                            double kParam, double averageSurfaceAreaIn)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -482,7 +480,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
     invArea *= 0.5 * invRadius;
 #endif
     const double vr =
-      drdt[i] + kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * freeArea[i] * (dInvRho - invRadius);
+      drdt[i] + kappa * averageSurfaceAreaIn * numValues / dTotalArea * freeArea[i] * (dInvRho - invRadius);
     drdt[i] = kParam * invArea * vr;
   }
 }

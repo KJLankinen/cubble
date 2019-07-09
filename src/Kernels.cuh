@@ -22,15 +22,14 @@ enum class ReorganizeType
 #define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
 #define CUBBLE_I_PI 1.0 / CUBBLE_PI
 
+extern __constant__ __device__ double dTotalArea;
+extern __constant__ __device__ double dTotalFreeArea;
+extern __constant__ __device__ double dTotalFreeAreaPerRadius;
+extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
-extern __device__ double dTotalFreeArea;
-extern __device__ double dTotalFreeAreaPerRadius;
 extern __device__ double dVolumeMultiplier;
-extern __device__ double dTotalVolume;
 extern __device__ double dInvRho;
-extern __device__ double dTotalArea;
-extern __device__ double dAverageSurfaceAreaIn;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line, void (*f)(Arguments...), KernelSize kernelSize,
@@ -464,7 +463,7 @@ __global__ void gasExchangeKernel(int numValues, int *first, int *second, double
 __global__ void freeAreaKernel(int numValues, double *r, double *freeArea, double *freeAreaPerRadius, double *area);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double kappa,
-                                            double kParam);
+                                            double kParam, double averageSurfaceAreaIn);
 
 __global__ void addVolume(double *r, int numValues);
 
