@@ -1313,7 +1313,7 @@ void run(const char *inputFileName)
   std::ofstream outFile("dump.bin", std::ofstream::binary);
   if (outFile.is_open())
   {
-    outFile.write(bytesData.data(), bytesData.size());
+    outFile.write(byteData.data(), byteData.size());
     outFile.close();
   }
   else
