@@ -173,7 +173,7 @@ struct SimulationInputs
   int numBubblesIn      = 0;
   int minNumBubbles     = 0;
 
-  bool operator==(const SimulationState &o)
+  bool operator==(const SimulationInputs &o)
   {
     bool equal = true;
     equal &= boxRelDim == o.boxRelDim;
