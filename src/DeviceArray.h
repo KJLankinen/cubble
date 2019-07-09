@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Macros.h"
 #include "Util.h"
 #include <assert.h>
 #include <memory>

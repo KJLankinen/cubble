@@ -1,6 +1,6 @@
 #include "CubWrapper.h"
 #include "Kernels.cuh"
-#include "Macros.h"
+#include "Util.h"
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"

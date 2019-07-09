@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Macros.h"
 #include "nlohmann/json.hpp"
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -10,8 +9,42 @@
 #include <sstream>
 #include <stdexcept>
 
+#if (USE_PROFILING == 1)
+#define NVTX_RANGE_PUSH_A(string) nvtxRangePushA(string)
+#define NVTX_RANGE_POP() nvtxRangePop()
+#define CUDA_PROFILER_START(start) startProfiling(start)
+#define CUDA_PROFILER_STOP(stop, continue) stopProfiling(stop, continue)
+#else
+#define NVTX_RANGE_PUSH_A(string)
+#define NVTX_RANGE_POP()
+#define CUDA_PROFILER_START(start)
+#define CUDA_PROFILER_STOP(stop, continue)
+#endif
+
+#define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
+#define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
+#define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
+#define KERNEL_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
+
+// Macro for device assert.
+#ifndef NDEBUG
+#define DEVICE_ASSERT(statement, msg) cubble::logError(statement, #statement, msg)
+#else
+#define DEVICE_ASSERT(statement, msg)
+#endif
+
+// Need to be usable from kernels
+#define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
+#define CUBBLE_I_PI 1.0 / CUBBLE_PI
+
 namespace cubble
 {
+const double CUBBLE_EPSILON = 1.0e-10;
+#if NUM_DIM == 3
+const int CUBBLE_NUM_NEIGHBORS = 13;
+#else
+const int CUBBLE_NUM_NEIGHBORS = 4;
+#endif
 
 struct KernelSize
 {
@@ -35,12 +68,15 @@ struct KernelSize
   }
 };
 
-const double CUBBLE_EPSILON = 1.0e-10;
-#if NUM_DIM == 3
-const int CUBBLE_NUM_NEIGHBORS = 13;
-#else
-const int CUBBLE_NUM_NEIGHBORS = 4;
-#endif
+enum class ReorganizeType
+{
+  COPY_FROM_INDEX,
+  COPY_TO_INDEX,
+  CONDITIONAL_FROM_INDEX,
+  CONDITIONAL_TO_INDEX,
+
+  NUM_VALUES
+};
 
 inline void handleException(const std::exception_ptr pExc)
 {

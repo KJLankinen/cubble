@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Macros.h"
 #include "Util.h"
 #include "Vec.h"
 #include <assert.h>
@@ -9,19 +8,6 @@
 
 namespace cubble
 {
-enum class ReorganizeType
-{
-  COPY_FROM_INDEX,
-  COPY_TO_INDEX,
-  CONDITIONAL_FROM_INDEX,
-  CONDITIONAL_TO_INDEX,
-
-  NUM_VALUES
-};
-
-#define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
-#define CUBBLE_I_PI 1.0 / CUBBLE_PI
-
 extern __constant__ __device__ double dTotalArea;
 extern __constant__ __device__ double dTotalFreeArea;
 extern __constant__ __device__ double dTotalFreeAreaPerRadius;
