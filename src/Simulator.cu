@@ -1409,7 +1409,7 @@ void run(const char *inputFileName)
     std::cout << "Couldn't open file for reading!" << std::endl;
   }
 
-  std::cout << params.state == state2 << ", " << params.inputs == inputs2 << std::endl;
+  std::cout << (params.state == state2) << ", " << (params.inputs == inputs2) << std::endl;
 
   return;
 
