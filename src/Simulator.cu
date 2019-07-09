@@ -112,6 +112,38 @@ struct SimulationState
   uint32_t timesPrinted = 0;
   uint32_t dataStride   = 0;
   uint32_t pairStride   = 0;
+
+  bool operator==(const SimulationState &o)
+  {
+    bool equal = true;
+    equal &= lbb == o.lbb;
+    equal &= tfr == o.tfr;
+    equal &= interval == o.interval;
+
+    equal &= memReqD == o.memReqD;
+    equal &= memReqI == o.memReqI;
+    equal &= numIntegrationSteps == o.numIntegrationSteps;
+
+    equal &= numStepsInTimeStep == o.numStepsInTimeStep;
+    equal &= simulationTime == o.simulationTime;
+    equal &= energy1 == o.energy1;
+
+    equal &= energy2 == o.energy2;
+    equal &= maxBubbleRadius == o.maxBubbleRadius;
+    equal &= timeStep == o.timeStep;
+
+    equal &= numBubbles == o.numBubbles;
+    equal &= maxNumCells == o.maxNumCells;
+    equal &= numPairs == o.numPairs;
+
+    equal &= numSnapshots == o.numSnapshots;
+    equal &= timesPrinted == o.timesPrinted;
+
+    equal &= dataStride == o.dataStride;
+    equal &= pairStride == o.pairStride;
+
+    return equal;
+  }
 };
 
 struct SimulationInputs
@@ -140,6 +172,42 @@ struct SimulationInputs
   int numStepsToRelax   = 0;
   int numBubblesIn      = 0;
   int minNumBubbles     = 0;
+
+  bool operator==(const SimulationState &o)
+  {
+    bool equal = true;
+    equal &= boxRelDim == o.boxRelDim;
+    equal &= flowLbb == o.flowLbb;
+    equal &= flowTfr == o.flowTfr;
+
+    equal &= flowVel == o.flowVel;
+    equal &= avgRad == o.avgRad;
+    equal &= stdDevRad == o.stdDevRad;
+
+    equal &= minRad == o.minRad;
+    equal &= phiTarget == o.phiTarget;
+    equal &= muZero == o.muZero;
+
+    equal &= sigmaZero == o.sigmaZero;
+    equal &= fZeroPerMuZero == o.fZeroPerMuZero;
+    equal &= errorTolerance == o.errorTolerance;
+
+    equal &= maxDeltaEnergy == o.maxDeltaEnergy;
+    equal &= kParameter == o.kParameter;
+    equal &= kappa == o.kappa;
+
+    equal &= timeScalingFactor == o.timeScalingFactor;
+    equal &= timeStepIn == o.timeStepIn;
+
+    equal &= numBubblesPerCell == o.numBubblesPerCell;
+    equal &= rngSeed == o.rngSeed;
+
+    equal &= numStepsToRelax == o.numStepsToRelax;
+    equal &= numBubblesIn == o.numBubblesIn;
+    equal &= minNumBubbles == o.minNumBubbles;
+
+    return equal;
+  }
 };
 
 struct Params
@@ -1320,6 +1388,29 @@ void run(const char *inputFileName)
   {
     std::cout << "Couldn't open file for writing!" << std::endl;
   }
+
+  SimulationState state2;
+  SimulationInputs inputs2;
+  std::ifstream inFile("dump.bin", std::ifstream::binary);
+
+  byteData.clear();
+  if (inFile.is_open())
+  {
+    inFile.seekg(0, inFile.end);
+    const uint64_t fileSize = inFile.tellg();
+    inFile.seekg(0);
+    byteData.resize(fileSize);
+    inFile.read(byteData.data(), fileSize);
+    std::memcpy(static_cast<void *>(&state2), static_cast<void *>(byteData.data()), sizeof(state2));
+    std::memcpy(static_cast<void *>(&inputs2), static_cast<void *>(byteData.data() + sizeof(state2)), sizeof(inputs2));
+  }
+  else
+  {
+    std::cout << "Couldn't open file for reading!" << std::endl;
+  }
+
+  std::cout << params.state == state2 << ", " << params.inputs == inputs2 << std::endl;
+
   return;
 
   // initializeFromBinary(inputFileName, params, dataStream);
