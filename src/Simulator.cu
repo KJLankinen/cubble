@@ -1305,6 +1305,8 @@ void run(const char *inputFileName)
   Params params;
   std::stringstream dataStream;
 
+  std::cout << sizeof(params.state) << ", " << sizeof(params.inputs) << std::endl;
+
   initializeFromJson(inputFileName, params, dataStream);
   // initializeFromBinary(inputFileName, params, dataStream);
 
