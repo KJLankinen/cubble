@@ -5,6 +5,7 @@
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <array>
+#include <cstring>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
@@ -1300,9 +1301,27 @@ void run(const char *inputFileName)
   Params params;
   std::stringstream dataStream;
 
-  std::cout << sizeof(params.state) << ", " << sizeof(params.inputs) << std::endl;
-
   initializeFromJson(inputFileName, params, dataStream);
+
+  // Testing serialization
+  std::vector<std::uint8_t> byteData;
+  byteData.resize(sizeof(params.state) + sizeof(params.inputs));
+  std::memcpy(static_cast<void *>(byteData.data()), static_cast<void *>(&params.state), sizeof(params.state));
+  std::memcpy(static_cast<void *>(byteData.data() + sizeof(params.state)), static_cast<void *>(&params.inputs),
+              sizeof(params.inputs));
+
+  std::ofstream outFile("dump.bin", std::ofstream::binary);
+  if (outFile.is_open())
+  {
+    outFile.write(bytesData.data(), bytesData.size());
+    outFile.close();
+  }
+  else
+  {
+    std::cout << "Couldn't open file for writing!" << std::endl;
+  }
+  return;
+
   // initializeFromBinary(inputFileName, params, dataStream);
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
