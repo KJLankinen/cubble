@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <nvToolsExt.h>
+#include <signal.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -413,7 +414,8 @@ void updateCellsAndNeighbors(Params &params)
                     params.ddps[(uint32_t)DDP::Y]);
   }
 
-  CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs), dnp, sizeof(int), cudaMemcpyDeviceToHost));
+  CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs), static_cast<void *>(dnp), sizeof(int),
+                       cudaMemcpyDeviceToHost));
   params.cw.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP1]),
     params.dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
@@ -1232,18 +1234,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
   }
 }
 
-void deserializeState(Params &params, const char *inputFileName)
-{
-  // Deserialize the saved state of the simulation.
-}
-
-void deserializeData(Params &params, const char *inputFileName)
-{
-  // Deserialize the data from the binary and copy it to the device.
-  // When serializing data, already 'remove' the useless bits at the end of each 'row'.
-}
-
-void initializeFromJson(const char *inputFileName, Params &params, std::stringstream &dataStream)
+void initializeFromJson(const char *inputFileName, Params &params)
 {
   // Initialize everything, starting with an input .json file.
   // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
@@ -1351,69 +1342,157 @@ void initializeFromJson(const char *inputFileName, Params &params, std::stringst
   params.state.numIntegrationSteps = 0;
 }
 
-void initializeFromBinary(const char *inputFileName, Params &params, std::stringstream &dataStream)
+void initializeFromBinary(const char *inputFileName, Params &params)
 {
-  // This function initializes the simulation state from a binary dump.
-  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
-  deserializeState(params, inputFileName);
-  commonSetup(params);
-  deserializeData(params, inputFileName);
+  std::cout << "Initializing simulation from a binary dump." << std::endl;
+
+  std::ifstream inFile(inputFileName, std::ifstream::binary);
+  if (inFile.is_open())
+  {
+    inFile.seekg(0, inFile.end);
+    const uint64_t fileSize = inFile.tellg();
+    inFile.seekg(0);
+    if (fileSize <= sizeof(params.state) + sizeof(params.inputs))
+      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+
+    std::vector<char> byteData;
+    byteData.resize(fileSize);
+    inFile.read(byteData.data(), fileSize);
+
+    uint64_t offset = 0;
+    std::memcpy(static_cast<void *>(&params.state), static_cast<void *>(byteData.data()), sizeof(params.state));
+    offset += sizeof(params.state);
+    std::memcpy(static_cast<void *>(&params.inputs), static_cast<void *>(byteData.data() + offset),
+                sizeof(params.inputs));
+    offset += sizeof(params.inputs);
+
+    int *dnp = nullptr;
+    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(dnp), static_cast<void *>(&params.state.numPairs), sizeof(int),
+                         cudaMemcpyHostToDevice));
+
+    // This function reserves memory & sets up the device pointers.
+    commonSetup(params);
+
+    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + params.state.memReqI + params.state.memReqD)
+      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+
+    // Copy doubles
+    const uint64_t doubleBytes = params.state.memReqD / 2;
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory), static_cast<void *>(byteData.data() + offset),
+                         doubleBytes, cudaMemcpyHostToDevice));
+    offset += doubleBytes;
+
+    // Copy ints
+    const uint64_t intBytes = sizeof(int) * 3 * params.state.dataStride;
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
+                         static_cast<void *>(byteData.data() + offset), intBytes, cudaMemcpyHostToDevice));
+    offset += intBytes;
+
+    // All the data should be used at this point
+    if (offset != byteData.size())
+      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+
+    // Setup pairs. Unnecessary to serialize them.
+    updateCellsAndNeighbors(params);
+  }
+  else
+    throw std::runtime_error("Couldn't open binary file for reading!");
+
+  std::cout << "Binary initialization done." << std::endl;
+}
+
+void serializeStateAndData(const char *outputFileName, Params &params)
+{
+  std::cout << "Serializing simulation state and data to a binary file." << std::endl;
+
+  std::ofstream outFile(outputFileName, std::ofstream::binary);
+  if (outFile.is_open())
+  {
+    const uint32_t numDoubleComponents = DDP::NUM_VALUES / 2;
+    std::vector<double> doubleData;
+    doubleData.resize(params.state.dataStride * numDoubleComponents);
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(doubleData.data()), static_cast<void *>(params.deviceDoubleMemory),
+                         sizeof(double) * doubleData.size(), cudaMemcpyDeviceToHost));
+
+    const uint32_t numIntComponents = 3;
+    std::vector<int> intData;
+    intData.resize(params.state.dataStride * numIntComponents);
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(intData.data()), params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                         sizeof(int) * intData.size(), cudaMemcpyDeviceToHost));
+
+    // Divisible by 32 and >= numBubbles
+    const uint64_t newDataStride =
+      params.state.numBubbles + !!(params.state.numBubbles % 32) * (32 - params.state.numBubbles % 32);
+    const uint64_t doubleDataSize = numDoubleComponents * newDataStride * sizeof(double);
+    const uint64_t intDataSize    = numIntComponents * newDataStride * sizeof(int);
+    const uint64_t totalSize      = sizeof(params.state) + sizeof(params.inputs) + doubleDataSize + intDataSize;
+
+    std::vector<char> byteData;
+    byteData.resize(totalSize);
+
+    uint64_t offset = 0;
+    // Copy state
+    std::memcpy(static_cast<void *>(byteData.data()), static_cast<void *>(&params.state), sizeof(params.state));
+    offset += sizeof(params.state);
+
+    // Copy inputs
+    std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(&params.inputs),
+                sizeof(params.inputs));
+    offset += sizeof(params.inputs);
+
+    // Copy doubles
+    for (uint32_t i = 0; i < numDoubleComponents; ++i)
+    {
+      double *fromPtr            = doubleData.data() + i * params.state.dataStride;
+      const uint64_t bytesToCopy = sizeof(double) * newDataStride;
+      std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(fromPtr), bytesToCopy);
+      offset += bytesToCopy;
+    }
+
+    // Copy ints
+    for (uint32_t i = 0; i < numIntComponents; ++i)
+    {
+      int *fromPtr               = intData.data() + i * params.state.dataStride;
+      const uint64_t bytesToCopy = sizeof(int) * newDataStride;
+      std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(fromPtr), bytesToCopy);
+      offset += bytesToCopy;
+    }
+
+    if (offset != totalSize || offset != byteData.size())
+      throw std::runtime_error("Error in data calculation at serialization!");
+
+    outFile.write(byteData.data(), byteData.size());
+    outFile.close();
+  }
+  else
+    throw std::runtime_error("Couldn't open file for writing!");
+
+  std::cout << "Serialization done." << std::endl;
 }
 
 } // namespace
 
 namespace cubble
 {
-void run(const char *inputFileName)
+sig_atomic_t signalReceived = 0;
+
+void signalHandler(int sigNum)
 {
+  signalReceived = (sigNum == SIGUSR1) ? 1 : signalReceived;
+}
+
+void run(std::string &&inputFileName, std::string &&outputFileName)
+{
+  // Register signal handler
+  signal(SIGUSR1, signalHandler);
+
   Params params;
-  std::stringstream dataStream;
-
-  initializeFromJson(inputFileName, params, dataStream);
-
-  // Testing serialization
-  std::vector<char> byteData;
-  byteData.resize(sizeof(params.state) + sizeof(params.inputs));
-  std::memcpy(static_cast<void *>(byteData.data()), static_cast<void *>(&params.state), sizeof(params.state));
-  std::memcpy(static_cast<void *>(byteData.data() + sizeof(params.state)), static_cast<void *>(&params.inputs),
-              sizeof(params.inputs));
-
-  std::ofstream outFile("dump.bin", std::ofstream::binary);
-  if (outFile.is_open())
-  {
-    outFile.write(byteData.data(), byteData.size());
-    outFile.close();
-  }
+  // If input file name ends with .bin, it's a serialized state.
+  if (inputFileName.compare(0, 4, ".bin", inputFileName.size() - 4, 4) == 0)
+    initializeFromBinary(inputFileName.c_str(), params);
   else
-  {
-    std::cout << "Couldn't open file for writing!" << std::endl;
-  }
-
-  SimulationState state2;
-  SimulationInputs inputs2;
-  std::ifstream inFile("dump.bin", std::ifstream::binary);
-
-  byteData.clear();
-  if (inFile.is_open())
-  {
-    inFile.seekg(0, inFile.end);
-    const uint64_t fileSize = inFile.tellg();
-    inFile.seekg(0);
-    byteData.resize(fileSize);
-    inFile.read(byteData.data(), fileSize);
-    std::memcpy(static_cast<void *>(&state2), static_cast<void *>(byteData.data()), sizeof(state2));
-    std::memcpy(static_cast<void *>(&inputs2), static_cast<void *>(byteData.data() + sizeof(state2)), sizeof(inputs2));
-  }
-  else
-  {
-    std::cout << "Couldn't open file for reading!" << std::endl;
-  }
-
-  std::cout << (params.state == state2) << ", " << (params.inputs == inputs2) << std::endl;
-
-  return;
-
-  // initializeFromBinary(inputFileName, params, dataStream);
+    initializeFromJson(inputFileName.c_str(), params);
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
   bool continueIntegration = true;
@@ -1423,6 +1502,7 @@ void run(const char *inputFileName)
     continueIntegration = integrate(params);
     CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
     CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 2200, continueIntegration);
+    continueIntegration &= signalReceived == 0;
 
     const double scaledTime = params.state.simulationTime * params.inputs.timeScalingFactor;
     if ((int)scaledTime >= params.state.timesPrinted)
@@ -1458,10 +1538,16 @@ void run(const char *inputFileName)
       const double relativeRadius = getAvg(params.ddps[(uint32_t)DDP::R], params) / params.inputs.avgRad;
 
       // Add values to data stream
-      dataStream << (int)scaledTime << " " << relativeRadius << " "
-                 << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
-                 << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
-                 << getAvg(params.ddps[(uint32_t)DDP::DISTANCE], params) << " " << dE << "\n";
+      std::ofstream resultFile("results.dat", std::ios_base::app);
+      if (resultFile.is_open())
+      {
+        resultFile << (int)scaledTime << " " << relativeRadius << " "
+                   << params.state.maxBubbleRadius / params.inputs.avgRad << " " << params.state.numBubbles << " "
+                   << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
+                   << getAvg(params.ddps[(uint32_t)DDP::DISTANCE], params) << " " << dE << "\n";
+      }
+      else
+        std::cout << "Couldn't open file stream to append results to!" << std::endl;
 
       // Print some values
       std::cout << (int)scaledTime << "\t" << calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params) << "\t"
@@ -1480,12 +1566,13 @@ void run(const char *inputFileName)
     ++params.state.numStepsInTimeStep;
   }
 
-  // Only save when actually ending, and not due to time running out
-  saveSnapshotToFile(params);
-
-  // Append when continued
-  std::ofstream file("results.dat");
-  file << dataStream.str() << std::endl;
+  if (signalReceived == 1)
+  {
+    std::cout << "Timeout signal received." << std::endl;
+    serializeStateAndData(outputFileName.c_str(), params);
+  }
+  else
+    saveSnapshotToFile(params);
 
   deinit(params);
 }
