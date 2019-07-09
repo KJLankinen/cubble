@@ -70,11 +70,5 @@
   "maxDeltaEnergy": 1e-5,
 
   "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
-  "kParameter": 0.001,
-
-  "snapshotFilenameExpl": "The stem of the filename where to save the snap shots to.",
-  "snapshotFilename": "snapshot",
-
-  "dataFilenameExpl": "Name of the file where all sorts of data is written to.",
-  "dataFilename": "output.dat"
+  "kParameter": 0.001
 }

@@ -89,13 +89,9 @@ enum class DIP
 
 struct SimulationState
 {
-  int numBubbles        = 0;
-  int maxNumCells       = 0;
-  int numPairs          = 0;
-  uint32_t numSnapshots = 0;
-  uint32_t timesPrinted = 0;
-  uint32_t dataStride   = 0;
-  uint32_t pairStride   = 0;
+  dvec lbb      = dvec(0.0, 0.0, 0.0);
+  dvec tfr      = dvec(0.0, 0.0, 0.0);
+  dvec interval = dvec(0.0, 0.0, 0.0);
 
   uint64_t memReqD             = 0;
   uint64_t memReqI             = 0;
@@ -108,18 +104,21 @@ struct SimulationState
   double timeStep              = 0.0;
   double averageSurfaceAreaIn  = 0.0;
 
-  dvec lbb      = dvec(0.0, 0.0, 0.0);
-  dvec tfr      = dvec(0.0, 0.0, 0.0);
-  dvec interval = dvec(0.0, 0.0, 0.0);
+  int numBubbles        = 0;
+  int maxNumCells       = 0;
+  int numPairs          = 0;
+  uint32_t numSnapshots = 0;
+  uint32_t timesPrinted = 0;
+  uint32_t dataStride   = 0;
+  uint32_t pairStride   = 0;
 };
 
 struct SimulationInputs
 {
-  int numBubblesPerCell = 0;
-  int rngSeed           = 0;
-  int numStepsToRelax   = 0;
-  int numBubblesIn      = 0;
-  int minNumBubbles     = 0;
+  dvec boxRelDim = dvec(0.0, 0.0, 0.0);
+  dvec flowLbb   = dvec(0.0, 0.0, 0.0);
+  dvec flowTfr   = dvec(0.0, 0.0, 0.0);
+  dvec flowVel   = dvec(0.0, 0.0, 0.0);
 
   double avgRad            = 0.0;
   double stdDevRad         = 0.0;
@@ -135,13 +134,11 @@ struct SimulationInputs
   double timeScalingFactor = 0.0;
   double timeStepIn        = 0.0;
 
-  dvec boxRelDim = dvec(0.0, 0.0, 0.0);
-  dvec flowLbb   = dvec(0.0, 0.0, 0.0);
-  dvec flowTfr   = dvec(0.0, 0.0, 0.0);
-  dvec flowVel   = dvec(0.0, 0.0, 0.0);
-
-  std::string snapshotFilename = "";
-  std::string dataFilename     = "";
+  int numBubblesPerCell = 0;
+  int rngSeed           = 0;
+  int numStepsToRelax   = 0;
+  int numBubblesIn      = 0;
+  int minNumBubbles     = 0;
 };
 
 struct Params
@@ -410,7 +407,7 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
 void saveSnapshotToFile(Params &params)
 {
   std::stringstream ss;
-  ss << params.inputs.snapshotFilename << ".csv." << params.state.numSnapshots;
+  ss << "snapshot.csv." << params.state.numSnapshots;
   std::ofstream file(ss.str().c_str(), std::ios::out);
   if (file.is_open())
   {
@@ -936,14 +933,12 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     JSON_READ(inputs, j, timeStepIn);
     JSON_READ(inputs, j, rngSeed);
     JSON_READ(inputs, j, numBubblesPerCell);
-    JSON_READ(inputs, j, snapshotFilename);
     JSON_READ(inputs, j, numStepsToRelax);
     JSON_READ(inputs, j, maxDeltaEnergy);
     JSON_READ(inputs, j, kParameter);
     JSON_READ(inputs, j, numBubblesIn);
     JSON_READ(inputs, j, kappa);
     JSON_READ(inputs, j, minNumBubbles);
-    JSON_READ(inputs, j, dataFilename);
     JSON_READ(inputs, j, boxRelDim);
     JSON_READ(inputs, j, flowLbb);
     JSON_READ(inputs, j, flowTfr);
@@ -1379,7 +1374,7 @@ void run(const char *inputFileName)
   saveSnapshotToFile(params);
 
   // Append when continued
-  std::ofstream file(params.inputs.dataFilename);
+  std::ofstream file("results.dat");
   file << dataStream.str() << std::endl;
 
   deinit(params);
