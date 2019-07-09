@@ -111,19 +111,19 @@ struct SimulationState
   dvec tfr      = dvec(0.0, 0.0, 0.0);
   dvec interval = dvec(0.0, 0.0, 0.0);
 
-  int *mbpc       = nullptr;
-  int *np         = nullptr;
-  int *deviceInts = nullptr;
-  int *pinnedInts = nullptr;
+  int *mbpc = nullptr;
+  int *np   = nullptr;
 
-  double *dtfapr        = nullptr;
-  double *dtfa          = nullptr;
-  double *dvm           = nullptr;
-  double *dtv           = nullptr;
-  double *dir           = nullptr;
-  double *dta           = nullptr;
-  double *dasai         = nullptr;
-  double *pinnedDoubles = nullptr;
+  int *deviceInts = nullptr;
+
+  double *dtfapr = nullptr;
+  double *dtfa   = nullptr;
+  double *dvm    = nullptr;
+  double *dtv    = nullptr;
+  double *dir    = nullptr;
+  double *dta    = nullptr;
+  double *dasai  = nullptr;
+
   double *deviceDoubles = nullptr;
 
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
@@ -361,8 +361,7 @@ void updateCellsAndNeighbors(Params &params)
   }
 
   CUDA_CALL(
-    cudaMemcpy(static_cast<void *>(params.state.pinnedInts), params.state.np, sizeof(int), cudaMemcpyDeviceToHost));
-  params.state.numPairs = params.state.pinnedInts[0];
+    cudaMemcpy(static_cast<void *>(&params.state.numPairs), params.state.np, sizeof(int), cudaMemcpyDeviceToHost));
   params.cw.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(params.state.dips[(uint32_t)DIP::TEMP1]),
     params.state.dips[(uint32_t)DIP::PAIR1], const_cast<const int *>(params.state.dips[(uint32_t)DIP::TEMP2]),
@@ -487,10 +486,8 @@ double stabilize(Params &params)
                   PBC_X == 1, params.state.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
                   params.state.ddps[(uint32_t)DDP::Y]);
 
-  params.cw.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4],
-                                                     params.state.dtfapr, params.state.numBubbles);
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.state.pinnedDoubles[1]),
-                            static_cast<void *>(params.state.dtfapr), sizeof(double), cudaMemcpyDeviceToHost, 0));
+  params.state.energy1 = params.cw.reduce<double, double *, double *>(
+    &cub::DeviceReduce::Sum, params.state.ddps[(uint32_t)DDP::TEMP4], params.state.numBubbles);
 
   for (int i = 0; i < params.inputs.numStepsToRelax; ++i)
   {
@@ -604,8 +601,6 @@ double stabilize(Params &params)
   }
 
   // Energy after stabilization
-  params.state.energy1 = params.state.pinnedDoubles[1];
-
   KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
                 params.state.ddps[(uint32_t)DDP::TEMP4]);
 
@@ -633,8 +628,9 @@ bool integrate(Params &params)
 {
   NVTX_RANGE_PUSH_A("Integration function");
 
-  double error          = 100000;
-  uint32_t numLoopsDone = 0;
+  double error              = 100000;
+  uint32_t numLoopsDone     = 0;
+  int numBubblesAboveMinRad = 0;
 
   do
   {
@@ -861,9 +857,9 @@ bool integrate(Params &params)
     params.cw.reduceNoCopy<double, double *, double *>(&cub::DeviceReduce::Max, params.state.ddps[(uint32_t)DDP::RP],
                                                        params.state.dtfa, params.state.numBubbles, params.gasStream);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.state.pinnedInts), params.state.mbpc, sizeof(int),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&numBubblesAboveMinRad), params.state.mbpc, sizeof(int),
                               cudaMemcpyDeviceToHost, params.gasStream));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.state.pinnedDoubles), params.state.dtfa, sizeof(double),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.state.maxBubbleRadius), params.state.dtfa, sizeof(double),
                               cudaMemcpyDeviceToHost, params.gasStream));
 
     // Error
@@ -895,16 +891,16 @@ bool integrate(Params &params)
 
   ++params.state.numIntegrationSteps;
   params.state.simulationTime += params.state.timeStep;
-  params.state.maxBubbleRadius = params.state.pinnedDoubles[0];
 
   // Delete & reorder
-  const int numBubblesAboveMinRad = params.state.pinnedInts[0];
-  const bool shouldDeleteBubbles  = numBubblesAboveMinRad < params.state.numBubbles;
-
-  if (shouldDeleteBubbles)
+  bool updateNeighbors = params.state.numIntegrationSteps % 5000 == 0;
+  if (numBubblesAboveMinRad < params.state.numBubbles)
+  {
     deleteSmallBubbles(params, numBubblesAboveMinRad);
+    updateNeighbors = true;
+  }
 
-  if (shouldDeleteBubbles || params.state.numIntegrationSteps % 5000 == 0)
+  if (updateNeighbors)
     updateCellsAndNeighbors(params);
 
   bool continueSimulation = params.state.numBubbles > params.inputs.minNumBubbles;
@@ -939,8 +935,6 @@ void deinit(Params &params)
 
   CUDA_CALL(cudaFree(static_cast<void *>(params.state.deviceDoubles)));
   CUDA_CALL(cudaFree(static_cast<void *>(params.state.deviceInts)));
-  CUDA_CALL(cudaFreeHost(static_cast<void *>(params.state.pinnedInts)));
-  CUDA_CALL(cudaFreeHost(static_cast<void *>(params.state.pinnedDoubles)));
 
   CUDA_CALL(cudaStreamDestroy(params.velocityStream));
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
@@ -1073,10 +1067,6 @@ void commonSetup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   std::cout << "Reserving device memory to hold data." << std::endl;
-
-  // Reserve pinned memory
-  CUDA_ASSERT(cudaMallocHost(reinterpret_cast<void **>(&params.state.pinnedDoubles), 3 * sizeof(double)));
-  CUDA_ASSERT(cudaMallocHost(reinterpret_cast<void **>(&params.state.pinnedInts), 1 * sizeof(int)));
 
   // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp size.
   params.state.dataStride =

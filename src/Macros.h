@@ -1,8 +1,5 @@
 #pragma once
 
-#define CUBBLE_XSTRINGIFY(s) CUBBLE_STRINGIFY(s)
-#define CUBBLE_STRINGIFY(s) #s
-
 #if (USE_PROFILING == 1)
 #define NVTX_RANGE_PUSH_A(string) nvtxRangePushA(string)
 #define NVTX_RANGE_POP() nvtxRangePop()
