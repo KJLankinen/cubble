@@ -113,6 +113,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --mail-type=ALL\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
+#SBATCH --signal=USR1@180
 module purge\n\
 module load cuda/10.0.130 gcc/6.3.0\n\
 mkdir " + array_temp_dir + "\n\
