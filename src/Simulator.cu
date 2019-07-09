@@ -1489,7 +1489,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
   Params params;
   // If input file name ends with .bin, it's a serialized state.
-  if (inputFileName.compare(0, 4, ".bin", inputFileName.size() - 4, 4) == 0)
+  if (inputFileName.compare(inputFileName.size() - 4, 4, ".bin") == 0)
     initializeFromBinary(inputFileName.c_str(), params);
   else
     initializeFromJson(inputFileName.c_str(), params);
