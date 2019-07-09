@@ -10,7 +10,7 @@ template <typename T>
 class DeviceArray
 {
 public:
-  DeviceArray(size_t w = 0, size_t h = 1, size_t d = 1)
+  DeviceArray(uint64_t w = 0, uint64_t h = 1, uint64_t d = 1)
     : width(w)
     , height(h)
     , depth(d)
@@ -52,7 +52,7 @@ public:
 
   T *get() const { return dataPtr.get(); }
 
-  T *getRowPtr(size_t row, size_t slice = 0) const
+  T *getRowPtr(uint64_t row, uint64_t slice = 0) const
   {
     assert(row < height);
     assert(slice < depth);
@@ -60,23 +60,23 @@ public:
     return dataPtr.get() + slice * width * height + width * row;
   }
 
-  T *getSlicePtr(size_t slice) const
+  T *getSlicePtr(uint64_t slice) const
   {
     assert(slice < depth);
 
     return dataPtr.get() + slice * width * height;
   }
 
-  size_t getWidth() const { return width; }
-  size_t getHeight() const { return height; }
-  size_t getDepth() const { return depth; }
-  size_t getSliceSize() const { return width * height; }
-  size_t getSize() const { return width * height * depth; }
-  size_t getSizeInBytes() const { return sizeof(T) * getSize(); }
+  uint64_t getWidth() const { return width; }
+  uint64_t getHeight() const { return height; }
+  uint64_t getDepth() const { return depth; }
+  uint64_t getSliceSize() const { return width * height; }
+  uint64_t getSize() const { return width * height * depth; }
+  uint64_t getSizeInBytes() const { return sizeof(T) * getSize(); }
   void setBytesToZero() { CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
 
 private:
-  static T *createDataPtr(size_t w, size_t h, size_t d)
+  static T *createDataPtr(uint64_t w, uint64_t h, uint64_t d)
   {
     T *t = nullptr;
     if (w * h * d > 0)
@@ -91,9 +91,9 @@ private:
     CUDA_CALL(cudaFree(static_cast<void *>(t)));
   }
 
-  size_t width  = 0;
-  size_t height = 0;
-  size_t depth  = 0;
+  uint64_t width  = 0;
+  uint64_t height = 0;
+  uint64_t depth  = 0;
 
   std::unique_ptr<T[], decltype(&destroyDataPtr)> dataPtr;
 };

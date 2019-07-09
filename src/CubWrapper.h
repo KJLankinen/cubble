@@ -18,7 +18,7 @@ public:
   ~CubWrapper() {}
 
   template <typename T, typename InputIterT, typename OutputIterT>
-  T reduce(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
+  T reduce(cudaError_t (*func)(void *, uint64_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
            InputIterT deviceInputData, int numValues, cudaStream_t stream = 0, bool debug = false)
   {
     assert(deviceInputData != nullptr);
@@ -29,7 +29,7 @@ public:
     void *rawOutputPtr           = static_cast<void *>(outData.get());
     OutputIterT deviceOutputData = static_cast<OutputIterT>(rawOutputPtr);
 
-    size_t tempStorageBytes = 0;
+    uint64_t tempStorageBytes = 0;
     (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
     if (tempStorageBytes > tempStorage.getSizeInBytes())
@@ -50,14 +50,14 @@ public:
   }
 
   template <typename T, typename InputIterT, typename OutputIterT>
-  void reduceNoCopy(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
+  void reduceNoCopy(cudaError_t (*func)(void *, uint64_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
                     InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0,
                     bool debug = false)
   {
     assert(deviceInputData != nullptr);
     assert(deviceOutputData != nullptr);
 
-    size_t tempStorageBytes = 0;
+    uint64_t tempStorageBytes = 0;
     (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
     if (tempStorageBytes > tempStorage.getSizeInBytes())
@@ -73,14 +73,14 @@ public:
   }
 
   template <typename InputIterT, typename OutputIterT>
-  void scan(cudaError_t (*func)(void *, size_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
+  void scan(cudaError_t (*func)(void *, uint64_t &, InputIterT, OutputIterT, int, cudaStream_t, bool),
             InputIterT deviceInputData, OutputIterT deviceOutputData, int numValues, cudaStream_t stream = 0,
             bool debug = false)
   {
     assert(deviceInputData != nullptr);
     assert(deviceOutputData != nullptr);
 
-    size_t tempStorageBytes = 0;
+    uint64_t tempStorageBytes = 0;
     (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData, numValues, stream, debug);
 
     if (tempStorageBytes > tempStorage.getSizeInBytes())
@@ -96,7 +96,7 @@ public:
   }
 
   template <typename KeyT, typename ValueT>
-  void sortPairs(cudaError_t (*func)(void *, size_t &, const KeyT *, KeyT *, const ValueT *, ValueT *, int, int, int,
+  void sortPairs(cudaError_t (*func)(void *, uint64_t &, const KeyT *, KeyT *, const ValueT *, ValueT *, int, int, int,
                                      cudaStream_t, bool),
                  const KeyT *keysIn, KeyT *keysOut, const ValueT *valuesIn, ValueT *valuesOut, int numValues,
                  cudaStream_t stream = 0, bool debug = false)
@@ -106,7 +106,7 @@ public:
     assert(valuesIn != nullptr);
     assert(valuesOut != nullptr);
 
-    size_t tempStorageBytes = 0;
+    uint64_t tempStorageBytes = 0;
     (*func)(NULL, tempStorageBytes, keysIn, keysOut, valuesIn, valuesOut, numValues, 0, sizeof(KeyT) * 8, stream,
             debug);
 
@@ -124,7 +124,7 @@ public:
   }
 
   template <typename SampleIteratorT, typename CounterT, typename LevelT, typename OffsetT>
-  void histogram(cudaError_t (*func)(void *, size_t &, SampleIteratorT, CounterT *, int, LevelT, LevelT, OffsetT,
+  void histogram(cudaError_t (*func)(void *, uint64_t &, SampleIteratorT, CounterT *, int, LevelT, LevelT, OffsetT,
                                      cudaStream_t, bool),
                  SampleIteratorT samples, CounterT *deviceOutHist, int numLevels, LevelT lowerLevel, LevelT upperLevel,
                  OffsetT numSamples, cudaStream_t stream = 0, bool debug = false)
@@ -132,7 +132,7 @@ public:
     assert(deviceOutHist != nullptr);
     assert(samples != nullptr);
 
-    size_t tempStorageBytes = 0;
+    uint64_t tempStorageBytes = 0;
     (*func)(NULL, tempStorageBytes, samples, deviceOutHist, numLevels, lowerLevel, upperLevel, numSamples, stream,
             debug);
 

@@ -283,7 +283,8 @@ void updateCellsAndNeighbors(Params &params)
   int *sortedCellIndices   = params.dips[(uint32_t)DIP::TEMP1] + 2 * params.state.dataStride;
   int *sortedBubbleIndices = params.dips[(uint32_t)DIP::TEMP1] + 3 * params.state.dataStride;
 
-  const size_t resetBytes = sizeof(int) * params.state.pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
+  const uint64_t resetBytes =
+    sizeof(int) * params.state.pairStride * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::PAIR1], 0, resetBytes));
 
   KERNEL_LAUNCH(assignBubblesToCells, params.pairKernelSize, 0, 0, params.ddps[(uint32_t)DDP::X],
@@ -414,13 +415,13 @@ void saveSnapshotToFile(Params &params)
   if (file.is_open())
   {
     std::vector<double> hostData;
-    const size_t numComp = 17;
+    const uint64_t numComp = 17;
     hostData.resize(params.state.dataStride * numComp);
     CUDA_CALL(cudaMemcpy(hostData.data(), params.deviceDoubleMemory, sizeof(double) * numComp * params.state.dataStride,
                          cudaMemcpyDeviceToHost));
 
     file << "x,y,z,r,vx,vy,vz,path,dist\n";
-    for (size_t i = 0; i < (size_t)params.state.numBubbles; ++i)
+    for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
     {
       file << hostData[i + 0 * params.state.dataStride];
       file << ",";
@@ -565,7 +566,7 @@ double stabilize(Params &params)
     } while (error > params.inputs.errorTolerance);
 
     // Update the current values with the calculated predictions
-    const size_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
+    const uint64_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
     CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
                               cudaMemcpyDeviceToDevice, 0));
     CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::XP], numBytesToCopy,
@@ -843,7 +844,7 @@ bool integrate(Params &params)
   } while (error > params.inputs.errorTolerance);
 
   // Update values
-  const size_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
+  const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
 
   CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
                             cudaMemcpyDeviceToDevice));
@@ -1254,7 +1255,7 @@ void initializeFromJson(const char *inputFileName, Params &params, std::stringst
   saveSnapshotToFile(params); // 3
 
   // Set starting positions and reset wrap counts to 0
-  const size_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
+  const uint64_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
   CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::X0], params.ddps[(uint32_t)DDP::X], numBytesToCopy,
                        cudaMemcpyDeviceToDevice));
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_X], 0, 6 * params.state.dataStride * sizeof(int)));
