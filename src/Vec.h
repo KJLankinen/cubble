@@ -383,5 +383,5 @@ public:
 typedef vec<float> fvec;
 typedef vec<double> dvec;
 typedef vec<int> ivec;
-typedef vec<size_t> uvec;
+typedef vec<uint32_t> uvec;
 } // namespace cubble
