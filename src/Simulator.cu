@@ -1304,7 +1304,7 @@ void run(const char *inputFileName)
   initializeFromJson(inputFileName, params, dataStream);
 
   // Testing serialization
-  std::vector<std::uint8_t> byteData;
+  std::vector<char> byteData;
   byteData.resize(sizeof(params.state) + sizeof(params.inputs));
   std::memcpy(static_cast<void *>(byteData.data()), static_cast<void *>(&params.state), sizeof(params.state));
   std::memcpy(static_cast<void *>(byteData.data() + sizeof(params.state)), static_cast<void *>(&params.inputs),
