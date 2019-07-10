@@ -2,17 +2,14 @@
 
 namespace cubble
 {
-
+__constant__ __device__ double dTotalArea;
+__constant__ __device__ double dTotalFreeArea;
+__constant__ __device__ double dTotalFreeAreaPerRadius;
+__constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
-__device__ int dMaxBubblesPerCell;
 __device__ int dNumPairs;
-__device__ double dTotalFreeArea;
-__device__ double dTotalFreeAreaPerRadius;
 __device__ double dVolumeMultiplier;
-__device__ double dTotalVolume;
 __device__ double dInvRho;
-__device__ double dTotalArea;
-__device__ double dAverageSurfaceAreaIn;
 
 __device__ void logError(bool condition, const char *statement, const char *errMsg)
 {
@@ -23,8 +20,7 @@ __device__ void logError(bool condition, const char *statement, const char *errM
            "\n(%s) -> %s"
            "\n@thread[%d, %d, %d], @block[%d, %d, %d]"
            "\n----------------------------------------------------\n",
-           statement, errMsg, threadIdx.x, threadIdx.y, threadIdx.z, blockIdx.x, blockIdx.y,
-           blockIdx.z);
+           statement, errMsg, threadIdx.x, threadIdx.y, threadIdx.z, blockIdx.x, blockIdx.y, blockIdx.z);
 
     dErrorEncountered = true;
   }
@@ -59,28 +55,26 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags, double *values
 __device__ double getWrappedDistance(double x1, double x2, double maxDistance, bool shouldWrap)
 {
   const double distance = x1 - x2;
-  x2                    = distance < -0.5 * maxDistance ? x2 - maxDistance
-                                     : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
+  x2 = distance < -0.5 * maxDistance ? x2 - maxDistance : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
   const double distance2 = x1 - x2;
 
   return shouldWrap ? distance2 : distance;
 }
 
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap,
-                                     double *x)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, bool shouldWrap, double *x)
 {
   const double distance = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
   DEVICE_ASSERT(distance * distance > 0, "Distance is zero!");
   return distance * distance;
 }
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance,
-                                     bool shouldWrap, double *x, double *useless)
+__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap,
+                                     double *x, double *useless)
 {
   return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
 }
 
-__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr,
-                                         double *x, double *y, double *z)
+__global__ void transformPositionsKernel(bool normalize, int numValues, dvec lbb, dvec tfr, double *x, double *y,
+                                         double *z)
 {
   const dvec interval = tfr - lbb;
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
@@ -186,9 +180,8 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum)
 __device__ double getWrappedCoordinate(double val1, double val2, double multiplier)
 {
   double difference = val1 - val2;
-  val2              = difference < -0.5 * multiplier
-           ? val2 - multiplier
-           : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
+  val2 =
+    difference < -0.5 * multiplier ? val2 - multiplier : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
   val2 = val1 - val2;
 
   return val2;
@@ -237,8 +230,8 @@ idxVec.z = idx / (cellDim.x * cellDim.y);
   idxVec.y = decodeMorton3y((unsigned int)idx);
   idxVec.z = decodeMorton3z((unsigned int)idx);
 #else
-  idxVec.x     = decodeMorton2x((unsigned int)idx);
-  idxVec.y     = decodeMorton2y((unsigned int)idx);
+  idxVec.x = decodeMorton2x((unsigned int)idx);
+  idxVec.y = decodeMorton2y((unsigned int)idx);
 #endif
 
   return idxVec;
@@ -324,8 +317,8 @@ __device__ __host__ unsigned int compact1By2(unsigned int x)
   return x;
 }
 
-__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue,
-                           int *wrapMultiplier, int *wrapMultiplierPrev)
+__device__ void wrapAround(int idx, double *coordinate, double minValue, double maxValue, int *wrapMultiplier,
+                           int *wrapMultiplierPrev)
 {
   const double interval = maxValue - minValue;
   double value          = coordinate[idx];
@@ -341,17 +334,16 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue, double 
   coordinate[idx]     = value;
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance,
-                            double minDistance, bool shouldWrap, double *x, double *v)
+__device__ void addVelocity(int idx1, int idx2, double multiplier, double maxDistance, double minDistance,
+                            bool shouldWrap, double *x, double *v)
 {
-  const double velocity =
-    getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
+  const double velocity = getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
   atomicAdd(&v[idx1], velocity);
   atomicAdd(&v[idx2], -velocity);
 }
 
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r, double interval,
-                               double zeroPoint, bool shouldWrap, double *x, double *v)
+__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r, double interval, double zeroPoint,
+                               bool shouldWrap, double *x, double *v)
 {
   if (shouldWrap)
     return;
@@ -365,8 +357,7 @@ __device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r, double
   {
     const double direction = distance < 0 ? -1.0 : 1.0;
     distance *= direction;
-    const double velocity =
-      direction * distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
+    const double velocity = direction * distance * fZeroPerMuZero * (radius - distance) / (radius * distance);
     atomicAdd(&v[idx], velocity);
   }
 }
@@ -391,10 +382,9 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues)
   }
 }
 
-__global__ void assignDataToBubbles(double *x, double *y, double *z, double *xPrd, double *yPrd,
-                                    double *zPrd, double *r, double *w, int *aboveMinRadFlags,
-                                    ivec bubblesPerDim, dvec tfr, dvec lbb, double avgRad,
-                                    double minRad, int numValues)
+__global__ void assignDataToBubbles(double *x, double *y, double *z, double *xPrd, double *yPrd, double *zPrd,
+                                    double *r, double *w, int *aboveMinRadFlags, ivec bubblesPerDim, dvec tfr, dvec lbb,
+                                    double avgRad, double minRad, int numValues)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -432,9 +422,8 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z, double *xPr
   }
 }
 
-__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices,
-                                     int *bubbleIndices, dvec lbb, dvec tfr, ivec cellDim,
-                                     int numValues)
+__global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellIndices, int *bubbleIndices, dvec lbb,
+                                     dvec tfr, ivec cellDim, int numValues)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -443,10 +432,9 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z, int *cellI
   }
 }
 
-__global__ void flowVelocityKernel(int numValues, int *numNeighbors, double *velX, double *velY,
-                                   double *velZ, double *nVelX, double *nVelY, double *nVelZ,
-                                   double *posX, double *posY, double *posZ, dvec flowVel,
-                                   dvec flowTfr, dvec flowLbb)
+__global__ void flowVelocityKernel(int numValues, int *numNeighbors, double *velX, double *velY, double *velZ,
+                                   double *nVelX, double *nVelY, double *nVelZ, double *posX, double *posY,
+                                   double *posZ, dvec flowVel, dvec flowTfr, dvec flowLbb)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -466,8 +454,7 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors, double *vel
   }
 }
 
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area)
+__global__ void freeAreaKernel(int numValues, double *r, double *freeArea, double *freeAreaPerRadius, double *area)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -481,8 +468,8 @@ __global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
   }
 }
 
-__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea,
-                                            int numValues, double kappa, double kParam)
+__global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *freeArea, int numValues, double kappa,
+                                            double kParam, double averageSurfaceAreaIn)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -493,8 +480,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r, double *fre
     invArea *= 0.5 * invRadius;
 #endif
     const double vr =
-      drdt[i] +
-      kappa * dAverageSurfaceAreaIn * numValues / dTotalArea * freeArea[i] * (dInvRho - invRadius);
+      drdt[i] + kappa * averageSurfaceAreaIn * numValues / dTotalArea * freeArea[i] * (dInvRho - invRadius);
     drdt[i] = kParam * invArea * vr;
   }
 }
@@ -515,8 +501,7 @@ __global__ void addVolume(double *r, int numValues)
   }
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags,
-                                                int numValues)
+__global__ void calculateRedistributedGasVolume(double *volume, double *r, int *aboveMinRadFlags, int numValues)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues; i += gridDim.x * blockDim.x)
   {
@@ -536,14 +521,12 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r, int *
   }
 }
 
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *y, double *f,
-                               double *fPrevious)
+__device__ void adamsBashforth(int idx, double timeStep, double *yNext, double *y, double *f, double *fPrevious)
 {
   yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
 }
 
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f,
-                               double *fNext)
+__device__ double adamsMoulton(int idx, double timeStep, double *yNext, double *y, double *f, double *fNext)
 {
   const double error = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]) - yNext[idx];
   yNext[idx] += error;
@@ -556,15 +539,15 @@ __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
   y[idx] += f[idx] * timeStep;
 }
 
-__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart,
-                                             int *wrapMultiplier, double interval)
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart, int *wrapMultiplier,
+                                             double interval)
 {
   double distance = x[idx] - xStart[idx] + wrapMultiplier[idx] * interval;
   return distance * distance;
 }
 
-__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart,
-                                      int *wrapMultiplier, double interval)
+__device__ double calculatePathLength(int idx, double *x, double *xPrev, double *xStart, int *wrapMultiplier,
+                                      double interval)
 {
   // Only works if done before boundary wrap
   const double diff = x[idx] - xPrev[idx];

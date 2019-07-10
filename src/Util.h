@@ -1,7 +1,5 @@
-// -*- C++ -*-
 #pragma once
 
-#include "Macros.h"
 #include "nlohmann/json.hpp"
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -11,8 +9,42 @@
 #include <sstream>
 #include <stdexcept>
 
+#if (USE_PROFILING == 1)
+#define NVTX_RANGE_PUSH_A(string) nvtxRangePushA(string)
+#define NVTX_RANGE_POP() nvtxRangePop()
+#define CUDA_PROFILER_START(start) startProfiling(start)
+#define CUDA_PROFILER_STOP(stop, continue) stopProfiling(stop, continue)
+#else
+#define NVTX_RANGE_PUSH_A(string)
+#define NVTX_RANGE_POP()
+#define CUDA_PROFILER_START(start)
+#define CUDA_PROFILER_STOP(stop, continue)
+#endif
+
+#define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
+#define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
+#define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
+#define KERNEL_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
+
+// Macro for device assert.
+#ifndef NDEBUG
+#define DEVICE_ASSERT(statement, msg) cubble::logError(statement, #statement, msg)
+#else
+#define DEVICE_ASSERT(statement, msg)
+#endif
+
+// Need to be usable from kernels
+#define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
+#define CUBBLE_I_PI 1.0 / CUBBLE_PI
+
 namespace cubble
 {
+const double CUBBLE_EPSILON = 1.0e-10;
+#if NUM_DIM == 3
+const int CUBBLE_NUM_NEIGHBORS = 13;
+#else
+const int CUBBLE_NUM_NEIGHBORS = 4;
+#endif
 
 struct KernelSize
 {
@@ -21,10 +53,13 @@ struct KernelSize
 
   KernelSize() {}
 
-  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
+  KernelSize(dim3 grid, dim3 block)
+    : grid(grid)
+    , block(block)
   {
-    update(numThreadsPerBlock, numTotalThreads);
   }
+
+  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads) { update(numThreadsPerBlock, numTotalThreads); }
 
   void update(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
   {
@@ -33,12 +68,15 @@ struct KernelSize
   }
 };
 
-const double CUBBLE_EPSILON = 1.0e-10;
-#if NUM_DIM == 3
-const int CUBBLE_NUM_NEIGHBORS = 13;
-#else
-const int CUBBLE_NUM_NEIGHBORS = 4;
-#endif
+enum class ReorganizeType
+{
+  COPY_FROM_INDEX,
+  COPY_TO_INDEX,
+  CONDITIONAL_FROM_INDEX,
+  CONDITIONAL_TO_INDEX,
+
+  NUM_VALUES
+};
 
 inline void handleException(const std::exception_ptr pExc)
 {
@@ -63,17 +101,15 @@ inline void handleException(const std::exception_ptr pExc)
   }
 }
 
-inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file,
-                                        int line, std::basic_ostream<char> &outStream)
+inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line,
+                                        std::basic_ostream<char> &outStream)
 {
   outStream << "Cuda error encountered."
-            << "\n\tType: " << cudaGetErrorName(result)
-            << "\n\tDescription: " << cudaGetErrorString(result) << "\n\tLocation: " << file << ":"
-            << line << "\n\tCall: " << callStr << std::endl;
+            << "\n\tType: " << cudaGetErrorName(result) << "\n\tDescription: " << cudaGetErrorString(result)
+            << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr << std::endl;
 }
 
-inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file,
-                           int line) noexcept
+inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file, int line) noexcept
 {
   if (result != cudaSuccess)
   {
@@ -94,14 +130,13 @@ inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char
   }
 }
 
-inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file,
-                             int line) noexcept
+inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file, int line) noexcept
 {
   if (result != CURAND_STATUS_SUCCESS)
   {
     std::cerr << "Curand error encountered."
-              << "\n\tType: " << result << "\n\tLocation: " << file << ":" << line
-              << "\n\tCall: " << callStr << std::endl;
+              << "\n\tType: " << result << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr
+              << std::endl;
 
     return false;
   }
@@ -125,8 +160,7 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 #endif
 }
 
-inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes,
-                                bool abort = true)
+inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes, bool abort = true)
 {
 #ifndef NDEBUG
   int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
@@ -150,8 +184,8 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, int lin
 #endif
 }
 
-inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line,
-                                      dim3 blockSize, bool abort = true)
+inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 blockSize,
+                                      bool abort = true)
 {
 #ifndef NDEBUG
   dim3 temp;
@@ -179,8 +213,8 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, i
 #endif
 }
 
-inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line,
-                                     dim3 gridSize, bool abort = true)
+inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 gridSize,
+                                     bool abort = true)
 {
 #ifndef NDEBUG
   dim3 temp;
@@ -220,21 +254,19 @@ inline void printRelevantInfoOfCurrentDevice()
   std::cout << "\n----------Properties of current device----------"
             << "\n\n\tGeneral"
             << "\n\t-------"
-            << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major << "."
-            << prop.minor << "\n\n\tMemory"
+            << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major << "." << prop.minor
+            << "\n\n\tMemory"
             << "\n\t------"
             << "\n\tTotal global memory (bytes): " << prop.totalGlobalMem
             << "\n\tShared memory per block (bytes): " << prop.sharedMemPerBlock
             << "\n\tTotal constant memory (bytes): " << prop.totalConstMem
-            << "\n\tMaximum number of registers per block: " << prop.regsPerBlock
-            << "\n\n\tWarp, threads, blocks, grid"
+            << "\n\tMaximum number of registers per block: " << prop.regsPerBlock << "\n\n\tWarp, threads, blocks, grid"
             << "\n\t---------------------------"
             << "\n\tWarp size: " << prop.warpSize
-            << "\n\tMaximum number of threads per block: " << prop.maxThreadsPerBlock
-            << "\n\tMaximum block size: (" << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1]
-            << ", " << prop.maxThreadsDim[2] << ")"
-            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", " << prop.maxGridSize[1]
-            << ", " << prop.maxGridSize[2] << ")"
+            << "\n\tMaximum number of threads per block: " << prop.maxThreadsPerBlock << "\n\tMaximum block size: ("
+            << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1] << ", " << prop.maxThreadsDim[2] << ")"
+            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", "
+            << prop.maxGridSize[2] << ")"
             << "\n\tMultiprocessor count: " << prop.multiProcessorCount << "\n"
             << "\nIf you want more info, see " << __FILE__ << ":" << __LINE__
             << "\nand 'Device Management' section of the CUDA Runtime API docs."

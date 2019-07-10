@@ -1,10 +1,14 @@
+#include "Util.h"
 #include <cuda.h>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
-#include "Simulator.cuh"
-#include "Util.h"
+namespace cubble
+{
+void run(std::string &&inputFileName, std::string &&outputFileName);
+}
 
 int main(int argc, char **argv)
 {
@@ -12,12 +16,12 @@ int main(int argc, char **argv)
 
   if (argc != 3)
   {
-    std::cerr << "Two arguments are required."
-              << "\nUsage: " << argv[0] << " inputFile saveFile"
-              << "\ninputFile = the name of the (.json) file that contains"
-              << " the necessary inputs."
-              << "\nsaveFile = file that can be used as a input file"
-              << " to continue from an earlier run" << std::endl;
+    std::cout
+      << "\nUsage: " << argv[0] << " inputFile outputFile"
+      << "\ninputFile = the name of the (.json) file that contains"
+      << " the necessary inputs, or the name of the binary file that contains the serialized state of a non-finished "
+         "simulation.\noutputFile = (.bin) file name where to save data if simulation ends before completion"
+      << std::endl;
 
     return EXIT_FAILURE;
   }
@@ -34,8 +38,7 @@ int main(int argc, char **argv)
                  "-----------\n"
               << std::endl;
 
-    cubble::Simulator simulator;
-    simulator.run(argv[1], argv[2]);
+    cubble::run(std::string(argv[1]), std::string(argv[2]));
   }
   catch (const std::exception &e)
   {

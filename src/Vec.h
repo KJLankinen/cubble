@@ -1,5 +1,3 @@
-// -*- C++ -*-
-
 #pragma once
 
 #include "nlohmann/json.hpp"
@@ -69,15 +67,9 @@ public:
 
   __host__ __device__ static vec<T> normalize(const vec<T> &v) { return v / v.getLength(); }
 
-  __host__ __device__ T getMaxComponent() const
-  {
-    return x > y ? (x > z ? x : z) : (y > z ? y : z);
-  }
+  __host__ __device__ T getMaxComponent() const { return x > y ? (x > z ? x : z) : (y > z ? y : z); }
 
-  __host__ __device__ T getMinComponent() const
-  {
-    return x < y ? (x < z ? x : z) : (y < z ? y : z);
-  }
+  __host__ __device__ T getMinComponent() const { return x < y ? (x < z ? x : z) : (y < z ? y : z); }
 
   template <typename T2>
   __host__ __device__ vec<T2> asType() const
@@ -391,5 +383,5 @@ public:
 typedef vec<float> fvec;
 typedef vec<double> dvec;
 typedef vec<int> ivec;
-typedef vec<size_t> uvec;
+typedef vec<uint32_t> uvec;
 } // namespace cubble
