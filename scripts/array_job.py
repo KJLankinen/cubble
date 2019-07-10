@@ -8,7 +8,7 @@ import pwd
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
-    
+
     for key, val in inbound.items():
 	if key in data.keys():
 	    data.update({key:val})
@@ -23,7 +23,7 @@ def main():
     if len(sys.argv) < 2:
         print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
         return 1
-    
+
     sub_dir = sys.argv[1]
     root_dir  = os.path.join(os.environ['WRKDIR'], "cubble")
     make_dir = os.path.join(root_dir, "final")
@@ -51,7 +51,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     if not os.path.isdir(root_dir):
         print("Root dir \"" + root_dir + "\" is not a directory.")
         return 1
-    
+
     if not os.path.isfile(default_input_file):
         print("\"" + default_input_file + "\" is not a file.")
         return 1
@@ -69,7 +69,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     print("Using " + default_input_file + " as the default input file.")
     print("Using " + array_param_file + " as the file to modify the default input file with.")
     print("Using " + data_dir + " as the data directory for this simulation run.")
-    
+
     print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script)[0]
@@ -95,7 +95,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
                 outfile_path,
                 copy.deepcopy(json_data),
                 json.loads(line.strip()))
-            
+
             num_runs = counter
 
     array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
@@ -113,12 +113,12 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 #SBATCH --mail-type=ALL\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
-#SBATCH --signal=USR1@180
+#SBATCH --signal=USR1@180\n\
 module purge\n\
 module load cuda/10.0.130 gcc/6.3.0\n\
 mkdir " + array_temp_dir + "\n\
 cd " + array_temp_dir + "\n\
-srun " + executable_path + " " + array_input_path + " output_parameters.json\n\
+srun " + executable_path + " " + array_input_path + " state.bin\n\
 mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 "
 

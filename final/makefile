@@ -152,15 +152,6 @@ $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILING_FLAGS))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
-
-#-----------------------------------------------------
-# Execute the program with default input files
-#-----------------------------------------------------
-.PHONY : run
-run : $(EXEC)
-	$(EXEC) ../input_parameters.json
-
-
 # -----------------------------------------------------
 # Clean up
 # -----------------------------------------------------

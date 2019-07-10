@@ -140,14 +140,6 @@ $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 
-#-----------------------------------------------------
-# Execute the program with default input files
-#-----------------------------------------------------
-.PHONY : run
-run : $(EXEC)
-	$(EXEC) ../input_parameters.json ../output_parameters.json
-
-
 # -----------------------------------------------------
 # Clean up
 # -----------------------------------------------------
