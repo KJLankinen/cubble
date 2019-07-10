@@ -1,6 +1,6 @@
 {
   "phiTargetExpl": "The target volume fraction.",
-  "phiTarget": 0.95,
+  "phiTarget": 0.88,
 
   "kappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
   "kappa": 0.1,
@@ -58,7 +58,7 @@
   "timeStepIn": 1e-3,
 
   "rngSeedExpl": "The seed for the RNG.",
-  "rngSeed": 441233,
+  "rngSeed": 41233,
 
   "numBubblesPerCellExpl": "How many bubbles per cell.",
   "numBubblesPerCell": 32,
