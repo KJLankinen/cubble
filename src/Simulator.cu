@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <sstream>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 namespace cubble
@@ -1487,6 +1488,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 {
   // Register signal handler
   signal(SIGUSR1, signalHandler);
+
+  std::vector<char> charArr;
+  charArr.resize(128);
+  if (gethostname(charArr.data(), charArr.size()) == 0)
+  {
+    std::string hostName(charArr.begin(), charArr.end());
+    std::cout << hostName << std::endl;
+  }
 
   Params params;
   // If input file name ends with .bin, it's a serialized state.
