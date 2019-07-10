@@ -1411,8 +1411,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // Get current host name
     std::array<char, NAME_MAX_LEN> charArr;
     gethostname(charArr.data(), charArr.size());
-    const char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
-    hostName           = std::string(charArr.begin(), nulLoc);
+    char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
+    hostName     = std::string(charArr.begin(), nulLoc);
 
     // Get current GPU name
     cudaDeviceProp prop;
@@ -1488,7 +1488,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     // Get host name
     std::array<char, NAME_MAX_LEN> charArr;
     gethostname(charArr.data(), charArr.size());
-    const char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
+    char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
     std::string hostName(charArr.begin(), nulLoc);
 
     // Get GPU name
