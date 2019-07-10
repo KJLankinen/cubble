@@ -1380,7 +1380,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     std::string gpuName(it, it + NAME_MAX_LEN);
     it += NAME_MAX_LEN;
 
-    std::array<int, NUM_DEFINED_INTS> definedInts(it, it + NUM_DEFINED_INTS * sizeof(int));
+    std::array<int, NUM_DEFINED_INTS> definedInts;
+    std::copy(it, it + sizeof(int) * definedInts.size(), definedInts.begin());
 
     std::cout << "Binary header:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
               << "\n\tNUM_DIM: " << definedInts[0] << "\n\tUSE_PROFILING: " << definedInts[1]
