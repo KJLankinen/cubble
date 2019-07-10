@@ -1397,6 +1397,10 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const char binPbcz = *it;
     it += 1;
 
+    for (auto &it2 : header.begin(); it2 != header.end() : ++it2)
+      std::cout << *it2;
+    std::cout << std::endl;
+
     std::cout << "Binary header:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
               << "\n\tNUM_DIM: " << binNumDim << "\n\tUSE_PROFILING: " << binUseProfiling
               << "\n\tUSE_FLOW: " << binUseFlow << "\n\tPBC_X: " << binPbcx << "\n\tPBC_Y: " << binPbcy
@@ -1420,9 +1424,9 @@ void initializeFromBinary(const char *inputFileName, Params &params)
               << "\n\tNUM_DIM: " << NUM_DIM << "\n\tUSE_PROFILING: " << USE_PROFILING << "\n\tUSE_FLOW: " << USE_FLOW
               << "\n\tPBC_X: " << PBC_X << "\n\tPBC_Y: " << PBC_Y << "\n\tPBC_Z: " << PBC_Z << std::endl;
 
-    const bool isBinaryCompatible = (char)NUM_DIM == binNumDim && (char)USE_PROFILING == binUseProfiling &&
-                                    (char)USE_FLOW == binUseFlow && (char)PBC_X == binPbcx && (char)PBC_Y == binPbcy &&
-                                    (char)PBC_Z == binPbcz;
+    const bool isBinaryCompatible = ((char)NUM_DIM == binNumDim) && ((char)USE_PROFILING == binUseProfiling) &&
+                                    ((char)USE_FLOW == binUseFlow) && ((char)PBC_X == binPbcx) &&
+                                    ((char)PBC_Y == binPbcy) && ((char)PBC_Z == binPbcz);
     if (!isBinaryCompatible)
       throw std::runtime_error("Incompatible binary file!");
 
@@ -1445,7 +1449,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t doubleBytes = params.state.memReqD / 2;
     const uint64_t intBytes    = sizeof(int) * 3 * params.state.dataStride;
 
-    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes)
+    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes + header.size())
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
 
     // Doubles
