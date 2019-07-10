@@ -1346,6 +1346,7 @@ void initializeFromJson(const char *inputFileName, Params &params)
 // Needed for serialization and deserialization
 #define NAME_MAX_LEN 64
 #define HEADER_SIZE 256 // <-- Needs to be > 2x NAME_MAX_LEN
+#define NUM_DEFINED_INTS 6
 
 void initializeFromBinary(const char *inputFileName, Params &params)
 {
@@ -1379,32 +1380,12 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     std::string gpuName(it, it + NAME_MAX_LEN);
     it += NAME_MAX_LEN;
 
-    const char binNumDim = *it;
-    it += 1;
-
-    const char binUseProfiling = *it;
-    it += 1;
-
-    const char binUseFlow = *it;
-    it += 1;
-
-    const char binPbcx = *it;
-    it += 1;
-
-    const char binPbcy = *it;
-    it += 1;
-
-    const char binPbcz = *it;
-    it += 1;
-
-    for (auto it2 = header.begin(); it2 != header.end(); ++it2)
-      std::cout << *it2;
-    std::cout << std::endl;
+    std::array<int, NUM_DEFINED_INTS> definedInts(it, it + NUM_DEFINED_INTS * sizeof(int));
 
     std::cout << "Binary header:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
-              << "\n\tNUM_DIM: " << binNumDim << "\n\tUSE_PROFILING: " << binUseProfiling
-              << "\n\tUSE_FLOW: " << binUseFlow << "\n\tPBC_X: " << binPbcx << "\n\tPBC_Y: " << binPbcy
-              << "\n\tPBC_Z: " << binPbcz << std::endl;
+              << "\n\tNUM_DIM: " << definedInts[0] << "\n\tUSE_PROFILING: " << definedInts[1]
+              << "\n\tUSE_FLOW: " << definedInts[2] << "\n\tPBC_X: " << definedInts[3]
+              << "\n\tPBC_Y: " << definedInts[4] << "\n\tPBC_Z: " << definedInts[5] << std::endl;
 
     // Get current host name
     std::vector<char> charArr(NAME_MAX_LEN);
@@ -1424,9 +1405,9 @@ void initializeFromBinary(const char *inputFileName, Params &params)
               << "\n\tNUM_DIM: " << NUM_DIM << "\n\tUSE_PROFILING: " << USE_PROFILING << "\n\tUSE_FLOW: " << USE_FLOW
               << "\n\tPBC_X: " << PBC_X << "\n\tPBC_Y: " << PBC_Y << "\n\tPBC_Z: " << PBC_Z << std::endl;
 
-    const bool isBinaryCompatible = ((char)NUM_DIM == binNumDim) && ((char)USE_PROFILING == binUseProfiling) &&
-                                    ((char)USE_FLOW == binUseFlow) && ((char)PBC_X == binPbcx) &&
-                                    ((char)PBC_Y == binPbcy) && ((char)PBC_Z == binPbcz);
+    const bool isBinaryCompatible = (NUM_DIM == definedInts[0]) && (USE_PROFILING == definedInts[1]) &&
+                                    (USE_FLOW == definedInts[2]) && (PBC_X == definedInts[3]) &&
+                                    (PBC_Y == definedInts[4]) && (PBC_Z == definedInts[5]);
     if (!isBinaryCompatible)
       throw std::runtime_error("Incompatible binary file!");
 
@@ -1505,23 +1486,13 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     strncpy(&header[offset], gpuName.data(), NAME_MAX_LEN);
     offset += NAME_MAX_LEN;
 
-    header[offset] = '1'; //(char)NUM_DIM;
-    offset += 1;
-
-    header[offset] = '2'; //(char)USE_PROFILING;
-    offset += 1;
-
-    header[offset] = '3'; //(char)USE_FLOW;
-    offset += 1;
-
-    header[offset] = '4'; //(char)PBC_X;
-    offset += 1;
-
-    header[offset] = '5'; //(char)PBC_Y;
-    offset += 1;
-
-    header[offset] = '6'; //(char)PBC_Z;
-    offset += 1;
+    const std::array<int, NUM_DEFINED_INTS> definedInts = { NUM_DIM, USE_PROFILING, USE_FLOW, PBC_X, PBC_Y, PBC_Z };
+    for (uint32_t i = 0; i < definedInts.size(); ++i)
+    {
+      int temp = definedInts[i];
+      std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(temp));
+      offset += sizeof(temp);
+    }
 
     // Divisible by 32 and >= numBubbles
     const uint64_t newDataStride =
