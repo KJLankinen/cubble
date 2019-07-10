@@ -1373,38 +1373,33 @@ void initializeFromBinary(const char *inputFileName, Params &params)
 
     // Check some values from header for compatibility
     uint32_t headerOffset = 0;
-    std::string hostName;
-    hostName.resize(NAME_MAX_LEN);
-    strncpy(hostName.data(), &header[offset], NAME_MAX_LEN);
+    std::string hostName(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN);
     headerOffset += NAME_MAX_LEN;
 
-    std::string gpuName;
-    gpuName.resize(NAME_MAX_LEN);
-    strncpy(gpuName.data(), &header[offset], NAME_MAX_LEN);
+    std::string gpuName(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN);
     headerOffset += NAME_MAX_LEN;
 
-    int binNumDim       = 0;
-    int binUseProfiling = 0;
-    int binUseFlow      = 0;
-    int binPbcx         = 0;
-    int binPbcy         = 0;
-    int binPbcz         = 0;
-
+    int binNumDim = 0;
     std::memcpy(static_cast<void *>(&binNumDim), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
+    int binUseProfiling = 0;
     std::memcpy(static_cast<void *>(&binUseProfiling), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
+    int binUseFlow = 0;
     std::memcpy(static_cast<void *>(&binUseFlow), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
+    int binPbcx = 0;
     std::memcpy(static_cast<void *>(&binPbcx), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
+    int binPbcy = 0;
     std::memcpy(static_cast<void *>(&binPbcy), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
+    int binPbcz = 0;
     std::memcpy(static_cast<void *>(&binPbcz), static_cast<void *>(&header[headerOffset]), sizeof(int));
     headerOffset += sizeof(int);
 
