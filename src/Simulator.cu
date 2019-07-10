@@ -90,6 +90,8 @@ enum class DIP
   NUM_VALUES
 };
 
+#define PRINT_PARAM(p) std::cout << #p << ": " << p << std::endl
+
 struct SimulationState
 {
   dvec lbb      = dvec(0.0, 0.0, 0.0);
@@ -145,6 +147,30 @@ struct SimulationState
     equal &= pairStride == o.pairStride;
 
     return equal;
+  }
+
+  void print()
+  {
+    PRINT_PARAM(lbb);
+    PRINT_PARAM(tfr);
+    PRINT_PARAM(interval);
+    PRINT_PARAM(memReqD);
+    PRINT_PARAM(memReqI);
+    PRINT_PARAM(numIntegrationSteps);
+    PRINT_PARAM(numStepsInTimeStep);
+    PRINT_PARAM(simulationTime);
+    PRINT_PARAM(energy1);
+    PRINT_PARAM(energy2);
+    PRINT_PARAM(maxBubbleRadius);
+    PRINT_PARAM(timeStep);
+    PRINT_PARAM(averageSurfaceAreaIn);
+    PRINT_PARAM(numBubbles);
+    PRINT_PARAM(maxNumCells);
+    PRINT_PARAM(numPairs);
+    PRINT_PARAM(numSnapshots);
+    PRINT_PARAM(timesPrinted);
+    PRINT_PARAM(dataStride);
+    PRINT_PARAM(pairStride);
   }
 };
 
@@ -209,6 +235,32 @@ struct SimulationInputs
     equal &= minNumBubbles == o.minNumBubbles;
 
     return equal;
+  }
+
+  void print()
+  {
+    PRINT_PARAM(boxRelDim);
+    PRINT_PARAM(flowLbb);
+    PRINT_PARAM(flowTfr);
+    PRINT_PARAM(flowVel);
+    PRINT_PARAM(avgRad);
+    PRINT_PARAM(stdDevRad);
+    PRINT_PARAM(minRad);
+    PRINT_PARAM(phiTarget);
+    PRINT_PARAM(muZero);
+    PRINT_PARAM(sigmaZero);
+    PRINT_PARAM(fZeroPerMuZero);
+    PRINT_PARAM(errorTolerance);
+    PRINT_PARAM(maxDeltaEnergy);
+    PRINT_PARAM(kParameter);
+    PRINT_PARAM(kappa);
+    PRINT_PARAM(timeScalingFactor);
+    PRINT_PARAM(timeStepIn);
+    PRINT_PARAM(numBubblesPerCell);
+    PRINT_PARAM(rngSeed);
+    PRINT_PARAM(numStepsToRelax);
+    PRINT_PARAM(numBubblesIn);
+    PRINT_PARAM(minNumBubbles);
   }
 };
 
@@ -981,9 +1033,7 @@ double getSimulationBoxVolume(Params &params)
   return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
 }
 
-#define JSON_READ(i, j, arg) \
-  i.arg = j[#arg];           \
-  std::cout << #arg << ": " << i.arg << std::endl
+#define JSON_READ(i, j, arg) i.arg = j[#arg]
 
 void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 {
@@ -1075,6 +1125,9 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 
   std::cout << "Maximum (theoretical) number of cells: " << params.state.maxNumCells
             << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z << std::endl;
+
+  params.state.print();
+  params.inputs.print();
 }
 #undef JSON_READ
 
@@ -1468,6 +1521,10 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // All the data should be used at this point
     if (offset != byteData.size())
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+
+    std::cout << "Continuing simulation with the following arguments:" << std::endl;
+    params.state.print();
+    params.inputs.print();
 
     // Setup pairs. Unnecessary to serialize them.
     updateCellsAndNeighbors(params);
