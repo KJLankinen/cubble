@@ -151,6 +151,7 @@ struct SimulationState
 
   void print()
   {
+    std::cout << "\n---------------State---------------" << std::endl;
     PRINT_PARAM(lbb);
     PRINT_PARAM(tfr);
     PRINT_PARAM(interval);
@@ -239,6 +240,7 @@ struct SimulationInputs
 
   void print()
   {
+    std::cout << "\n---------------Inputs---------------" << std::endl;
     PRINT_PARAM(boxRelDim);
     PRINT_PARAM(flowLbb);
     PRINT_PARAM(flowTfr);
@@ -1125,12 +1127,6 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 
   std::cout << "Maximum (theoretical) number of cells: " << params.state.maxNumCells
             << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z << std::endl;
-
-  std::cout << "\n---------------Starting state---------------" << std::endl;
-  params.state.print();
-
-  std::cout << "\n---------------Starting inputs---------------" << std::endl;
-  params.inputs.print();
 }
 #undef JSON_READ
 
@@ -1176,6 +1172,9 @@ void commonSetup(Params &params)
   std::cout << "Memory requirement for data:\n\tdouble: " << params.state.memReqD
             << " bytes\n\tint: " << params.state.memReqI
             << " bytes\n\ttotal: " << params.state.memReqI + params.state.memReqD << " bytes" << std::endl;
+
+  params.state.print();
+  params.inputs.print();
 }
 
 void generateStartingData(Params &params, ivec bubblesPerDim)
@@ -1524,10 +1523,6 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // All the data should be used at this point
     if (offset != byteData.size())
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
-
-    std::cout << "Continuing simulation with the following arguments:" << std::endl;
-    params.state.print();
-    params.inputs.print();
 
     // Setup pairs. Unnecessary to serialize them.
     updateCellsAndNeighbors(params);
