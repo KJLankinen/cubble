@@ -1397,7 +1397,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const char binPbcz = *it;
     it += 1;
 
-    for (auto &it2 = header.begin(); it2 != header.end(); ++it2)
+    for (auto it2 = header.begin(); it2 != header.end(); ++it2)
       std::cout << *it2;
     std::cout << std::endl;
 
