@@ -1343,6 +1343,10 @@ void initializeFromJson(const char *inputFileName, Params &params)
   params.state.numIntegrationSteps = 0;
 }
 
+// Needed for serialization and deserialization
+#define NAME_MAX_LEN 64
+#define HEADER_SIZE 256 // <-- Needs to be > 2x NAME_MAX_LEN
+
 void initializeFromBinary(const char *inputFileName, Params &params)
 {
   std::cout << "Initializing simulation from a binary dump." << std::endl;
@@ -1353,7 +1357,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     inFile.seekg(0, inFile.end);
     const uint64_t fileSize = inFile.tellg();
     inFile.seekg(0);
-    if (fileSize <= sizeof(params.state) + sizeof(params.inputs))
+    if (fileSize <= sizeof(params.state) + sizeof(params.inputs) + HEADER_SIZE)
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
 
     std::vector<char> byteData;
@@ -1361,10 +1365,73 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     inFile.read(byteData.data(), fileSize);
 
     uint64_t offset = 0;
-    std::memcpy(static_cast<void *>(&params.state), static_cast<void *>(byteData.data()), sizeof(params.state));
+    std::array<char, HEADER_SIZE> header;
+
+    // Header
+    std::memcpy(static_cast<void *>(header.data()), static_cast<void *>(&byteData[offset]), header.size());
+    offset += header.size();
+
+    // Check some values from header for compatibility
+    auto it = header.begin();
+    std::string hostName(it, it + NAME_MAX_LEN);
+    it += NAME_MAX_LEN;
+
+    std::string gpuName(it, it + NAME_MAX_LEN);
+    it += NAME_MAX_LEN;
+
+    const char binNumDim = *it;
+    it += 1;
+
+    const char binUseProfiling = *it;
+    it += 1;
+
+    const char binUseFlow = *it;
+    it += 1;
+
+    const char binPbcx = *it;
+    it += 1;
+
+    const char binPbcy = *it;
+    it += 1;
+
+    const char binPbcz = *it;
+    it += 1;
+
+    std::cout << "Binary header:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
+              << "\n\tNUM_DIM: " << binNumDim << "\n\tUSE_PROFILING: " << binUseProfiling
+              << "\n\tUSE_FLOW: " << binUseFlow << "\n\tPBC_X: " << binPbcx << "\n\tPBC_Y: " << binPbcy
+              << "\n\tPBC_Z: " << binPbcz << std::endl;
+
+    // Get current host name
+    std::vector<char> charArr(NAME_MAX_LEN);
+    gethostname(charArr.data(), charArr.size());
+    hostName = std::string(charArr.begin(), charArr.end());
+
+    // Get current GPU name
+    cudaDeviceProp prop;
+    int device = 0;
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaGetDevice(&device));
+    CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
+    gpuName = std::string(prop.name);
+    gpuName = gpuName.substr(0, NAME_MAX_LEN);
+
+    std::cout << "Current program:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
+              << "\n\tNUM_DIM: " << NUM_DIM << "\n\tUSE_PROFILING: " << USE_PROFILING << "\n\tUSE_FLOW: " << USE_FLOW
+              << "\n\tPBC_X: " << PBC_X << "\n\tPBC_Y: " << PBC_Y << "\n\tPBC_Z: " << PBC_Z << std::endl;
+
+    const bool isBinaryCompatible = (char)NUM_DIM == binNumDim && (char)USE_PROFILING == binUseProfiling &&
+                                    (char)USE_FLOW == binUseFlow && (char)PBC_X == binPbcx && (char)PBC_Y == binPbcy &&
+                                    (char)PBC_Z == binPbcz;
+    if (!isBinaryCompatible)
+      throw std::runtime_error("Incompatible binary file!");
+
+    // State
+    std::memcpy(static_cast<void *>(&params.state), static_cast<void *>(&byteData[offset]), sizeof(params.state));
     offset += sizeof(params.state);
-    std::memcpy(static_cast<void *>(&params.inputs), static_cast<void *>(byteData.data() + offset),
-                sizeof(params.inputs));
+
+    // Inputs
+    std::memcpy(static_cast<void *>(&params.inputs), static_cast<void *>(&byteData[offset]), sizeof(params.inputs));
     offset += sizeof(params.inputs);
 
     int *dnp = nullptr;
@@ -1381,14 +1448,14 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes)
       throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
 
-    // Copy doubles
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory), static_cast<void *>(byteData.data() + offset),
+    // Doubles
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory), static_cast<void *>(&byteData[offset]),
                          doubleBytes, cudaMemcpyHostToDevice));
     offset += doubleBytes;
 
-    // Copy ints
+    // Ints
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
-                         static_cast<void *>(byteData.data() + offset), intBytes, cudaMemcpyHostToDevice));
+                         static_cast<void *>(&byteData[offset]), intBytes, cudaMemcpyHostToDevice));
     offset += intBytes;
 
     // All the data should be used at this point
@@ -1411,53 +1478,98 @@ void serializeStateAndData(const char *outputFileName, Params &params)
   std::ofstream outFile(outputFileName, std::ofstream::binary);
   if (outFile.is_open())
   {
+    // Get host name
+    std::vector<char> charArr(NAME_MAX_LEN);
+    gethostname(charArr.data(), charArr.size());
+    std::string hostName(charArr.begin(), charArr.end());
+
+    // Get GPU name
+    cudaDeviceProp prop;
+    int device = 0;
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaGetDevice(&device));
+    CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
+    std::string gpuName(prop.name);
+    gpuName = gpuName.substr(0, NAME_MAX_LEN);
+
+    std::array<char, HEADER_SIZE> header;
+    uint64_t offset = 0;
+
+    strncpy(&header[offset], hostName.data(), NAME_MAX_LEN);
+    offset += NAME_MAX_LEN;
+
+    strncpy(&header[offset], gpuName.data(), NAME_MAX_LEN);
+    offset += NAME_MAX_LEN;
+
+    header[offset] = (char)NUM_DIM;
+    offset += 1;
+
+    header[offset] = (char)USE_PROFILING;
+    offset += 1;
+
+    header[offset] = (char)USE_FLOW;
+    offset += 1;
+
+    header[offset] = (char)PBC_X;
+    offset += 1;
+
+    header[offset] = (char)PBC_Y;
+    offset += 1;
+
+    header[offset] = (char)PBC_Z;
+    offset += 1;
+
+    // Divisible by 32 and >= numBubbles
+    const uint64_t newDataStride =
+      params.state.numBubbles + !!(params.state.numBubbles % 32) * (32 - params.state.numBubbles % 32);
+    const uint32_t numIntComponents    = 3;
     const uint32_t numDoubleComponents = (uint32_t)DDP::NUM_VALUES / 2;
+    const uint64_t doubleDataSize      = numDoubleComponents * newDataStride * sizeof(double);
+    const uint64_t intDataSize         = numIntComponents * newDataStride * sizeof(int);
+    const uint64_t totalSize =
+      sizeof(params.state) + sizeof(params.inputs) + doubleDataSize + intDataSize + header.size();
+
+    std::vector<char> byteData;
+    byteData.resize(totalSize);
+    offset = 0;
+
+    // Header
+    std::memcpy(static_cast<void *>(&byteData[offset]), static_cast<void *>(header.data()), header.size());
+    offset += header.size();
+
+    // State
+    std::memcpy(static_cast<void *>(&byteData[offset]), static_cast<void *>(&params.state), sizeof(params.state));
+    offset += sizeof(params.state);
+
+    // Inputs
+    std::memcpy(static_cast<void *>(&byteData[offset]), static_cast<void *>(&params.inputs), sizeof(params.inputs));
+    offset += sizeof(params.inputs);
+
+    // Doubles
     std::vector<double> doubleData;
     doubleData.resize(params.state.dataStride * numDoubleComponents);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(doubleData.data()), static_cast<void *>(params.deviceDoubleMemory),
                          sizeof(double) * doubleData.size(), cudaMemcpyDeviceToHost));
 
-    const uint32_t numIntComponents = 3;
+    for (uint32_t i = 0; i < numDoubleComponents; ++i)
+    {
+      double *fromPtr            = doubleData.data() + i * params.state.dataStride;
+      const uint64_t bytesToCopy = sizeof(double) * newDataStride;
+      std::memcpy(static_cast<void *>(&byteData[offset]), static_cast<void *>(fromPtr), bytesToCopy);
+      offset += bytesToCopy;
+    }
+
+    // Ints
     std::vector<int> intData;
     intData.resize(params.state.dataStride * numIntComponents);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(intData.data()), params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
                          sizeof(int) * intData.size(), cudaMemcpyDeviceToHost));
 
-    // Divisible by 32 and >= numBubbles
-    const uint64_t newDataStride =
-      params.state.numBubbles + !!(params.state.numBubbles % 32) * (32 - params.state.numBubbles % 32);
-    const uint64_t doubleDataSize = numDoubleComponents * newDataStride * sizeof(double);
-    const uint64_t intDataSize    = numIntComponents * newDataStride * sizeof(int);
-    const uint64_t totalSize      = sizeof(params.state) + sizeof(params.inputs) + doubleDataSize + intDataSize;
-
-    std::vector<char> byteData;
-    byteData.resize(totalSize);
-
-    uint64_t offset = 0;
-    // Copy state
-    std::memcpy(static_cast<void *>(byteData.data()), static_cast<void *>(&params.state), sizeof(params.state));
-    offset += sizeof(params.state);
-
-    // Copy inputs
-    std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(&params.inputs),
-                sizeof(params.inputs));
-    offset += sizeof(params.inputs);
-
-    // Copy doubles
-    for (uint32_t i = 0; i < numDoubleComponents; ++i)
-    {
-      double *fromPtr            = doubleData.data() + i * params.state.dataStride;
-      const uint64_t bytesToCopy = sizeof(double) * newDataStride;
-      std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(fromPtr), bytesToCopy);
-      offset += bytesToCopy;
-    }
-
-    // Copy ints
     for (uint32_t i = 0; i < numIntComponents; ++i)
     {
       int *fromPtr               = intData.data() + i * params.state.dataStride;
       const uint64_t bytesToCopy = sizeof(int) * newDataStride;
-      std::memcpy(static_cast<void *>(byteData.data() + offset), static_cast<void *>(fromPtr), bytesToCopy);
+      std::memcpy(static_cast<void *>(&byteData[offset]), static_cast<void *>(fromPtr), bytesToCopy);
       offset += bytesToCopy;
     }
 
@@ -1488,14 +1600,6 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 {
   // Register signal handler
   signal(SIGUSR1, signalHandler);
-
-  std::vector<char> charArr;
-  charArr.resize(128);
-  if (gethostname(charArr.data(), charArr.size()) == 0)
-  {
-    std::string hostName(charArr.begin(), charArr.end());
-    std::cout << hostName << std::endl;
-  }
 
   Params params;
   // If input file name ends with .bin, it's a serialized state.
