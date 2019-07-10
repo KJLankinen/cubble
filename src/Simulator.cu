@@ -1346,7 +1346,6 @@ void initializeFromJson(const char *inputFileName, Params &params)
 // Needed for serialization and deserialization
 #define NAME_MAX_LEN 64
 #define HEADER_SIZE 256 // <-- Needs to be > 2x NAME_MAX_LEN
-#define NUM_DEFINED_INTS 6
 
 void initializeFromBinary(const char *inputFileName, Params &params)
 {
@@ -1373,24 +1372,46 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     offset += header.size();
 
     // Check some values from header for compatibility
-    auto it = header.begin();
-    std::string hostName(it, it + NAME_MAX_LEN);
-    it += NAME_MAX_LEN;
+    uint32_t headerOffset = 0;
+    std::string hostName;
+    hostName.resize(NAME_MAX_LEN);
+    strncpy(hostName.data(), &header[offset], NAME_MAX_LEN);
+    headerOffset += NAME_MAX_LEN;
 
-    std::string gpuName(it, it + NAME_MAX_LEN);
-    it += NAME_MAX_LEN;
+    std::string gpuName;
+    gpuName.resize(NAME_MAX_LEN);
+    strncpy(gpuName.data(), &header[offset], NAME_MAX_LEN);
+    headerOffset += NAME_MAX_LEN;
 
-    for (auto it2 = header.begin(); it2 != header.end(); ++it2)
-      std::cout << *it2 << " ";
-    std::cout << std::endl;
+    int binNumDim       = 0;
+    int binUseProfiling = 0;
+    int binUseFlow      = 0;
+    int binPbcx         = 0;
+    int binPbcy         = 0;
+    int binPbcz         = 0;
 
-    std::array<int, NUM_DEFINED_INTS> definedInts;
-    std::copy(it, it + sizeof(int) * definedInts.size(), definedInts.begin());
+    std::memcpy(static_cast<void *>(&binNumDim), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
+
+    std::memcpy(static_cast<void *>(&binUseProfiling), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
+
+    std::memcpy(static_cast<void *>(&binUseFlow), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
+
+    std::memcpy(static_cast<void *>(&binPbcx), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
+
+    std::memcpy(static_cast<void *>(&binPbcy), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
+
+    std::memcpy(static_cast<void *>(&binPbcz), static_cast<void *>(&header[headerOffset]), sizeof(int));
+    headerOffset += sizeof(int);
 
     std::cout << "Binary header:\n\tHostname: " << hostName << "\n\tGPU name: " << gpuName
-              << "\n\tNUM_DIM: " << definedInts[0] << "\n\tUSE_PROFILING: " << definedInts[1]
-              << "\n\tUSE_FLOW: " << definedInts[2] << "\n\tPBC_X: " << definedInts[3]
-              << "\n\tPBC_Y: " << definedInts[4] << "\n\tPBC_Z: " << definedInts[5] << std::endl;
+              << "\n\tNUM_DIM: " << binNumDim << "\n\tUSE_PROFILING: " << binUseProfiling
+              << "\n\tUSE_FLOW: " << binUseFlow << "\n\tPBC_X: " << binPbcx << "\n\tPBC_Y: " << binPbcy
+              << "\n\tPBC_Z: " << binPbcz << std::endl;
 
     // Get current host name
     std::array<char, NAME_MAX_LEN> charArr;
@@ -1410,9 +1431,9 @@ void initializeFromBinary(const char *inputFileName, Params &params)
               << "\n\tNUM_DIM: " << NUM_DIM << "\n\tUSE_PROFILING: " << USE_PROFILING << "\n\tUSE_FLOW: " << USE_FLOW
               << "\n\tPBC_X: " << PBC_X << "\n\tPBC_Y: " << PBC_Y << "\n\tPBC_Z: " << PBC_Z << std::endl;
 
-    const bool isBinaryCompatible = (NUM_DIM == definedInts[0]) && (USE_PROFILING == definedInts[1]) &&
-                                    (USE_FLOW == definedInts[2]) && (PBC_X == definedInts[3]) &&
-                                    (PBC_Y == definedInts[4]) && (PBC_Z == definedInts[5]);
+    const bool isBinaryCompatible = (NUM_DIM == binNumDim) && (USE_PROFILING == binUseProfiling) &&
+                                    (USE_FLOW == binUseFlow) && (PBC_X == binPbcx) && (PBC_Y == binPbcy) &&
+                                    (PBC_Z == binPbcz);
     if (!isBinaryCompatible)
       throw std::runtime_error("Incompatible binary file!");
 
@@ -1491,13 +1512,29 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     strncpy(&header[offset], gpuName.data(), NAME_MAX_LEN);
     offset += NAME_MAX_LEN;
 
-    const std::array<int, NUM_DEFINED_INTS> definedInts = { NUM_DIM, USE_PROFILING, USE_FLOW, PBC_X, PBC_Y, PBC_Z };
-    for (uint32_t i = 0; i < definedInts.size(); ++i)
-    {
-      int temp = definedInts[i];
-      std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(temp));
-      offset += sizeof(temp);
-    }
+    int temp = NUM_DIM;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
+
+    temp = USE_PROFILING;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
+
+    temp = USE_FLOW;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
+
+    temp = PBC_X;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
+
+    temp = PBC_Y;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
+
+    temp = PBC_Z;
+    std::memcpy(static_cast<void *>(&header[offset]), static_cast<void *>(&temp), sizeof(int));
+    offset += sizeof(int);
 
     // Divisible by 32 and >= numBubbles
     const uint64_t newDataStride =
