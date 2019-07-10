@@ -172,6 +172,7 @@ struct SimulationState
     PRINT_PARAM(timesPrinted);
     PRINT_PARAM(dataStride);
     PRINT_PARAM(pairStride);
+    std::cout << "----------------End----------------\n" << std::endl;
   }
 };
 
@@ -263,6 +264,7 @@ struct SimulationInputs
     PRINT_PARAM(numStepsToRelax);
     PRINT_PARAM(numBubblesIn);
     PRINT_PARAM(minNumBubbles);
+    std::cout << "-----------------End----------------\n" << std::endl;
   }
 };
 
