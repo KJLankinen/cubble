@@ -1126,7 +1126,10 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
   std::cout << "Maximum (theoretical) number of cells: " << params.state.maxNumCells
             << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y << ", " << gridDim.z << std::endl;
 
+  std::cout << "\n---------------Starting state---------------" << std::endl;
   params.state.print();
+
+  std::cout << "\n---------------Starting inputs---------------" << std::endl;
   params.inputs.print();
 }
 #undef JSON_READ
