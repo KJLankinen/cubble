@@ -1505,22 +1505,22 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     strncpy(&header[offset], gpuName.data(), NAME_MAX_LEN);
     offset += NAME_MAX_LEN;
 
-    header[offset] = (char)NUM_DIM;
+    header[offset] = '1'; //(char)NUM_DIM;
     offset += 1;
 
-    header[offset] = (char)USE_PROFILING;
+    header[offset] = '2'; //(char)USE_PROFILING;
     offset += 1;
 
-    header[offset] = (char)USE_FLOW;
+    header[offset] = '3'; //(char)USE_FLOW;
     offset += 1;
 
-    header[offset] = (char)PBC_X;
+    header[offset] = '4'; //(char)PBC_X;
     offset += 1;
 
-    header[offset] = (char)PBC_Y;
+    header[offset] = '5'; //(char)PBC_Y;
     offset += 1;
 
-    header[offset] = (char)PBC_Z;
+    header[offset] = '6'; //(char)PBC_Z;
     offset += 1;
 
     // Divisible by 32 and >= numBubbles
