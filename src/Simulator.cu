@@ -1380,6 +1380,10 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     std::string gpuName(it, it + NAME_MAX_LEN);
     it += NAME_MAX_LEN;
 
+    for (auto it2 = header.begin(); it2 != header.end(); ++it2)
+      std::cout << *it2 << " ";
+    std::cout << std::endl;
+
     std::array<int, NUM_DEFINED_INTS> definedInts;
     std::copy(it, it + sizeof(int) * definedInts.size(), definedInts.begin());
 
@@ -1389,7 +1393,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
               << "\n\tPBC_Y: " << definedInts[4] << "\n\tPBC_Z: " << definedInts[5] << std::endl;
 
     // Get current host name
-    std::vector<char> charArr(NAME_MAX_LEN);
+    std::array<char, NAME_MAX_LEN> charArr;
     gethostname(charArr.data(), charArr.size());
     hostName = std::string(charArr.begin(), charArr.end());
 
