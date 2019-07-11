@@ -122,7 +122,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
-RUN_NUM=$1\n\
+RUN_NUM=\$1\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
@@ -146,7 +146,7 @@ elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; 
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
-RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
+RUN_NUM=\$SLURM_ARRAY_TASK_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
