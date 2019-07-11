@@ -448,7 +448,7 @@ void updateCellsAndNeighbors(Params &params)
                             cudaMemcpyDeviceToDevice));
 
   KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
-  const double maxDistance      = 1.5 * params.state.maxBubbleRadius;
+  const double maxDistance      = 1.3 * params.state.maxBubbleRadius;
 
   int *dnp = nullptr;
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
@@ -1152,7 +1152,7 @@ void commonSetup(Params &params)
   params.state.memReqD = sizeof(double) * (uint64_t)params.state.dataStride * (uint64_t)DDP::NUM_VALUES;
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceDoubleMemory), params.state.memReqD));
 
-  for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
+  for (uint32_t i  = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
     params.ddps[i] = params.deviceDoubleMemory + i * params.state.dataStride;
 
   // Integers
@@ -1164,11 +1164,11 @@ void commonSetup(Params &params)
                          ((uint64_t)DIP::PAIR1 + avgNumNeighbors * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1));
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceIntMemory), params.state.memReqI));
 
-  for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
+  for (uint32_t i  = 0; i < (uint32_t)DIP::PAIR2; ++i)
     params.dips[i] = params.deviceIntMemory + i * params.state.dataStride;
 
   uint32_t j = 0;
-  for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
+  for (uint32_t i  = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
     params.dips[i] = params.dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * params.state.dataStride;
 
   std::cout << "Memory requirement for data:\n\tdouble: " << params.state.memReqD
