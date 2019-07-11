@@ -42,9 +42,10 @@ def main():
     sb_mail_user = "juhana.lankinen@aalto.fi"
     sb_mail_type = "ALL"
     sb_signal = "USR1@180"
-    binary_name = "state.bin"
     temp_dir = "/tmp/$TEMP_DIR"
     continue_script_name = "continue_script.sh"
+    continue_script_path = os.path.join(array_data_dir, continue_script_name)
+    binary_name = "state.bin"
     binary_input_path = os.path.join(array_data_dir, binary_name)
 
     compile_script = "\
@@ -133,7 +134,7 @@ rm " + binary_input_path + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ] && [[ ( \$TIMES_CALLED < 3 ) ]]; \
-then cd \$WRKDIR/cubble; sbatch " + continue_script_name + " \$RUN_NUM \$((\$TIMES_CALLED + 1)); \
+then cd " + root_dir + "; sbatch " + continue_script_path + " \$RUN_NUM \$((\$TIMES_CALLED + 1)); \
 elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
     array_script = "\
@@ -157,7 +158,7 @@ srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
-if [ -f " + continue_script_name + " ]; then cd $WRKDIR/cubble; sbatch " + continue_script_name + " $RUN_NUM 1; fi\
+if [ -f " + continue_script_name + " ]; then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM 1; fi\
 "
 
     print("Launching an array of processes that run the simulation.\n")
