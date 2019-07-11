@@ -43,7 +43,7 @@ def main():
     sb_mail_type = "ALL"
     sb_signal = "USR1@180"
     binary_name = "state.bin"
-    temp_dir = "/tmp/$SLURM_JOB_ID"
+    temp_dir = "/tmp/$TEMP_DIR"
     continue_script_name = "continue_script.sh"
     binary_input_path = os.path.join(array_data_dir, binary_name)
 
@@ -61,7 +61,6 @@ mkdir /tmp/$SLURM_JOB_ID\n\
 srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 "
-
     if not os.path.isdir(root_dir):
         print("Root dir \"" + root_dir + "\" is not a directory.")
         return 1
@@ -123,15 +122,18 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
 RUN_NUM=\$1\n\
+TIMES_CALLED=\$2\n\
+TEMP_DIR=\$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
-cp " + result_file_path + " .\n\
+if [ -f " + result_file_path + " ]; then cp " + result_file_path + " .; fi\n\
 srun " + executable_path + " " + binary_input_path + " " + binary_name + "\n\
 rm " + binary_input_path + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + " $RUN_NUM; \
+if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ] && [[ ( \$TIMES_CALLED < 3 ) ]]; \
+then cd \$WRKDIR/cubble; sbatch " + continue_script_name + " \$RUN_NUM \$((\$TIMES_CALLED + 1)); \
 elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
     array_script = "\
@@ -147,6 +149,7 @@ elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; 
 #SBATCH --array=0-" + str(num_runs) + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
 RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
+TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
@@ -154,7 +157,7 @@ srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
-if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + " $RUN_NUM; fi\
+if [ -f " + continue_script_name + " ]; then cd $WRKDIR/cubble; sbatch " + continue_script_name + " $RUN_NUM 1; fi\
 "
 
     print("Launching an array of processes that run the simulation.\n")
