@@ -31,7 +31,7 @@ def main():
     array_param_file = os.path.join(root_dir, "array_parameters.json")
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"), sub_dir)
     executable_path = os.path.join(data_dir, "cubble")
-    array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
+    array_data_dir = os.path.join(data_dir, "run_$RUN_NUM")
     array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
     result_file_path = os.path.join(array_data_dir, "results.dat")
     sb_modules = "cuda/10.0.130 gcc/6.3.0"
@@ -43,7 +43,7 @@ def main():
     sb_mail_type = "ALL"
     sb_signal = "USR1@180"
     binary_name = "state.bin"
-    array_temp_dir = "/tmp/$SLURM_JOB_ID"
+    temp_dir = "/tmp/$SLURM_JOB_ID"
     continue_script_name = "continue_script.sh"
     binary_input_path = os.path.join(array_data_dir, binary_name)
 
@@ -122,15 +122,16 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
+RUN_NUM=$1\n\
 module load " + sb_modules + "\n\
-mkdir " + array_temp_dir + "\n\
-cd " + array_temp_dir + "\n\
+mkdir " + temp_dir + "\n\
+cd " + temp_dir + "\n\
 cp " + result_file_path + " .\n\
 srun " + executable_path + " " + binary_input_path + " " + binary_name + "\n\
 rm " + binary_input_path + "\n\
-mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
+mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; \
+if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + " $RUN_NUM; \
 elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
     array_script = "\
@@ -145,14 +146,15 @@ elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; 
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
+RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
 module load " + sb_modules + "\n\
-mkdir " + array_temp_dir + "\n\
-cd " + array_temp_dir + "\n\
+mkdir " + temp_dir + "\n\
+cd " + temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
-mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
+mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
-if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\
+if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + " $RUN_NUM; fi\
 "
     print(compile_script)
     print(continue_script)
