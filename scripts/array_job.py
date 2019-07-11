@@ -146,7 +146,7 @@ elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; 
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
-RUN_NUM=\$SLURM_ARRAY_TASK_ID\n\
+RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
