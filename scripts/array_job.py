@@ -36,7 +36,7 @@ def main():
     result_file_path = os.path.join(array_data_dir, "results.dat")
     sb_modules = "cuda/10.0.130 gcc/6.3.0"
     sb_mem = "32G"
-    sb_time = "120:00:00"
+    sb_time = "00:05:00"
     sb_gres = "gpu:1"
     sb_constraint = "\"pascal\""
     sb_mail_user = "juhana.lankinen@aalto.fi"
@@ -82,35 +82,35 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
     print("Using " + make_dir + " as the makefile directory.")
     print("Using " + default_input_file + " as the default input file.")
     print("Using " + array_param_file + " as the file to modify the default input file with.")
-    print("Using " + data_dir + " as the data directory for this simulation run.")
+    print("Using " + data_dir + " as the data directory for this simulation run.\n")
 
-    #print("Launching process for compiling the binary.")
-    #compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    #compile_stdout = compile_process.communicate(input=compile_script)[0]
-    compile_slurm_id = "1"#str(compile_stdout).strip().split(" ")[-1]
+    print("Launching process for compiling the binary.")
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    compile_stdout = compile_process.communicate(input=compile_script)[0]
+    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
 
-    #if compile_process.returncode != 0:
-    #    print("Compile process submission was not successful!")
-    #    return compile_process.returncode
+    if compile_process.returncode != 0:
+        print("Compile process submission was not successful!")
+        return compile_process.returncode
 
-    #print("Reading default input arguments.")
-    #with open(default_input_file) as json_file_handle:
-    #    json_data = json.load(json_file_handle)
+    print("Reading default input arguments.")
+    with open(default_input_file) as json_file_handle:
+        json_data = json.load(json_file_handle)
 
     num_runs = 0
 
-    #print("Creating directories and input files.")
-    #with open(array_param_file) as parameter_file_handle:
-    #    for counter, line in enumerate(parameter_file_handle):
-    #        run_dir = os.path.join(data_dir, "run_" + str(counter))
-    #        outfile_path = os.path.join(run_dir, os.path.split(default_input_file)[1])
+    print("Creating directories and input files.")
+    with open(array_param_file) as parameter_file_handle:
+        for counter, line in enumerate(parameter_file_handle):
+            run_dir = os.path.join(data_dir, "run_" + str(counter))
+            outfile_path = os.path.join(run_dir, os.path.split(default_input_file)[1])
 
-    #        create_folder_and_data_file(run_dir,
-    #            outfile_path,
-    #            copy.deepcopy(json_data),
-    #            json.loads(line.strip()))
+            create_folder_and_data_file(run_dir,
+                outfile_path,
+                copy.deepcopy(json_data),
+                json.loads(line.strip()))
 
-    #        num_runs = counter
+            num_runs = counter
 
     continue_script = "\
 #!/bin/bash\n\
@@ -156,13 +156,8 @@ cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
 if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + " $RUN_NUM; fi\
 "
-    print(compile_script)
-    print(continue_script)
-    print(array_script)
 
-    return 0
-
-    print("Launching an array of processes that run the simulation.")
+    print("Launching an array of processes that run the simulation.\n")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script)[0]
 
@@ -170,10 +165,8 @@ if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "
         print("Array process submission was not successful!")
         return array_process.returncode
 
-    current_user = pwd.getpwuid(os.getuid()).pw_name
-
-    squeue_process = subprocess.Popen(["squeue", "-u", current_user], stdout=subprocess.PIPE)
-    print("Slurm queue of the current user:")
+    squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
+    print("Slurm queue:")
     print(squeue_process.communicate()[0])
     print("\nJob submission done!")
 
