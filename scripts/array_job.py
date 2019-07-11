@@ -76,7 +76,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 
     if not os.path.isdir(make_dir):
         print("Make dir \"" + make_dir + "\" is not a directory.")
-	    return 1
+        return 1
 
     print("Using " + root_dir + " as root dir.")
     print("Using " + make_dir + " as the makefile directory.")
