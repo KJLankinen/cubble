@@ -97,7 +97,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     #with open(default_input_file) as json_file_handle:
     #    json_data = json.load(json_file_handle)
 
-    #num_runs = 0
+    num_runs = 0
 
     #print("Creating directories and input files.")
     #with open(array_param_file) as parameter_file_handle:
