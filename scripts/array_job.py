@@ -59,7 +59,7 @@ def main():
 module load " + sb_modules + "\n\
 mkdir /tmp/$SLURM_JOB_ID\n\
 srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
-cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
+cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 "
 
     if not os.path.isdir(root_dir):
@@ -130,7 +130,8 @@ srun " + executable_path + " " + binary_input_path + " " + binary_name + "\n\
 rm " + binary_input_path + "\n\
 mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\n\
+if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; \
+elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
     array_script = "\
 #!/bin/bash\n\
@@ -150,8 +151,8 @@ cd " + array_temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
 mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ]; then echo " + continue_script + " > " + continue_script_name + "; fi\n\
-if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\n\
+if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
+if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\
 "
     print(compile_script)
     print(continue_script)
