@@ -1,10 +1,10 @@
-{"KParameter" : 0.001000}
-{"KParameter" : 0.000750}
-{"KParameter" : 0.000500}
-{"KParameter" : 0.000250}
-{"KParameter" : 0.000125}
-{"Kappa" : 0.0, "KParameter" : 0.001000}
-{"Kappa" : 0.0, "KParameter" : 0.000750}
-{"Kappa" : 0.0, "KParameter" : 0.000500}
-{"Kappa" : 0.0, "KParameter" : 0.000250}
-{"Kappa" : 0.0, "KParameter" : 0.000125}
+{"kParameter" : 0.001000}
+{"kParameter" : 0.000750}
+{"kParameter" : 0.000500}
+{"kParameter" : 0.000250}
+{"kParameter" : 0.000125}
+{"kappa" : 0.01, "kParameter" : 0.001000}
+{"kappa" : 0.01, "kParameter" : 0.000750}
+{"kappa" : 0.01, "kParameter" : 0.000500}
+{"kappa" : 0.01, "kParameter" : 0.000250}
+{"kappa" : 0.01, "kParameter" : 0.000125}

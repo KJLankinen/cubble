@@ -1,15 +1,15 @@
 {
   "phiTargetExpl": "The target volume fraction.",
-  "phiTarget": 0.88,
+  "phiTarget": 0.9,
 
   "kappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
   "kappa": 0.1,
 
   "numBubblesInExpl": "Total number of bubbles to simulate.",
-  "numBubblesIn": 1e4,
+  "numBubblesIn": 1e5,
 
   "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "minNumBubbles": 300,
+  "minNumBubbles": 900,
 
   "boxRelDimExpl": "The relative dimension of the box.",
   "boxRelDim": {
