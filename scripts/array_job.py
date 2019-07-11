@@ -110,7 +110,8 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
                 copy.deepcopy(json_data),
                 json.loads(line.strip()))
 
-            num_runs = counter'''
+            num_runs = counter
+    '''
 
     compile_slurm_id = 0
     continue_script = "\
@@ -133,7 +134,6 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
 if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\n\
 "
-
     array_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
