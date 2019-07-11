@@ -32,22 +32,86 @@ def main():
     data_dir = os.path.join(root_dir, "data", datetime.datetime.now().strftime("%d_%m_%Y"), sub_dir)
     executable_path = os.path.join(data_dir, "cubble")
 
+    sb_modules = "cuda/10.0.130 gcc/6.3.0"
+    sb_mem = "32G"
+    sb_time = "120:00:00"
+    sb_gres = "gpu:1"
+    sb_constraint = "\"pascal\""
+    sb_mail_user = "juhana.lankinen@aalto.fi"
+    sb_mail_type = "ALL"
+    sb_signal = "USR1@180"
+    binary_name = "state.bin"
+
     compile_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
 #SBATCH --mem=100M\n\
 #SBATCH --time=00:10:00\n\
-#SBATCH --gres=gpu:1\n\
-#SBATCH --constraint=\"pascal\"\n\
-#SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
-#SBATCH --mail-type=ALL\n\
-module purge\n\
-module load cuda/10.0.130 gcc/6.3.0\n\
+#SBATCH --gres=" + sb_gres + "\n\
+#SBATCH --constraint=" + sb_constraint + "\n\
+#SBATCH --mail-user=" + sb_mail_user + "\n\
+#SBATCH --mail-type=" + sb_mail_type + "\n\
+module load " + sb_modules + "\n\
 mkdir /tmp/$SLURM_JOB_ID\n\
 srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
 
+    array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
+    array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
+    binary_input_path = os.path.join(array_data_dir, binary_name)
+    result_file_path = os.path.join(array_data_dir, "results.dat")
+    array_temp_dir = "/tmp/$SLURM_JOB_ID"
+    continue_script_name = "continue_script.sh"
+
+    continue_script = "\
+#!/bin/bash\n\
+#SBATCH --job-name=cubble\n\
+#SBATCH --mem=" + sb_mem + "\n\
+#SBATCH --time=" + sb_time + "\n\
+#SBATCH --gres=" + sb_gres + "\n\
+#SBATCH --constraint=" + sb_constraint + "\n\
+#SBATCH --mail-user=" + sb_mail_user + "\n\
+#SBATCH --mail-type=" + sb_mail_type + "\n\
+#SBATCH --signal=" + sb_signal + "\n\
+module load " + sb_modules + "\n\
+mkdir " + array_temp_dir + "\n\
+cd " + array_temp_dir + "\n\
+cp " + result_file_path + " .\n\
+srun " + executable_path + " " + binary_input_path + " " + binary_name + "\n\
+rm " + binary_input_path + "\n\
+mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
+cd " + array_data_dir + "\n\
+if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\n\
+"
+
+    array_script = "\
+#!/bin/bash\n\
+#SBATCH --job-name=cubble\n\
+#SBATCH --mem=" + sb_mem + "\n\
+#SBATCH --time=" + sb_time + "\n\
+#SBATCH --gres=" + sb_gres + "\n\
+#SBATCH --constraint=" + sb_constraint + "\n\
+#SBATCH --mail-user=" + sb_mail_user + "\n\
+#SBATCH --mail-type=" + sb_mail_type + "\n\
+#SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
+#SBATCH --array=0-" + str(num_runs) + "\n\
+#SBATCH --signal=" + sb_signal + "\n\
+module load " + sb_modules + "\n\
+mkdir " + array_temp_dir + "\n\
+cd " + array_temp_dir + "\n\
+srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
+mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
+cd " + array_data_dir + "\n\
+if [ -f " + binary_name + " ]; then echo " + continue_script + " > " + continue_script_name + "; fi\n\
+if [ -f " + continue_script_name + " ]; then sbatch " + continue_script_name + "; fi\n\
+"
+    print(compile_script)
+    print(continue_script)
+    print(array_script)
+
+    return 0;
+'''
     if not os.path.isdir(root_dir):
         print("Root dir \"" + root_dir + "\" is not a directory.")
         return 1
@@ -98,30 +162,6 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 
             num_runs = counter
 
-    array_data_dir = os.path.join(data_dir, "run_$SLURM_ARRAY_TASK_ID")
-    array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
-    array_temp_dir = "/tmp/$SLURM_JOB_ID"
-
-    array_script = "\
-#!/bin/bash\n\
-#SBATCH --job-name=cubble\n\
-#SBATCH --mem=32G\n\
-#SBATCH --time=00:05:00\n\
-#SBATCH --gres=gpu:1\n\
-#SBATCH --constraint=\"pascal\"\n\
-#SBATCH --mail-user=juhana.lankinen@aalto.fi\n\
-#SBATCH --mail-type=ALL\n\
-#SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
-#SBATCH --array=0-" + str(num_runs) + "\n\
-#SBATCH --signal=USR1@180\n\
-module purge\n\
-module load cuda/10.0.130 gcc/6.3.0\n\
-mkdir " + array_temp_dir + "\n\
-cd " + array_temp_dir + "\n\
-srun " + executable_path + " " + array_input_path + " state.bin\n\
-mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
-"
-
     print("Launching an array of processes that run the simulation.")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script)[0]
@@ -136,7 +176,7 @@ mv -f " + array_temp_dir + "/* " + array_data_dir + "\n\
     print("Slurm queue of the current user:")
     print(squeue_process.communicate()[0])
     print("\nJob submission done!")
-
+'''
 
 if __name__ == "__main__":
     main()
