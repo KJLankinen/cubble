@@ -61,58 +61,6 @@ mkdir /tmp/$SLURM_JOB_ID\n\
 srun make -C " + make_dir + " BIN_PATH=/tmp/$SLURM_JOB_ID\n\
 cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
 "
-'''
-    if not os.path.isdir(root_dir):
-        print("Root dir \"" + root_dir + "\" is not a directory.")
-        return 1
-
-    if not os.path.isfile(default_input_file):
-        print("\"" + default_input_file + "\" is not a file.")
-        return 1
-
-    if not os.path.isfile(array_param_file):
-        print("\"" + array_param_file + "\" is not a file.")
-        return 1
-
-    if not os.path.isdir(make_dir):
-	print("Make dir \"" + make_dir + "\" is not a directory.")
-	return 1
-
-    print("Using " + root_dir + " as root dir.")
-    print("Using " + make_dir + " as the makefile directory.")
-    print("Using " + default_input_file + " as the default input file.")
-    print("Using " + array_param_file + " as the file to modify the default input file with.")
-    print("Using " + data_dir + " as the data directory for this simulation run.")
-
-    print("Launching process for compiling the binary.")
-    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    compile_stdout = compile_process.communicate(input=compile_script)[0]
-    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
-
-    if compile_process.returncode != 0:
-        print("Compile process submission was not successful!")
-        return compile_process.returncode
-
-    print("Reading default input arguments.")
-    with open(default_input_file) as json_file_handle:
-        json_data = json.load(json_file_handle)
-
-    num_runs = 0
-
-    print("Creating directories and input files.")
-    with open(array_param_file) as parameter_file_handle:
-        for counter, line in enumerate(parameter_file_handle):
-            run_dir = os.path.join(data_dir, "run_" + str(counter))
-            outfile_path = os.path.join(run_dir, os.path.split(default_input_file)[1])
-
-            create_folder_and_data_file(run_dir,
-                outfile_path,
-                copy.deepcopy(json_data),
-                json.loads(line.strip()))
-
-            num_runs = counter
-    '''
-
     continue_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
