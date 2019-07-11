@@ -75,8 +75,8 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
         return 1
 
     if not os.path.isdir(make_dir):
-	print("Make dir \"" + make_dir + "\" is not a directory.")
-	return 1
+        print("Make dir \"" + make_dir + "\" is not a directory.")
+	    return 1
 
     print("Using " + root_dir + " as root dir.")
     print("Using " + make_dir + " as the makefile directory.")
@@ -87,7 +87,7 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\n\
     #print("Launching process for compiling the binary.")
     #compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     #compile_stdout = compile_process.communicate(input=compile_script)[0]
-    compile_slurm_id = 1#str(compile_stdout).strip().split(" ")[-1]
+    compile_slurm_id = "1"#str(compile_stdout).strip().split(" ")[-1]
 
     #if compile_process.returncode != 0:
     #    print("Compile process submission was not successful!")
