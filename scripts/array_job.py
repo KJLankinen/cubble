@@ -33,7 +33,10 @@ def main():
     executable_path = os.path.join(data_dir, "cubble")
     array_data_dir = os.path.join(data_dir, "run_$RUN_NUM")
     array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
-    result_file_path = os.path.join(array_data_dir, "results.dat")
+    result_file_path = os.path.join(array_data_dir, result_file_name) 
+    continue_script_path = os.path.join(array_data_dir, continue_script_name)
+    binary_input_path = os.path.join(array_data_dir, binary_name)
+    
     sb_modules = "cuda/10.0.130 gcc/6.3.0"
     sb_mem = "32G"
     sb_time = "00:05:00"
@@ -44,9 +47,8 @@ def main():
     sb_signal = "USR1@180"
     temp_dir = "/tmp/$TEMP_DIR"
     continue_script_name = "continue_script.sh"
-    continue_script_path = os.path.join(array_data_dir, continue_script_name)
-    binary_name = "state.bin"
-    binary_input_path = os.path.join(array_data_dir, binary_name)
+    binary_name = "state.bin" 
+    result_file_name = "results.dat"
 
     compile_script = "\
 #!/bin/bash\n\
@@ -122,9 +124,9 @@ cp /tmp/$SLURM_JOB_ID/cubble " + data_dir + "\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
-RUN_NUM=\$1\n\
-TIMES_CALLED=\$2\n\
-TEMP_DIR=\$SLURM_JOB_ID\n\
+RUN_NUM=$1\n\
+TIMES_CALLED=$2\n\
+TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir + "\n\
 cd " + temp_dir + "\n\
@@ -133,10 +135,11 @@ srun " + executable_path + " " + binary_input_path + " " + binary_name + "\n\
 rm " + binary_input_path + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ] && [[ ( \$TIMES_CALLED < 3 ) ]]; \
-then cd " + root_dir + "; sbatch " + continue_script_path + " \$RUN_NUM \$((\$TIMES_CALLED + 1)); \
+if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ] && [[ ( $TIMES_CALLED < 3 ) ]]; \
+then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM $(($TIMES_CALLED + 1)); \
 elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
+    # Important to echo the continue script with single quotes to avoid bash variable expansion
     array_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
@@ -157,9 +160,9 @@ cd " + temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ]; then echo \"" + continue_script + "\" > " + continue_script_name + "; fi\n\
-if [ -f " + continue_script_name + " ]; then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM 1; fi\
-"
+if [ -f " + binary_name + " ]; then echo \'" + continue_script + "\' > " + continue_script_name + "; cat " + continue_script_name + " fi\n"
+#if [ -f " + continue_script_name + " ]; then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM 1; fi\
+#"
 
     print("Launching an array of processes that run the simulation.\n")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
