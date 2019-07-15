@@ -8,6 +8,7 @@ import datetime
 import subprocess
 import pwd
 import shutil
+import errno
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
@@ -26,7 +27,7 @@ class File:
     path = ""
     stem = ""
 
-    def __init__(self, name, root, stem=None):
+    def __init__(self, name, root, stem=None, create=False):
         self.name = name
         if stem is not None:
             self.stem = stem
@@ -34,9 +35,15 @@ class File:
         else:
             self.path = os.path.join(root, name)
 
-        print(self.path)
-        if not os.isdir(self.path) and not os.isfile(self.path):
-            raise FileNotFoundError(self.path + " is neither a directory nor a file!"))
+        if create and not os.path.isdir(self.path) and not os.path.isfile(self.path):
+            print("Creating: " + self.path)
+            os.makedirs(self.path)
+        elif create and os.path.isdir(self.path) or os.path.isfile(self.path):
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), self.path)
+        elif not os.path.isdir(self.path) and not os.path.isfile(self.path):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.path)
+        else:
+            print(self.path)
 
 def main():
     if len(sys.argv) < 2:
@@ -54,7 +61,10 @@ def main():
     
     print("Using the following paths & files:")
     root_dir =              File("cubble", os.environ['WRKDIR'])
-    data_dir =              File(sys.argv[1], root_dir.path, os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")))
+    data_dir =              File(sys.argv[1],
+                                 root_dir.path,
+                                 os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
+                                 True)
     array_work_dir =        File("run_$RUN_NUM", root_dir.path)
     make_file =             File("makefile", root_dir.path, "final")
     default_input =         File("input_parameters.json", root_dir.path)
