@@ -1430,10 +1430,12 @@ void initializeFromBinary(const char *inputFileName, Params &params)
 
     // Check some values from header for compatibility
     uint32_t headerOffset = 0;
-    std::string hostName(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN);
+    char *nulLoc = std::find(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN, '\0');
+    std::string hostName(header.begin() + headerOffset, nulLoc);
     headerOffset += NAME_MAX_LEN;
 
-    std::string gpuName(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN);
+    nulLoc = std::find(header.begin() + headerOffset, header.begin() + headerOffset + NAME_MAX_LEN, '\0');
+    std::string gpuName(header.begin() + headerOffset, nulLoc);
     headerOffset += NAME_MAX_LEN;
 
     int binNumDim = 0;
