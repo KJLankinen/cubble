@@ -12,13 +12,12 @@ import errno
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
-
     for key, val in inbound.items():
-	if key in data.keys():
-	    data.update({key:val})
-	else:
-	    print("Key not found in default input file: " + key)
-
+        if key in data.keys():
+            data.update({key:val})
+        else:
+            print("Key not found in default input file: " + key)
+    
     with open(outfile_name, 'w') as outfile:
         json.dump(data, outfile, indent=4, sort_keys=True)
 
