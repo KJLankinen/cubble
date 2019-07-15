@@ -40,7 +40,7 @@ class File:
         if create and not os.path.isdir(self.path) and not os.path.isfile(self.path):
             print("Creating: " + self.path)
             os.makedirs(self.path)
-        elif create and os.path.isdir(self.path) or os.path.isfile(self.path):
+        elif create and (os.path.isdir(self.path) or os.path.isfile(self.path)):
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), self.path)
         else:
             print(self.path)
