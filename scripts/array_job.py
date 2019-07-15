@@ -185,7 +185,7 @@ if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " 
 
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
-    print(str(squeue_process.communicate()[0]).decode())
+    print(str(squeue_process.communicate()[0].decode()))
     print("\nJob submission done!")
 
 if __name__ == "__main__":
