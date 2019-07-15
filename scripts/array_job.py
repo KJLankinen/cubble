@@ -80,7 +80,6 @@ def main():
     
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
-    make_file = File(make_file.name, data_dir.path, None, False, True)
 
     compile_script_str = "\
 #!/bin/bash\n\
@@ -94,7 +93,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + make_file.path + " BIN_PATH=" + temp_dir.path + "\n\
+srun make -C " + data_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
@@ -109,7 +108,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
         print(str(compile_stdout.decode()))
 
     print("Reading default input arguments.")
-    with open(default_input_file) as json_file_handle:
+    with open(default_input.path) as json_file_handle:
         json_data = json.load(json_file_handle)
 
     num_runs = 0
@@ -117,7 +116,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     with open(array_param_file) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
             run_dir = os.path.join(data_dir, "run_" + str(counter))
-            outfile_path = os.path.join(run_dir, os.path.split(default_input_file)[1])
+            outfile_path = os.path.join(run_dir, os.path.split(default_input.path)[1])
             create_folder_and_data_file(run_dir, outfile_path, copy.deepcopy(json_data), json.loads(line.strip()))
             num_runs = counter
 
