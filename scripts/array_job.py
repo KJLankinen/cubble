@@ -66,7 +66,7 @@ def main():
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
                                  True)
     array_work_dir =        File("run_$RUN_NUM", root_dir.path)
-    make_file =             File("makefile", root_dir.path, "final", None, False, True)
+    make_file =             File("makefile", root_dir.path, "final", False, True)
     default_input =         File("input_parameters.json", root_dir.path, None, False, True)
     arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
     executable =            File("cubble", root_dir.path, data_dir.path)
