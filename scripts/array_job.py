@@ -62,6 +62,7 @@ def main():
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
     root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
+    src_dir =               File("src", root_dir.path)
     data_dir =              File(sys.argv[1],
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
@@ -93,7 +94,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
+srun make -C " + data_dir.path + "SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
@@ -113,7 +114,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 
     num_runs = 0
     print("Creating directories and input files.")
-    with open(array_param_file) as parameter_file_handle:
+    with open(arr_params.path) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
             run_dir = os.path.join(data_dir, "run_" + str(counter))
             outfile_path = os.path.join(run_dir, os.path.split(default_input.path)[1])
