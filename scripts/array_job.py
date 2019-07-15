@@ -34,6 +34,10 @@ class File:
         else:
             self.path = os.path.join(root, name)
 
+        print(self.path)
+        if not os.isdir(self.path) and not os.isfile(self.path):
+            raise FileNotFoundError(self.path + " is neither a directory nor a file!"))
+
 def main():
     if len(sys.argv) < 2:
         print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
@@ -48,6 +52,7 @@ def main():
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
     
+    print("Using the following paths & files:")
     root_dir =              File("cubble", os.environ['WRKDIR'])
     data_dir =              File(sys.argv[1], root_dir.path, os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")))
     array_work_dir =        File("run_$RUN_NUM", root_dir.path)
@@ -82,28 +87,7 @@ mkdir " + temp_dir.path + "\n\
 srun make -C " + make_file.path + " BIN_PATH=" + temp_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable_name.name + " " + data_dir.path + "\
 "
-    if not os.path.isdir(root_dir.path):
-        print("Root dir \"" + root_dir.path + "\" is not a directory.")
-        return 1
-
-    if not os.path.isfile(default_input.path):
-        print("\"" + default_input.path + "\" is not a file.")
-        return 1
-
-    if not os.path.isfile(arr_params):
-        print("\"" + arr_params.path + "\" is not a file.")
-        return 1
-
-    if not os.path.isfile(make_file.path):
-        print("Makefile \"" + make_file.path + "\" is not a file.")
-        return 1
-
-    print("Using " + root_dir.path + " as root dir.")
-    print("Using " + data_dir.path + " as the data directory for this simulation run.\n")
-    print("Using " + make_file.path + " as the makefile.")
-    print("Using " + default_input.path + " as the default input file.")
-    print("Using " + arr_params.path + " as the file to modify the default input file with.")
-
+    
     print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script_str)[0]
