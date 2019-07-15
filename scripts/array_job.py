@@ -65,12 +65,11 @@ def main():
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
                                  True)
-    array_work_dir =        File("run_$RUN_NUM", root_dir.path)
     make_file =             File("makefile", root_dir.path, "final", False, True)
     default_input =         File("input_parameters.json", root_dir.path, None, False, True)
     arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
-    executable =            File("cubble", root_dir.path, data_dir.path)
-    array_work_dir =        File("run_$RUN_NUM", root_dir.path, data_dir)
+    executable =            File("cubble", data_dir.path)
+    array_work_dir =        File("run_$RUN_NUM", data_dir.path)
     array_input =           File(os.path.split(default_input_file)[1], array_work_dir.path)
     continue_script =       File("continue_script.sh", array_work_dir.path)
     binary =                File("state.bin", array_work_dir.path) 
