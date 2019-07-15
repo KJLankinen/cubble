@@ -82,7 +82,7 @@ def main():
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
     make_file = File(make_file.name, data_dir.path, None, False, True)
 
-    compile_script_str = b"\
+    compile_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
 #SBATCH --mem=100M\n\
@@ -95,12 +95,11 @@ TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 srun make -C " + make_file.path + " BIN_PATH=" + temp_dir.path + "\n\
-cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path + "\
-"
+cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    compile_stdout = compile_process.communicate(input=compile_script_str)[0]
+    compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
     compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
 
     if compile_process.returncode != 0:
@@ -145,11 +144,11 @@ mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ] && [ -f " + continue_script.name + " ] && [[ ( $TIMES_CALLED < 3 ) ]]; \
 then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM $(($TIMES_CALLED + 1)); \
-elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; fi\
-"
+elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; fi"
+
     # Important to echo the continue script to file with single quotes to avoid bash variable expansion
     # See the second to last line of this script.
-    array_script_str = b"\
+    array_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
 #SBATCH --mem=" + sb_mem + "\n\
@@ -170,12 +169,12 @@ srun " + executable.path + " " + array_input.path + " " + binary.name + "\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + continue_script.name + "; fi\n\
-if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi\
-"
+if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi"
+
 
     print("Launching an array of processes that run the simulation.\n")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    array_stdout = array_process.communicate(input=array_script_str)[0]
+    array_stdout = array_process.communicate(input=array_script_str.encode())[0]
 
     if array_process.returncode != 0:
         print("Array process submission was not successful!")
