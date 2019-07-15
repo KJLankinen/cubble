@@ -181,7 +181,7 @@ if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " 
         print("Array process submission was not successful!")
         return array_process.returncode
     else:
-        print(array_stdout.decoce())
+        print(str(array_stdout.decode()))
 
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
