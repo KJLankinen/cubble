@@ -99,7 +99,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path + "\
 "
     
     print("Launching process for compiling the binary.")
-    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
     compile_stdout = compile_process.communicate(input=compile_script_str)[0]
     compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
 
@@ -172,7 +172,7 @@ if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " 
 "
 
     print("Launching an array of processes that run the simulation.\n")
-    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
     array_stdout = array_process.communicate(input=array_script_str)[0]
 
     if array_process.returncode != 0:
