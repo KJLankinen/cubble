@@ -60,6 +60,7 @@ def main():
     sb_signal =     "USR1@180"
     
     print("Using the following paths & files:")
+    print("----------------------------------\n")
     root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     data_dir =              File(sys.argv[1],
                                  root_dir.path,
@@ -70,11 +71,12 @@ def main():
     arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
     executable =            File("cubble", data_dir.path)
     array_work_dir =        File("run_$RUN_NUM", data_dir.path)
-    array_input =           File(os.path.split(default_input_file)[1], array_work_dir.path)
+    array_input =           File(os.path.split(default_input)[1], array_work_dir.path)
     continue_script =       File("continue_script.sh", array_work_dir.path)
     binary =                File("state.bin", array_work_dir.path) 
     result_file =           File("results.dat", array_work_dir.path)
     temp_dir =              File("$TEMP_DIR", "/tmp")
+    print("----------------------------------\n")
     
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
