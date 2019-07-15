@@ -94,7 +94,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + "SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
+srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
@@ -116,7 +116,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     print("Creating directories and input files.")
     with open(arr_params.path) as parameter_file_handle:
         for counter, line in enumerate(parameter_file_handle):
-            run_dir = os.path.join(data_dir, "run_" + str(counter))
+            run_dir = os.path.join(data_dir.path, "run_" + str(counter))
             outfile_path = os.path.join(run_dir, os.path.split(default_input.path)[1])
             create_folder_and_data_file(run_dir, outfile_path, copy.deepcopy(json_data), json.loads(line.strip()))
             num_runs = counter
