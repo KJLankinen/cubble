@@ -63,6 +63,7 @@ def main():
     print("----------------------------------\n")
     root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     src_dir =               File("src", root_dir.path)
+    incl_dir =              File("incl", root_dir.path)
     data_dir =              File(sys.argv[1],
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
@@ -94,7 +95,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + "\n\
+srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=" + incl_dir + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
@@ -184,7 +185,7 @@ if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " 
 
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
-    print(squeue_process.communicate()[0].decode())
+    print(str(squeue_process.communicate()[0]).decode())
     print("\nJob submission done!")
 
 if __name__ == "__main__":
