@@ -71,7 +71,7 @@ def main():
     arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
     executable =            File("cubble", data_dir.path)
     array_work_dir =        File("run_$RUN_NUM", data_dir.path)
-    array_input =           File(os.path.split(default_input)[1], array_work_dir.path)
+    array_input =           File(default_input.name, array_work_dir.path)
     continue_script =       File("continue_script.sh", array_work_dir.path)
     binary =                File("state.bin", array_work_dir.path) 
     result_file =           File("results.dat", array_work_dir.path)
