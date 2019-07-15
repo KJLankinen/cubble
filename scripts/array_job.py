@@ -59,7 +59,7 @@ def main():
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
     
-    print("Using the following paths & files:")
+    print("\nUsing the following paths & files:")
     print("----------------------------------\n")
     root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     data_dir =              File(sys.argv[1],
@@ -95,7 +95,7 @@ TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 srun make -C " + make_file.path + " BIN_PATH=" + temp_dir.path + "\n\
-cp " + temp_dir.path + "/" + executable_name.name + " " + data_dir.path + "\
+cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path + "\
 "
     
     print("Launching process for compiling the binary.")
