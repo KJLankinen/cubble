@@ -26,7 +26,7 @@ class File:
     path = ""
     stem = ""
 
-    def __init__(self, name, root, stem=None, create=False):
+    def __init__(self, name, root, stem=None, create=False, checkIfExists=False):
         self.name = name
         if stem is not None:
             self.stem = stem
@@ -34,13 +34,14 @@ class File:
         else:
             self.path = os.path.join(root, name)
 
+        if checkIfExists and not os.path.isdir(self.path) and not os.path.isfile(self.path):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.path)
+
         if create and not os.path.isdir(self.path) and not os.path.isfile(self.path):
             print("Creating: " + self.path)
             os.makedirs(self.path)
         elif create and os.path.isdir(self.path) or os.path.isfile(self.path):
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), self.path)
-        elif not os.path.isdir(self.path) and not os.path.isfile(self.path):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.path)
         else:
             print(self.path)
 
@@ -59,15 +60,15 @@ def main():
     sb_signal =     "USR1@180"
     
     print("Using the following paths & files:")
-    root_dir =              File("cubble", os.environ['WRKDIR'])
+    root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     data_dir =              File(sys.argv[1],
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
                                  True)
     array_work_dir =        File("run_$RUN_NUM", root_dir.path)
-    make_file =             File("makefile", root_dir.path, "final")
-    default_input =         File("input_parameters.json", root_dir.path)
-    arr_params =            File("array_parameters.json", root_dir.path)
+    make_file =             File("makefile", root_dir.path, "final", None, False, True)
+    default_input =         File("input_parameters.json", root_dir.path, None, False, True)
+    arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
     executable =            File("cubble", root_dir.path, data_dir.path)
     array_work_dir =        File("run_$RUN_NUM", root_dir.path, data_dir)
     array_input =           File(os.path.split(default_input_file)[1], array_work_dir.path)
@@ -77,9 +78,8 @@ def main():
     temp_dir =              File("$TEMP_DIR", "/tmp")
     
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
-    os.makedirs(data_dir.path)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
-    make_file = File(make_file.name, data_dir.path)
+    make_file = File(make_file.name, data_dir.path, None, False, True)
 
     compile_script_str = "\
 #!/bin/bash\n\
