@@ -82,7 +82,7 @@ def main():
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
     make_file = File(make_file.name, data_dir.path, None, False, True)
 
-    compile_script_str = "\
+    compile_script_str = b"\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
 #SBATCH --mem=100M\n\
@@ -99,13 +99,15 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path + "\
 "
     
     print("Launching process for compiling the binary.")
-    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script_str)[0]
-    compile_slurm_id = str(compile_stdout).strip().split(" ")[-1]
+    compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
 
     if compile_process.returncode != 0:
         print("Compile process submission was not successful!")
         return compile_process.returncode
+    else:
+        print(str(compile_stdout.decode()))
 
     print("Reading default input arguments.")
     with open(default_input_file) as json_file_handle:
@@ -147,7 +149,7 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 "
     # Important to echo the continue script to file with single quotes to avoid bash variable expansion
     # See the second to last line of this script.
-    array_script_str = "\
+    array_script_str = b"\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
 #SBATCH --mem=" + sb_mem + "\n\
@@ -172,16 +174,18 @@ if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " 
 "
 
     print("Launching an array of processes that run the simulation.\n")
-    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
+    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script_str)[0]
 
     if array_process.returncode != 0:
         print("Array process submission was not successful!")
         return array_process.returncode
+    else:
+        print(array_stdout.decoce())
 
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
-    print(squeue_process.communicate()[0])
+    print(squeue_process.communicate()[0].decode())
     print("\nJob submission done!")
 
 if __name__ == "__main__":
