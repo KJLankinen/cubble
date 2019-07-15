@@ -95,7 +95,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=" + incl_dir + "\n\
+srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=" + incl_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
