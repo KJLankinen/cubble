@@ -173,7 +173,7 @@ if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + c
 if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi"
 
 
-    print("Launching an array of processes that run the simulation.\n")
+    print("Launching an array of processes that run the simulation.")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script_str.encode())[0]
 
