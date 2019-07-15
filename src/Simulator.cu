@@ -1470,7 +1470,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // Get current host name
     std::array<char, NAME_MAX_LEN> charArr;
     gethostname(charArr.data(), charArr.size());
-    char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
+    nulLoc = std::find(charArr.data(), charArr.end(), '\0');
     hostName     = std::string(charArr.begin(), nulLoc);
 
     // Get current GPU name
