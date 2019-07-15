@@ -1,80 +1,74 @@
 {
-  "PhiTargetExpl": "The target volume fraction.",
-  "PhiTarget": 0.95,
+  "phiTargetExpl": "The target volume fraction.",
+  "phiTarget": 0.9,
 
-  "KappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
-  "Kappa": 0.1,
+  "kappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
+  "kappa": 0.1,
 
-  "NumBubblesExpl": "Total number of bubbles to simulate.",
-  "NumBubbles": 1e5,
+  "numBubblesInExpl": "Total number of bubbles to simulate.",
+  "numBubblesIn": 1e5,
 
-  "MinNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "MinNumBubbles": 900,
+  "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
+  "minNumBubbles": 900,
 
-  "BoxRelativeDimensionsExpl": "The relative dimension of the box.",
-  "BoxRelativeDimensions": {
+  "boxRelDimExpl": "The relative dimension of the box.",
+  "boxRelDim": {
     "x": 1.0,
     "y": 1.0,
     "z": 1.0
   },
 
-  "FlowLbbExpl": "(Relative) Lower-back-bottom of flow area.",
-  "FlowLbb": {
+  "flowLbbExpl": "(Relative) Lower-back-bottom of flow area.",
+  "flowLbb": {
     "x": 0.0,
     "y": 0.0,
     "z": 0.0
   },
 
-  "FlowTfrExpl": "(Relative) Top-front-right of flow area.",
-  "FlowTfr": {
+  "flowTfrExpl": "(Relative) Top-front-right of flow area.",
+  "flowTfr": {
     "x": 1.0,
     "y": 1.0,
     "z": 0.05
   },
 
-  "FlowVelExpl": "Flow velocity inside flow area.",
-  "FlowVel": {
+  "flowVelExpl": "Flow velocity inside flow area.",
+  "flowVel": {
     "x": 1.0,
     "y": 1.0,
     "z": 1.0
   },
 
-  "MuZeroExpl": "The viscosity of the fluid",
-  "MuZero": 1.0,
+  "muZeroExpl": "The viscosity of the fluid",
+  "muZero": 1.0,
 
-  "SigmaZeroExpl": "The surface tension (spring constant) of the fluid.",
-  "SigmaZero": 1.0,
+  "sigmaZeroExpl": "The surface tension (spring constant) of the fluid.",
+  "sigmaZero": 1.0,
 
-  "AvgRadExpl": "The average radius of the bubbles.",
-  "AvgRad": 1.0,
+  "avgRadExpl": "The average radius of the bubbles.",
+  "avgRad": 1.0,
 
-  "StdDevRadExpl": "The standard deviation of the bubble radii.",
-  "StdDevRad": 0.21,
+  "stdDevRadExpl": "The standard deviation of the bubble radii.",
+  "stdDevRad": 0.21,
 
-  "ErrorToleranceExpl": "The error tolerance level for the integration.",
-  "ErrorTolerance": 1e-5,
+  "errorToleranceExpl": "The error tolerance level for the integration.",
+  "errorTolerance": 1e-5,
 
-  "TimeStepExpl": "The initial time step with which to increment the simulation time.",
-  "TimeStep": 1e-5,
+  "timeStepInExpl": "The initial time step with which to increment the simulation time.",
+  "timeStepIn": 1e-3,
 
-  "RngSeedExpl": "The seed for the RNG.",
-  "RngSeed": 441233,
+  "rngSeedExpl": "The seed for the RNG.",
+  "rngSeed": 41233,
 
-  "NumBubblesPerCellExpl": "How many bubbles per cell.",
-  "NumBubblesPerCell": 32,
+  "numBubblesPerCellExpl": "How many bubbles per cell.",
+  "numBubblesPerCell": 32,
 
-  "NumStepsToRelaxExpl": "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
-  "NumStepsToRelax": 1e4,
+  "numStepsToRelaxExpl": "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
+  "numStepsToRelax": 1e4,
 
-  "MaxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "MaxDeltaEnergy": 1e-5,
+  "maxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
+  "maxDeltaEnergy": 1e-5,
 
-  "KParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
-  "KParameter": 0.001,
-
-  "SnapshotFilenameExpl": "The stem of the filename where to save the snap shots to.",
-  "SnapshotFilename": "snapshot",
-
-  "DataFilenameExpl": "Name of the file where all sorts of data is written to.",
-  "DataFilename": "output.dat"
+  "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
+  "kParameter": 0.001
 }

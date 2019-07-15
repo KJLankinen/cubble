@@ -90,7 +90,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt
 
 DEFINES := -DNUM_DIM=$(NUM_DIM) -DUSE_FLOW=$(USE_FLOW) \
 	   -DPBC_X=$(PBC_X) -DPBC_Y=$(PBC_Y) -DPBC_Z=$(PBC_Z) \
-	   -DNDEBUG
+	   -DNDEBUG -DUSE_PROFILING=$(USE_PROFILING)
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 
@@ -106,7 +106,7 @@ COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O3
 PROFILING_FLAGS :=
 ifeq ($(USE_PROFILING), 1)
-PROFILING_FLAGS := -pg -DUSE_PROFILING=$(USE_PROFILING)
+PROFILING_FLAGS := -pg
 endif
 
 
@@ -151,15 +151,6 @@ $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
 	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILING_FLAGS))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
-
-
-#-----------------------------------------------------
-# Execute the program with default input files
-#-----------------------------------------------------
-.PHONY : run
-run : $(EXEC)
-	$(EXEC) ../input_parameters.json ../output_parameters.json
-
 
 # -----------------------------------------------------
 # Clean up
