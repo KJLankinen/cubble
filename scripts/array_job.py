@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import json
 import sys
 import os
@@ -33,10 +35,7 @@ def main():
     executable_path = os.path.join(data_dir, "cubble")
     array_data_dir = os.path.join(data_dir, "run_$RUN_NUM")
     array_input_path = os.path.join(array_data_dir, os.path.split(default_input_file)[1])
-    result_file_path = os.path.join(array_data_dir, result_file_name) 
-    continue_script_path = os.path.join(array_data_dir, continue_script_name)
-    binary_input_path = os.path.join(array_data_dir, binary_name)
-    
+        
     sb_modules = "cuda/10.0.130 gcc/6.3.0"
     sb_mem = "32G"
     sb_time = "00:05:00"
@@ -49,6 +48,9 @@ def main():
     continue_script_name = "continue_script.sh"
     binary_name = "state.bin" 
     result_file_name = "results.dat"
+    result_file_path = os.path.join(array_data_dir, result_file_name) 
+    continue_script_path = os.path.join(array_data_dir, continue_script_name)
+    binary_input_path = os.path.join(array_data_dir, binary_name)
 
     compile_script = "\
 #!/bin/bash\n\
@@ -139,7 +141,8 @@ if [ -f " + binary_name + " ] && [ -f " + continue_script_name + " ] && [[ ( $TI
 then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM $(($TIMES_CALLED + 1)); \
 elif [ -f " + continue_script_name + " ]; then rm " + continue_script_name + "; fi\
 "
-    # Important to echo the continue script with single quotes to avoid bash variable expansion
+    # Important to echo the continue script to file with single quotes to avoid bash variable expansion
+    # See the second to last line of this script.
     array_script = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
@@ -160,9 +163,9 @@ cd " + temp_dir + "\n\
 srun " + executable_path + " " + array_input_path + " " + binary_name + "\n\
 mv -f " + temp_dir + "/* " + array_data_dir + "\n\
 cd " + array_data_dir + "\n\
-if [ -f " + binary_name + " ]; then echo \'" + continue_script + "\' > " + continue_script_name + "; cat " + continue_script_name + " fi\n"
-#if [ -f " + continue_script_name + " ]; then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM 1; fi\
-#"
+if [ -f " + binary_name + " ]; then echo \'" + continue_script + "\' > " + continue_script_name + "; fi\n\
+if [ -f " + continue_script_name + " ]; then cd " + root_dir + "; sbatch " + continue_script_path + " $RUN_NUM 1; fi\
+"
 
     print("Launching an array of processes that run the simulation.\n")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
