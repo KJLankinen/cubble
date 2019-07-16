@@ -483,8 +483,9 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
 {
   NVTX_RANGE_PUSH_A("BubbleRemoval");
 
-  // Get symbol addresses. These could be cached, but this function is called sufficiently rarely
-  // and is already slow enough that fetching them every time isn't a significant impact on performace.
+  // Get symbol addresses. These could be cached, but this function is called
+  // sufficiently rarely and is already slow enough that fetching them every
+  // time isn't a significant impact on performace.
   double *dVolMul   = nullptr;
   double *dTotalVol = nullptr;
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dVolMul), dVolumeMultiplier));
@@ -1144,7 +1145,8 @@ void commonSetup(Params &params)
 
   std::cout << "Reserving device memory to hold data." << std::endl;
 
-  // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp size.
+  // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp
+  // size.
   params.state.dataStride =
     params.state.numBubbles + !!(params.state.numBubbles % 32) * (32 - params.state.numBubbles % 32);
 
@@ -1152,23 +1154,23 @@ void commonSetup(Params &params)
   params.state.memReqD = sizeof(double) * (uint64_t)params.state.dataStride * (uint64_t)DDP::NUM_VALUES;
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceDoubleMemory), params.state.memReqD));
 
-  for (uint32_t i  = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
+  for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
     params.ddps[i] = params.deviceDoubleMemory + i * params.state.dataStride;
 
   // Integers
-  // 32 is just a guess, and roughly it seems to hold true with 3D sim.
-  const uint32_t avgNumNeighbors = 32;
+  // 35 is just a guess, and roughly it seems to hold true with 3D sim.
+  const uint32_t avgNumNeighbors = 35;
   params.state.pairStride        = avgNumNeighbors * params.state.dataStride;
 
   params.state.memReqI = sizeof(int) * (uint64_t)params.state.dataStride *
                          ((uint64_t)DIP::PAIR1 + avgNumNeighbors * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1));
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceIntMemory), params.state.memReqI));
 
-  for (uint32_t i  = 0; i < (uint32_t)DIP::PAIR2; ++i)
+  for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
     params.dips[i] = params.deviceIntMemory + i * params.state.dataStride;
 
   uint32_t j = 0;
-  for (uint32_t i  = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
+  for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
     params.dips[i] = params.dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * params.state.dataStride;
 
   std::cout << "Memory requirement for data:\n\tdouble: " << params.state.memReqD
@@ -1295,7 +1297,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
 void initializeFromJson(const char *inputFileName, Params &params)
 {
   // Initialize everything, starting with an input .json file.
-  // The end state of this function is 'prepared state' that can then be used immediately to run the integration loop.
+  // The end state of this function is 'prepared state' that can then be used
+  // immediately to run the integration loop.
 
   std::cout << "\n=====\nSetup\n=====" << std::endl;
   ivec bubblesPerDim = ivec(0, 0, 0);
@@ -1415,7 +1418,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t fileSize = inFile.tellg();
     inFile.seekg(0);
     if (fileSize <= sizeof(params.state) + sizeof(params.inputs) + HEADER_SIZE)
-      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+      throw std::runtime_error("The given binary file is incorrect size. Check "
+                               "that the file is correct.");
 
     std::vector<char> byteData;
     byteData.resize(fileSize);
@@ -1470,8 +1474,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // Get current host name
     std::array<char, NAME_MAX_LEN> charArr;
     gethostname(charArr.data(), charArr.size());
-    nulLoc = std::find(charArr.data(), charArr.end(), '\0');
-    hostName     = std::string(charArr.begin(), nulLoc);
+    nulLoc   = std::find(charArr.data(), charArr.end(), '\0');
+    hostName = std::string(charArr.begin(), nulLoc);
 
     // Get current GPU name
     cudaDeviceProp prop;
@@ -1512,7 +1516,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t intBytes    = sizeof(int) * 3 * params.state.dataStride;
 
     if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes + header.size())
-      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+      throw std::runtime_error("The given binary file is incorrect size. Check "
+                               "that the file is correct.");
 
     // Doubles
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory), static_cast<void *>(&byteData[offset]),
@@ -1526,7 +1531,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
 
     // All the data should be used at this point
     if (offset != byteData.size())
-      throw std::runtime_error("The given binary file is incorrect size. Check that the file is correct.");
+      throw std::runtime_error("The given binary file is incorrect size. Check "
+                               "that the file is correct.");
 
     // Setup pairs. Unnecessary to serialize them.
     updateCellsAndNeighbors(params);
