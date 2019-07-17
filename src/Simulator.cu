@@ -1187,7 +1187,7 @@ bool integrate(Params &params)
   params.state.simulationTime += params.state.timeStep;
 
   // Delete & reorder
-  bool updateNeighbors = params.state.numIntegrationSteps % 5000 == 0;
+  bool updateNeighbors = params.state.numIntegrationSteps % 200 == 0;
   if (numBubblesAboveMinRad < params.state.numBubbles)
   {
     deleteSmallBubbles(params, numBubblesAboveMinRad);
