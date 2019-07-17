@@ -899,6 +899,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP],
         params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
+
       // Wall velocity
       doWallVelocity(
         params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
@@ -1187,7 +1188,7 @@ bool integrate(Params &params)
   params.state.simulationTime += params.state.timeStep;
 
   // Delete & reorder
-  bool updateNeighbors = params.state.numIntegrationSteps % 200 == 0;
+  bool updateNeighbors = params.state.numIntegrationSteps % 50 == 0;
   if (numBubblesAboveMinRad < params.state.numBubbles)
   {
     deleteSmallBubbles(params, numBubblesAboveMinRad);
