@@ -1154,7 +1154,7 @@ void commonSetup(Params &params)
   params.state.memReqD = sizeof(double) * (uint64_t)params.state.dataStride * (uint64_t)DDP::NUM_VALUES;
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceDoubleMemory), params.state.memReqD));
 
-  for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
+  for (uint32_t i  = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
     params.ddps[i] = params.deviceDoubleMemory + i * params.state.dataStride;
 
   // Integers
@@ -1166,11 +1166,11 @@ void commonSetup(Params &params)
                          ((uint64_t)DIP::PAIR1 + avgNumNeighbors * ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1));
   CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceIntMemory), params.state.memReqI));
 
-  for (uint32_t i = 0; i < (uint32_t)DIP::PAIR2; ++i)
+  for (uint32_t i  = 0; i < (uint32_t)DIP::PAIR2; ++i)
     params.dips[i] = params.deviceIntMemory + i * params.state.dataStride;
 
   uint32_t j = 0;
-  for (uint32_t i = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
+  for (uint32_t i  = (uint32_t)DIP::PAIR2; i < (uint32_t)DIP::NUM_VALUES; ++i)
     params.dips[i] = params.dips[(uint32_t)DIP::PAIR1] + avgNumNeighbors * ++j * params.state.dataStride;
 
   std::cout << "Memory requirement for data:\n\tdouble: " << params.state.memReqD
@@ -1748,8 +1748,8 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                 << params.state.numStepsInTimeStep << "\t" << params.state.numPairs << std::endl;
 
       // Only write snapshots when t* is a power of 2.
-      if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
-        saveSnapshotToFile(params);
+      // if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
+      saveSnapshotToFile(params);
 
       ++params.state.timesPrinted;
       params.state.numStepsInTimeStep = 0;
