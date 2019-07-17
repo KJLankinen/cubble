@@ -16,12 +16,13 @@ int main(int argc, char **argv)
 
   if (argc != 3)
   {
-    std::cout
-      << "\nUsage: " << argv[0] << " inputFile outputFile"
-      << "\ninputFile = the name of the (.json) file that contains"
-      << " the necessary inputs, or the name of the binary file that contains the serialized state of a non-finished "
-         "simulation.\noutputFile = (.bin) file name where to save data if simulation ends before completion"
-      << std::endl;
+    std::cout << "\nUsage: " << argv[0] << " inputFile outputFile"
+              << "\ninputFile = the name of the (.json) file that contains"
+              << " the necessary inputs, or the name of the binary file that "
+                 "contains the serialized state of a non-finished "
+                 "simulation.\noutputFile = (.bin) file name where to save "
+                 "data if simulation ends before completion"
+              << std::endl;
 
     return EXIT_FAILURE;
   }
@@ -30,7 +31,8 @@ int main(int argc, char **argv)
   {
     std::cout << "-------------------------------------------------------------"
                  "-----------\n"
-              << "The current program simulates the bubbles in " << NUM_DIM << " dimensions.\n"
+              << "The current program simulates the bubbles in " << NUM_DIM
+              << " dimensions.\n"
               << "If you want to change the dimensionality of the program, "
                  "change the number of dimensions 'NUM_DIM'"
               << "\nin Makefile and rebuild the program.\n"
