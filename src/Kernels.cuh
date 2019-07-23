@@ -230,10 +230,12 @@ __device__ __host__ unsigned int compact1By1(unsigned int x);
 __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Args>
-__device__ void comparePair(double maxDistance, int idx1, int idx2, double *r,
-                            int *first, int *second, Args... args)
+__device__ void comparePair(int idx1, int idx2, double *r, int *first,
+                            int *second, Args... args)
 {
-  maxDistance += r[idx1] > r[idx2] ? r[idx1] : r[idx2];
+  double maxDistance = r[idx1] > r[idx2] ? r[idx1] : r[idx2];
+  maxDistance *= 1.5;
+  maxDistance += (r[idx1] < r[idx2]) ? r[idx1] : r[idx2];
   if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance)
   {
     // Set the smaller idx to idx1 and larger to idx2
@@ -334,9 +336,9 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
 
 template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
-                               int numCells, int numMaxPairs,
-                               double maxDistance, int *offsets, int *sizes,
-                               int *first, int *second, double *r, Args... args)
+                               int numCells, int numMaxPairs, int *offsets,
+                               int *sizes, int *first, int *second, double *r,
+                               Args... args)
 {
   const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
   const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
@@ -370,7 +372,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
         DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
         DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-        comparePair(maxDistance, idx1, idx2, r, first, second, args...);
+        comparePair(idx1, idx2, r, first, second, args...);
         DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
       }
     }
@@ -391,7 +393,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
         DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
         DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-        comparePair(maxDistance, idx1, idx2, r, first, second, args...);
+        comparePair(idx1, idx2, r, first, second, args...);
         DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
       }
     }

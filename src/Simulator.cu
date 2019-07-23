@@ -484,7 +484,7 @@ void updateCellsAndNeighbors(Params &params)
                             cudaMemcpyDeviceToDevice));
 
   KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
-  const double maxDistance      = 1.3 * params.state.maxBubbleRadius;
+  // const double maxDistance      = 1.3 * params.state.maxBubbleRadius;
 
   int *dnp = nullptr;
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
@@ -497,7 +497,7 @@ void updateCellsAndNeighbors(Params &params)
       KERNEL_LAUNCH(
         neighborSearch, kernelSizeNeighbor, 0, stream, i,
         params.state.numBubbles, params.state.maxNumCells,
-        (int)params.state.pairStride, maxDistance, offsets, sizes,
+        (int)params.state.pairStride, offsets, sizes,
         params.dips[(uint32_t)DIP::TEMP1], params.dips[(uint32_t)DIP::TEMP2],
         params.ddps[(uint32_t)DDP::R], params.state.interval.x, PBC_X == 1,
         params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
@@ -507,7 +507,7 @@ void updateCellsAndNeighbors(Params &params)
       KERNEL_LAUNCH(
         neighborSearch, kernelSizeNeighbor, 0, stream, i,
         params.state.numBubbles, params.state.maxNumCells,
-        (int)params.state.pairStride, maxDistance, offsets, sizes,
+        (int)params.state.pairStride, offsets, sizes,
         params.dips[(uint32_t)DIP::TEMP1], params.dips[(uint32_t)DIP::TEMP2],
         params.ddps[(uint32_t)DDP::R], params.state.interval.x, PBC_X == 1,
         params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
@@ -1016,6 +1016,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::DXDTP],
         params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
+
       // Wall velocity
       doWallVelocity(
         params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
