@@ -502,10 +502,10 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 
     const double multiplier =
       (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
-    velX[i] += !inside * multiplier * nVelX[i] + flowVel.x * inside;
-    velY[i] += !inside * multiplier * nVelY[i] + flowVel.y * inside;
+    velX[i] += flowVel.x * inside;
+    velY[i] += flowVel.y * inside;
 #if (NUM_DIM == 3)
-    velZ[i] += !inside * multiplier * nVelZ[i] + flowVel.z * inside;
+    velZ[i] += flowVel.z * inside;
 #endif
   }
 }
