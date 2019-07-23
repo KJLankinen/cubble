@@ -234,7 +234,7 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             int *second, Args... args)
 {
   double maxDistance = r[idx1] > r[idx2] ? r[idx1] : r[idx2];
-  maxDistance *= 1.5;
+  maxDistance *= 2.5;
   maxDistance += (r[idx1] < r[idx2]) ? r[idx1] : r[idx2];
   if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance)
   {
