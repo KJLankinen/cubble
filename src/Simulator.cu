@@ -2095,63 +2095,6 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy1            = params.state.energy2;
     }
 
-    if (params.state.numStepsInTimeStep % 1000 == 0)
-    {
-      double maxdr = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::DRDT],
-        params.state.numBubbles);
-      double maxdx = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::DXDT],
-        params.state.numBubbles);
-      double maxdy = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::DYDT],
-        params.state.numBubbles);
-      double maxdz = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::DZDT],
-        params.state.numBubbles);
-
-      double mindr = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Min, params.ddps[(uint32_t)DDP::DRDT],
-        params.state.numBubbles);
-      double mindx = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Min, params.ddps[(uint32_t)DDP::DXDT],
-        params.state.numBubbles);
-      double mindy = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Min, params.ddps[(uint32_t)DDP::DYDT],
-        params.state.numBubbles);
-      double mindz = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Min, params.ddps[(uint32_t)DDP::DZDT],
-        params.state.numBubbles);
-
-      double invNumB = 1.0 / params.state.numBubbles;
-
-      double avgdr =
-        invNumB *
-        params.cw.reduce<double, double *, double *>(
-          &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::DRDT],
-          params.state.numBubbles);
-      double avgdx =
-        invNumB *
-        params.cw.reduce<double, double *, double *>(
-          &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::DXDT],
-          params.state.numBubbles);
-      double avgdy =
-        invNumB *
-        params.cw.reduce<double, double *, double *>(
-          &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::DYDT],
-          params.state.numBubbles);
-      double avgdz =
-        invNumB *
-        params.cw.reduce<double, double *, double *>(
-          &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::DZDT],
-          params.state.numBubbles);
-
-      std::cout << maxdr << ", " << mindr << ", " << avgdr << ", " << maxdx
-                << ", " << mindx << ", " << avgdx << ", " << maxdy << ", "
-                << mindy << ", " << avgdy << ", " << maxdz << ", " << mindz
-                << ", " << avgdz << std::endl;
-    }
-
     ++params.state.numStepsInTimeStep;
   }
 
