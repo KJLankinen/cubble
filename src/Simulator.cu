@@ -2088,20 +2088,11 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                 << "\t" << dE << "\t" << params.state.numStepsInTimeStep << "\t"
                 << params.state.numPairs << std::endl;
 
-      // Only write snapshots when t* is a power of 2.
-      // if ((params.state.timesPrinted & (params.state.timesPrinted - 1)) == 0)
       saveSnapshotToFile(params);
 
       ++params.state.timesPrinted;
       params.state.numStepsInTimeStep = 0;
       params.state.energy1            = params.state.energy2;
-    }
-
-    if (params.state.numStepsInTimeStep % 1000 == 0)
-    {
-      std::cout << params.state.numStepsInTimeStep << ", "
-                << params.state.timeStep << ", " << params.state.simulationTime
-                << ", " << scaledTime << std::endl;
     }
 
     ++params.state.numStepsInTimeStep;
