@@ -1154,11 +1154,7 @@ bool integrate(Params &params)
     if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
       params.state.timeStep *= 1.9;
     else if (error > params.inputs.errorTolerance)
-    {
       params.state.timeStep *= 0.5;
-      std::cout << "Error: " << error << ", timestep: " << params.state.timeStep
-                << std::endl;
-    }
 
     ++numLoopsDone;
 
@@ -2099,6 +2095,13 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       ++params.state.timesPrinted;
       params.state.numStepsInTimeStep = 0;
       params.state.energy1            = params.state.energy2;
+    }
+
+    if (params.state.numStepsInTimeStep % 1000 == 0)
+    {
+      std::cout << params.state.numStepsInTimeStep << ", "
+                << params.state.timeStep << ", " << params.state.simulationTime
+                << ", " << scaledTime << std::endl;
     }
 
     ++params.state.numStepsInTimeStep;
