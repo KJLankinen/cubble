@@ -587,6 +587,14 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
                             params.state.memReqD / 2,
                             cudaMemcpyDeviceToDevice));
 
+  // This needs to be copied as well, because after deletion the neighbors will
+  // be searched and the indices will be reordered again. This means they'll be
+  // wrong if the ones reordered here won't be copied back.
+  CUDA_CALL(cudaMemcpyAsync(
+    static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_X]),
+    static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
+    params.state.dataStride * 3 * sizeof(int), cudaMemcpyDeviceToDevice));
+
   params.state.numBubbles  = numBubblesAboveMinRad;
   params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
 
