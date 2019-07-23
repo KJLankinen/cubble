@@ -1210,10 +1210,6 @@ bool integrate(Params &params)
 
   NVTX_RANGE_POP();
 
-  double maxDist = params.cw.reduce<double, double *, double *>(
-    &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::DISTANCE],
-    params.state.numBubbles);
-
   return continueSimulation;
 }
 
