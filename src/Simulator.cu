@@ -872,7 +872,7 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::DRDTP],
       params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP1],
       params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::TEMP6],
-      params.ddps [(uint32_t) DPP:TEMP7]);
+      params.ddps [(uint32_t) DDP:TEMP7]);
 
     if (NUM_DIM == 3)
     {
