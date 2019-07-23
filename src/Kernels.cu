@@ -597,9 +597,9 @@ __device__ void adamsBashforth(int idx, double timeStep, double *yNext,
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
                                double *y, double *f, double *fNext)
 {
-  const double error =
-    y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]) - yNext[idx];
-  yNext[idx] += error;
+  const double corrected = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
+  const double error     = corrected - yNext[idx];
+  yNext[idx]             = corrected;
 
   return error < 0 ? -error : error;
 }

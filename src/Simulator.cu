@@ -1131,7 +1131,7 @@ bool integrate(Params &params)
 
     params.cw.reduceNoCopy<int, int *, int *>(
       &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
-      params.dips[(uint32_t)DIP::TEMP1], params.state.numBubbles,
+      params.dips[(uint32_t)DIP::TEMP2], params.state.numBubbles,
       params.gasStream);
     params.cw.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
@@ -1139,7 +1139,7 @@ bool integrate(Params &params)
       params.gasStream);
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&numBubblesAboveMinRad),
-                              params.dips[(uint32_t)DIP::TEMP1], sizeof(int),
+                              params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
                               cudaMemcpyDeviceToHost, params.gasStream));
     CUDA_CALL(
       cudaMemcpyAsync(static_cast<void *>(&params.state.maxBubbleRadius),
