@@ -808,7 +808,7 @@ double stabilize(Params &params)
 
     elapsedTime += params.state.timeStep;
 
-    if (i % 5000 == 0)
+    if (i % 50 == 0)
       updateCellsAndNeighbors(params);
   }
 
