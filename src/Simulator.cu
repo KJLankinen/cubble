@@ -1154,7 +1154,11 @@ bool integrate(Params &params)
     if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
       params.state.timeStep *= 1.9;
     else if (error > params.inputs.errorTolerance)
+    {
       params.state.timeStep *= 0.5;
+      std::cout << "Error: " << error << ", timestep: " << params.state.timeStep
+                << std::endl;
+    }
 
     ++numLoopsDone;
 

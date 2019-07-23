@@ -499,7 +499,6 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 #if (NUM_DIM == 3)
     inside *= (int)(posZ[i] < flowTfr.z && posZ[i] > flowLbb.z);
 #endif
-    inside = !!inside;
 
     const double multiplier =
       (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
