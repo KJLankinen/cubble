@@ -865,16 +865,17 @@ bool integrate(Params &params)
   {
     NVTX_RANGE_PUSH_A("Integration step");
 
+    // Reset
+    KERNEL_LAUNCH(
+      resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
+      params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+      params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::DRDTP],
+      params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP1],
+      params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::TEMP6],
+      params.ddps [(uint32_t) DPP:TEMP7]);
+
     if (NUM_DIM == 3)
     {
-      // Reset
-      KERNEL_LAUNCH(
-        resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-        params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::ERROR],
-        params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::TEMP2]);
-
       // Predict
       KERNEL_LAUNCH(
         predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
@@ -921,16 +922,16 @@ bool integrate(Params &params)
           neighborVelocityKernel, params.pairKernelSize, 0,
           params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
           params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-          params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::DXDTO],
-          params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::DYDTO],
-          params.ddps[(uint32_t)DDP::TEMP3], params.ddps[(uint32_t)DDP::DZDTO]);
+          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDTO],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDTO],
+          params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::DZDTO]);
 
         KERNEL_LAUNCH(
           flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
           params.state.numBubbles, numNeighbors,
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
-          params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP1],
-          params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::TEMP3],
+          params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
@@ -988,14 +989,6 @@ bool integrate(Params &params)
     }
     else // Two dimensions
     {
-      // Reset
-      KERNEL_LAUNCH(
-        resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-        params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DRDTP],
-        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP1],
-        params.ddps[(uint32_t)DDP::TEMP2]);
-
       // Predict
       KERNEL_LAUNCH(
         predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
@@ -1038,15 +1031,15 @@ bool integrate(Params &params)
           neighborVelocityKernel, params.pairKernelSize, 0,
           params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
           params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-          params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::DXDTO],
-          params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::DYDTO]);
+          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDTO],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDTO]);
 
         KERNEL_LAUNCH(
           flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
           params.state.numBubbles, numNeighbors,
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
-          params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP1],
-          params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::TEMP3],
+          params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
