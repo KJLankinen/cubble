@@ -922,9 +922,9 @@ bool integrate(Params &params)
           neighborVelocityKernel, params.pairKernelSize, 0,
           params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
           params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDTO],
-          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDTO],
-          params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::DZDTO]);
+          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDT],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDT],
+          params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::DZDT]);
 
         KERNEL_LAUNCH(
           flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
@@ -1031,8 +1031,8 @@ bool integrate(Params &params)
           neighborVelocityKernel, params.pairKernelSize, 0,
           params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
           params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDTO],
-          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDTO]);
+          params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::DXDT],
+          params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::DYDT]);
 
         KERNEL_LAUNCH(
           flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
