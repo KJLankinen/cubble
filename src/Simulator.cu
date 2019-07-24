@@ -1649,11 +1649,11 @@ void initializeFromJson(const char *inputFileName, Params &params)
     {
       std::cout << std::setw(10) << std::left
                 << (numSteps + 1) * params.inputs.numStepsToRelax
-                << std::setw(10) << std::left << std::setprecision(10)
+                << std::setw(10) << std::left << std::setprecision(5)
                 << std::scientific << deltaEnergy
-                << std::setw(10) << std::left << std::setprecision(7)
+                << std::setw(10) << std::left << std::setprecision(5)
                 << std::fixed << params.state.energy1 
-                << std::setw(10) << std::left << std::setprecision(7)
+                << std::setw(10) << std::left << std::setprecision(5)
                 << std::fixed << params.state.energy2 
                 << std::endl;
     }
