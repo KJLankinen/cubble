@@ -86,7 +86,7 @@ def main():
     compile_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
-#SBATCH --mem=100M\n\
+#SBATCH --mem=1G\n\
 #SBATCH --time=00:10:00\n\
 #SBATCH --gres=" + sb_gres + "\n\
 #SBATCH --constraint=" + sb_constraint + "\n\
