@@ -2017,12 +2017,16 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
     initializeFromJson(inputFileName.c_str(), params);
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
+
+  std::cout << std::setw(5) << std::left << "T"
+            << std::setw(8) << std::left << "phi"
+            << std::setw(10) << std::left << "R"
+            << std::setw(10) << std::left << "#b"
+            << std::setw(10) << std::left << "#pairs"
+            << std::setw(5) << std::left << "#steps"
+            << std::endl;
+
   bool continueIntegration = true;
-  std::cout << std::setw(5) << std::left << "T" << std::setw(6) << std::left
-            << "phi" << std::setw(6) << std::left << "R" << std::setw(8)
-            << std::left << "#b" << std::setw(9) << std::left << "#pairs"
-            << std::setw(5) << std::left << "#steps" << std::endl;
-  std::cout << "T     phi     R      #b       #pairs    #steps" << std::endl;
   while (continueIntegration)
   {
     continueIntegration = integrate(params);
@@ -2088,18 +2092,22 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                    << " " << dE << "\n";
       }
       else
+      {
         std::cout << "Couldn't open file stream to append results to!"
                   << std::endl;
+      }
+
+      const double phi =
+        calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params);
 
       // Print some values
-      std::cout << std::setw(5) << std::left << (int)scaledTime << std::setw(6)
-                << std::left
-                << calculateVolumeOfBubbles(params) /
-                     getSimulationBoxVolume(params)
-                << std::setw(6) << std::left << relativeRadius << std::setw(8)
-                << std::left << params.state.numBubbles << std::setw(9)
-                << std::left << params.state.numStepsInTimeStep << std::setw(5)
-                << std::left << params.state.numPairs << std::endl;
+      std::cout << std::setw(5) << std::left << (int)scaledTime
+                << std::setw(8) << std::left << phi 
+                << std::setw(10) << std::left << relativeRadius
+                << std::setw(10) << std::left << params.state.numBubbles
+                << std::setw(10) << std::left << params.state.numStepsInTimeStep
+                << std::setw(5) << std::left << params.state.numPairs
+                << std::endl;
 
       saveSnapshotToFile(params);
 
