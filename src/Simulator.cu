@@ -2026,7 +2026,10 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
   if (inputFileName.compare(inputFileName.size() - 4, 4, ".bin") == 0)
     initializeFromBinary(inputFileName.c_str(), params);
   else
+  {
     initializeFromJson(inputFileName.c_str(), params);
+    saveSnapshotToFile(params);
+  }
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
 
