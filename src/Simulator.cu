@@ -1581,14 +1581,12 @@ void initializeFromJson(const char *inputFileName, Params &params)
   readInputs(params, inputFileName, bubblesPerDim);
   commonSetup(params);
   generateStartingData(params, bubblesPerDim);
-  saveSnapshotToFile(params); // 0
 
   std::cout << "Letting bubbles settle after they've been created and before "
                "scaling or stabilization."
             << std::endl;
 
   stabilize(params);
-  saveSnapshotToFile(params); // 1
 
   const double bubbleVolume = calculateVolumeOfBubbles(params);
 
@@ -1608,7 +1606,6 @@ void initializeFromJson(const char *inputFileName, Params &params)
   params.state.interval = params.state.tfr - params.state.lbb;
 
   transformPositions(params, false);
-  saveSnapshotToFile(params); // 2
 
   std::cout << "Volume ratios: current: "
             << bubbleVolume / getSimulationBoxVolume(params)
@@ -1651,8 +1648,6 @@ void initializeFromJson(const char *inputFileName, Params &params)
 
     ++numSteps;
   }
-
-  saveSnapshotToFile(params); // 3
 
   // Set starting positions and reset wrap counts to 0
   const uint64_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
@@ -2023,7 +2018,11 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
   bool continueIntegration = true;
-  std::cout << "T\tphi\tR\t#b\tdE\t\t#steps\t#pairs" << std::endl;
+  std::cout << std::setw(5) << left << "T" << std::setw(6) << left << "phi"
+            << std::setw(6) << left << "R" << std::setw(8) << left << "#b"
+            << std::setw(9) << left << "#pairs" << std::setw(5) << left
+            << "#steps" << std::endl;
+  std::cout << "T     phi     R      #b       #pairs    #steps" << std::endl;
   while (continueIntegration)
   {
     continueIntegration = integrate(params);
@@ -2041,6 +2040,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                     params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
 
       if (NUM_DIM == 3)
+      {
         KERNEL_LAUNCH(
           potentialEnergyKernel, params.pairKernelSize, 0, 0,
           params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
@@ -2049,7 +2049,9 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
           PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
           PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
           PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
+      }
       else
+      {
         KERNEL_LAUNCH(
           potentialEnergyKernel, params.pairKernelSize, 0, 0,
           params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
@@ -2057,6 +2059,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
           params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
           PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
           PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
+      }
 
       auto getSum = [](double *p, Params &params) -> double {
         return params.cw.reduce<double, double *, double *>(
@@ -2089,11 +2092,13 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                   << std::endl;
 
       // Print some values
-      std::cout << (int)scaledTime << "\t"
+      std::cout << std::setw(5) << left << (int)scaledTime << std::setw(6)
+                << left
                 << calculateVolumeOfBubbles(params) /
                      getSimulationBoxVolume(params)
-                << "\t" << relativeRadius << "\t" << params.state.numBubbles
-                << "\t" << dE << "\t" << params.state.numStepsInTimeStep << "\t"
+                << std::setw(6) << left << relativeRadius << std::setw(8)
+                << left << params.state.numBubbles << std::setw(9) << left
+                << params.state.numStepsInTimeStep << std::setw(5) << left
                 << params.state.numPairs << std::endl;
 
       saveSnapshotToFile(params);
