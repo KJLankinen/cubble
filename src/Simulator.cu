@@ -2122,8 +2122,8 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                 << std::setw(10) << std::left
                 << std::setprecision(6) << std::fixed << relRad 
                 << std::setw(10) << std::left << params.state.numBubbles
-                << std::setw(10) << std::left << params.state.numStepsInTimeStep
                 << std::setw(10) << std::left << params.state.numPairs
+                << std::setw(10) << std::left << params.state.numStepsInTimeStep
                 << std::endl;
 
       saveSnapshotToFile(params);
