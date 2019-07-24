@@ -1616,9 +1616,9 @@ void initializeFromJson(const char *inputFileName, Params &params)
   const int failsafe = 500;
   
   std::cout << std::setw(10) << std::left << "#steps"
-            << std::setw(13) << std::left << "dE"
-            << std::setw(10) << std::left << "e1"
-            << std::setw(10) << std::left << "e2"
+            << std::setw(12) << std::left << "dE"
+            << std::setw(15) << std::left << "e1"
+            << std::setw(15) << std::left << "e2"
             << std::endl;
 
   while (true)
@@ -1649,11 +1649,11 @@ void initializeFromJson(const char *inputFileName, Params &params)
     {
       std::cout << std::setw(10) << std::left
                 << (numSteps + 1) * params.inputs.numStepsToRelax
-                << std::setw(13) << std::left << std::setprecision(5)
+                << std::setw(12) << std::left << std::setprecision(5)
                 << std::scientific << deltaEnergy
-                << std::setw(10) << std::left << std::setprecision(5)
+                << std::setw(15) << std::left << std::setprecision(5)
                 << std::fixed << params.state.energy1 
-                << std::setw(10) << std::left << std::setprecision(5)
+                << std::setw(15) << std::left << std::setprecision(5)
                 << std::fixed << params.state.energy2 
                 << std::endl;
     }
