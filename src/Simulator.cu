@@ -1614,7 +1614,13 @@ void initializeFromJson(const char *inputFileName, Params &params)
 
   int numSteps       = 0;
   const int failsafe = 500;
-  std::cout << "#steps\tdE/t\te1\te2" << std::endl;
+  
+  std::cout << std::setw(10) << std::left << "#steps"
+            << std::setw(10) << std::left << "dE"
+            << std::setw(10) << std::left << "e1"
+            << std::setw(10) << std::left << "e2"
+            << std::endl;
+
   while (true)
   {
     double time = stabilize(params);
@@ -1626,7 +1632,7 @@ void initializeFromJson(const char *inputFileName, Params &params)
     {
       std::cout << "Final delta energy " << deltaEnergy << " after "
                 << (numSteps + 1) * params.inputs.numStepsToRelax << " steps."
-                << " Energy before: " << params.state.energy1
+                << "\nEnergy before: " << params.state.energy1
                 << ", energy after: " << params.state.energy2
                 << ", time: " << time * params.inputs.timeScalingFactor
                 << std::endl;
@@ -1641,9 +1647,15 @@ void initializeFromJson(const char *inputFileName, Params &params)
     }
     else
     {
-      std::cout << (numSteps + 1) * params.inputs.numStepsToRelax << "\t"
-                << deltaEnergy << "\t" << params.state.energy1 << "\t"
-                << params.state.energy2 << std::endl;
+      std::cout << std::setw(10) << std::left
+                << (numSteps + 1) * params.inputs.numStepsToRelax
+                << std::setw(10) << std::left << std::setprecision(10)
+                << std::scientific << deltaEnergy
+                << std::setw(10) << std::left << std::setprecision(7)
+                << std::fixed << params.state.energy1 
+                << std::setw(10) << std::left << std::setprecision(7)
+                << std::fixed << params.state.energy2 
+                << std::endl;
     }
 
     ++numSteps;
@@ -2102,8 +2114,10 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
       // Print some values
       std::cout << std::setw(10) << std::left << (int)scaledTime
-                << std::setw(10) << std::left << std::setprecision(7) << phi 
-                << std::setw(10) << std::left << std::setprecision(7) << relRad 
+                << std::setw(10) << std::left
+                << std::setprecision(6) << std::fixed << phi 
+                << std::setw(10) << std::left
+                << std::setprecision(6) << std::fixed << relRad 
                 << std::setw(10) << std::left << params.state.numBubbles
                 << std::setw(10) << std::left << params.state.numStepsInTimeStep
                 << std::setw(10) << std::left << params.state.numPairs
