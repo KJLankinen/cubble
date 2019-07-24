@@ -2018,12 +2018,12 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
 
-  std::cout << std::setw(5) << std::left << "T"
-            << std::setw(8) << std::left << "phi"
+  std::cout << std::setw(10) << std::left << "T"
+            << std::setw(10) << std::left << "phi"
             << std::setw(10) << std::left << "R"
             << std::setw(10) << std::left << "#b"
             << std::setw(10) << std::left << "#pairs"
-            << std::setw(5) << std::left << "#steps"
+            << std::setw(10) << std::left << "#steps"
             << std::endl;
 
   bool continueIntegration = true;
@@ -2077,14 +2077,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy2 = getSum(params.ddps[(uint32_t)DDP::TEMP4], params);
       const double dE =
         (params.state.energy2 - params.state.energy1) / params.state.energy2;
-      const double relativeRadius =
+      const double relRad =
         getAvg(params.ddps[(uint32_t)DDP::R], params) / params.inputs.avgRad;
 
       // Add values to data stream
       std::ofstream resultFile("results.dat", std::ios_base::app);
       if (resultFile.is_open())
       {
-        resultFile << (int)scaledTime << " " << relativeRadius << " "
+        resultFile << (int)scaledTime << " " << relRad << " "
                    << params.state.maxBubbleRadius / params.inputs.avgRad << " "
                    << params.state.numBubbles << " "
                    << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
@@ -2101,12 +2101,12 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
         calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params);
 
       // Print some values
-      std::cout << std::setw(5) << std::left << (int)scaledTime
-                << std::setw(8) << std::left << phi 
-                << std::setw(10) << std::left << relativeRadius
+      std::cout << std::setw(10) << std::left << (int)scaledTime
+                << std::setw(10) << std::left << std::setprecision(7) << phi 
+                << std::setw(10) << std::left << std::setprecision(7) << relRad 
                 << std::setw(10) << std::left << params.state.numBubbles
                 << std::setw(10) << std::left << params.state.numStepsInTimeStep
-                << std::setw(5) << std::left << params.state.numPairs
+                << std::setw(10) << std::left << params.state.numPairs
                 << std::endl;
 
       saveSnapshotToFile(params);
