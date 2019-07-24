@@ -21,7 +21,8 @@ public:
   DeviceArray(const DeviceArray<T> &other)
     : DeviceArray(other.width, other.height, other.depth)
   {
-    CUDA_ASSERT(cudaMemcpy(static_cast<void *>(dataPtr.get()), static_cast<void *>(other.dataPtr.get()),
+    CUDA_ASSERT(cudaMemcpy(static_cast<void *>(dataPtr.get()),
+                           static_cast<void *>(other.dataPtr.get()),
                            other.getSizeInBytes(), cudaMemcpyDeviceToDevice));
   }
 
@@ -73,7 +74,11 @@ public:
   uint64_t getSliceSize() const { return width * height; }
   uint64_t getSize() const { return width * height * depth; }
   uint64_t getSizeInBytes() const { return sizeof(T) * getSize(); }
-  void setBytesToZero() { CUDA_ASSERT(cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes())); }
+  void setBytesToZero()
+  {
+    CUDA_ASSERT(
+      cudaMemset(static_cast<void *>(dataPtr.get()), 0, getSizeInBytes()));
+  }
 
 private:
   static T *createDataPtr(uint64_t w, uint64_t h, uint64_t d)

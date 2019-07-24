@@ -55,7 +55,7 @@ def main():
     sb_time =       "120:00:00"
     sb_gres =       "gpu:1"
     sb_constraint = "\"volta\""
-    sb_mail_user =  "juhana.lankinen@aalto.fi"
+    sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
     

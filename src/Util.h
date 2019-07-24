@@ -21,14 +21,19 @@
 #define CUDA_PROFILER_STOP(stop, continue)
 #endif
 
-#define CUDA_CALL(call) cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
-#define CUDA_ASSERT(call) cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
-#define CURAND_CALL(call) cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
-#define KERNEL_LAUNCH(kernel, ...) cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
+#define CUDA_CALL(call) \
+  cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
+#define CUDA_ASSERT(call) \
+  cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
+#define CURAND_CALL(call) \
+  cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
+#define KERNEL_LAUNCH(kernel, ...) \
+  cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
 
 // Macro for device assert.
 #ifndef NDEBUG
-#define DEVICE_ASSERT(statement, msg) cubble::logError(statement, #statement, msg)
+#define DEVICE_ASSERT(statement, msg) \
+  cubble::logError(statement, #statement, msg)
 #else
 #define DEVICE_ASSERT(statement, msg)
 #endif
@@ -59,12 +64,16 @@ struct KernelSize
   {
   }
 
-  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads) { update(numThreadsPerBlock, numTotalThreads); }
+  KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
+  {
+    update(numThreadsPerBlock, numTotalThreads);
+  }
 
   void update(uint32_t numThreadsPerBlock, uint32_t numTotalThreads)
   {
     block = dim3(numThreadsPerBlock, 1, 1);
-    grid  = dim3((uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
+    grid  = dim3(
+      (uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1, 1);
   }
 };
 
@@ -88,9 +97,10 @@ inline void handleException(const std::exception_ptr pExc)
   }
   catch (const json::exception &e)
   {
-    std::cout << "Encountered a json parse error."
-              << "\nMake sure the .json file is correct and filenames are correct.\n"
-              << e.what() << std::endl;
+    std::cout
+      << "Encountered a json parse error."
+      << "\nMake sure the .json file is correct and filenames are correct.\n"
+      << e.what() << std::endl;
   }
   catch (const std::exception &e)
   {
@@ -101,15 +111,19 @@ inline void handleException(const std::exception_ptr pExc)
   }
 }
 
-inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr, const char *file, int line,
+inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr,
+                                        const char *file, int line,
                                         std::basic_ostream<char> &outStream)
 {
   outStream << "Cuda error encountered."
-            << "\n\tType: " << cudaGetErrorName(result) << "\n\tDescription: " << cudaGetErrorString(result)
-            << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr << std::endl;
+            << "\n\tType: " << cudaGetErrorName(result)
+            << "\n\tDescription: " << cudaGetErrorString(result)
+            << "\n\tLocation: " << file << ":" << line
+            << "\n\tCall: " << callStr << std::endl;
 }
 
-inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *file, int line) noexcept
+inline bool cudaCallAndLog(cudaError_t result, const char *callStr,
+                           const char *file, int line) noexcept
 {
   if (result != cudaSuccess)
   {
@@ -120,7 +134,8 @@ inline bool cudaCallAndLog(cudaError_t result, const char *callStr, const char *
   return true;
 }
 
-inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char *file, int line)
+inline void cudaCallAndThrow(cudaError_t result, const char *callStr,
+                             const char *file, int line)
 {
   if (result != cudaSuccess)
   {
@@ -130,13 +145,14 @@ inline void cudaCallAndThrow(cudaError_t result, const char *callStr, const char
   }
 }
 
-inline bool curandCallAndLog(curandStatus_t result, const char *callStr, const char *file, int line) noexcept
+inline bool curandCallAndLog(curandStatus_t result, const char *callStr,
+                             const char *file, int line) noexcept
 {
   if (result != CURAND_STATUS_SUCCESS)
   {
     std::cerr << "Curand error encountered."
-              << "\n\tType: " << result << "\n\tLocation: " << file << ":" << line << "\n\tCall: " << callStr
-              << std::endl;
+              << "\n\tType: " << result << "\n\tLocation: " << file << ":"
+              << line << "\n\tCall: " << callStr << std::endl;
 
     return false;
   }
@@ -160,7 +176,8 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr)
 #endif
 }
 
-inline void assertMemBelowLimit(const char *kernelStr, const char *file, int line, int bytes, bool abort = true)
+inline void assertMemBelowLimit(const char *kernelStr, const char *file,
+                                int line, int bytes, bool abort = true)
 {
 #ifndef NDEBUG
   int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
@@ -170,7 +187,8 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, int lin
     std::stringstream ss;
     ss << "Requested size of dynamically allocated shared memory exceeds"
        << " the limitation of the current device."
-       << "\nError location: '" << kernelStr << "' @" << file << ":" << line << "."
+       << "\nError location: '" << kernelStr << "' @" << file << ":" << line
+       << "."
        << "\nRequested size: " << bytes << "\nDevice limit: " << value;
 
     if (abort)
@@ -184,7 +202,8 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file, int lin
 #endif
 }
 
-inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 blockSize,
+inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file,
+                                      int line, dim3 blockSize,
                                       bool abort = true)
 {
 #ifndef NDEBUG
@@ -198,9 +217,12 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, i
     std::stringstream ss;
     ss << "Block size exceeds the limitation of the current device"
        << " in at least one dimension."
-       << "\nError location: '" << kernelStr << "' @" << file << ":" << line << "."
-       << "\nBlock size: (" << blockSize.x << ", " << blockSize.y << ", " << blockSize.z << ")"
-       << "\nDevice limit: (" << temp.x << ", " << temp.y << ", " << temp.z << ")";
+       << "\nError location: '" << kernelStr << "' @" << file << ":" << line
+       << "."
+       << "\nBlock size: (" << blockSize.x << ", " << blockSize.y << ", "
+       << blockSize.z << ")"
+       << "\nDevice limit: (" << temp.x << ", " << temp.y << ", " << temp.z
+       << ")";
 
     if (abort)
     {
@@ -213,8 +235,8 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file, i
 #endif
 }
 
-inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, int line, dim3 gridSize,
-                                     bool abort = true)
+inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file,
+                                     int line, dim3 gridSize, bool abort = true)
 {
 #ifndef NDEBUG
   dim3 temp;
@@ -227,9 +249,12 @@ inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file, in
     std::stringstream ss;
     ss << "Grid size exceeds the limitation of the current device"
        << " in at least one dimension."
-       << "\nError location: '" << kernelStr << "' @" << file << ":" << line << "."
-       << "\nGrid size: (" << gridSize.x << ", " << gridSize.y << ", " << gridSize.z << ")"
-       << "\nDevice limit: (" << temp.x << ", " << temp.y << ", " << temp.z << ")";
+       << "\nError location: '" << kernelStr << "' @" << file << ":" << line
+       << "."
+       << "\nGrid size: (" << gridSize.x << ", " << gridSize.y << ", "
+       << gridSize.z << ")"
+       << "\nDevice limit: (" << temp.x << ", " << temp.y << ", " << temp.z
+       << ")";
 
     if (abort)
     {
@@ -254,19 +279,23 @@ inline void printRelevantInfoOfCurrentDevice()
   std::cout << "\n----------Properties of current device----------"
             << "\n\n\tGeneral"
             << "\n\t-------"
-            << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major << "." << prop.minor
+            << "\n\tName: " << prop.name
+            << "\n\tCompute capability: " << prop.major << "." << prop.minor
             << "\n\n\tMemory"
             << "\n\t------"
             << "\n\tTotal global memory (bytes): " << prop.totalGlobalMem
             << "\n\tShared memory per block (bytes): " << prop.sharedMemPerBlock
             << "\n\tTotal constant memory (bytes): " << prop.totalConstMem
-            << "\n\tMaximum number of registers per block: " << prop.regsPerBlock << "\n\n\tWarp, threads, blocks, grid"
+            << "\n\tMaximum number of registers per block: "
+            << prop.regsPerBlock << "\n\n\tWarp, threads, blocks, grid"
             << "\n\t---------------------------"
             << "\n\tWarp size: " << prop.warpSize
-            << "\n\tMaximum number of threads per block: " << prop.maxThreadsPerBlock << "\n\tMaximum block size: ("
-            << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1] << ", " << prop.maxThreadsDim[2] << ")"
-            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", " << prop.maxGridSize[1] << ", "
-            << prop.maxGridSize[2] << ")"
+            << "\n\tMaximum number of threads per block: "
+            << prop.maxThreadsPerBlock << "\n\tMaximum block size: ("
+            << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1] << ", "
+            << prop.maxThreadsDim[2] << ")"
+            << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", "
+            << prop.maxGridSize[1] << ", " << prop.maxGridSize[2] << ")"
             << "\n\tMultiprocessor count: " << prop.multiProcessorCount << "\n"
             << "\nIf you want more info, see " << __FILE__ << ":" << __LINE__
             << "\nand 'Device Management' section of the CUDA Runtime API docs."

@@ -2,5 +2,10 @@
 *.[oa]
 *~
 data/*
-bin/*
 /.ptp-sync/
+*.swp
+slurm-*.out
+snapshot.csv.*
+default/bin
+final/bin
+debug/bin

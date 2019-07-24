@@ -51,7 +51,10 @@ public:
     return temp;
   }
 
-  __host__ __device__ T getLength() const { return std::sqrt(getSquaredLength()); }
+  __host__ __device__ T getLength() const
+  {
+    return std::sqrt(getSquaredLength());
+  }
 
   __host__ __device__ vec<T> getAbsolute() const
   {
@@ -63,13 +66,25 @@ public:
     return v;
   }
 
-  __host__ __device__ static vec<T> normalize(vec<T> &v) { return v / v.getLength(); }
+  __host__ __device__ static vec<T> normalize(vec<T> &v)
+  {
+    return v / v.getLength();
+  }
 
-  __host__ __device__ static vec<T> normalize(const vec<T> &v) { return v / v.getLength(); }
+  __host__ __device__ static vec<T> normalize(const vec<T> &v)
+  {
+    return v / v.getLength();
+  }
 
-  __host__ __device__ T getMaxComponent() const { return x > y ? (x > z ? x : z) : (y > z ? y : z); }
+  __host__ __device__ T getMaxComponent() const
+  {
+    return x > y ? (x > z ? x : z) : (y > z ? y : z);
+  }
 
-  __host__ __device__ T getMinComponent() const { return x < y ? (x < z ? x : z) : (y < z ? y : z); }
+  __host__ __device__ T getMinComponent() const
+  {
+    return x < y ? (x < z ? x : z) : (y < z ? y : z);
+  }
 
   template <typename T2>
   __host__ __device__ vec<T2> asType() const
@@ -79,9 +94,15 @@ public:
     return v;
   }
 
-  __host__ vec<int> ceil() const { return vec<int>(std::ceil(x), std::ceil(y), std::ceil(z)); }
+  __host__ vec<int> ceil() const
+  {
+    return vec<int>(std::ceil(x), std::ceil(y), std::ceil(z));
+  }
 
-  __host__ vec<int> floor() const { return vec<int>(std::floor(x), std::floor(y), std::floor(z)); }
+  __host__ vec<int> floor() const
+  {
+    return vec<int>(std::floor(x), std::floor(y), std::floor(z));
+  }
 
   // + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
   __host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &o)
@@ -328,7 +349,10 @@ public:
   }
 
   // != != != != != != != != != != != != != != != != != != != != != !=
-  __host__ __device__ friend bool operator!=(const vec<T> &t, const vec<T> &o) { return !(t == o); }
+  __host__ __device__ friend bool operator!=(const vec<T> &t, const vec<T> &o)
+  {
+    return !(t == o);
+  }
 
   // << << << << << << << << << << << << << << << << << << << << << <<
   friend std::ostream &operator<<(std::ostream &os, const vec<T> &v)
