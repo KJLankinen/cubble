@@ -2018,10 +2018,10 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
   bool continueIntegration = true;
-  std::cout << std::setw(5) << left << "T" << std::setw(6) << left << "phi"
-            << std::setw(6) << left << "R" << std::setw(8) << left << "#b"
-            << std::setw(9) << left << "#pairs" << std::setw(5) << left
-            << "#steps" << std::endl;
+  std::cout << std::setw(5) << std::left << "T" << std::setw(6) << std::left
+            << "phi" << std::setw(6) << std::left << "R" << std::setw(8)
+            << std::left << "#b" << std::setw(9) << std::left << "#pairs"
+            << std::setw(5) << std::left << "#steps" << std::endl;
   std::cout << "T     phi     R      #b       #pairs    #steps" << std::endl;
   while (continueIntegration)
   {
@@ -2092,14 +2092,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                   << std::endl;
 
       // Print some values
-      std::cout << std::setw(5) << left << (int)scaledTime << std::setw(6)
-                << left
+      std::cout << std::setw(5) << std::left << (int)scaledTime << std::setw(6)
+                << std::left
                 << calculateVolumeOfBubbles(params) /
                      getSimulationBoxVolume(params)
-                << std::setw(6) << left << relativeRadius << std::setw(8)
-                << left << params.state.numBubbles << std::setw(9) << left
-                << params.state.numStepsInTimeStep << std::setw(5) << left
-                << params.state.numPairs << std::endl;
+                << std::setw(6) << std::left << relativeRadius << std::setw(8)
+                << std::left << params.state.numBubbles << std::setw(9)
+                << std::left << params.state.numStepsInTimeStep << std::setw(5)
+                << std::left << params.state.numPairs << std::endl;
 
       saveSnapshotToFile(params);
 
