@@ -437,7 +437,7 @@ __global__ void neighborVelocityKernel(int *first, int *second,
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,
                                    double *nVelX, double *nVelY, double *nVelZ,
-                                   double *posX, double *posY, double *posZ,
+                                   double *posX, double *posY, double *posZ, double * radius,
                                    dvec flowVel, dvec flowTfr, dvec flowLbb);
 
 template <typename... Args>

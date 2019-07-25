@@ -941,7 +941,8 @@ bool integrate(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
           params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
+          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::RP],
+          params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
@@ -1049,7 +1050,8 @@ bool integrate(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
           params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
+          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::RP],
+          params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
