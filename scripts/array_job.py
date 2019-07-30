@@ -10,6 +10,8 @@ import pwd
 import shutil
 import errno
 
+from create_venv import virtual_environment_name
+
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
     for key, val in inbound.items():
@@ -171,7 +173,7 @@ mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + continue_script.name + "; fi\n\
 if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi\n"\
-f"source {root_dir.path}/venv/bin/activate\n\
+f"source {root_dir.path}/{virtual_environment_name}/bin/activate\n\
 python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} vtu_snapshots\n\
 deactivate"
 

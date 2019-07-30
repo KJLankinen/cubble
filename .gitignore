@@ -9,3 +9,4 @@ snapshot.csv.*
 default/bin
 final/bin
 debug/bin
+cubble_python_venv/*

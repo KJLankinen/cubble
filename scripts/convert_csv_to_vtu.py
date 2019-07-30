@@ -60,17 +60,28 @@ elif len(sys.argv) > 3:
 
 else:
     warn("No arguments given, assuming that everything in data folder should be converted")
-    sub_folders = sorted(data_directory.glob("[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9][0-9]"))
 
-    for sub_folder in sub_folders:
-        sub_sub_folders = sorted(sub_folder.glob("*"))
-        for sub_sub_folder in sub_sub_folders:
-            if sub_folder.is_dir():
-                run_folder_paths = np.asarray(sorted(sub_sub_folder.glob(run_folder_pattern)))
-                for run_folder in run_folder_paths:
-                    output_folder = run_folder / output_folder_name
-                    if not output_folder.exists():
-                        try:
-                            convert_run(run_folder, output_folder)
-                        except:
-                            print(f"Could not convert files in {run_folder}")
+    print(f"\nAre you sure you want to find all possible snapshots in {data_directory.resolve()} and convert them "
+          f"\n(this is NOT recommended and may take a long time)? [y/n]:")
+    x = input()
+    while x != "y" and x != "n":
+        print("Please enter y or n")
+        x = input()
+    return x
+
+    if x == "y":
+
+        sub_folders = sorted(data_directory.glob("[0-9][0-9]_[0-9][0-9]_[0-9][0-9][0-9][0-9]"))
+
+        for sub_folder in sub_folders:
+            sub_sub_folders = sorted(sub_folder.glob("*"))
+            for sub_sub_folder in sub_sub_folders:
+                if sub_folder.is_dir():
+                    run_folder_paths = np.asarray(sorted(sub_sub_folder.glob(run_folder_pattern)))
+                    for run_folder in run_folder_paths:
+                        output_folder = run_folder / output_folder_name
+                        if not output_folder.exists():
+                            try:
+                                convert_run(run_folder, output_folder)
+                            except:
+                                print(f"Could not convert files in {run_folder}")
