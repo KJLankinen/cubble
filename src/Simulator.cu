@@ -196,6 +196,7 @@ struct SimulationInputs
   double kappa             = 0.0;
   double timeScalingFactor = 0.0;
   double timeStepIn        = 0.0;
+  double wallDragStrength  = 0.0;
 
   int numBubblesPerCell = 0;
   int rngSeed           = 0;
@@ -235,6 +236,7 @@ struct SimulationInputs
     equal &= numStepsToRelax == o.numStepsToRelax;
     equal &= numBubblesIn == o.numBubblesIn;
     equal &= minNumBubbles == o.minNumBubbles;
+    equal &= wallDragStrength == o.wallDragStrength;
 
     return equal;
   }
@@ -264,6 +266,7 @@ struct SimulationInputs
     PRINT_PARAM(numStepsToRelax);
     PRINT_PARAM(numBubblesIn);
     PRINT_PARAM(minNumBubbles);
+    PRINT_PARAM(wallDragStrength);
     std::cout << "-----------------End----------------\n" << std::endl;
   }
 };
@@ -320,58 +323,6 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX,
   else if (wrapZ)
     KERNEL_LAUNCH(boundaryWrapKernel, ks, sm, stream, numValues, z, lbb.z,
                   tfr.z, mulZ, mulOldZ);
-}
-
-void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX,
-                    bool doY, bool doZ, int numValues, int *first, int *second,
-                    double *r, double *x, double *y, double *z, double *dxdt,
-                    double *dydt, double *dzdt, dvec lbb, dvec tfr,
-                    Params &params)
-{
-  dvec interval = tfr - lbb;
-  if (doX && doY && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt,
-                  interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doX && doY)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt);
-  }
-  else if (doX && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doY && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.y,
-                  lbb.y, !doY, y, dydt, interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doX)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt);
-  }
-  else if (doY)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.y,
-                  lbb.y, !doY, y, dydt);
-  }
-  else if (doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.z,
-                  lbb.z, !doZ, z, dzdt);
-  }
 }
 
 void startProfiling(bool start)
@@ -713,14 +664,14 @@ double stabilize(Params &params)
           params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
-        doWallVelocity(
-          params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-          params.state.lbb, params.state.tfr, params);
+        KERNEL_LAUNCH(
+          velocityWallKernel, params.defaultKernelSize, 0,
+          params.velocityStream, params.state.numBubbles,
+          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
+          params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -758,14 +709,14 @@ double stabilize(Params &params)
           params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
-        doWallVelocity(
-          params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-          params.state.lbb, params.state.tfr, params);
+        KERNEL_LAUNCH(
+          velocityWallKernel, params.defaultKernelSize, 0,
+          params.velocityStream, params.state.numBubbles,
+          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
+          params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -909,16 +860,6 @@ bool integrate(Params &params)
         params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
-      // Wall velocity
-      doWallVelocity(
-        params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
-        PBC_Z == 0, params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params);
-
       // Flow velocity
       if (USE_FLOW == 1)
       {
@@ -945,6 +886,17 @@ bool integrate(Params &params)
           params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
+
+      // Wall velocity, should be after flow so that possible drag is applied
+      // correctly
+      KERNEL_LAUNCH(
+        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
+        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
+        params.inputs.wallDragStrength);
 
       // Correct
       KERNEL_LAUNCH(
@@ -1019,16 +971,6 @@ bool integrate(Params &params)
         params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
-      // Wall velocity
-      doWallVelocity(
-        params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
-        false, params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params);
-
       // Flow velocity
       if (USE_FLOW == 1)
       {
@@ -1054,6 +996,17 @@ bool integrate(Params &params)
           params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
+
+      // Wall velocity, should be after flow so that possible drag is applied
+      // correctly
+      KERNEL_LAUNCH(
+        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
+        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
+        params.inputs.wallDragStrength);
 
       // Correct
       KERNEL_LAUNCH(
@@ -1284,11 +1237,13 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     JSON_READ(inputs, j, flowLbb);
     JSON_READ(inputs, j, flowTfr);
     JSON_READ(inputs, j, flowVel);
+    JSON_READ(inputs, j, wallDragStrength);
 
     assert(inputs.muZero > 0);
     assert(inputs.boxRelDim.x > 0);
     assert(inputs.boxRelDim.y > 0);
     assert(inputs.boxRelDim.z > 0);
+    assert(inputs.wallDragStrength >= 0.0 && inputs.wallDragStrength <= 1.0);
 
     inputs.fZeroPerMuZero = inputs.sigmaZero * inputs.avgRad / inputs.muZero;
     inputs.minRad         = 0.1 * inputs.avgRad;
