@@ -572,7 +572,7 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
     // centre is smaller or equal to the radius If any condition True then
     // inside will be 1, else 0
     int inside =
-      (int)((posY[i] < flowTfr.x && posY[i] > flowLbb.x) ||
+      (int)((posX[i] < flowTfr.x && posX[i] > flowLbb.x) ||
             ((flowLbb.x - posX[i]) * (flowLbb.x - posX[i]) <= r[i] * r[i]) ||
             ((flowTfr.x - posX[i]) * (flowTfr.x - posX[i]) <= r[i] * r[i]));
 
