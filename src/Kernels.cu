@@ -478,67 +478,67 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
     double yDrag     = 1.0;
 
 #if (PBC_X == 0)
-    distance1 = x[i] - lbb.x;
-    distance2 = x[i] - tfr.x;
+    distance1 = x[tid] - lbb.x;
+    distance2 = x[tid] - tfr.x;
     distance =
       distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
-    if (r[i] * r[i] >= distance * distance)
+    if (r[tid] * r[tid] >= distance * distance)
     {
       const double direction = distance < 0 ? -1.0 : 1.0;
       distance *= direction;
       const double velocity = direction * distance * fZeroPerMuZero *
-                              (radius - distance) / (radius * distance);
-      vx[i] += velocity;
+                              (r[tid] - distance) / (r[tid] * distance);
+      vx[tid] += velocity;
       xDrag = 1.0 - dragCoeff;
 
       // Drag of x wall to y & z
-      vy[i] *= xDrag;
-      vz[i] *= xDrag;
+      vy[tid] *= xDrag;
+      vz[tid] *= xDrag;
     }
 #endif
 
 #if (PBC_Y == 0)
-    distance1 = y[i] - lbb.y;
-    distance2 = y[i] - tfr.y;
+    distance1 = y[tid] - lbb.y;
+    distance2 = y[tid] - tfr.y;
     distance =
       distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
-    if (r[i] * r[i] >= distance * distance)
+    if (r[tid] * r[tid] >= distance * distance)
     {
       const double direction = distance < 0 ? -1.0 : 1.0;
       distance *= direction;
       const double velocity = direction * distance * fZeroPerMuZero *
-                              (radius - distance) / (radius * distance);
+                              (r[tid] - distance) / (r[tid] * distance);
 
       // Retroactively apply possible drag from x wall to the velocity the y
       // wall causes
-      vy[i] += velocity * xDrag;
+      vy[tid] += velocity * xDrag;
       yDrag = 1.0 - dragCoeff;
 
       // Drag of y wall to x & z
-      vx[i] *= yDrag;
-      vz[i] *= yDrag;
+      vx[tid] *= yDrag;
+      vz[tid] *= yDrag;
     }
 #endif
 
 #if (PBC_Z == 0)
-    distance1 = z[i] - lbb.z;
-    distance2 = z[i] - tfr.z;
+    distance1 = z[tid] - lbb.z;
+    distance2 = z[tid] - tfr.z;
     distance =
       distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
-    if (r[i] * r[i] >= distance * distance)
+    if (r[tid] * r[tid] >= distance * distance)
     {
       const double direction = distance < 0 ? -1.0 : 1.0;
       distance *= direction;
       const double velocity = direction * distance * fZeroPerMuZero *
-                              (radius - distance) / (radius * distance);
+                              (r[tid] - distance) / (r[tid] * distance);
 
       // Retroactively apply possible drag from x & y walls to the velocity the
       // z wall causes
-      vz[i] += velocity * xDrag * yDrag;
+      vz[tid] += velocity * xDrag * yDrag;
 
       // Drag of z wall to x & y directions
-      vx[i] *= 1.0 - dragCoeff;
-      vy[i] *= 1.0 - dragCoeff;
+      vx[tid] *= 1.0 - dragCoeff;
+      vy[tid] *= 1.0 - dragCoeff;
     }
 #endif
   }
