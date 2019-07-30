@@ -381,28 +381,6 @@ __device__ void addVelocity(int idx1, int idx2, double multiplier,
   atomicAdd(&v[idx2], -velocity);
 }
 
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-                               double interval, double zeroPoint,
-                               bool shouldWrap, double *x, double *v)
-{
-  if (shouldWrap)
-    return;
-
-  const double radius    = r[idx];
-  const double distance1 = x[idx] - zeroPoint;
-  const double distance2 = x[idx] - (interval + zeroPoint);
-  double distance =
-    distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
-
-  if (radius * radius >= distance * distance)
-  {
-    const double direction = distance < 0 ? -1.0 : 1.0;
-    distance *= direction;
-    const double velocity = direction * distance * fZeroPerMuZero *
-                            (radius - distance) / (radius * distance);
-    atomicAdd(&v[idx], velocity);
-  }
-}
 
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity)
@@ -485,28 +463,139 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
   }
 }
 
+__global__ void velocityWallKernel(int numValues, double *r, double *x,
+                                   double *y, double *z, double *vx, double *vy,
+                                   double *vz, dvec lbb, dvec tfr,
+                                   double fZeroPerMuZero, double dragCoeff)
+{
+  const int tid = getGlobalTid();
+  if (tid < numValues)
+  {
+    double distance1 = 0.0;
+    double distance2 = 0.0;
+    double distance  = 0.0;
+    double xDrag     = 1.0;
+    double yDrag     = 1.0;
+
+#if (PBC_X == 0)
+    distance1 = x[tid] - lbb.x;
+    distance2 = x[tid] - tfr.x;
+    distance =
+      distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
+    if (r[tid] * r[tid] >= distance * distance)
+    {
+      const double direction = distance < 0 ? -1.0 : 1.0;
+      distance *= direction;
+      const double velocity = direction * distance * fZeroPerMuZero *
+                              (r[tid] - distance) / (r[tid] * distance);
+      vx[tid] += velocity;
+      xDrag = 1.0 - dragCoeff;
+
+      // Drag of x wall to y & z
+      vy[tid] *= xDrag;
+      vz[tid] *= xDrag;
+    }
+#endif
+
+#if (PBC_Y == 0)
+    distance1 = y[tid] - lbb.y;
+    distance2 = y[tid] - tfr.y;
+    distance =
+      distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
+    if (r[tid] * r[tid] >= distance * distance)
+    {
+      const double direction = distance < 0 ? -1.0 : 1.0;
+      distance *= direction;
+      const double velocity = direction * distance * fZeroPerMuZero *
+                              (r[tid] - distance) / (r[tid] * distance);
+
+      // Retroactively apply possible drag from x wall to the velocity the y
+      // wall causes
+      vy[tid] += velocity * xDrag;
+      yDrag = 1.0 - dragCoeff;
+
+      // Drag of y wall to x & z
+      vx[tid] *= yDrag;
+      vz[tid] *= yDrag;
+    }
+#endif
+
+#if (PBC_Z == 0)
+    distance1 = z[tid] - lbb.z;
+    distance2 = z[tid] - tfr.z;
+    distance =
+      distance1 * distance1 < distance2 * distance2 ? distance1 : distance2;
+    if (r[tid] * r[tid] >= distance * distance)
+    {
+      const double direction = distance < 0 ? -1.0 : 1.0;
+      distance *= direction;
+      const double velocity = direction * distance * fZeroPerMuZero *
+                              (r[tid] - distance) / (r[tid] * distance);
+
+      // Retroactively apply possible drag from x & y walls to the velocity the
+      // z wall causes
+      vz[tid] += velocity * xDrag * yDrag;
+
+      // Drag of z wall to x & y directions
+      vx[tid] *= 1.0 - dragCoeff;
+      vy[tid] *= 1.0 - dragCoeff;
+    }
+#endif
+  }
+}
+
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,
                                    double *nVelX, double *nVelY, double *nVelZ,
                                    double *posX, double *posY, double *posZ,
-                                   dvec flowVel, dvec flowTfr, dvec flowLbb)
+                                   double *r, dvec flowVel, dvec flowTfr,
+                                   dvec flowLbb)
 {
+  /* Function that implements a flow region inside the simulation box.
+   *
+   * Loops through each bubble. Bubble should be considered to be inside the
+   * flow region, if its centre (posX, posY, posZ) is within the the flow box or
+   * if the bubble is touching or overlapping the boundary of the box due to its
+   * spacial extent, i.e. the bubble is large enough to partially cross into the
+   * flow region. If the bubble is found to be inside the flow region its
+   * velocity is adjusted by the flow velocity
+   */
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
-    int inside = (int)(posX[i] < flowTfr.x && posX[i] > flowLbb.x);
-    inside *= (int)(posY[i] < flowTfr.y && posY[i] > flowLbb.y);
-#if (NUM_DIM == 3)
-    inside *= (int)(posZ[i] < flowTfr.z && posZ[i] > flowLbb.z);
-#endif
-
     const double multiplier =
       (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
-    velX[i] += inside * flowVel.x + !inside * multiplier * nVelX[i];
-    velY[i] += inside * flowVel.y + !inside * multiplier * nVelY[i];
+
+    // Checks if the bubble centre point is within the flow region
+    // OR the distance between the lowest boundary and the centre is smaller or
+    // equal to the radius OR the distance between the highest boundary and the
+    // centre is smaller or equal to the radius If any condition True then
+    // inside will be 1, else 0
+    int inside =
+      (int)((posY[i] < flowTfr.x && posY[i] > flowLbb.x) ||
+            ((flowLbb.x - posX[i]) * (flowLbb.x - posX[i]) <= r[i] * r[i]) ||
+            ((flowTfr.x - posX[i]) * (flowTfr.x - posX[i]) <= r[i] * r[i]));
+
+    // Repeat same for y. Multiply result, since conditions must be satisfied in
+    // all coordinate directions
+    inside *=
+      (int)((posY[i] < flowTfr.y && posY[i] > flowLbb.y) ||
+            ((flowLbb.y - posY[i]) * (flowLbb.y - posY[i]) <= r[i] * r[i]) ||
+            ((flowTfr.y - posY[i]) * (flowTfr.y - posY[i]) <= r[i] * r[i]));
+
 #if (NUM_DIM == 3)
-    velZ[i] += inside * flowVel.z + !inside * multiplier * nVelZ[i];
+    inside *=
+      (int)((posZ[i] < flowTfr.z && posZ[i] > flowLbb.z) ||
+            ((flowLbb.z - posZ[i]) * (flowLbb.z - posZ[i]) <= r[i] * r[i]) ||
+            ((flowTfr.z - posZ[i]) * (flowTfr.z - posZ[i]) <= r[i] * r[i]));
+
+    velZ[i] += !inside * multiplier * nVelZ[i] + flowVel.z * inside;
 #endif
+
+    // Velocities of the bubble will only change if inside is 1, i.e. it
+    // fulfilled the conditions in all coordinate directions
+    velX[i] += !inside * multiplier * nVelX[i] + flowVel.x * inside;
+    velY[i] += !inside * multiplier * nVelY[i] + flowVel.y * inside;
   }
 }
 

@@ -6,10 +6,16 @@
   "kappa": 0.1,
 
   "numBubblesInExpl": "Total number of bubbles to simulate.",
-  "numBubblesIn": 1e5,
+  "numBubblesIn": 1e4,
 
   "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "minNumBubbles": 900,
+  "minNumBubbles": 300,
+
+  "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
+  "kParameter": 0.001,
+
+  "wallDragStrengthExpl" : "How strong the drag from the wall is. Should be between 0.0 and 1.0",
+  "wallDragStrength" : 0.1,
 
   "boxRelDimExpl": "The relative dimension of the box.",
   "boxRelDim": {
@@ -21,22 +27,22 @@
   "flowLbbExpl": "(Relative) Lower-back-bottom of flow area.",
   "flowLbb": {
     "x": 0.0,
-    "y": 0.0,
+    "y": 0.475,
     "z": 0.0
   },
 
   "flowTfrExpl": "(Relative) Top-front-right of flow area.",
   "flowTfr": {
     "x": 1.0,
-    "y": 1.0,
-    "z": 0.05
+    "y": 0.525,
+    "z": 0.0
   },
 
   "flowVelExpl": "Flow velocity inside flow area.",
   "flowVel": {
-    "x": 1.0,
-    "y": 1.0,
-    "z": 1.0
+    "x": 0.01,
+    "y": 0.0,
+    "z": 0.0
   },
 
   "muZeroExpl": "The viscosity of the fluid",
@@ -58,7 +64,7 @@
   "timeStepIn": 1e-3,
 
   "rngSeedExpl": "The seed for the RNG.",
-  "rngSeed": 41233,
+  "rngSeed": 4,
 
   "numBubblesPerCellExpl": "How many bubbles per cell.",
   "numBubblesPerCell": 32,
@@ -67,8 +73,5 @@
   "numStepsToRelax": 1e4,
 
   "maxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "maxDeltaEnergy": 1e-5,
-
-  "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
-  "kParameter": 0.001
+  "maxDeltaEnergy": 1e-5
 }

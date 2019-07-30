@@ -289,18 +289,6 @@ __device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero,
   }
 }
 
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-                               double interval, double zeroPoint,
-                               bool shouldWrap, double *x, double *v);
-template <typename... Args>
-__device__ void forceFromWalls(int idx, double fZeroPerMuZero, double *r,
-                               double interval, double zeroPoint,
-                               bool shouldWrap, double *x, double *v,
-                               Args... args)
-{
-  forceFromWalls(idx, fZeroPerMuZero, r, interval, zeroPoint, shouldWrap, x, v);
-  forceFromWalls(idx, fZeroPerMuZero, r, args...);
-}
 
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity);
@@ -409,15 +397,10 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
     forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
 }
 
-template <typename... Args>
-__global__ void velocityWallKernel(int numValues, double fZeroPerMuZero,
-                                   int *first, int *second, double *r,
-                                   Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-       i += gridDim.x * blockDim.x)
-    forceFromWalls(i, fZeroPerMuZero, r, args...);
-}
+__global__ void velocityWallKernel(int numValues, double *r, double *x,
+                                   double *y, double *z, double *vx, double *vy,
+                                   double *vz, dvec lbb, dvec tfr,
+                                   double fZeroPerMuZero, double dragCoeff);
 
 template <typename... Args>
 __global__ void neighborVelocityKernel(int *first, int *second,
@@ -438,7 +421,8 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,
                                    double *nVelX, double *nVelY, double *nVelZ,
                                    double *posX, double *posY, double *posZ,
-                                   dvec flowVel, dvec flowTfr, dvec flowLbb);
+                                   double *r, dvec flowVel, dvec flowTfr,
+                                   dvec flowLbb);
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
