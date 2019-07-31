@@ -407,12 +407,14 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues)
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
                                     double *r, double *w, int *aboveMinRadFlags,
+                                    int *indices,
                                     ivec bubblesPerDim, dvec tfr, dvec lbb,
                                     double avgRad, double minRad, int numValues)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
+    indices[i] = i;
     dvec pos(0, 0, 0);
     pos.x = (i % bubblesPerDim.x) / (double)bubblesPerDim.x;
     pos.y = ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;

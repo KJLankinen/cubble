@@ -313,8 +313,8 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
                                     double *r, double *w, int *aboveMinRadFlags,
-                                    ivec bubblesPerDim, dvec tfr, dvec lbb,
-                                    double avgRad, double minRad,
+                                    int *indices, ivec bubblesPerDim, dvec tfr,
+                                    dvec lbb, double avgRad, double minRad,
                                     int numValues);
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z,
