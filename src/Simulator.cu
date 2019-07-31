@@ -81,6 +81,8 @@ enum class DIP
   WRAP_COUNT_YP,
   WRAP_COUNT_ZP,
 
+  INDEX,
+
   PAIR1,
   PAIR2,
 
@@ -196,6 +198,7 @@ struct SimulationInputs
   double kappa             = 0.0;
   double timeScalingFactor = 0.0;
   double timeStepIn        = 0.0;
+  double wallDragStrength  = 0.0;
 
   int numBubblesPerCell = 0;
   int rngSeed           = 0;
@@ -235,6 +238,7 @@ struct SimulationInputs
     equal &= numStepsToRelax == o.numStepsToRelax;
     equal &= numBubblesIn == o.numBubblesIn;
     equal &= minNumBubbles == o.minNumBubbles;
+    equal &= wallDragStrength == o.wallDragStrength;
 
     return equal;
   }
@@ -264,6 +268,7 @@ struct SimulationInputs
     PRINT_PARAM(numStepsToRelax);
     PRINT_PARAM(numBubblesIn);
     PRINT_PARAM(minNumBubbles);
+    PRINT_PARAM(wallDragStrength);
     std::cout << "-----------------End----------------\n" << std::endl;
   }
 };
@@ -285,6 +290,9 @@ struct Params
   double *deviceDoubleMemory = nullptr;
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
+  std::vector<int> previousX;
+  std::vector<int> previousY;
+  std::vector<int> previousZ;
 };
 
 } // namespace cubble
@@ -322,58 +330,7 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX,
                   tfr.z, mulZ, mulOldZ);
 }
 
-void doWallVelocity(KernelSize ks, int sm, cudaStream_t stream, bool doX,
-                    bool doY, bool doZ, int numValues, int *first, int *second,
-                    double *r, double *x, double *y, double *z, double *dxdt,
-                    double *dydt, double *dzdt, dvec lbb, dvec tfr,
-                    Params &params)
-{
-  dvec interval = tfr - lbb;
-  if (doX && doY && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt,
-                  interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doX && doY)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.y, lbb.y, !doY, y, dydt);
-  }
-  else if (doX && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt, interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doY && doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.y,
-                  lbb.y, !doY, y, dydt, interval.z, lbb.z, !doZ, z, dzdt);
-  }
-  else if (doX)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.x,
-                  lbb.x, !doX, x, dxdt);
-  }
-  else if (doY)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.y,
-                  lbb.y, !doY, y, dydt);
-  }
-  else if (doZ)
-  {
-    KERNEL_LAUNCH(velocityWallKernel, ks, sm, stream, numValues,
-                  params.inputs.fZeroPerMuZero, first, second, r, interval.z,
-                  lbb.z, !doZ, z, dzdt);
-  }
-}
-
+#if (USE_PROFILING == 1)
 void startProfiling(bool start)
 {
   if (start)
@@ -388,6 +345,7 @@ void stopProfiling(bool stop, bool &continueIntegration)
     continueIntegration = false;
   }
 }
+#endif
 
 dim3 getGridSize(Params &params)
 {
@@ -426,6 +384,8 @@ void updateCellsAndNeighbors(Params &params)
     params.dips[(uint32_t)DIP::TEMP1] + 2 * params.state.dataStride;
   int *sortedBubbleIndices =
     params.dips[(uint32_t)DIP::TEMP1] + 3 * params.state.dataStride;
+  int *staticIndices =
+    params.dips[(uint32_t)DIP::TEMP1] + 4 * params.state.dataStride;
 
   const uint64_t resetBytes =
     sizeof(int) * params.state.pairStride *
@@ -476,15 +436,20 @@ void updateCellsAndNeighbors(Params &params)
     params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
     params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
     params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
+    params.dips[(uint32_t)DIP::INDEX], staticIndices);
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
                             static_cast<void *>(params.ddps[(uint32_t)DDP::XP]),
                             params.state.memReqD / 2,
                             cudaMemcpyDeviceToDevice));
 
+  CUDA_CALL(cudaMemcpyAsync(
+    static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
+    static_cast<void *>(staticIndices), sizeof(int) * params.state.dataStride,
+    cudaMemcpyDeviceToDevice));
+
   KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
-  // const double maxDistance      = 1.3 * params.state.maxBubbleRadius;
 
   int *dnp = nullptr;
   CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
@@ -580,7 +545,8 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
     params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
     params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
     params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
+    params.dips[(uint32_t)DIP::INDEX], params.dips[(uint32_t)DIP::TEMP2]);
 
   CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
                             static_cast<void *>(params.ddps[(uint32_t)DDP::XP]),
@@ -594,6 +560,11 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
     static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_X]),
     static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
     params.state.dataStride * 3 * sizeof(int), cudaMemcpyDeviceToDevice));
+
+  CUDA_CALL(cudaMemcpyAsync(
+    static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
+    static_cast<void *>(params.dips[(uint32_t)DIP::TEMP2]),
+    sizeof(int) * params.state.dataStride, cudaMemcpyDeviceToDevice));
 
   params.state.numBubbles  = numBubblesAboveMinRad;
   params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
@@ -611,34 +582,82 @@ void saveSnapshotToFile(Params &params)
   std::ofstream file(ss.str().c_str(), std::ios::out);
   if (file.is_open())
   {
-    std::vector<double> hostData;
-    const uint64_t numComp = 17;
-    hostData.resize(params.state.dataStride * numComp);
-    CUDA_CALL(cudaMemcpy(hostData.data(), params.deviceDoubleMemory,
-                         sizeof(double) * numComp * params.state.dataStride,
+    const uint64_t numDoubles = 30;
+    std::vector<double> doubleData;
+    doubleData.resize(params.state.dataStride * numDoubles);
+    CUDA_CALL(cudaMemcpy(doubleData.data(), params.deviceDoubleMemory,
+                         sizeof(doubleData[0]) * doubleData.size(),
                          cudaMemcpyDeviceToHost));
 
-    file << "x,y,z,r,vx,vy,vz,path,dist\n";
+    const uint64_t numInts = 1;
+    std::vector<int> intData;
+    intData.resize(params.state.dataStride * numInts);
+    CUDA_CALL(cudaMemcpy(intData.data(), params.dips[(uint32_t)DIP::INDEX],
+                         sizeof(intData[0]) * intData.size(),
+                         cudaMemcpyDeviceToHost));
+
+    if (params.state.numSnapshots == 0)
+    {
+        params.previousX.resize(params.state.dataStride);
+        params.previousY.resize(params.state.dataStride);
+        params.previousZ.resize(params.state.dataStride);
+
+        for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
+        {
+          params.previousX[intData[i]] =
+            doubleData[i + 0 * params.state.dataStride];
+          params.previousY[intData[i]] =
+            doubleData[i + 1 * params.state.dataStride];
+          params.previousZ[intData[i]] =
+            doubleData[i + 2 * params.state.dataStride];
+        }
+    }
+
+    file << "x,y,z,r,vx,vy,vz,vtot,path,distance,energy,displacement,index\n";
     for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
     {
-      file << hostData[i + 0 * params.state.dataStride];
+      const double x  = doubleData[i + 0 * params.state.dataStride];
+      const double y  = doubleData[i + 1 * params.state.dataStride];
+      const double z  = doubleData[i + 2 * params.state.dataStride];
+      const double r  = doubleData[i + 3 * params.state.dataStride];
+      const double vx = doubleData[i + 4 * params.state.dataStride];
+      const double vy = doubleData[i + 5 * params.state.dataStride];
+      const double vz = doubleData[i + 6 * params.state.dataStride];
+      const double px = params.previousX[intData[i]];
+      const double py = params.previousY[intData[i]];
+      const double pz = params.previousZ[intData[i]];
+
+      file << x;
       file << ",";
-      file << hostData[i + 1 * params.state.dataStride];
+      file << y;
       file << ",";
-      file << hostData[i + 2 * params.state.dataStride];
+      file << z;
       file << ",";
-      file << hostData[i + 3 * params.state.dataStride];
+      file << r;
       file << ",";
-      file << hostData[i + 4 * params.state.dataStride];
+      file << vx; 
       file << ",";
-      file << hostData[i + 5 * params.state.dataStride];
+      file << vy; 
       file << ",";
-      file << hostData[i + 6 * params.state.dataStride];
+      file << vz; 
       file << ",";
-      file << hostData[i + 15 * params.state.dataStride];
+      file << sqrt(vx * vx + vy * vy + vz * vz); 
       file << ",";
-      file << hostData[i + 16 * params.state.dataStride];
+      file << doubleData[i + 15 * params.state.dataStride];
+      file << ",";
+      file << doubleData[i + 16 * params.state.dataStride];
+      file << ",";
+      file << doubleData[i + 29 * params.state.dataStride];
+      file << ",";
+      file << sqrt((x - px) * (x - px) + (y - py) * (y - py) +
+                   (z - pz) * (z - pz));
+      file << ",";
+      file << intData[i + 0 * params.state.dataStride];
       file << "\n";
+
+      params.previousX[intData[i]] = x;
+      params.previousY[intData[i]] = y;
+      params.previousZ[intData[i]] = z;
     }
 
     ++params.state.numSnapshots;
@@ -713,14 +732,16 @@ double stabilize(Params &params)
           params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
-        doWallVelocity(
-          params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-          params.state.lbb, params.state.tfr, params);
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+        KERNEL_LAUNCH(
+          velocityWallKernel, params.defaultKernelSize, 0,
+          params.velocityStream, params.state.numBubbles,
+          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
+          params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
+#endif
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -758,14 +779,16 @@ double stabilize(Params &params)
           params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
-        doWallVelocity(
-          params.pairKernelSize, 0, 0, PBC_X == 0, PBC_Y == 0, PBC_Z == 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-          params.state.lbb, params.state.tfr, params);
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+        KERNEL_LAUNCH(
+          velocityWallKernel, params.defaultKernelSize, 0,
+          params.velocityStream, params.state.numBubbles,
+          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
+          params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
+#endif
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -909,16 +932,6 @@ bool integrate(Params &params)
         params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
-      // Wall velocity
-      doWallVelocity(
-        params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
-        PBC_Z == 0, params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params);
-
       // Flow velocity
       if (USE_FLOW == 1)
       {
@@ -941,9 +954,23 @@ bool integrate(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
           params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
+          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::RP],
+          params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
+
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+      // Wall velocity, should be after flow so that possible drag is applied
+      // correctly
+      KERNEL_LAUNCH(
+        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
+        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
+        params.inputs.wallDragStrength);
+#endif
 
       // Correct
       KERNEL_LAUNCH(
@@ -1018,16 +1045,6 @@ bool integrate(Params &params)
         params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
-      // Wall velocity
-      doWallVelocity(
-        params.pairKernelSize, 0, params.velocityStream, PBC_X == 0, PBC_Y == 0,
-        false, params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params);
-
       // Flow velocity
       if (USE_FLOW == 1)
       {
@@ -1049,9 +1066,23 @@ bool integrate(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::TEMP5],
           params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.inputs.flowVel,
+          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::RP],
+          params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
+
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+      // Wall velocity, should be after flow so that possible drag is applied
+      // correctly
+      KERNEL_LAUNCH(
+        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
+        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
+        params.inputs.wallDragStrength);
+#endif
 
       // Correct
       KERNEL_LAUNCH(
@@ -1282,11 +1313,13 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     JSON_READ(inputs, j, flowLbb);
     JSON_READ(inputs, j, flowTfr);
     JSON_READ(inputs, j, flowVel);
+    JSON_READ(inputs, j, wallDragStrength);
 
     assert(inputs.muZero > 0);
     assert(inputs.boxRelDim.x > 0);
     assert(inputs.boxRelDim.y > 0);
     assert(inputs.boxRelDim.z > 0);
+    assert(inputs.wallDragStrength >= 0.0 && inputs.wallDragStrength <= 1.0);
 
     inputs.fZeroPerMuZero = inputs.sigmaZero * inputs.avgRad / inputs.muZero;
     inputs.minRad         = 0.1 * inputs.avgRad;
@@ -1381,8 +1414,9 @@ void commonSetup(Params &params)
     params.ddps[i] = params.deviceDoubleMemory + i * params.state.dataStride;
 
   // Integers
-  // 35 is just a guess, and roughly it seems to hold true with 3D sim.
-  const uint32_t avgNumNeighbors = 35;
+  // It seems to roughly hold that in 3 dimensions the total number of neighbors
+  // is < (24 x numBubbles) and in 2D < (8 x numBubbles)
+  const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 8;
   params.state.pairStride        = avgNumNeighbors * params.state.dataStride;
 
   params.state.memReqI =
@@ -1439,7 +1473,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
                 params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
                 params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
                 params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::RP],
-                params.dips[(uint32_t)DIP::FLAGS], bubblesPerDim,
+                params.dips[(uint32_t)DIP::FLAGS],
+                params.dips[(uint32_t)DIP::INDEX], bubblesPerDim,
                 params.state.tfr, params.state.lbb, avgRad,
                 params.inputs.minRad, params.state.numBubbles);
 
@@ -1832,7 +1867,7 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     commonSetup(params);
 
     const uint64_t doubleBytes = params.state.memReqD / 2;
-    const uint64_t intBytes    = sizeof(int) * 3 * params.state.dataStride;
+    const uint64_t intBytes    = sizeof(int) * 4 * params.state.dataStride;
 
     if (fileSize !=
         sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes +
@@ -1933,7 +1968,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     const uint64_t newDataStride =
       params.state.numBubbles +
       !!(params.state.numBubbles % 32) * (32 - params.state.numBubbles % 32);
-    const uint32_t numIntComponents    = 3;
+    const uint32_t numIntComponents    = 4;
     const uint32_t numDoubleComponents = (uint32_t)DDP::NUM_VALUES / 2;
     const uint64_t doubleDataSize =
       numDoubleComponents * newDataStride * sizeof(double);
