@@ -2171,26 +2171,23 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy1            = params.state.energy2;
     }
 
-    ++params.state.numStepsInTimeStep;
-  }
-
-  if ((int)(scaledTime * params.inputs.snapshotFrequency) >=
-      params.state.numSnapshot)
-  {
-    // Calculate total energy
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
-
-    if (NUM_DIM == 3)
+    if ((int)(scaledTime * params.inputs.snapshotFrequency) >=
+        params.state.numSnapshots)
     {
-      KERNEL_LAUNCH(
-        potentialEnergyKernel, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
-        params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
-        params.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
-        params.ddps[(uint32_t)DDP::Z]);
+      // Calculate total energy
+      KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                    params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
+
+      if (NUM_DIM == 3)
+      {
+        KERNEL_LAUNCH(
+          potentialEnergyKernel, params.pairKernelSize, 0, 0,
+          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+          params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
+          PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
+          PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
+          PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
       }
       else
       {
@@ -2203,8 +2200,13 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
           PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
       }
 
-    saveSnapshotToFile(params);
+      saveSnapshotToFile(params);
+    }
+
+    ++params.state.numStepsInTimeStep;
   }
+
+  
 
   if (signalReceived == 1)
   {
