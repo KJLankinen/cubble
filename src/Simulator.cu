@@ -732,7 +732,7 @@ double stabilize(Params &params)
           params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
-#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
@@ -779,7 +779,7 @@ double stabilize(Params &params)
           params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
-#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
@@ -959,7 +959,7 @@ bool integrate(Params &params)
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
-#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
       // Wall velocity, should be after flow so that possible drag is applied
       // correctly
       KERNEL_LAUNCH(
@@ -1071,7 +1071,7 @@ bool integrate(Params &params)
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
-#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
       // Wall velocity, should be after flow so that possible drag is applied
       // correctly
       KERNEL_LAUNCH(

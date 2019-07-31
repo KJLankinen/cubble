@@ -470,7 +470,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *vz, dvec lbb, dvec tfr,
                                    double fZeroPerMuZero, double dragCoeff)
 {
-#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
   const int tid = getGlobalTid();
   if (tid < numValues)
   {
