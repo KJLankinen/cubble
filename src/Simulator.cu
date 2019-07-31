@@ -600,7 +600,7 @@ void saveSnapshotToFile(Params &params)
         params.previousY.resize(params.state.dataStride);
         params.previousZ.resize(params.state.dataStride);
 
-        for (uint64_t i = 0; i < (uint64_t)param.state.numBubbles; ++i)
+        for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
         {
           params.previousX[intData[i]] =
             doubleData[i + 0 * params.state.dataStride];
