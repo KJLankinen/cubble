@@ -73,8 +73,5 @@
   "numStepsToRelax": 1e4,
 
   "maxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "maxDeltaEnergy": 1e-5,
-
-  "snapshotFrequencyExpl" : "How often are snapshots saved. Bigger number can be used to get smoother animations, 0.0 means no snapshots.",
-  "snapshotFrequency" : 1.0
+  "maxDeltaEnergy": 1e-5
 }
