@@ -52,9 +52,9 @@ def main():
     
     sb_modules =    "cuda/10.0.130 gcc/6.3.0"
     sb_mem =        "32G"
-    sb_time =       "120:00:00"
+    sb_time =       "4:00:00"
     sb_gres =       "gpu:1"
-    sb_constraint = "\"volta\""
+    sb_constraint = "'volta|pascal'"
     sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
