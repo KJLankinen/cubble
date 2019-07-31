@@ -1,9 +1,9 @@
 #!/bin/bash
 # This is a comment!
 {
-	virtualenv -p python3 $1 &&
+	python3 -m venv $1 &&
 	. $1/bin/activate &&
-	pip install -r scripts/requirements.txt
+	pip install -r $2
 
 } || {
 	set -e

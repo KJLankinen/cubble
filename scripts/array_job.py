@@ -6,7 +6,6 @@ import os
 import copy
 import datetime
 import subprocess
-import pwd
 import shutil
 import errno
 
@@ -58,6 +57,8 @@ def main():
     sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
+
+    conversion_key_word = "convert"
     
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
@@ -84,10 +85,10 @@ def main():
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
 
 
-    if len(sys.argv) > 2 and sys.argv[2] == "vtu":
-        from create_venv import virtual_environment_name
+    if len(sys.argv) > 2 and sys.argv[2] == conversion_key_word:
+        from create_venv.create_venv import virtual_environment
         vtu_conversion_bash = \
-            f"source {root_dir.path}/{virtual_environment_name}/bin/activate\n\
+            f"source {virtual_environment.resolve()}/bin/activate\n\
             python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} vtu_snapshots\n\
             deactivate"
     else:

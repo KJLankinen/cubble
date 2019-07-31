@@ -3,18 +3,20 @@ from pathlib import Path
 import logging
 import os
 
+dir_of_current_file = Path(__file__).parent
+
 ###########################################################
 
 shell_script_name = "set_up_venv.sh"
 virtual_environment_name = "cubble_python_venv"
+virtual_environment = dir_of_current_file.parent / virtual_environment_name
+requirements_path = dir_of_current_file / "requirements.txt"
 logging.basicConfig(level=logging.INFO)
+
 
 ############################################################
 
-dir_of_current_file = Path(__file__).parent
-
 shell_script = dir_of_current_file / shell_script_name
-virtual_environment = dir_of_current_file.parent / virtual_environment_name
 
 
 def prompt_bool():
@@ -37,13 +39,14 @@ if not virtual_environment.exists():
 
     if x == "y":
         print('Creating new virtual environment')
-        os.chmod(shell_script, 0o740)
         try:
-            subprocess.run(["sh", f"{shell_script}", f"{virtual_environment_name}"], check=True)
+            os.chmod(shell_script, 0o740)
+            subprocess.run(["sh",  f"{shell_script.resolve()}", f"{virtual_environment.resolve()}", f"{requirements_path.resolve()}"], check=True)
             logging.info(f'New virtual environment in {virtual_environment}')
         except subprocess.CalledProcessError as e:
             logging.warning(e.output)
-        os.chmod(shell_script, 0o640)
+        finally:
+            os.chmod(shell_script, 0o640)
     elif x == "n":
         print(f"You can silence this message in the future. This will create an empty directory in {virtual_environment.resolve()}\n"
               f"Ignore future prompt to create new environment? [y/n]")
