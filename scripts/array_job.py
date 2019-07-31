@@ -10,8 +10,6 @@ import pwd
 import shutil
 import errno
 
-from create_venv import virtual_environment_name
-
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
     for key, val in inbound.items():
@@ -85,6 +83,16 @@ def main():
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
 
+
+    if len(sys.argv) > 2 and sys.argv[2] == "vtu":
+        from create_venv import virtual_environment_name
+        vtu_conversion_bash = \
+            f"source {root_dir.path}/{virtual_environment_name}/bin/activate\n\
+            python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} vtu_snapshots\n\
+            deactivate"
+    else:
+        vtu_conversion_bash = ""
+
     compile_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_compile\n\
@@ -151,6 +159,7 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 
     # Important to echo the continue script to file with single quotes to avoid bash variable expansion
     # See the second to last line of this script.
+
     array_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble\n\
@@ -173,10 +182,7 @@ mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + continue_script.name + "; fi\n\
 if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi\n"\
-f"source {root_dir.path}/{virtual_environment_name}/bin/activate\n\
-python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} vtu_snapshots\n\
-deactivate"
-
++ vtu_conversion_bash
 
     print("Launching an array of processes that run the simulation.")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
