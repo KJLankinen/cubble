@@ -199,6 +199,7 @@ struct SimulationInputs
   double timeScalingFactor = 0.0;
   double timeStepIn        = 0.0;
   double wallDragStrength  = 0.0;
+  double snapshotFrequency = 0.0;
 
   int numBubblesPerCell = 0;
   int rngSeed           = 0;
@@ -239,6 +240,7 @@ struct SimulationInputs
     equal &= numBubblesIn == o.numBubblesIn;
     equal &= minNumBubbles == o.minNumBubbles;
     equal &= wallDragStrength == o.wallDragStrength;
+    equal &= snapshotFrequency == o.snapshotFrequency;
 
     return equal;
   }
@@ -269,6 +271,7 @@ struct SimulationInputs
     PRINT_PARAM(numBubblesIn);
     PRINT_PARAM(minNumBubbles);
     PRINT_PARAM(wallDragStrength);
+    PRINT_PARAM(snapshotFrequency);
     std::cout << "-----------------End----------------\n" << std::endl;
   }
 };
@@ -1314,6 +1317,7 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
     JSON_READ(inputs, j, flowTfr);
     JSON_READ(inputs, j, flowVel);
     JSON_READ(inputs, j, wallDragStrength);
+    JSON_READ(inputs, j, snapshotFrequency);
 
     assert(inputs.muZero > 0);
     assert(inputs.boxRelDim.x > 0);
@@ -1357,10 +1361,6 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 
   params.state.tfr      = d * bubblesPerDim.asType<double>() + params.state.lbb;
   params.state.interval = params.state.tfr - params.state.lbb;
-  params.inputs.flowTfr =
-    params.state.interval * params.inputs.flowTfr + params.state.lbb;
-  params.inputs.flowLbb =
-    params.state.interval * params.inputs.flowLbb + params.state.lbb;
   params.state.timeStep = params.inputs.timeStepIn;
 
   // Determine the maximum number of Morton numbers for the simulation box
@@ -1639,6 +1639,10 @@ void initializeFromJson(const char *inputFileName, Params &params)
   t                     = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
   params.state.tfr      = dvec(t, t, t) * relativeSize;
   params.state.interval = params.state.tfr - params.state.lbb;
+  params.inputs.flowTfr =
+    params.state.interval * params.inputs.flowTfr + params.state.lbb;
+  params.inputs.flowLbb =
+    params.state.interval * params.inputs.flowLbb + params.state.lbb;
 
   transformPositions(params, false);
 
@@ -2063,7 +2067,8 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
   else
   {
     initializeFromJson(inputFileName.c_str(), params);
-    saveSnapshotToFile(params);
+    if (params.inputs.snapshotFrequency > 0.0)
+      saveSnapshotToFile(params);
   }
 
   std::cout << "\n==========\nIntegration\n==========" << std::endl;
@@ -2161,22 +2166,54 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                 << std::setw(10) << std::left << params.state.numStepsInTimeStep
                 << std::endl;
 
-      saveSnapshotToFile(params);
-
       ++params.state.timesPrinted;
       params.state.numStepsInTimeStep = 0;
       params.state.energy1            = params.state.energy2;
     }
 
+    if ((int)(scaledTime * params.inputs.snapshotFrequency) >=
+        params.state.numSnapshots)
+    {
+      // Calculate total energy
+      KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                    params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
+
+      if (NUM_DIM == 3)
+      {
+        KERNEL_LAUNCH(
+          potentialEnergyKernel, params.pairKernelSize, 0, 0,
+          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+          params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
+          PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
+          PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
+          PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
+      }
+      else
+      {
+        KERNEL_LAUNCH(
+          potentialEnergyKernel, params.pairKernelSize, 0, 0,
+          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+          params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
+          PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
+          PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
+      }
+
+      saveSnapshotToFile(params);
+    }
+
     ++params.state.numStepsInTimeStep;
   }
+
+  
 
   if (signalReceived == 1)
   {
     std::cout << "Timeout signal received." << std::endl;
     serializeStateAndData(outputFileName.c_str(), params);
   }
-  else
+  else if (params.inputs.snapshotFrequency > 0.0)
     saveSnapshotToFile(params);
 
   deinit(params);
