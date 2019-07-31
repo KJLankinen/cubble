@@ -330,6 +330,7 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, bool wrapX,
                   tfr.z, mulZ, mulOldZ);
 }
 
+#if (USE_PROFILING == 1)
 void startProfiling(bool start)
 {
   if (start)
@@ -344,6 +345,7 @@ void stopProfiling(bool stop, bool &continueIntegration)
     continueIntegration = false;
   }
 }
+#endif
 
 dim3 getGridSize(Params &params)
 {
@@ -730,6 +732,7 @@ double stabilize(Params &params)
           params.state.interval.z, params.state.lbb.z, PBC_Z == 1,
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
+#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
@@ -738,6 +741,7 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
           params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
+#endif
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -775,6 +779,7 @@ double stabilize(Params &params)
           params.state.interval.y, params.state.lbb.y, PBC_Y == 1,
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
+#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
@@ -783,6 +788,7 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
           params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
+#endif
 
         KERNEL_LAUNCH(
           correctKernel, params.defaultKernelSize, 0, 0,
@@ -953,6 +959,7 @@ bool integrate(Params &params)
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
+#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
       // Wall velocity, should be after flow so that possible drag is applied
       // correctly
       KERNEL_LAUNCH(
@@ -963,6 +970,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
         params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
         params.inputs.wallDragStrength);
+#endif
 
       // Correct
       KERNEL_LAUNCH(
@@ -1063,6 +1071,7 @@ bool integrate(Params &params)
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
 
+#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
       // Wall velocity, should be after flow so that possible drag is applied
       // correctly
       KERNEL_LAUNCH(
@@ -1073,6 +1082,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
         params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
         params.inputs.wallDragStrength);
+#endif
 
       // Correct
       KERNEL_LAUNCH(

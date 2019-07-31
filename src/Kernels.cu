@@ -407,9 +407,9 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues)
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
                                     double *r, double *w, int *aboveMinRadFlags,
-                                    int *indices,
-                                    ivec bubblesPerDim, dvec tfr, dvec lbb,
-                                    double avgRad, double minRad, int numValues)
+                                    int *indices, ivec bubblesPerDim, dvec tfr,
+                                    dvec lbb, double avgRad, double minRad,
+                                    int numValues)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
@@ -470,6 +470,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *vz, dvec lbb, dvec tfr,
                                    double fZeroPerMuZero, double dragCoeff)
 {
+#if (PBC_X != 0 || PBC_Y != 0 || PBC_Z != 0)
   const int tid = getGlobalTid();
   if (tid < numValues)
   {
@@ -544,6 +545,9 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
     }
 #endif
   }
+#else
+  return;
+#endif
 }
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
