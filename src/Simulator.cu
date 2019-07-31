@@ -1361,10 +1361,6 @@ void readInputs(Params &params, const char *inputFileName, ivec &bubblesPerDim)
 
   params.state.tfr      = d * bubblesPerDim.asType<double>() + params.state.lbb;
   params.state.interval = params.state.tfr - params.state.lbb;
-  params.inputs.flowTfr =
-    params.state.interval * params.inputs.flowTfr + params.state.lbb;
-  params.inputs.flowLbb =
-    params.state.interval * params.inputs.flowLbb + params.state.lbb;
   params.state.timeStep = params.inputs.timeStepIn;
 
   // Determine the maximum number of Morton numbers for the simulation box
@@ -1643,6 +1639,10 @@ void initializeFromJson(const char *inputFileName, Params &params)
   t                     = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
   params.state.tfr      = dvec(t, t, t) * relativeSize;
   params.state.interval = params.state.tfr - params.state.lbb;
+  params.inputs.flowTfr =
+    params.state.interval * params.inputs.flowTfr + params.state.lbb;
+  params.inputs.flowLbb =
+    params.state.interval * params.inputs.flowLbb + params.state.lbb;
 
   transformPositions(params, false);
 
