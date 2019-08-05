@@ -8,6 +8,9 @@ import datetime
 import subprocess
 import shutil
 import errno
+import argparse
+from pathlib import Path
+
 
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
@@ -45,27 +48,51 @@ class File:
             print(self.path)
 
 def main():
+
+    parser = argparse.ArgumentParser(
+        description='This script starts an array of slurm jobs to perform the bubble simulation'
+    )
+
+    parser.add_argument(
+        '--save_dir',
+        type=str,
+        help='Name of directory to save snapshots and general output to'
+    )
+
+    parser.add_argument(
+        '--convert',
+        action='store_true',
+        help=f'Optional: Convert the snapshots of the simulation from csv to vtu files. Maybe be slow for many files. '
+        f'To use the conversion use: $ python3 {Path(__file__).name} [...] --convert'
+    )
+
+    parser.add_argument(
+        '-s',
+        action='store_true',
+        help='Optional: If --convert is set this will find all snapshots in all "run_*number*" files and convert them'
+    )
+
+    cubble_namespace = parser.parse_args()
+
     if len(sys.argv) < 2:
         print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
         return 1
     
     sb_modules =    "cuda/10.0.130 gcc/6.3.0"
     sb_mem =        "32G"
-    sb_time =       "4:00:00"
+    sb_time =       "08:00:00"
     sb_gres =       "gpu:1"
     sb_constraint = "'volta|pascal'"
     sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
 
-    conversion_key_word = "convert"
-    
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
     root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     src_dir =               File("src", root_dir.path)
     incl_dir =              File("incl", root_dir.path)
-    data_dir =              File(sys.argv[1],
+    data_dir =              File(cubble_namespace.save_dir,
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
                                  True)
@@ -85,11 +112,12 @@ def main():
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
 
 
-    if len(sys.argv) > 2 and sys.argv[2] == conversion_key_word:
+    if cubble_namespace.convert:
+
         from create_venv.create_venv import virtual_environment
         vtu_conversion_bash = \
             f"source {virtual_environment.resolve()}/bin/activate\n\
-            python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} vtu_snapshots\n\
+            python {root_dir.path}/scripts/convert_csv_to_vtu.py {data_dir.path} \n\
             deactivate"
     else:
         vtu_conversion_bash = ""
@@ -185,20 +213,20 @@ if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + c
 if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi\n"\
 + vtu_conversion_bash
 
-    print("Launching an array of processes that run the simulation.")
-    array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    array_stdout = array_process.communicate(input=array_script_str.encode())[0]
-
-    if array_process.returncode != 0:
-        print("Array process submission was not successful!")
-        return array_process.returncode
-    else:
-        print(str(array_stdout.decode()))
-
-    squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
-    print("Slurm queue:")
-    print(str(squeue_process.communicate()[0].decode()))
-    print("\nJob submission done!")
+    # print("Launching an array of processes that run the simulation.")
+    # array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    # array_stdout = array_process.communicate(input=array_script_str.encode())[0]
+    #
+    # if array_process.returncode != 0:
+    #     print("Array process submission was not successful!")
+    #     return array_process.returncode
+    # else:
+    #     print(str(array_stdout.decode()))
+    #
+    # squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
+    # print("Slurm queue:")
+    # print(str(squeue_process.communicate()[0].decode()))
+    # print("\nJob submission done!")
 
 if __name__ == "__main__":
     main()
