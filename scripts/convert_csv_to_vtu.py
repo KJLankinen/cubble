@@ -6,6 +6,8 @@ import sys
 import numpy as np
 import pandas as pd
 import time
+import argparse
+
 
 ########################################################################################################################
 # User adjustable variables
@@ -14,12 +16,59 @@ import time
 csv_pattern = 'snapshot.csv.[0-9]*'
 default_output_folder_name = "vtu_snapshots"
 run_folder_pattern = 'run_[0-9]*'
-logging.basicConfig(level=logging.INFO)  # logging.INFO or logging.DEBUG or logging.WARNING
+logging.basicConfig(level=logging.WARN)  # logging.INFO or logging.DEBUG or logging.WARNING
 
 ########################################################################################################################
 directory_of_this_script = Path(__file__).parent  # Current script file folder path
 data_directory = directory_of_this_script / "data"
 info = logging.info; debug = logging.debug; warn = logging.warning
+
+
+parser = argparse.ArgumentParser(
+    description='This script converts csv snapshots in a given directory to vtu files'
+)
+
+parser.add_argument(
+    '--snapshot_dir',
+    type=str,
+    help='Location of folder containing the snapshots to be converted'
+)
+
+parser.add_argument(
+    '--save_dir_name',
+    type=str,
+    default=default_output_folder_name,
+    help='(Optional) Name of directory to be created in --snapshot_dir where all converted snapshots will be saved'
+)
+
+parser.add_argument(
+    '-s',
+    action='store_true',
+    help=f'(Optional flag) If set will attempt to find all folders with pattern "{run_folder_pattern}" '
+    f'(or specified with --sub_folder_pattern) in --snapshot_dir and convert all snapshots in the found folders'
+)
+
+parser.add_argument(
+    '--sub_folder_pattern',
+    type=str,
+    default=run_folder_pattern,
+    help=f'(Optional) If -s is set this is the pattern that is used to recognise subfolders in --snapshot_dir '
+    f'that contain snapshots. Default: "{run_folder_pattern}"'
+)
+
+parser.add_argument(
+    '-i',
+    action='store_true',
+    help=f'(Optional) Change the level of output that is printed to "INFO": print all messages with useful information, '
+    f'otherwise only critical messages will be printed.'
+)
+convert_namespace = parser.parse_args()
+run_folder_pattern = str(convert_namespace.sub_folder_pattern)
+snapshot_dir = convert_namespace.snapshot_dir
+find_subfolders = convert_namespace.s
+save_dir_name = convert_namespace.save_dir_name
+if convert_namespace.i:
+    logging.getLogger().setLevel(logging.INFO)
 
 
 def convert_run(snapshot_folder, output_folder):
@@ -78,36 +127,42 @@ def convert_run(snapshot_folder, output_folder):
         diff = time.time() - start
         info(f"Converted {snapshot_paths.size} snapshots in {diff:.2f}s ({snapshot_paths.size / diff:.2f} snapshots/s)")
 
+#if len(sys.argv) > 1:
+#    raise Exception("Wrong arguments given. Use --help to find list of arguments")
 
-if len(sys.argv) > 1:
-    user_given_snapshot_directory = sys.argv[1]
+if snapshot_dir:
+    user_given_snapshot_directory = snapshot_dir
     snapshot_folder = Path(user_given_snapshot_directory)
-    save_dir = None
+
     if not snapshot_folder.exists():
         raise Exception(f"Snapshot directory {snapshot_folder.resolve()} does not exist. Please give absolute path.")
 
-    if len(sys.argv) == 2:
-        save_dir = snapshot_folder / default_output_folder_name
-    elif len(sys.argv) == 3:
-        user_given_save_directory = sys.argv[2]
-        save_dir = Path(user_given_save_directory)
-
-    elif len(sys.argv) > 3:
-        raise Exception("Too many arguments given. Expected one or two: location of csv snapshots "
-                        "(and optionally folder path to save to relative to snapshot dir, otherwise inside snapshot dir)")
     try:
-        convert_run(snapshot_folder, save_dir)
+        if find_subfolders:
+            sub_folders = sorted(snapshot_folder.glob(run_folder_pattern))
+
+            if len(sub_folders) == 0:
+                warn(f"No matching subfolders with pattern {run_folder_pattern} found in {snapshot_folder.resolve()}")
+
+            for sub_folder in sub_folders:
+                save_dir = sub_folder / save_dir_name
+                convert_run(sub_folder, save_dir)
+        else:
+            save_dir = snapshot_folder / save_dir_name
+            convert_run(snapshot_folder, save_dir)
+
     except Exception as e:
         warn(f"Could not convert files in {snapshot_folder}:{e}")
 
 else:
-    print("No arguments given, assuming that everything in data folder should be converted")
+    warn("No arguments given, assuming that everything in data folder should be converted "
+          "(If this is accidental use --help to see the possible arguments)")
 
-    print(f"\nAre you sure you want to find all possible snapshots in {data_directory.resolve()} and convert them "
+    warn(f"\nAre you sure you want to find all possible snapshots in {data_directory.resolve()} and convert them "
           f"\n(this is NOT recommended and may take a long time)? [y/n]:")
     x = input()
     while x != "y" and x != "n":
-        print("Please enter y or n")
+        warn("Please enter y or n")
         x = input()
 
     if x == "y":
@@ -124,4 +179,4 @@ else:
                             try:
                                 convert_run(run_folder, output_folder)
                             except Exception as e:
-                                print(f"Could not convert files in {run_folder}:{e}")
+                                warn(f"Could not convert files in {run_folder}:{e}")
