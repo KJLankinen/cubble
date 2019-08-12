@@ -141,6 +141,8 @@ cd " + temp_dir.path + "\n\
 if [ -f " + result_file.path + " ]; then cp " + result_file.path + " .; fi\n\
 srun " + executable.path + " " + binary.path + " " + binary.name + "\n\
 rm " + binary.path + "\n\
+tar cf snapshots.tar snapshot.csv.*\n\
+rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ] && [ -f " + continue_script.name + " ] && [[ ( $TIMES_CALLED < 3 ) ]]; \
@@ -167,6 +169,8 @@ module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
 srun " + executable.path + " " + array_input.path + " " + binary.name + "\n\
+tar cf snapshots.tar snapshot.csv.*\n\
+rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
 if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + continue_script.name + "; fi\n\
