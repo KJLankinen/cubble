@@ -53,8 +53,7 @@ def main():
     sb_modules =    "cuda/10.0.130 gcc/6.3.0"
     sb_mem =        "32G"
     sb_time =       "120:00:00"
-    sb_gres =       "gpu:1"
-    sb_constraint = "\"volta\""
+    sb_gres =       "gpu:v100:1"
     sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =  "ALL"
     sb_signal =     "USR1@180"
@@ -89,7 +88,6 @@ def main():
 #SBATCH --mem=1G\n\
 #SBATCH --time=00:10:00\n\
 #SBATCH --gres=" + sb_gres + "\n\
-#SBATCH --constraint=" + sb_constraint + "\n\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
@@ -128,7 +126,6 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
-#SBATCH --constraint=" + sb_constraint + "\n\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
@@ -157,7 +154,6 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
-#SBATCH --constraint=" + sb_constraint + "\n\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
