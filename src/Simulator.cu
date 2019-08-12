@@ -112,13 +112,14 @@ struct SimulationState
   double timeStep              = 0.0;
   double averageSurfaceAreaIn  = 0.0;
 
-  int numBubbles        = 0;
-  int maxNumCells       = 0;
-  int numPairs          = 0;
-  uint32_t numSnapshots = 0;
-  uint32_t timesPrinted = 0;
-  uint32_t dataStride   = 0;
-  uint32_t pairStride   = 0;
+  int numBubbles         = 0;
+  int maxNumCells        = 0;
+  int numPairs           = 0;
+  uint32_t numSnapshots  = 0;
+  uint32_t timesPrinted  = 0;
+  uint32_t originalDataStride = 0;
+  uint32_t dataStride    = 0;
+  uint32_t pairStride    = 0;
 
   bool operator==(const SimulationState &o)
   {
@@ -147,6 +148,7 @@ struct SimulationState
     equal &= numSnapshots == o.numSnapshots;
     equal &= timesPrinted == o.timesPrinted;
 
+    equal &= originalDataStride == o.originalDataStride;
     equal &= dataStride == o.dataStride;
     equal &= pairStride == o.pairStride;
 
@@ -175,6 +177,7 @@ struct SimulationState
     PRINT_PARAM(numPairs);
     PRINT_PARAM(numSnapshots);
     PRINT_PARAM(timesPrinted);
+    PRINT_PARAM(originalDataStride);
     PRINT_PARAM(dataStride);
     PRINT_PARAM(pairStride);
     std::cout << "----------------End----------------\n" << std::endl;
@@ -296,6 +299,7 @@ struct Params
   double *deviceDoubleMemory = nullptr;
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
+
   std::vector<int> previousX;
   std::vector<int> previousY;
   std::vector<int> previousZ;
@@ -1627,6 +1631,11 @@ void initializeFromJson(const char *inputFileName, Params &params)
   ivec bubblesPerDim = ivec(0, 0, 0);
   readInputs(params, inputFileName, bubblesPerDim);
   commonSetup(params);
+
+  // This parameter is used with serialization. It should be immutable and never
+  // be changed after this. It just saves the original dataStride.
+  params.state.originalDataStride = params.state.dataStride;
+
   generateStartingData(params, bubblesPerDim);
 
   std::cout << "Letting bubbles settle after they've been created and before "
@@ -1886,17 +1895,43 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t doubleBytes = params.state.memReqD / 2;
     const uint64_t intBytes    = sizeof(int) * 4 * params.state.dataStride;
 
-    if (fileSize !=
-        sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes +
-          header.size())
+    // Previous positions of bubbles are saved on the cpu. They are accessed
+    // with the immutable index of a bubble and thus they 'must' contain all the
+    // data from the start of the simulation. This could be done in a better way
+    // (by e.g. having a separate map where immutable indices are translated to
+    // indices to these vectors) but I've thought that's just unnecessary
+    // complication.
+    params.previousX.resize(params.state.originalDataStride);
+    params.previousY.resize(params.state.originalDataStride);
+    params.previousZ.resize(params.state.originalDataStride);
+    const uint64_t previousPosBytes =
+      params.previousX.size() * sizeof(params.previousX[0]);
+
+    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes +
+                      intBytes + header.size() + 3 * previousPosBytes)
+    {
       throw std::runtime_error("The given binary file is incorrect size. Check "
                                "that the file is correct.");
+    }
 
     // Doubles
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory),
                          static_cast<void *>(&byteData[offset]), doubleBytes,
                          cudaMemcpyHostToDevice));
     offset += doubleBytes;
+
+    // Previous positions
+    std::memcpy(static_cast<void *>(params.previousX.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
+
+    std::memcpy(static_cast<void *>(params.previousY.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
+
+    std::memcpy(static_cast<void *>(params.previousZ.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
 
     // Ints
     CUDA_CALL(
@@ -1990,8 +2025,10 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     const uint64_t doubleDataSize =
       numDoubleComponents * newDataStride * sizeof(double);
     const uint64_t intDataSize = numIntComponents * newDataStride * sizeof(int);
-    const uint64_t totalSize   = sizeof(params.state) + sizeof(params.inputs) +
-                               doubleDataSize + intDataSize + header.size();
+    const uint64_t totalSize =
+      sizeof(params.state) + sizeof(params.inputs) + doubleDataSize +
+      intDataSize + header.size() +
+      3 * params.previousX.size() * sizeof(params.previousX[0]);
 
     std::vector<char> byteData;
     byteData.resize(totalSize);
@@ -2026,6 +2063,24 @@ void serializeStateAndData(const char *outputFileName, Params &params)
       const uint64_t bytesToCopy = sizeof(double) * newDataStride;
       std::memcpy(static_cast<void *>(&byteData[offset]),
                   static_cast<void *>(fromPtr), bytesToCopy);
+      offset += bytesToCopy;
+    }
+
+    // CPU vectors for previous bubble positions
+    {
+      const uint64_t bytesToCopy =
+        params.previousX.size() * sizeof(params.previousX[0]);
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousX.data()), bytesToCopy);
+      offset += bytesToCopy;
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousY.data()), bytesToCopy);
+      offset += bytesToCopy;
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousZ.data()), bytesToCopy);
       offset += bytesToCopy;
     }
 
