@@ -104,20 +104,22 @@ struct SimulationState
   uint64_t memReqI             = 0;
   uint64_t numIntegrationSteps = 0;
   uint64_t numStepsInTimeStep  = 0;
-  double simulationTime        = 0.0;
+  uint64_t timeInteger         = 0;
+  double timeFraction          = 0.0;
   double energy1               = 0.0;
   double energy2               = 0.0;
   double maxBubbleRadius       = 0.0;
   double timeStep              = 0.0;
   double averageSurfaceAreaIn  = 0.0;
 
-  int numBubbles        = 0;
-  int maxNumCells       = 0;
-  int numPairs          = 0;
-  uint32_t numSnapshots = 0;
-  uint32_t timesPrinted = 0;
-  uint32_t dataStride   = 0;
-  uint32_t pairStride   = 0;
+  int numBubbles         = 0;
+  int maxNumCells        = 0;
+  int numPairs           = 0;
+  uint32_t numSnapshots  = 0;
+  uint32_t timesPrinted  = 0;
+  uint32_t originalDataStride = 0;
+  uint32_t dataStride    = 0;
+  uint32_t pairStride    = 0;
 
   bool operator==(const SimulationState &o)
   {
@@ -131,7 +133,8 @@ struct SimulationState
     equal &= numIntegrationSteps == o.numIntegrationSteps;
 
     equal &= numStepsInTimeStep == o.numStepsInTimeStep;
-    equal &= simulationTime == o.simulationTime;
+    equal &= timeInteger == o.timeInteger;
+    equal &= timeFraction == o.timeFraction;
     equal &= energy1 == o.energy1;
 
     equal &= energy2 == o.energy2;
@@ -145,6 +148,7 @@ struct SimulationState
     equal &= numSnapshots == o.numSnapshots;
     equal &= timesPrinted == o.timesPrinted;
 
+    equal &= originalDataStride == o.originalDataStride;
     equal &= dataStride == o.dataStride;
     equal &= pairStride == o.pairStride;
 
@@ -161,7 +165,8 @@ struct SimulationState
     PRINT_PARAM(memReqI);
     PRINT_PARAM(numIntegrationSteps);
     PRINT_PARAM(numStepsInTimeStep);
-    PRINT_PARAM(simulationTime);
+    PRINT_PARAM(timeInteger);
+    PRINT_PARAM(timeFraction);
     PRINT_PARAM(energy1);
     PRINT_PARAM(energy2);
     PRINT_PARAM(maxBubbleRadius);
@@ -172,6 +177,7 @@ struct SimulationState
     PRINT_PARAM(numPairs);
     PRINT_PARAM(numSnapshots);
     PRINT_PARAM(timesPrinted);
+    PRINT_PARAM(originalDataStride);
     PRINT_PARAM(dataStride);
     PRINT_PARAM(pairStride);
     std::cout << "----------------End----------------\n" << std::endl;
@@ -293,6 +299,7 @@ struct Params
   double *deviceDoubleMemory = nullptr;
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
+
   std::vector<int> previousX;
   std::vector<int> previousY;
   std::vector<int> previousZ;
@@ -1221,7 +1228,16 @@ bool integrate(Params &params)
                             cudaMemcpyDeviceToDevice));
 
   ++params.state.numIntegrationSteps;
-  params.state.simulationTime += params.state.timeStep;
+
+  // As the total simulation time can reach very large numbers as the simulation
+  // goes on it's better to keep track of the time as two separate values. One
+  // large integer for the integer part and a double that is <= 1.0 to which the
+  // potentially very small timeStep gets added. This keeps the precision of the
+  // time relatively constant even when the simulation has run a long time.
+  params.state.timeFraction += params.state.timeStep;
+  params.state.timeInteger += (uint64_t)params.state.timeFraction;
+  params.state.timeFraction =
+    params.state.timeFraction - (uint64_t)params.state.timeFraction;
 
   // Delete & reorder
   bool updateNeighbors = params.state.numIntegrationSteps % 50 == 0;
@@ -1615,6 +1631,11 @@ void initializeFromJson(const char *inputFileName, Params &params)
   ivec bubblesPerDim = ivec(0, 0, 0);
   readInputs(params, inputFileName, bubblesPerDim);
   commonSetup(params);
+
+  // This parameter is used with serialization. It should be immutable and never
+  // be changed after this. It just saves the original dataStride.
+  params.state.originalDataStride = params.state.dataStride;
+
   generateStartingData(params, bubblesPerDim);
 
   std::cout << "Letting bubbles settle after they've been created and before "
@@ -1737,7 +1758,8 @@ void initializeFromJson(const char *inputFileName, Params &params)
   params.state.energy1 = params.cw.reduce<double, double *, double *>(
     &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP4],
     params.state.numBubbles);
-  params.state.simulationTime      = 0.0;
+  params.state.timeInteger         = 0;
+  params.state.timeFraction        = 0.0;
   params.state.timesPrinted        = 1;
   params.state.numIntegrationSteps = 0;
 }
@@ -1873,17 +1895,43 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t doubleBytes = params.state.memReqD / 2;
     const uint64_t intBytes    = sizeof(int) * 4 * params.state.dataStride;
 
-    if (fileSize !=
-        sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes +
-          header.size())
+    // Previous positions of bubbles are saved on the cpu. They are accessed
+    // with the immutable index of a bubble and thus they 'must' contain all the
+    // data from the start of the simulation. This could be done in a better way
+    // (by e.g. having a separate map where immutable indices are translated to
+    // indices to these vectors) but I've thought that's just unnecessary
+    // complication.
+    params.previousX.resize(params.state.originalDataStride);
+    params.previousY.resize(params.state.originalDataStride);
+    params.previousZ.resize(params.state.originalDataStride);
+    const uint64_t previousPosBytes =
+      params.previousX.size() * sizeof(params.previousX[0]);
+
+    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes +
+                      intBytes + header.size() + 3 * previousPosBytes)
+    {
       throw std::runtime_error("The given binary file is incorrect size. Check "
                                "that the file is correct.");
+    }
 
     // Doubles
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory),
                          static_cast<void *>(&byteData[offset]), doubleBytes,
                          cudaMemcpyHostToDevice));
     offset += doubleBytes;
+
+    // Previous positions
+    std::memcpy(static_cast<void *>(params.previousX.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
+
+    std::memcpy(static_cast<void *>(params.previousY.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
+
+    std::memcpy(static_cast<void *>(params.previousZ.data()),
+                static_cast<void *>(&byteData[offset]), previousPosBytes);
+    offset += previousPosBytes;
 
     // Ints
     CUDA_CALL(
@@ -1977,8 +2025,10 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     const uint64_t doubleDataSize =
       numDoubleComponents * newDataStride * sizeof(double);
     const uint64_t intDataSize = numIntComponents * newDataStride * sizeof(int);
-    const uint64_t totalSize   = sizeof(params.state) + sizeof(params.inputs) +
-                               doubleDataSize + intDataSize + header.size();
+    const uint64_t totalSize =
+      sizeof(params.state) + sizeof(params.inputs) + doubleDataSize +
+      intDataSize + header.size() +
+      3 * params.previousX.size() * sizeof(params.previousX[0]);
 
     std::vector<char> byteData;
     byteData.resize(totalSize);
@@ -2013,6 +2063,24 @@ void serializeStateAndData(const char *outputFileName, Params &params)
       const uint64_t bytesToCopy = sizeof(double) * newDataStride;
       std::memcpy(static_cast<void *>(&byteData[offset]),
                   static_cast<void *>(fromPtr), bytesToCopy);
+      offset += bytesToCopy;
+    }
+
+    // CPU vectors for previous bubble positions
+    {
+      const uint64_t bytesToCopy =
+        params.previousX.size() * sizeof(params.previousX[0]);
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousX.data()), bytesToCopy);
+      offset += bytesToCopy;
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousY.data()), bytesToCopy);
+      offset += bytesToCopy;
+
+      std::memcpy(static_cast<void *>(&byteData[offset]),
+                  static_cast<void *>(params.previousZ.data()), bytesToCopy);
       offset += bytesToCopy;
     }
 
@@ -2090,9 +2158,17 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
                        continueIntegration);
     continueIntegration &= signalReceived == 0;
 
-    const double scaledTime =
-      params.state.simulationTime * params.inputs.timeScalingFactor;
-    if ((int)scaledTime >= params.state.timesPrinted)
+    // Here we compare potentially very large integers (> 10e6) to each other
+    // and small doubles (<= 1.0) to each other to preserve precision.
+    const double nextPrintTime =
+      params.state.timesPrinted / params.inputs.timeScalingFactor;
+    const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
+    const double nextPrintTimeFraction  = nextPrintTime - nextPrintTimeInteger;
+
+    // Print at the earliest possible moment when simulation time is larger than
+    // scaled time
+    if (params.state.timeInteger >= nextPrintTimeInteger &&
+        params.state.timeFraction >= nextPrintTimeFraction)
     {
       // Calculate total energy
       KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
@@ -2139,7 +2215,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       std::ofstream resultFile("results.dat", std::ios_base::app);
       if (resultFile.is_open())
       {
-        resultFile << (int)scaledTime << " " << relRad << " "
+        resultFile << params.state.timesPrinted << " " << relRad << " "
                    << params.state.maxBubbleRadius / params.inputs.avgRad << " "
                    << params.state.numBubbles << " "
                    << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
@@ -2156,22 +2232,20 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
         calculateVolumeOfBubbles(params) / getSimulationBoxVolume(params);
 
       // Print some values
-      std::cout << std::setw(10) << std::left << (int)scaledTime
-                << std::setw(10) << std::left
-                << std::setprecision(6) << std::fixed << phi 
-                << std::setw(10) << std::left
-                << std::setprecision(6) << std::fixed << relRad 
-                << std::setw(10) << std::left << params.state.numBubbles
-                << std::setw(10) << std::left << params.state.numPairs
-                << std::setw(10) << std::left << params.state.numStepsInTimeStep
-                << std::endl;
+      std::cout << std::setw(10) << std::left << params.state.timesPrinted
+                << std::setw(10) << std::left << std::setprecision(6)
+                << std::fixed << phi << std::setw(10) << std::left
+                << std::setprecision(6) << std::fixed << relRad << std::setw(10)
+                << std::left << params.state.numBubbles << std::setw(10)
+                << std::left << params.state.numPairs << std::setw(10)
+                << std::left << params.state.numStepsInTimeStep << std::endl;
 
       ++params.state.timesPrinted;
       params.state.numStepsInTimeStep = 0;
       params.state.energy1            = params.state.energy2;
     }
 
-    if ((int)(scaledTime * params.inputs.snapshotFrequency) >=
+    if ((int)(params.state.timesPrinted * params.inputs.snapshotFrequency) >=
         params.state.numSnapshots)
     {
       // Calculate total energy
