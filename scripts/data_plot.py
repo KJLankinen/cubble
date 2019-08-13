@@ -14,8 +14,8 @@ def plot_data_loglog(data_file, json_file, ax):
     with open(json_file, 'r') as f:
         decoded_json = json.load(f)
             
-    phi = decoded_json["PhiTarget"]
-    kappa = decoded_json["Kappa"]
+    phi = decoded_json["phiTarget"]
+    kappa = decoded_json["kappa"]
     label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
     
     ax.loglog(x, y, '+', linewidth=1.5, label=label_str)
@@ -59,8 +59,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
                 with open(json_file, 'r') as f:
                     decoded_json = json.load(f)
             
-                phis.append(float(decoded_json["PhiTarget"]))
-                kappas.append(float(decoded_json["Kappa"]))
+                phis.append(float(decoded_json["phiTarget"]))
+                kappas.append(float(decoded_json["kappa"]))
                 json_files.append(json_file)
                 data_files.append(data_file)
 
@@ -94,8 +94,8 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     
 def main():
     arguments = sys.argv
-    data_file_name = "output.dat"
-    json_file_name = "output_parameters.json"
+    data_file_name = "results.dat"
+    json_file_name = "input_parameters.json"
     num_plots = 999
     
     if len(arguments) < 2:
