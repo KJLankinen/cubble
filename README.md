@@ -7,7 +7,6 @@ This is a CUDA accelerated version of and older code for simulating the coarseni
 ## Contents of the repository
 In addition to this readme, the repository contains the following items:
 - **include/**: All the extra dependencies are put here. E.g. the json parser and cub related files.
-- **Makefile**: Used to build the program.
 - **scripts/**: Contains scripts for running the program on triton and some scripts for plotting data.
 - **src/**: Contains all of the source code.
 - **default/**: Directory for the binaries of Make target 'default'
@@ -15,7 +14,7 @@ In addition to this readme, the repository contains the following items:
 - **final/**: Directory for the binaries of Make target 'final'
 
 ## Building and running the program
-**N.B.** The dimensionality of the simulation is controlled from the makefile.
+**N.B.** The dimensionality of the simulation is controlled from the makefiles.
 
 Each make target is built into a separate directory, final, default or debug. Each of these directories has its own makefile and all the targets are built/cleaned in the same way:
 ```
@@ -26,20 +25,17 @@ make clean
 Final target is the one that should be run when doing simulations. It's the fastest and most optimized.
 
 Default target is built with -O2 flag so it's quite fast, but some internal debug cababilities are still on and it's significantly slower than the final target. Mostly for testing some new cababilities.
+This can be used to test some new implementations, because some useful error reporting is still present, but the program still runs quite fast.
 
 Debug is built with -O0 and debug cababilities, only meant for debugging. Very slow.
 
 In addition to the options above, there are some extra parameters in the makefile which can be used to e.g. turn profiling on/off.
 
-The program can be run by typing
+To run the program, type the path to the executable and the two files used for input and output, e.g.
 ```
-make run
+bin/cubble input_parameters.json state.bin
 ```
-or by manually writing the path to the executable and the io files, e.g.
-```
-final/bin/cubble input_parameters.json output_parameters.json
-```
-The program runs until a certain amount of bubbles is left. After this, the program writes one final data file and returns.
+The program runs until a certain amount of bubbles is left.
 
 **N.B.** The parameter that controls this amount of bubbles (called MinNumBubbles) should always be larger than the number of bubbles in one cell multiplied by 3^NumDim. In other words, if the number of bubbles in a cell is 32 and the dimensionality of the program is 2 (2D simulation), then the minimum number of bubbles should be larger than **32 * 3^2 = 32 * 3 * 3 = 288**. For 3D this would be 864. **300 and 900 are nice round numbers for MinNumBubbles**.
 
