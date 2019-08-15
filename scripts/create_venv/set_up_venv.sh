@@ -1,5 +1,5 @@
 #!/bin/bash
-# This is a comment!
+# Creates new virtual python environment, activates it and installs required packages
 {
 	python3 -m venv $1 &&
 	. $1/bin/activate &&
