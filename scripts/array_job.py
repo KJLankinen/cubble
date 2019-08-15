@@ -12,6 +12,13 @@ import argparse
 from pathlib import Path
 
 
+# Assumes that whole application is contained in one folder above, normally cubble
+dir_name_of_application = Path(__file__).resolve().parent.parent.name
+if dir_name_of_application != "cubble":
+    raise Exception(f"The folder of this application is '{dir_name_of_application}'. "
+                    f"Please rename it to 'cubble' to ensure correct usage")
+
+
 def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
     os.makedirs(dir_name)
     for key, val in inbound.items():
@@ -68,13 +75,17 @@ def main():
 
     cubble_namespace = parser.parse_args()
 
+    
+
     if len(sys.argv) < 2:
         print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
         return 1
-    
+
+    sb_name = f"cubble_{cubble_namespace.name}"
+    sb_compile_name = f"compile_{sb_name}"
     sb_modules =    "cuda/10.0.130 gcc/6.3.0"
     sb_mem =        "32G"
-    sb_time =       "04:00:00"
+    sb_time =       "08:00:00"
     sb_gres =       "gpu:1"
     sb_constraint = "'volta|pascal'"
     sb_mail_user =  os.popen('git config user.email').read().replace("\n", "")
@@ -83,7 +94,7 @@ def main():
 
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
-    root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
+    root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)  ###
     src_dir =               File("src", root_dir.path)
     incl_dir =              File("incl", root_dir.path)
     data_dir =              File(cubble_namespace.name,
@@ -93,7 +104,7 @@ def main():
     make_file =             File("makefile", root_dir.path, "final", False, True)
     default_input =         File("input_parameters.json", root_dir.path, None, False, True)
     arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
-    executable =            File("cubble", data_dir.path)
+    executable =            File("cubble", data_dir.path) ###
     array_work_dir =        File("run_$RUN_NUM", data_dir.path)
     array_input =           File(default_input.name, array_work_dir.path)
     continue_script =       File("continue_script.sh", array_work_dir.path)
@@ -104,12 +115,15 @@ def main():
     
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
+	
+    sb_slurm_output_name = "slurm-%x_%j.out"  # output name should be the simulation name and job number
 
-
+    # Check if user provided -c option for conversion
     if cubble_namespace.c:
 
-        from create_venv.create_venv import virtual_environment
-        run_folder_pattern = "run_[0-9]*"
+        from create_venv.create_venv import virtual_environment  # Creates virtual environment or else loads it
+        run_folder_pattern = "run_[0-9]*"  # pattern of folders that contain snapshots
+        # Load virtual environment excecutes conversion file and deactivates virtual environment
         vtu_conversion_bash = \
             f"source {virtual_environment.resolve()}/bin/activate\n\
             python {root_dir.path}/scripts/convert_csv_to_vtu.py " \
@@ -120,13 +134,14 @@ def main():
 
     compile_script_str = "\
 #!/bin/bash\n\
-#SBATCH --job-name=cubble_compile\n\
+#SBATCH --job-name=" + sb_compile_name + "\n\
 #SBATCH --mem=1G\n\
 #SBATCH --time=00:10:00\n\
 #SBATCH --gres=" + sb_gres + "\n\
 #SBATCH --constraint=" + sb_constraint + "\n\
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
+#SBATCH --output=" + sb_slurm_output_name + "\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
@@ -159,7 +174,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 
     continue_script_str = "\
 #!/bin/bash\n\
-#SBATCH --job-name=cubble\n\
+#SBATCH --job-name=" + sb_name +"\n\
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
@@ -167,6 +182,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
+#SBATCH --output=" + sb_slurm_output_name + "\n\
 RUN_NUM=$1\n\
 TIMES_CALLED=$2\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
@@ -187,7 +203,7 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 
     array_script_str = "\
 #!/bin/bash\n\
-#SBATCH --job-name=cubble\n\
+#SBATCH --job-name=" + sb_name + "\n\
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
@@ -197,6 +213,7 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
 #SBATCH --signal=" + sb_signal + "\n\
+#SBATCH --output=" + sb_slurm_output_name + "\n\
 RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
