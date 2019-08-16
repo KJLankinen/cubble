@@ -1,0 +1,152 @@
+# state file generated using paraview version 5.6.1
+
+# ----------------------------------------------------------------
+# setup views used in the visualization
+# ----------------------------------------------------------------
+
+# trace generated using paraview version 5.6.1
+#
+# To ensure correct image size when batch processing, please search 
+# for and uncomment the line `# renderView*.ViewSize = [*,*]`
+
+#### import the simple module from the paraview
+from paraview.simple import *
+#### disable automatic camera reset on 'Show'
+paraview.simple._DisableFirstRenderCameraReset()
+
+# get the material library
+materialLibrary1 = GetMaterialLibrary()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# These lines are replaced by the separate script
+# ----------------------------------------------------------------------------------------------------------------------
+# Paths to the files to be loaded in Paraview
+snapshot_csv_file_paths = [
+# CSV files paths
+]
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Create a new 'Render View'
+renderView1 = CreateView('RenderView')
+renderView1.ViewSize = [562, 931]
+renderView1.AxesGrid = 'GridAxes3DActor'
+renderView1.CenterOfRotation = [99.48150271, 99.47666279, 0.0]
+renderView1.StereoType = 0
+renderView1.CameraPosition = [569.1030665261159, 111.38349769264957, 460.3187900250535]
+renderView1.CameraFocalPoint = [99.48150271000004, 99.47666279, 5.7665240640106175e-15]
+renderView1.CameraViewUp = [-0.38461082175500505, 0.8454545655264207, 0.3705146332055873]
+renderView1.CameraParallelScale = 140.68372686911349
+renderView1.Background = [0.32, 0.34, 0.43]
+renderView1.OSPRayMaterialLibrary = materialLibrary1
+
+# init the 'GridAxes3DActor' selected for 'AxesGrid'
+renderView1.AxesGrid.XTitleFontFile = ''
+renderView1.AxesGrid.YTitleFontFile = ''
+renderView1.AxesGrid.ZTitleFontFile = ''
+renderView1.AxesGrid.XLabelFontFile = ''
+renderView1.AxesGrid.YLabelFontFile = ''
+renderView1.AxesGrid.ZLabelFontFile = ''
+
+# ----------------------------------------------------------------
+# restore active view
+SetActiveView(renderView1)
+# ----------------------------------------------------------------
+
+# ----------------------------------------------------------------
+# setup the data processing pipelines
+# ----------------------------------------------------------------
+
+# create a new 'CSV Reader'
+
+
+
+
+cSVReader1 = CSVReader(FileName=snapshot_csv_file_paths)
+
+
+# create a new 'Table To Points'
+tableToPoints1 = TableToPoints(Input=cSVReader1)
+tableToPoints1.XColumn = 'x'
+tableToPoints1.YColumn = 'y'
+tableToPoints1.ZColumn = 'z'
+
+# ----------------------------------------------------------------
+# setup the visualization in view 'renderView1'
+# ----------------------------------------------------------------
+
+# show data from tableToPoints1
+tableToPoints1Display = Show(tableToPoints1, renderView1)
+
+# get color transfer function/color map for 'r'
+rLUT = GetColorTransferFunction('r')
+rLUT.RGBPoints = [0.100303, 0.231373, 0.298039, 0.752941, 1.4126615000000005, 0.865003, 0.865003, 0.865003, 2.72502, 0.705882, 0.0156863, 0.14902]
+rLUT.ScalarRangeInitialized = 1.0
+
+# trace defaults for the display properties.
+tableToPoints1Display.Representation = 'Point Gaussian'
+tableToPoints1Display.ColorArrayName = ['POINTS', 'r']
+tableToPoints1Display.LookupTable = rLUT
+tableToPoints1Display.OSPRayScaleArray = 'dist'
+tableToPoints1Display.OSPRayScaleFunction = 'PiecewiseFunction'
+tableToPoints1Display.SelectOrientationVectors = 'None'
+tableToPoints1Display.ScaleFactor = 19.896099458
+tableToPoints1Display.SelectScaleArray = 'None'
+tableToPoints1Display.GlyphType = 'Arrow'
+tableToPoints1Display.GlyphTableIndexArray = 'None'
+tableToPoints1Display.GaussianRadius = 1.0
+tableToPoints1Display.ScaleByArray = 1
+tableToPoints1Display.SetScaleArray = ['POINTS', 'r']
+tableToPoints1Display.UseScaleFunction = 0
+tableToPoints1Display.ScaleTransferFunction = 'PiecewiseFunction'
+tableToPoints1Display.OpacityArray = ['POINTS', 'dist']
+tableToPoints1Display.OpacityTransferFunction = 'PiecewiseFunction'
+tableToPoints1Display.DataAxesGrid = 'GridAxesRepresentation'
+tableToPoints1Display.SelectionCellLabelFontFile = ''
+tableToPoints1Display.SelectionPointLabelFontFile = ''
+tableToPoints1Display.PolarAxes = 'PolarAxesRepresentation'
+
+# init the 'GridAxesRepresentation' selected for 'DataAxesGrid'
+tableToPoints1Display.DataAxesGrid.XTitleFontFile = ''
+tableToPoints1Display.DataAxesGrid.YTitleFontFile = ''
+tableToPoints1Display.DataAxesGrid.ZTitleFontFile = ''
+tableToPoints1Display.DataAxesGrid.XLabelFontFile = ''
+tableToPoints1Display.DataAxesGrid.YLabelFontFile = ''
+tableToPoints1Display.DataAxesGrid.ZLabelFontFile = ''
+
+# init the 'PolarAxesRepresentation' selected for 'PolarAxes'
+tableToPoints1Display.PolarAxes.PolarAxisTitleFontFile = ''
+tableToPoints1Display.PolarAxes.PolarAxisLabelFontFile = ''
+tableToPoints1Display.PolarAxes.LastRadialAxisTextFontFile = ''
+tableToPoints1Display.PolarAxes.SecondaryRadialAxesTextFontFile = ''
+
+# setup the color legend parameters for each legend in this view
+
+# get color legend/bar for rLUT in view renderView1
+rLUTColorBar = GetScalarBar(rLUT, renderView1)
+rLUTColorBar.Title = 'r'
+rLUTColorBar.ComponentTitle = ''
+rLUTColorBar.TitleFontFile = ''
+rLUTColorBar.LabelFontFile = ''
+
+# set color bar visibility
+rLUTColorBar.Visibility = 1
+
+# show color legend
+tableToPoints1Display.SetScalarBarVisibility(renderView1, True)
+
+# ----------------------------------------------------------------
+# setup color maps and opacity mapes used in the visualization
+# note: the Get..() functions create a new object, if needed
+# ----------------------------------------------------------------
+
+# get opacity transfer function/opacity map for 'r'
+rPWF = GetOpacityTransferFunction('r')
+rPWF.Points = [0.100303, 0.0, 0.5, 0.0, 2.72502, 1.0, 0.5, 0.0]
+rPWF.ScalarRangeInitialized = 1
+
+# ----------------------------------------------------------------
+# finally, restore active source
+SetActiveSource(tableToPoints1)
+# ----------------------------------------------------------------
