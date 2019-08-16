@@ -77,6 +77,7 @@ ax.set_zlabel(statistic_title)
 ax = fig.add_subplot(1, 2, 2)
 
 # uncomment one(!) of the norm parameters to either see a log scale or for both pos and neg values a symmetric log scale
+bin_values_whole_run = np.flip(np.flip(bin_values_whole_run), axis=1)  # Flip for correct time and y axis ticks
 heatmap = ax.imshow(bin_values_whole_run, cmap='coolwarm',
                     #norm=colors.LogNorm(vmin=bin_means_all.min(), vmax=bin_means_all.max()),
                     #norm=colors.SymLogNorm(linthresh=0.00001, vmin=bin_means_all.min(), vmax=bin_means_all.max()),
