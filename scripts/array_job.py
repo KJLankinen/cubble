@@ -120,6 +120,10 @@ def main():
     # Check if user provided -c option for conversion
     if cubble_namespace.c:
 
+        # Conversion does not currently work with using tar, since the script needs access to the CSV files
+        # Manually convert the snapshots using convert_csv_to_vtu.py after the simulation is done
+        raise NotImplementedError()
+
         from create_venv.create_venv import virtual_environment  # Creates virtual environment or else loads it
         run_folder_pattern = "run_[0-9]*"  # pattern of folders that contain snapshots
         # Load virtual environment excecutes conversion file and deactivates virtual environment
