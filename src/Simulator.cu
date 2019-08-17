@@ -2274,13 +2274,15 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy1            = params.state.energy2;
     }
 
-    double remainder =
-      params.state.timeInteger * params.inputs.snapshotFrequency;
-    const uint64_t snapshotNumInt = (uint64_t)remainder;
-    remainder                     = remainder - snapshotNumInt +
-                params.state.timeFraction * params.inputs.snapshotFrequency;
-    if (snapshotNumInt + (uint64_t)remainder >=
-        (uint64_t)params.state.numSnapshots)
+    const double nextSnapshotTime = params.state.numSnapshots /
+                                    params.inputs.snapshotFrequency /
+                                    params.inputs.timeScalingFactor;
+    const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
+    const double nextSnapshotTimeFraction =
+      nextSnapshotTime - nextSnapshotTimeInteger;
+
+    if (params.state.timeInteger >= nextSnapshotTimeInteger &&
+        params.state.timeFraction >= nextSnapshotTimeFraction)
     {
       // Calculate total energy
       KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
