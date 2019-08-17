@@ -14,7 +14,7 @@ def main():
         print("Give a (descriptive) name for the sub directory the simulation data is saved to.")
         return 1
 
-    sb_name =           "cubble_" + sys.argv[1] 
+    sb_name =           sys.argv[1] 
     sb_compile_name =   "cubble_compile_" + sys.argv[1]
     sb_modules =        "cuda/10.0.130 gcc/6.3.0"
     sb_mem =            "32G"
@@ -90,7 +90,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 
     continue_script_str = "\
 #!/bin/bash\n\
-#SBATCH --job-name=" + sb_name +"\n\
+#SBATCH --job-name=cubble_" + sb_name +"\n\
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
@@ -120,7 +120,7 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 
     array_script_str = "\
 #!/bin/bash\n\
-#SBATCH --job-name=" + sb_name + "\n\
+#SBATCH --job-name=cubble_" + sb_name + "\n\
 #SBATCH --mem=" + sb_mem + "\n\
 #SBATCH --time=" + sb_time + "\n\
 #SBATCH --gres=" + sb_gres + "\n\
