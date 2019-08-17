@@ -683,7 +683,7 @@ void saveSnapshotToFile(Params &params)
       file << ",";
       file << doubleData[i + 29 * params.state.dataStride];
       file << ",";
-      file << sqrt(displX * displX + displY * displY + diplZ * displZ);
+      file << sqrt(displX * displX + displY * displY + displZ * displZ);
       file << ",";
       file << intData[i + 0 * params.state.dataStride];
       file << "\n";
@@ -2244,7 +2244,6 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
         const double vr = getAvg(params.ddps[(uint32_t)DDP::DRDT], params);
 
         resultFile << params.state.timesPrinted << " " << relRad << " "
-                   << params.state.maxBubbleRadius / params.inputs.avgRad << " "
                    << params.state.numBubbles << " "
                    << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
                    << getAvg(params.ddps[(uint32_t)DDP::DISTANCE], params)
