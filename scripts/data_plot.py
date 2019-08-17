@@ -16,22 +16,29 @@ def plot_data_loglog(data_file, json_file, ax):
             
     phi = decoded_json["phiTarget"]
     kappa = decoded_json["kappa"]
-    label_str = r"$\phi=$" + str(phi) + r", $\kappa=$" + str(kappa)
+    label_str = ""
+    #label_str += r"$\phi=$" + str(phi) 
+    label_str += r"$\kappa=$" + str(kappa)
     
-    ax.loglog(x, y, '+', linewidth=1.5, label=label_str)
+    ax.loglog(x, y, '-', linewidth=5, label=label_str)
 
-def plot_line(ax, alpha, x, y, line_color, label_str):
-    ax.loglog(x, y, '--', color=line_color, linewidth=2.0, label=label_str)
+def plot_line(ax, alpha, x, y, line_color, line_style, label_str):
+    ax.loglog(x, y, line_style, color=line_color, linewidth=5, label=label_str)
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
-    
-    ax.xaxis.label.set_fontsize(20)
-    ax.yaxis.label.set_fontsize(20)
-    ax.set_xlim(1, 12000)
-    ax.set_ylim(0.9, 15)
+    ax.xaxis.label.set_fontsize(50)
+    ax.xaxis.set_label_coords(0.035, 0.065)
+    ax.yaxis.label.set_fontsize(50)
+    ax.yaxis.set_label_coords(0.035, 0.87)
+
+    ax.tick_params(axis='x', which='both', labelsize=40, direction='in', pad=-50)
+    ax.tick_params(axis='y', which='both', labelsize=40, direction='in', pad=-80)
+
+    ax.set_xlim(10.1, 3500)
+    ax.set_ylim(0.7, 22)
     ax.set_xlabel(r"$\tau$")
-    ax.set_ylabel(r"$\frac{R}{\langle R_{in} \rangle}$", rotation=0)
-    ax.grid(1)
+    ax.set_ylabel(r"$\frac{\langle R \rangle}{\langle R_{in} \rangle}$", rotation=0)
+    ax.grid(0)
 
     child_dirs = [name for name in os.listdir(parent_dir) if os.path.isdir(os.path.join(parent_dir, name))]
     json_files = []
@@ -69,12 +76,13 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     data_files = [data_files[idx] for idx in indices]
 
     # line
-    alpha = 0.48
-    x = np.linspace(30, 1250, 1000)
-    y = pow(0.3 * x, alpha)
-    line_color = (1, 0, 0)
-    label_str = r"$k \tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
-    plot_line(ax, alpha, x, y, line_color, label_str)
+    alpha = 0.45
+    x = np.linspace(30, 1600, 1000)
+    y = pow(0.35 * x, alpha)
+    line_color = (0, 0, 0)
+    line_style = '--' 
+    label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
+    plot_line(ax, alpha, x, y, line_color, line_style, label_str)
 
     # Plot
     for i in range(min(len(data_files), max(num_plots, 0))):
@@ -82,13 +90,14 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
 
     # line
     alpha = 0.33
-    x = np.linspace(100, 58000, 1000)
-    y = pow(0.07 * x, alpha)
-    label_str = r"$k \tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
+    x = np.linspace(100, 30000, 1000)
+    y = pow(0.12* x, alpha)
+    label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
     line_color = (0, 0, 0)
-    plot_line(ax, alpha, x, y, line_color, label_str)
+    line_style = '-.' 
+    #plot_line(ax, alpha, x, y, line_color, line_style, label_str)
 
-    ax.legend(loc='upper left')
+    ax.legend(loc='lower right', fontsize=28)
 
     plt.show()
     
@@ -127,6 +136,7 @@ def main():
     
     fig = plt.figure()
     ax = fig.add_subplot(111) # nrows, ncols, index
+    plt.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.01)
     plot_relative_radius(ax, arguments[1], data_file_name, json_file_name, num_plots)
 
 if __name__ == "__main__":
