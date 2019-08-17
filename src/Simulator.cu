@@ -2274,8 +2274,13 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy1            = params.state.energy2;
     }
 
-    if ((int)(params.state.timesPrinted * params.inputs.snapshotFrequency) >=
-        params.state.numSnapshots)
+    double remainder =
+      params.state.timeInteger * params.inputs.snapshotFrequency;
+    const uint64_t snapshotNumInt = (uint64_t)remainder;
+    remainder                     = remainder - snapshotNumInt +
+                params.state.timeFraction * params.inputs.snapshotFrequency;
+    if (snapshotNumInt + (uint64_t)remainder >=
+        (uint64_t)params.state.numSnapshots)
     {
       // Calculate total energy
       KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
