@@ -487,7 +487,7 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
     disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
 
-    double distance = disX * disX + disy * disY + disZ * disZ;
+    double distance = disX * disX + disY * disY + disZ * disZ;
     if (radii * radii >= distance)
     {
       distance = sqrt(distance);

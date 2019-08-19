@@ -803,7 +803,7 @@ double stabilize(Params &params)
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
           params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-          params.state.interval params.state.lbb,
+          params.state.interval, params.state.lbb,
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
           params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP]);
