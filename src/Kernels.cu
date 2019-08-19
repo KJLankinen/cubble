@@ -672,9 +672,7 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
         overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
         overlapArea *= overlapArea;
         overlapArea = r2 * r2 - overlapArea;
-        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
         overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
       }
 #if (NUM_DIM == 3)
       overlapArea *= CUBBLE_PI;
@@ -682,47 +680,12 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
       overlapArea = 2.0 * sqrt(overlapArea);
 #endif
       atomicAdd(&freeArea[idx1], overlapArea);
-      atomicAdd(&drdt[idx1], overlapArea * (1.0 / r2 - 1.0 / r1));
-    }
+      atomicAdd(&freeArea[idx2], overlapArea);
 
-    idx1 = pairB1[i];
-    idx2 = pairB2[i];
+      overlapArea *= (1.0 / r2 - 1.0 / r1);
 
-    distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-    distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-    distZ = 0.0;
-#if (NUM_DIM == 3)
-    distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
-#endif
-
-    magnitude = distX * distX + distY * distY + distZ * distZ;
-    r1        = r[idx1];
-    r2        = r[idx2];
-
-    if (magnitude < (r1 + r2) * (r1 + r2))
-    {
-      double overlapArea = 0;
-      if (magnitude < r1 * r1 || magnitude < r2 * r2)
-      {
-        overlapArea = r1 < r2 ? r1 : r2;
-        overlapArea *= overlapArea;
-      }
-      else
-      {
-        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
-        overlapArea *= overlapArea;
-        overlapArea = r2 * r2 - overlapArea;
-        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
-        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
-      }
-#if (NUM_DIM == 3)
-      overlapArea *= CUBBLE_PI;
-#else
-      overlapArea = 2.0 * sqrt(overlapArea);
-#endif
-      atomicAdd(&freeArea[idx1], overlapArea);
-      atomicAdd(&drdt[idx1], overlapArea * (1.0 / r2 - 1.0 / r1));
+      atomicAdd(&drdt[idx1], overlapArea);
+      atomicAdd(&drdt[idx2], -overlapArea);
     }
   }
 }
