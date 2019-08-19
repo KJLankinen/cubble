@@ -2188,7 +2188,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
   {
     continueIntegration = integrate(params);
     CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
-    CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 2200,
+    CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 5000,
                        continueIntegration);
     continueIntegration &= signalReceived == 0;
 
