@@ -938,7 +938,7 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::TEMP6],
       params.ddps[(uint32_t)DDP::TEMP7]);
 
-    if (NUM_DIM == 3)
+#if (NUM_DIM == 3)
     {
       // Predict
       KERNEL_LAUNCH(
@@ -966,7 +966,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DZDTP]);
 
       // Flow velocity
-      if (USE_FLOW == 1)
+#if (USE_FLOW == 1)
       {
         CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
                              sizeof(int) * params.state.pairStride));
@@ -991,6 +991,7 @@ bool integrate(Params &params)
           params.inputs.flowVel,
           params.inputs.flowTfr, params.inputs.flowLbb);
       }
+#endif
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
       // Wall velocity, should be after flow so that possible drag is applied
@@ -1055,7 +1056,7 @@ bool integrate(Params &params)
         params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::YP],
         params.state.interval.z, PBC_Z == 1, params.ddps[(uint32_t)DDP::ZP]);
     }
-    else // Two dimensions
+#else // Two dimensions
     {
       // Predict
       KERNEL_LAUNCH(
@@ -1079,7 +1080,7 @@ bool integrate(Params &params)
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::DYDTP]);
 
       // Flow velocity
-      if (USE_FLOW == 1)
+#if (USE_FLOW == 1)
       {
         CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
                              sizeof(int) * params.state.pairStride));
@@ -1100,21 +1101,23 @@ bool integrate(Params &params)
           params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7],
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::RP],
-          params.inputs.flowVel,
-          params.inputs.flowTfr, params.inputs.flowLbb);
+          params.inputs.flowVel, params.inputs.flowTfr, params.inputs.flowLbb);
       }
+#endif
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
       // Wall velocity, should be after flow so that possible drag is applied
       // correctly
-      KERNEL_LAUNCH(
-        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
-        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
-        params.inputs.wallDragStrength);
+      {
+        KERNEL_LAUNCH(
+          velocityWallKernel, params.defaultKernelSize, 0,
+          params.velocityStream, params.state.numBubbles,
+          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
+          params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
+      }
 #endif
 
       // Correct
@@ -1161,6 +1164,7 @@ bool integrate(Params &params)
         params.state.interval.x, PBC_X == 1, params.ddps[(uint32_t)DDP::XP],
         params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::YP]);
     }
+#endif
 
     // Free area
     KERNEL_LAUNCH(freeAreaKernel, params.defaultKernelSize, 0, params.gasStream,
