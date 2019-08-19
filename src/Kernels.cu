@@ -479,33 +479,37 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
     {
       distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
       atomicAdd(&vx[idx1], distance * disX);
+      atomicAdd(&vx[idx2], -distance * disX);
       atomicAdd(&vy[idx1], distance * disY);
+      atomicAdd(&vy[idx2], -distance * disY);
 #if (NUM_DIM == 3)
       atomicAdd(&vz[idx1], distance * disZ);
+      atomicAdd(&vz[idx2], -distance * disZ);
 #endif
     }
+    /*
+        idx1 = pairB1[i];
+        idx2 = pairB2[i];
 
-    idx1 = pairB1[i];
-    idx2 = pairB2[i];
+        radii = r[idx1] + r[idx2];
+        disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+        disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+        disZ  = 0.0;
+    #if (NUM_DIM == 3)
+        disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+    #endif
 
-    radii = r[idx1] + r[idx2];
-    disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-    disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-    disZ  = 0.0;
-#if (NUM_DIM == 3)
-    disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
-#endif
-
-    distance = disX * disX + disY * disY + disZ * disZ;
-    if (radii * radii >= distance)
-    {
-      distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
-      atomicAdd(&vx[idx1], distance * disX);
-      atomicAdd(&vy[idx1], distance * disY);
-#if (NUM_DIM == 3)
-      atomicAdd(&vz[idx1], distance * disZ);
-#endif
-    }
+        distance = disX * disX + disY * disY + disZ * disZ;
+        if (radii * radii >= distance)
+        {
+          distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
+          atomicAdd(&vx[idx1], distance * disX);
+          atomicAdd(&vy[idx1], distance * disY);
+    #if (NUM_DIM == 3)
+          atomicAdd(&vz[idx1], distance * disZ);
+    #endif
+        }
+        */
   }
 }
 
