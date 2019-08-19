@@ -659,21 +659,19 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
     double r1        = r[idx1];
     double r2        = r[idx2];
 
-    if (magnitude < (r1 + r2) * (r1 + r2))
-    {
-      double overlapArea = 0;
-      if (magnitude < r1 * r1 || magnitude < r2 * r2)
-      {
-        overlapArea = r1 < r2 ? r1 : r2;
-        overlapArea *= overlapArea;
-      }
-      else
-      {
-        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
-        overlapArea *= overlapArea;
-        overlapArea = r2 * r2 - overlapArea;
-        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-      }
+    const int mul1 = (int)(magnitude < (r1 + r2) * (r1 + r2));
+    const int mul2 = (int)(magnitude < r1 * r1 || magnitude < r2 * r2);
+
+    double overlapArea1 = r1 < r2 ? r1 : r2;
+    overlapArea1 *= overlapArea1;
+
+    double overlapArea2 =
+      0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+    overlapArea *= overlapArea2;
+    overlapArea2 = r2 * r2 - overlapArea2;
+    overlapArea2 = overlapArea2 < 0 ? -overlapArea2 : overlapArea2;
+
+    double overlapArea = mul1 * (mul2 * overlapArea1 + !mul2 * overlapArea2);
 #if (NUM_DIM == 3)
       overlapArea *= CUBBLE_PI;
 #else
@@ -686,7 +684,6 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
 
       atomicAdd(&drdt[idx1], overlapArea);
       atomicAdd(&drdt[idx2], -overlapArea);
-    }
   }
 }
 
