@@ -477,11 +477,8 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
     double distance = disX * disX + disY * disY + disZ * disZ;
     if (radii * radii >= distance)
     {
-      distance = sqrt(distance);
-      distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
-
+      distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
       atomicAdd(&vx[idx1], distance * disX);
-
       atomicAdd(&vy[idx1], distance * disY);
 #if (NUM_DIM == 3)
       atomicAdd(&vz[idx1], distance * disZ);
@@ -502,11 +499,8 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
     distance = disX * disX + disY * disY + disZ * disZ;
     if (radii * radii >= distance)
     {
-      distance = sqrt(distance);
-      distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
-
+      distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
       atomicAdd(&vx[idx1], distance * disX);
-
       atomicAdd(&vy[idx1], distance * disY);
 #if (NUM_DIM == 3)
       atomicAdd(&vz[idx1], distance * disZ);
