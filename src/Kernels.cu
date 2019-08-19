@@ -492,11 +492,11 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
     idx2 = pairB2[i];
 
     radii = r[idx1] + r[idx2];
-    disX  = getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-    disY  = getWrapped1DDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
     disZ  = 0.0;
 #if (NUM_DIM == 3)
-    disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+    disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
 
     distance = disX * disX + disY * disY + disZ * disZ;

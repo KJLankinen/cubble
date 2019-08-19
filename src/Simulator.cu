@@ -1170,7 +1170,7 @@ bool integrate(Params &params)
         params.dips[(uint32_t)DIP::PAIR_B1],
         params.dips[(uint32_t)DIP::PAIR_B2], params.state.interval,
         params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
-        params.ddps[(uint32_t)DDP::TEMP1], , params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
     }
 #endif
