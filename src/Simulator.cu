@@ -592,9 +592,8 @@ void saveSnapshotToFile(Params &params)
   std::ofstream file(ss.str().c_str(), std::ios::out);
   if (file.is_open())
   {
-    const uint64_t numDoubles = 30;
     std::vector<double> doubleData;
-    doubleData.resize(params.state.dataStride * numDoubles);
+    doubleData.resize(params.state.dataStride * (uint32_t)DDP::NUM_VALUES);
     CUDA_CALL(cudaMemcpy(doubleData.data(), params.deviceDoubleMemory,
                          sizeof(doubleData[0]) * doubleData.size(),
                          cudaMemcpyDeviceToHost));
@@ -623,19 +622,42 @@ void saveSnapshotToFile(Params &params)
         }
     }
 
-    file << "x,y,z,r,vx,vy,vz,vtot,path,distance,energy,displacement,index\n";
+    file
+      << "x,y,z,r,vx,vy,vz,vtot,vr,path,distance,energy,displacement,index\n";
     for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
     {
-      const double x  = doubleData[i + 0 * params.state.dataStride];
-      const double y  = doubleData[i + 1 * params.state.dataStride];
-      const double z  = doubleData[i + 2 * params.state.dataStride];
-      const double r  = doubleData[i + 3 * params.state.dataStride];
-      const double vx = doubleData[i + 4 * params.state.dataStride];
-      const double vy = doubleData[i + 5 * params.state.dataStride];
-      const double vz = doubleData[i + 6 * params.state.dataStride];
+      const double x =
+        doubleData[i + (uint32_t)DDP::X * params.state.dataStride];
+      const double y =
+        doubleData[i + (uint32_t)DDP::Y * params.state.dataStride];
+      const double z =
+        doubleData[i + (uint32_t)DDP::Z * params.state.dataStride];
+      const double r =
+        doubleData[i + (uint32_t)DDP::R * params.state.dataStride];
+      const double vx =
+        doubleData[i + (uint32_t)DDP::DXDT * params.state.dataStride];
+      const double vy =
+        doubleData[i + (uint32_t)DDP::DYDT * params.state.dataStride];
+      const double vz =
+        doubleData[i + (uint32_t)DDP::DZDT * params.state.dataStride];
+      const double vr =
+        doubleData[i + (uint32_t)DDP::DRDT * params.state.dataStride];
       const double px = params.previousX[intData[i]];
       const double py = params.previousY[intData[i]];
       const double pz = params.previousZ[intData[i]];
+
+      double displX = abs(x - px);
+      displX        = displX > 0.5 * params.state.interval.x
+                 ? displX - params.state.interval.x
+                 : displX;
+      double displY = abs(y - py);
+      displY        = displY > 0.5 * params.state.interval.y
+                 ? displY - params.state.interval.y
+                 : displY;
+      double displZ = abs(z - pz);
+      displZ        = displZ > 0.5 * params.state.interval.z
+                 ? displZ - params.state.interval.z
+                 : displZ;
 
       file << x;
       file << ",";
@@ -651,7 +673,9 @@ void saveSnapshotToFile(Params &params)
       file << ",";
       file << vz; 
       file << ",";
-      file << sqrt(vx * vx + vy * vy + vz * vz); 
+      file << sqrt(vx * vx + vy * vy + vz * vz);
+      file << ",";
+      file << vr;
       file << ",";
       file << doubleData[i + 15 * params.state.dataStride];
       file << ",";
@@ -659,8 +683,7 @@ void saveSnapshotToFile(Params &params)
       file << ",";
       file << doubleData[i + 29 * params.state.dataStride];
       file << ",";
-      file << sqrt((x - px) * (x - px) + (y - py) * (y - py) +
-                   (z - pz) * (z - pz));
+      file << sqrt(displX * displX + displY * displY + displZ * displZ);
       file << ",";
       file << intData[i + 0 * params.state.dataStride];
       file << "\n";
@@ -2215,12 +2238,18 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       std::ofstream resultFile("results.dat", std::ios_base::app);
       if (resultFile.is_open())
       {
+        const double vx = getAvg(params.ddps[(uint32_t)DDP::DXDT], params);
+        const double vy = getAvg(params.ddps[(uint32_t)DDP::DYDT], params);
+        const double vz = getAvg(params.ddps[(uint32_t)DDP::DZDT], params);
+        const double vr = getAvg(params.ddps[(uint32_t)DDP::DRDT], params);
+
         resultFile << params.state.timesPrinted << " " << relRad << " "
-                   << params.state.maxBubbleRadius / params.inputs.avgRad << " "
                    << params.state.numBubbles << " "
                    << getAvg(params.ddps[(uint32_t)DDP::PATH], params) << " "
                    << getAvg(params.ddps[(uint32_t)DDP::DISTANCE], params)
-                   << " " << dE << "\n";
+                   << " " << params.state.energy2 << " " << dE << " " << vx
+                   << " " << vy << " " << vz << " "
+                   << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr << "\n";
       }
       else
       {
@@ -2245,8 +2274,15 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
       params.state.energy1            = params.state.energy2;
     }
 
-    if ((int)(params.state.timesPrinted * params.inputs.snapshotFrequency) >=
-        params.state.numSnapshots)
+    const double nextSnapshotTime = params.state.numSnapshots /
+                                    params.inputs.snapshotFrequency /
+                                    params.inputs.timeScalingFactor;
+    const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
+    const double nextSnapshotTimeFraction =
+      nextSnapshotTime - nextSnapshotTimeInteger;
+
+    if (params.state.timeInteger >= nextSnapshotTimeInteger &&
+        params.state.timeFraction >= nextSnapshotTimeFraction)
     {
       // Calculate total energy
       KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
@@ -2279,9 +2315,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
     ++params.state.numStepsInTimeStep;
   }
-
   
-
   if (signalReceived == 1)
   {
     std::cout << "Timeout signal received." << std::endl;
