@@ -769,10 +769,10 @@ double stabilize(Params &params)
           params.dips[(uint32_t)DIP::PAIR2],
           params.dips[(uint32_t)DIP::PAIR_B1],
           params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
-          params.state.interval, params.state.lbb,
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP]);
+          params.state.interval, params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP]);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         KERNEL_LAUNCH(
@@ -818,10 +818,10 @@ double stabilize(Params &params)
           params.dips[(uint32_t)DIP::PAIR2],
           params.dips[(uint32_t)DIP::PAIR_B1],
           params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
-          params.state.interval, params.state.lbb,
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP]);
+          params.state.interval, params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+          params.ddps[(uint32_t)DDP::DZDTP]);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         KERNEL_LAUNCH(
@@ -969,7 +969,7 @@ bool integrate(Params &params)
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
         params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
-        params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::XP],
+        params.state.interval, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
         params.ddps[(uint32_t)DDP::DZDTP]);
@@ -1057,12 +1057,12 @@ bool integrate(Params &params)
       // Gas exchange
       KERNEL_LAUNCH(
         gasExchangeKernel, params.pairKernelSize, 0, params.gasStream,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
-        params.state.interval.x, PBC_X == 1, params.ddps[(uint32_t)DDP::XP],
-        params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::YP],
-        params.state.interval.z, PBC_Z == 1, params.ddps[(uint32_t)DDP::ZP]);
+        params.dips[(uint32_t)DIP::PAIR1], params.dips[(uint32_t)DIP::PAIR2],
+        params.dips[(uint32_t)DIP::PAIR_B1],
+        params.dips[(uint32_t)DIP::PAIR_B2], params.state.interval,
+        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
+        params.ddps[(uint32_t)DDP::TEMP1], , params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
     }
 #else // Two dimensions
     {
@@ -1083,7 +1083,7 @@ bool integrate(Params &params)
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
         params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
-        params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::XP],
+        params.state.interval, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
         params.ddps[(uint32_t)DDP::DZDTP]);
@@ -1166,11 +1166,12 @@ bool integrate(Params &params)
       // Gas exchange
       KERNEL_LAUNCH(
         gasExchangeKernel, params.pairKernelSize, 0, params.gasStream,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
-        params.state.interval.x, PBC_X == 1, params.ddps[(uint32_t)DDP::XP],
-        params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::YP]);
+        params.dips[(uint32_t)DIP::PAIR1], params.dips[(uint32_t)DIP::PAIR2],
+        params.dips[(uint32_t)DIP::PAIR_B1],
+        params.dips[(uint32_t)DIP::PAIR_B2], params.state.interval,
+        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
+        params.ddps[(uint32_t)DDP::TEMP1], , params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
     }
 #endif
 
@@ -1570,7 +1571,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
       params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
       params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
-      params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
+      params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
       params.ddps[(uint32_t)DDP::DZDTO]);
@@ -1603,7 +1604,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
       params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
       params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
-      params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
+      params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
       params.ddps[(uint32_t)DDP::DZDTO]);
@@ -1615,7 +1616,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
       params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
       params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
-      params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
+      params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
       params.ddps[(uint32_t)DDP::DZDTO]);
@@ -1647,7 +1648,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
       params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
       params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
-      params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
+      params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
       params.ddps[(uint32_t)DDP::DZDTO]);

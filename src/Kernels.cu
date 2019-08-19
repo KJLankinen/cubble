@@ -456,22 +456,10 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
                                    int *pairA2, int *pairB1, int *pairB2,
-                                   double *r, dvec interval, dvec lbb,
-                                   double *x, double *y, double *z, double *vx,
-                                   double *vy, double *vz)
+                                   double *r, dvec interval, double *x,
+                                   double *y, double *z, double *vx, double *vy,
+                                   double *vz)
 {
-  // Lambda for calculating one dimensional distance
-  auto getWrapped1DDistance = [](double x1, double x2, double maxDistance,
-                                 bool wrap) -> double {
-    const double distance = x1 - x2;
-    x2                    = distance < -0.5 * maxDistance
-           ? x2 - maxDistance
-           : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
-    const double distance2 = x1 - x2;
-
-    return wrap ? distance2 : distance;
-  };
-
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
@@ -479,13 +467,11 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
     int idx2 = pairA2[i];
 
     double radii = r[idx1] + r[idx2];
-    double disX =
-      getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-    double disY =
-      getWrapped1DDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    double disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    double disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
     double disZ = 0.0;
 #if (NUM_DIM == 3)
-    disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+    disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
 
     double distance = disX * disX + disY * disY + disZ * disZ;
@@ -502,30 +488,30 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
 #endif
     }
 
-  idx1 = pairB1[i];
-  idx2 = pairB2[i];
+    idx1 = pairB1[i];
+    idx2 = pairB2[i];
 
-  radii = r[idx1] + r[idx2];
-  disX  = getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-  disY  = getWrapped1DDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-  disZ  = 0.0;
+    radii = r[idx1] + r[idx2];
+    disX  = getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    disY  = getWrapped1DDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    disZ  = 0.0;
 #if (NUM_DIM == 3)
-  disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+    disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
 
-  distance = disX * disX + disY * disY + disZ * disZ;
-  if (radii * radii >= distance)
-  {
-    distance = sqrt(distance);
-    distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
+    distance = disX * disX + disY * disY + disZ * disZ;
+    if (radii * radii >= distance)
+    {
+      distance = sqrt(distance);
+      distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
 
-    atomicAdd(&vx[idx1], distance * disX);
+      atomicAdd(&vx[idx1], distance * disX);
 
-    atomicAdd(&vy[idx1], distance * disY);
+      atomicAdd(&vy[idx1], distance * disY);
 #if (NUM_DIM == 3)
-    atomicAdd(&vz[idx1], distance * disZ);
+      atomicAdd(&vz[idx1], distance * disZ);
 #endif
-  }
+    }
   }
 }
 
@@ -648,6 +634,96 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 
     velX[i] += !inside * multiplier * nVelX[i] + flowVel.x * inside;
     velY[i] += !inside * multiplier * nVelY[i] + flowVel.y * inside;
+  }
+}
+
+__global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
+                                  int *pairB2, dvec interval, double *r,
+                                  double *drdt, double *freeArea, double *x,
+                                  double *y, double *z)
+{
+  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+       i += gridDim.x * blockDim.x)
+  {
+    int idx1 = pairA1[i];
+    int idx2 = pairA2[i];
+
+    double distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    double distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    double distZ = 0.0;
+#if (NUM_DIM == 3)
+    distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+#endif
+
+    double magnitude = distX * distX + distY * distY + distZ * distZ;
+    double r1        = r[idx1];
+    double r2        = r[idx2];
+
+    if (magnitude < (r1 + r2) * (r1 + r2))
+    {
+      double overlapArea = 0;
+      if (magnitude < r1 * r1 || magnitude < r2 * r2)
+      {
+        overlapArea = r1 < r2 ? r1 : r2;
+        overlapArea *= overlapArea;
+      }
+      else
+      {
+        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+        overlapArea *= overlapArea;
+        overlapArea = r2 * r2 - overlapArea;
+        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
+        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
+      }
+#if (NUM_DIM == 3)
+      overlapArea *= CUBBLE_PI;
+#else
+      overlapArea = 2.0 * sqrt(overlapArea);
+#endif
+      atomicAdd(&freeArea[idx1], overlapArea);
+      atomicAdd(&drdt[idx1], overlapArea * (1.0 / r2 - 1.0 / r1));
+    }
+
+    idx1 = pairB1[i];
+    idx2 = pairB2[i];
+
+    distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    distZ = 0.0;
+#if (NUM_DIM == 3)
+    distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+#endif
+
+    magnitude = distX * distX + distY * distY + distZ * distZ;
+    r1        = r[idx1];
+    r2        = r[idx2];
+
+    if (magnitude < (r1 + r2) * (r1 + r2))
+    {
+      double overlapArea = 0;
+      if (magnitude < r1 * r1 || magnitude < r2 * r2)
+      {
+        overlapArea = r1 < r2 ? r1 : r2;
+        overlapArea *= overlapArea;
+      }
+      else
+      {
+        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+        overlapArea *= overlapArea;
+        overlapArea = r2 * r2 - overlapArea;
+        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
+        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
+      }
+#if (NUM_DIM == 3)
+      overlapArea *= CUBBLE_PI;
+#else
+      overlapArea = 2.0 * sqrt(overlapArea);
+#endif
+      atomicAdd(&freeArea[idx1], overlapArea);
+      atomicAdd(&drdt[idx1], overlapArea * (1.0 / r2 - 1.0 / r1));
+    }
   }
 }
 

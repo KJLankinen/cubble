@@ -362,9 +362,9 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
                                    int *pairA2, int *pairB1, int *pairB2,
-                                   double *r, dvec interval, dvec lbb,
-                                   double *x, double *y, double *z, double *vx,
-                                   double *vy, double *vz);
+                                   double *r, dvec interval, double *x,
+                                   double *y, double *z, double *vx, double *vy,
+                                   double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
@@ -413,55 +413,10 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
   }
 }
 
-template <typename... Args>
-__global__ void gasExchangeKernel(int numValues, int *first, int *second,
-                                  double *r, double *drdt, double *freeArea,
-                                  Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-  {
-    const int idx1 = first[i];
-    const int idx2 = second[i];
-
-    const double magnitude = sqrt(getDistanceSquared(idx1, idx2, args...));
-    const double r1        = r[idx1];
-    const double r2        = r[idx2];
-
-    if (magnitude < r1 + r2)
-    {
-      double overlapArea = 0;
-
-      if (magnitude < r1 || magnitude < r2)
-      {
-        overlapArea = r1 < r2 ? r1 : r2;
-        overlapArea *= overlapArea;
-      }
-      else
-      {
-        overlapArea =
-          0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
-        overlapArea *= overlapArea;
-        overlapArea = r2 * r2 - overlapArea;
-        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
-        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
-      }
-#if (NUM_DIM == 3)
-      overlapArea *= CUBBLE_PI;
-#else
-      overlapArea = 2.0 * sqrt(overlapArea);
-#endif
-      atomicAdd(&freeArea[idx1], overlapArea);
-      atomicAdd(&freeArea[idx2], overlapArea);
-
-      overlapArea *= (1.0 / r2 - 1.0 / r1);
-
-      atomicAdd(&drdt[idx1], overlapArea);
-      atomicAdd(&drdt[idx2], -overlapArea);
-    }
-  }
-}
+__global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
+                                  int *pairB2, dvec interval, double *r,
+                                  double *drdt, double *freeArea, double *x,
+                                  double *y, double *z);
 
 __global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
                                double *freeAreaPerRadius, double *area);
