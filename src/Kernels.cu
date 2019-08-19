@@ -454,10 +454,11 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
   }
 }
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
-                                   int *second, double *r, dvec interval,
-                                   dvec lbb, double *x, double *y, double *z,
-                                   double *vx, double *vy, double *vz)
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
+                                   int *pairA2, int *pairB1, int *pairB2,
+                                   double *r, dvec interval, dvec lbb,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz)
 {
   // Lambda for calculating one dimensional distance
   auto getWrapped1DDistance = [](double x1, double x2, double maxDistance,
@@ -474,10 +475,10 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
-    int idx1 = first[i];
-    int idx2 = second[i];
+    int idx1 = pairA1[i];
+    int idx2 = pairA2[i];
 
-    const double radii = r[idx1] + r[idx2];
+    double radii = r[idx1] + r[idx2];
     double disX =
       getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
     double disY =
@@ -494,15 +495,37 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
       distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
 
       atomicAdd(&vx[idx1], distance * disX);
-      atomicAdd(&vx[idx2], -distance * disX);
 
       atomicAdd(&vy[idx1], distance * disY);
-      atomicAdd(&vy[idx2], -distance * disY);
 #if (NUM_DIM == 3)
       atomicAdd(&vz[idx1], distance * disZ);
-      atomicAdd(&vz[idx2], -distance * disZ);
 #endif
     }
+
+  idx1 = pairB1[i];
+  idx2 = pairB2[i];
+
+  radii = r[idx1] + r[idx2];
+  disX  = getWrapped1DDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+  disY  = getWrapped1DDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+  disZ  = 0.0;
+#if (NUM_DIM == 3)
+  disZ = getWrapped1DDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+#endif
+
+  distance = disX * disX + disY * disY + disZ * disZ;
+  if (radii * radii >= distance)
+  {
+    distance = sqrt(distance);
+    distance = fZeroPerMuZero * (radii - distance) / (radii * distance);
+
+    atomicAdd(&vx[idx1], distance * disX);
+
+    atomicAdd(&vy[idx1], distance * disY);
+#if (NUM_DIM == 3)
+    atomicAdd(&vz[idx1], distance * disZ);
+#endif
+  }
   }
 }
 

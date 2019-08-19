@@ -86,6 +86,9 @@ enum class DIP
   PAIR1,
   PAIR2,
 
+  PAIR_B1,
+  PAIR_B2,
+
   TEMP1,
   TEMP2,
 
@@ -491,12 +494,20 @@ void updateCellsAndNeighbors(Params &params)
   CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs),
                        static_cast<void *>(dnp), sizeof(int),
                        cudaMemcpyDeviceToHost));
+
   params.cw.sortPairs<int, int>(
     &cub::DeviceRadixSort::SortPairs,
     const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP1]),
     params.dips[(uint32_t)DIP::PAIR1],
     const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
     params.dips[(uint32_t)DIP::PAIR2], params.state.numPairs);
+
+  params.cw.sortPairs<int, int>(
+    &cub::DeviceRadixSort::SortPairs,
+    const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
+    params.dips[(uint32_t)DIP::PAIR_B1],
+    const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP1]),
+    params.dips[(uint32_t)DIP::PAIR_B2], params.state.numPairs);
 }
 
 void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
@@ -755,7 +766,9 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2],
+          params.dips[(uint32_t)DIP::PAIR_B1],
+          params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
           params.state.interval, params.state.lbb,
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
@@ -802,7 +815,9 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2],
+          params.dips[(uint32_t)DIP::PAIR_B1],
+          params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
           params.state.interval, params.state.lbb,
           params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
@@ -952,7 +967,8 @@ bool integrate(Params &params)
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+        params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+        params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
         params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -1065,7 +1081,8 @@ bool integrate(Params &params)
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+        params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+        params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
         params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -1551,7 +1568,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1583,7 +1601,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1594,7 +1613,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1625,7 +1645,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.state.lbb, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],

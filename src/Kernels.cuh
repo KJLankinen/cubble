@@ -360,10 +360,11 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
   }
 }
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
-                                   int *second, double *r, dvec interval,
-                                   dvec lbb, double *x, double *y, double *z,
-                                   double *vx, double *vy, double *vz);
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
+                                   int *pairA2, int *pairB1, int *pairB2,
+                                   double *r, dvec interval, dvec lbb,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
