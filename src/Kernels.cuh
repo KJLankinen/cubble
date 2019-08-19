@@ -262,34 +262,6 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue,
   wrapAround(idx, args...);
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier,
-                            double maxDistance, double minDistance,
-                            bool shouldWrap, double *x, double *v);
-template <typename... Args>
-__device__ void addVelocity(int idx1, int idx2, double multiplier,
-                            double maxDistance, double minDistance,
-                            bool shouldWrap, double *x, double *v, Args... args)
-{
-  addVelocity(idx1, idx2, multiplier, maxDistance, minDistance, shouldWrap, x,
-              v);
-  addVelocity(idx1, idx2, multiplier, args...);
-}
-
-template <typename... Args>
-__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero,
-                                 double *r, Args... args)
-{
-  const double radii = r[idx1] + r[idx2];
-  double multiplier  = getDistanceSquared(idx1, idx2, args...);
-  if (radii * radii >= multiplier)
-  {
-    multiplier = sqrt(multiplier);
-    multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
-    addVelocity(idx1, idx2, multiplier, args...);
-  }
-}
-
-
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity);
 template <typename... Args>
@@ -388,14 +360,10 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
   }
 }
 
-template <typename... Args>
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
-                                   int *second, double *r, Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-    forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
-}
+                                   int *second, double *r, dvec interval,
+                                   dvec lbb, double *x, double *y, double *z,
+                                   double *vx, double *vy, double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
