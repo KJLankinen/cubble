@@ -641,16 +641,16 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   int *pairB2, dvec interval, double *r,
                                   double *drdt, double *freeArea, double *x,
                                   double *y, double *z)
-
+{
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
-{
-  int idx1 = pairA1[i];
-  int idx2 = pairA2[i];
+  {
+    int idx1 = pairA1[i];
+    int idx2 = pairA2[i];
 
-  double distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-  double distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-  double distZ = 0.0;
+    double distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    double distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    double distZ = 0.0;
 #if (NUM_DIM == 3)
     distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
@@ -667,7 +667,7 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
 
     double overlapArea2 =
       0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
-    overlapArea2 *= overlapArea2;
+    overlapArea *= overlapArea2;
     overlapArea2 = r2 * r2 - overlapArea2;
     overlapArea2 = overlapArea2 < 0 ? -overlapArea2 : overlapArea2;
 
