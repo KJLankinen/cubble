@@ -10,9 +10,8 @@ namespace cubble
 {
 extern __device__ double devR;
 extern __device__ double devR2;
-extern __constant__ __device__ double dTotalArea;
-extern __constant__ __device__ double dTotalFreeArea;
-extern __constant__ __device__ double dTotalFreeAreaPerRadius;
+extern __device__ double dTotalOverlap;
+extern __device__ double dTotalOverlapPerRad;
 extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
@@ -85,6 +84,8 @@ __global__ void resetKernel(double value, int numValues, Args... args)
   {
     devR  = 0.0;
     devR2 = 0.0;
+    dTotalOverlap       = 0.0;
+    dTotalOverlapPerRad = 0.0;
   }
 }
 
@@ -423,14 +424,11 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
 
 __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   int *pairB2, dvec interval, double *r,
-                                  double *drdt, double *freeArea, double *x,
+                                  double *drdt, double *overlapArea, double *x,
                                   double *y, double *z);
 
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area);
-
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
-                                            double *freeArea, int numValues,
+                                            double *overlapArea, int numValues,
                                             double kappa, double kParam,
                                             double averageSurfaceAreaIn);
 

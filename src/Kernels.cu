@@ -4,9 +4,8 @@ namespace cubble
 {
 __device__ double devR;
 __device__ double devR2;
-__constant__ __device__ double dTotalArea;
-__constant__ __device__ double dTotalFreeArea;
-__constant__ __device__ double dTotalFreeAreaPerRadius;
+__device__ double dTotalOverlap;
+__device__ double dTotalOverlapPerRad;
 __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
@@ -639,7 +638,7 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 
 __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   int *pairB2, dvec interval, double *r,
-                                  double *drdt, double *freeArea, double *x,
+                                  double *drdt, double *overlapArea, double *x,
                                   double *y, double *z)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
@@ -661,76 +660,64 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
 
     if (magnitude < (r1 + r2) * (r1 + r2))
     {
-      double overlapArea = 0;
+      double overlapA = 0;
       if (magnitude < r1 * r1 || magnitude < r2 * r2)
       {
-        overlapArea = r1 < r2 ? r1 : r2;
-        overlapArea *= overlapArea;
+        overlapA = r1 < r2 ? r1 : r2;
+        overlapA *= overlapA;
       }
       else
       {
-        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
-        overlapArea *= overlapArea;
-        overlapArea = r2 * r2 - overlapArea;
-        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+        overlapA = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+        overlapA *= overlapA;
+        overlapA = r2 * r2 - overlapA;
+        overlapA = overlapA < 0 ? -overlapA : overlapA;
       }
 #if (NUM_DIM == 3)
-      overlapArea *= CUBBLE_PI;
+      overlapA *= CUBBLE_PI;
 #else
-      overlapArea = 2.0 * sqrt(overlapArea);
+      overlapA = 2.0 * sqrt(overlapA);
 #endif
-      atomicAdd(&freeArea[idx1], overlapArea);
-      atomicAdd(&freeArea[idx2], overlapArea);
+      atomicAdd(&overlapArea[idx1], overlapA);
+      atomicAdd(&overlapArea[idx2], overlapA);
 
-      overlapArea *= (1.0 / r2 - 1.0 / r1);
+      atomicAdd(&dTotalOverlap, 2 * overlapA);
+      atomicAdd(&dTotalOverlapPerRad, overlapA / r2 + overlapA / r1);
 
-      atomicAdd(&drdt[idx1], overlapArea);
-      atomicAdd(&drdt[idx2], -overlapArea);
+      overlapA *= (1.0 / r2 - 1.0 / r1);
+
+      atomicAdd(&drdt[idx1], overlapA);
+      atomicAdd(&drdt[idx2], -overlapA);
     }
   }
 }
 
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-       i += gridDim.x * blockDim.x)
-  {
-    double totalArea = 2.0 * CUBBLE_PI * r[i];
-#if (NUM_DIM == 3)
-    totalArea *= 2.0 * r[i];
-#endif
-    area[i]              = totalArea;
-    freeArea[i]          = totalArea - freeArea[i];
-    freeAreaPerRadius[i] = freeArea[i] / r[i];
-  }
-}
-
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
-                                            double *freeArea, int numValues,
+                                            double *overlapArea, int numValues,
                                             double kappa, double kParam,
                                             double averageSurfaceAreaIn)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
-    dInvRho                = dTotalFreeAreaPerRadius / dTotalFreeArea;
-    const double invRadius = 1.0 / r[i];
-    double invArea         = 0.5 * CUBBLE_I_PI * invRadius;
+    double totalArea       = 2.0 * CUBBLE_PI;
+    double area            = totalArea * r[i];
 #if (NUM_DIM == 3)
-    invArea *= 0.5 * invRadius;
+    totalArea *= 2.0 * devR2;
+    area *= 2.0 * r[i];
+    double invRho = (4.0 * CUBBLE_PI * devR - dTotalOverlapPerRad) /
+                    (4.0 * CUBBLE_PI * devR2 - dTotalOverlap);
+#else
+    totalArea *= devR;
+    double invRho = (2.0 * CUBBLE_PI * numValues - dTotalOverlapPerRad) /
+                    (2.0 * CUBBLE_PI * devR - dTotalOverlap);
 #endif
-    const double vr = drdt[i] +
-                      kappa * averageSurfaceAreaIn * numValues / dTotalArea *
-                        freeArea[i] * (dInvRho - invRadius);
-    drdt[i] = kParam * invArea * vr;
+    const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
+                                  totalArea * (area - overlapArea[i]) *
+                                  (invRho - 1.0 / r[i]);
+    drdt[i] = kParam * vr / area;
   }
 
-  if (blockIdx.x == 0)
-  {
-    devR  = 0.0;
-    devR2 = 0.0;
-  }
 }
 
 __global__ void addVolume(double *r, int numValues)
@@ -799,13 +786,17 @@ __global__ void predictKernel(int numValues, double timeStep, double *xp,
   }
 
   atomicAdd(&totalR[0], rp[tid]);
+#if (NUM_DIM == 3)
   atomicAdd(&totalR[1], rp[tid] * rp[tid]);
+#endif
   __syncthreads();
 
   if (threadIdx.x == 0)
   {
     atomicAdd(&devR, totalR[0]);
+#if (NUM_DIM == 3)
     atomicAdd(&devR2, totalR[1]);
+#endif
   }
 }
 
