@@ -16,7 +16,6 @@ extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ double dVolumeMultiplier;
-extern __device__ double dInvRho;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
