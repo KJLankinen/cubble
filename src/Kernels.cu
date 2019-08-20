@@ -640,6 +640,9 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   double *drdt, double *freeArea, double *x,
                                   double *y, double *z)
 {
+  __shared__ double totalArea[128];
+  totalArea[threadIdx.x] = 0.0;
+
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
@@ -685,6 +688,44 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
       atomicAdd(&drdt[idx1], overlapArea);
       atomicAdd(&drdt[idx2], -overlapArea);
     }
+
+    if (i < numValues)
+    {
+      double area = 2.0 * CUBBLE_PI * r[i];
+#if (NUM_DIM == 3)
+      area *= 2.0 * r[i];
+#endif
+      totalArea[threadIdx.x] += area;
+    }
+  }
+
+  __syncthreads();
+
+  if (threadIdx.x < 32)
+  {
+    totalArea[threadIdx.x] += totalArea[32 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[64 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[96 + threadIdx.x];
+  }
+
+  if (threadIdx.x < 8)
+  {
+    totalArea[threadIdx.x] += totalArea[8 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[16 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[24 + threadIdx.x];
+  }
+
+  if (threadIdx.x < 2)
+  {
+    totalArea[threadIdx.x] += totalArea[2 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[4 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[6 + threadIdx.x];
+  }
+
+  if (threadIdx.x == 0)
+  {
+    totalArea[threadIdx.x] += totalArea[1];
+    atomicAdd(&dTotalArea, totalArea[0]);
   }
 }
 

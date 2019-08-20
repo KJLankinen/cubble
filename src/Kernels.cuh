@@ -78,6 +78,9 @@ __global__ void resetKernel(double value, int numValues, Args... args)
   const int tid = getGlobalTid();
   if (tid < numValues)
     resetDoubleArrayToValue(value, tid, args...);
+
+  if (tid == 0)
+    dTotalArea = 0.0;
 }
 
 template <typename T>
