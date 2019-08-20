@@ -454,17 +454,16 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
   }
 }
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
-                                   int *pairA2, int *pairB1, int *pairB2,
-                                   double *r, dvec interval, double *x,
-                                   double *y, double *z, double *vx, double *vy,
-                                   double *vz)
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
+                                   int *pair2, double *r, dvec interval,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz)
 {
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
-    int idx1 = pairA1[i];
-    int idx2 = pairA2[i];
+    int idx1 = pair1[i];
+    int idx2 = pair2[i];
 
     double radii = r[idx1] + r[idx2];
     double disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
@@ -612,10 +611,10 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
   }
 }
 
-__global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
-                                  int *pairB1, int *pairB2, dvec interval,
-                                  double *r, double *drdt, double *freeArea,
-                                  double *x, double *y, double *z)
+__global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
+                                  dvec interval, double *r, double *drdt,
+                                  double *freeArea, double *x, double *y,
+                                  double *z)
 {
   __shared__ double totalArea[128];
   __shared__ double totalOverlapArea[128];
@@ -630,8 +629,8 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
-    int idx1 = pairA1[i];
-    int idx2 = pairA2[i];
+    int idx1 = pair1[i];
+    int idx2 = pair2[i];
 
     double distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
     double distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);

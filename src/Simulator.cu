@@ -86,9 +86,6 @@ enum class DIP
   PAIR1,
   PAIR2,
 
-  PAIR_B1,
-  PAIR_B2,
-
   TEMP1,
   TEMP2,
 
@@ -504,13 +501,6 @@ void updateCellsAndNeighbors(Params &params)
     params.dips[(uint32_t)DIP::PAIR1],
     const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
     params.dips[(uint32_t)DIP::PAIR2], params.state.numPairs);
-
-  params.cw.sortPairs<int, int>(
-    &cub::DeviceRadixSort::SortPairs,
-    const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
-    params.dips[(uint32_t)DIP::PAIR_B1],
-    const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP1]),
-    params.dips[(uint32_t)DIP::PAIR_B2], params.state.numPairs);
 }
 
 void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
@@ -769,9 +759,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2],
-          params.dips[(uint32_t)DIP::PAIR_B1],
-          params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
           params.state.interval, params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -818,9 +806,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2],
-          params.dips[(uint32_t)DIP::PAIR_B1],
-          params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
           params.state.interval, params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -926,8 +912,7 @@ void velocityCalculation(Params &params)
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-        params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
+        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
         params.state.interval, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -1019,8 +1004,7 @@ void velocityCalculation(Params &params)
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-        params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
+        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
         params.state.interval, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -1110,8 +1094,7 @@ void gasExchangeCalculation(Params &params)
   KERNEL_LAUNCH(
     gasExchangeKernel, params.pairKernelSize, 0, params.gasStream,
     params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-    params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-    params.dips[(uint32_t)DIP::PAIR_B2], params.state.interval,
+    params.dips[(uint32_t)DIP::PAIR2], params.state.interval,
     params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
     params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::XP],
     params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
@@ -1554,8 +1537,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1587,8 +1569,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1599,8 +1580,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
@@ -1631,8 +1611,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
     KERNEL_LAUNCH(
       velocityPairKernel, params.pairKernelSize, 0, 0,
       params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-      params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
-      params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::R],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
       params.state.interval, params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],

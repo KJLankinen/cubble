@@ -368,11 +368,10 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
   }
 }
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
-                                   int *pairA2, int *pairB1, int *pairB2,
-                                   double *r, dvec interval, double *x,
-                                   double *y, double *z, double *vx, double *vy,
-                                   double *vz);
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
+                                   int *pair2, double *r, dvec interval,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
@@ -421,10 +420,10 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
   }
 }
 
-__global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
-                                  int *pairB1, int *pairB2, dvec interval,
-                                  double *r, double *drdt, double *freeArea,
-                                  double *x, double *y, double *z);
+__global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
+                                  dvec interval, double *r, double *drdt,
+                                  double *freeArea, double *x, double *y,
+                                  double *z);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                                             double *freeArea, int numValues,
