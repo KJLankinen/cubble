@@ -308,8 +308,6 @@ struct Params
   std::vector<int> previousX;
   std::vector<int> previousY;
   std::vector<int> previousZ;
-
-  double *totalFreeAreaPerRadius = nullptr;
 };
 
 } // namespace cubble
@@ -1118,17 +1116,6 @@ void gasExchangeCalculation(Params &params)
     params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::XP],
     params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
 
-  // Free area
-  KERNEL_LAUNCH(freeAreaKernel, params.defaultKernelSize, 0, params.gasStream,
-                params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
-                params.ddps[(uint32_t)DDP::TEMP1],
-                params.ddps[(uint32_t)DDP::TEMP2],
-                params.ddps[(uint32_t)DDP::TEMP3]);
-
-  params.cw.reduceNoCopy<double, double *, double *>(
-    &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP2],
-    params.totalFreeAreaPerRadius, params.state.numBubbles, params.gasStream);
-
   KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.defaultKernelSize, 0,
                 params.gasStream, params.ddps[(uint32_t)DDP::DRDTP],
                 params.ddps[(uint32_t)DDP::RP],
@@ -1440,11 +1427,6 @@ void commonSetup(Params &params)
   CUDA_ASSERT(cudaStreamCreate(&params.gasStream));
 
   printRelevantInfoOfCurrentDevice();
-
-  // Get some device global symbol addresses.
-  CUDA_ASSERT(cudaGetSymbolAddress(
-    reinterpret_cast<void **>(&params.totalFreeAreaPerRadius),
-    dTotalFreeAreaPerRadius));
 
   std::cout << "Reserving device memory to hold data." << std::endl;
 

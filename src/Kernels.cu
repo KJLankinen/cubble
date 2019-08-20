@@ -4,7 +4,8 @@ namespace cubble
 {
 __device__ double dTotalArea;
 __device__ double dTotalOverlapArea;
-__constant__ __device__ double dTotalFreeAreaPerRadius;
+__device__ double dTotalOverlapAreaPerRadius;
+__device__ double dTotalAreaPerRadius;
 __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
@@ -486,29 +487,6 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pairA1,
       atomicAdd(&vz[idx2], -distance * disZ);
 #endif
     }
-    /*
-        idx1 = pairB1[i];
-        idx2 = pairB2[i];
-
-        radii = r[idx1] + r[idx2];
-        disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-        disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-        disZ  = 0.0;
-    #if (NUM_DIM == 3)
-        disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
-    #endif
-
-        distance = disX * disX + disY * disY + disZ * disZ;
-        if (radii * radii >= distance)
-        {
-          distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
-          atomicAdd(&vx[idx1], distance * disX);
-          atomicAdd(&vy[idx1], distance * disY);
-    #if (NUM_DIM == 3)
-          atomicAdd(&vz[idx1], distance * disZ);
-    #endif
-        }
-        */
   }
 }
 
@@ -641,8 +619,13 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
 {
   __shared__ double totalArea[128];
   __shared__ double totalOverlapArea[128];
-  totalArea[threadIdx.x] = 0.0;
-  totalOverlapArea[threadIdx.x] = 0.0;
+  __shared__ double totalAreaPerRadius[128];
+  __shared__ double totalOverlapAreaPerRadius[128];
+
+  totalArea[threadIdx.x]                 = 0.0;
+  totalOverlapArea[threadIdx.x]          = 0.0;
+  totalAreaPerRadius[threadIdx.x]        = 0.0;
+  totalOverlapAreaPerRadius[threadIdx.x] = 0.0;
 
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
@@ -685,6 +668,8 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
       atomicAdd(&freeArea[idx2], overlapArea);
 
       totalOverlapArea[threadIdx.x] += 2.0 * overlapArea;
+      totalOverlapAreaPerRadius[threadIdx.x] +=
+        overlapArea / r1 + overlapArea / r2;
 
       overlapArea *= (1.0 / r2 - 1.0 / r1);
 
@@ -699,6 +684,7 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
       area *= 2.0 * r[i];
 #endif
       totalArea[threadIdx.x] += area;
+      totalAreaPerRadius[threadIdx.x] += area / r[i];
     }
   }
 
@@ -713,6 +699,17 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalOverlapArea[threadIdx.x] += totalOverlapArea[32 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[64 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[96 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[32 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[64 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[96 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[32 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[64 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[96 + threadIdx.x];
   }
 
   if (threadIdx.x < 8)
@@ -724,6 +721,17 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalOverlapArea[threadIdx.x] += totalOverlapArea[8 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[16 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[24 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[8 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[16 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[24 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[8 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[16 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[24 + threadIdx.x];
   }
 
   if (threadIdx.x < 2)
@@ -735,28 +743,30 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalOverlapArea[threadIdx.x] += totalOverlapArea[2 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[4 + threadIdx.x];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[6 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[2 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[4 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[6 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[2 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[4 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[6 + threadIdx.x];
   }
 
   if (threadIdx.x == 0)
   {
     totalArea[threadIdx.x] += totalArea[1];
     totalOverlapArea[threadIdx.x] += totalOverlapArea[1];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[1];
+    totalOverlapAreaPerRadius[threadIdx.x] += totalOverlapAreaPerRadius[1];
+
     atomicAdd(&dTotalArea, totalArea[0]);
     atomicAdd(&dTotalOverlapArea, totalOverlapArea[0]);
-  }
-}
-
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-       i += gridDim.x * blockDim.x)
-  {
-    double totalArea = 2.0 * CUBBLE_PI * r[i];
-#if (NUM_DIM == 3)
-    totalArea *= 2.0 * r[i];
-#endif
-    freeAreaPerRadius[i] = (totalArea - freeArea[i]) / r[i];
+    atomicAdd(&dTotalAreaPerRadius, totalAreaPerRadius[0]);
+    atomicAdd(&dTotalOverlapAreaPerRadius, totalOverlapAreaPerRadius[0]);
   }
 }
 
@@ -768,7 +778,8 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
-    double invRho = dTotalFreeAreaPerRadius / (dTotalArea - dTotalOverlapArea);
+    double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
+                    (dTotalArea - dTotalOverlapArea);
     double area   = 2.0 * CUBBLE_PI * r[i];
 #if (NUM_DIM == 3)
     invArea *= 2.0 * r[i];
