@@ -926,17 +926,6 @@ void velocityCalculation(Params &params)
 {
 #if (NUM_DIM == 3)
     {
-      // Predict
-      KERNEL_LAUNCH(
-        predictKernel, params.defaultKernelSize, 0, params.velocityStream,
-        params.state.numBubbles, params.state.timeStep,
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
-        params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTO],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTO],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
-        params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTO]);
-
       // Velocity
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
@@ -1030,15 +1019,6 @@ void velocityCalculation(Params &params)
     }
 #else // Two dimensions
     {
-      // Predict
-      KERNEL_LAUNCH(
-        predictKernel, params.defaultKernelSize, 0, params.velocityStream,
-        params.state.numBubbles, params.state.timeStep,
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
-        params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTO],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTO]);
-
       // Velocity
       KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
@@ -1130,13 +1110,6 @@ void velocityCalculation(Params &params)
 
 void gasExchangeCalculation(Params &params)
 {
-  // Predict
-  KERNEL_LAUNCH(predictKernel, params.defaultKernelSize, 0, params.gasStream,
-                params.state.numBubbles, params.state.timeStep,
-                params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
-                params.ddps[(uint32_t)DDP::DRDT],
-                params.ddps[(uint32_t)DDP::DRDTO]);
-
   // Gas exchange
   KERNEL_LAUNCH(
     gasExchangeKernel, params.pairKernelSize, 0, params.gasStream,
@@ -1202,6 +1175,31 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::TEMP6],
       params.ddps[(uint32_t)DDP::TEMP7]);
 
+    // Predict
+#if (NUM_DIM == 3)
+    KERNEL_LAUNCH(
+      predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
+      params.state.timeStep, params.ddps[(uint32_t)DDP::XP],
+      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
+      params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::YP],
+      params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
+      params.ddps[(uint32_t)DDP::DYDTO], params.ddps[(uint32_t)DDP::ZP],
+      params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
+      params.ddps[(uint32_t)DDP::DZDTO], params.ddps[(uint32_t)DDP::RP],
+      params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
+      params.ddps[(uint32_t)DDP::DRDTO]);
+#else
+    KERNEL_LAUNCH(
+      predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
+      params.state.timeStep, params.ddps[(uint32_t)DDP::XP],
+      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
+      params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::YP],
+      params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
+      params.ddps[(uint32_t)DDP::DYDTO], params.ddps[(uint32_t)DDP::RP],
+      params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
+      params.ddps[(uint32_t)DDP::DRDTO]);
+#endif
+
     gasExchangeCalculation(params);
     velocityCalculation(params);
 
@@ -1249,16 +1247,18 @@ bool integrate(Params &params)
 
   // Update values
   const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
-
   CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO],
                             params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
                             cudaMemcpyDeviceToDevice));
+
   CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X],
                             params.ddps[(uint32_t)DDP::XP], 2 * numBytesToCopy,
                             cudaMemcpyDeviceToDevice));
+
   CUDA_CALL(cudaMemcpyAsync(
     params.ddps[(uint32_t)DDP::PATH], params.ddps[(uint32_t)DDP::TEMP4],
     sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice));
+
   CUDA_CALL(cudaMemcpyAsync(params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
                             params.dips[(uint32_t)DIP::WRAP_COUNT_X],
                             params.state.dataStride * 3 * sizeof(int),
