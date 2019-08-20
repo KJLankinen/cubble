@@ -80,6 +80,12 @@ __global__ void resetKernel(double value, int numValues, Args... args)
   const int tid = getGlobalTid();
   if (tid < numValues)
     resetDoubleArrayToValue(value, tid, args...);
+
+  if (blockIdx.x == 0)
+  {
+    devR  = 0.0;
+    devR2 = 0.0;
+  }
 }
 
 template <typename T>
@@ -464,6 +470,7 @@ __global__ void correctKernel(int numValues, double timeStep, double *errors,
     const double e = adamsMoulton(tid, timeStep, args...);
     errors[tid]    = e > errors[tid] ? e : errors[tid];
   }
+
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
