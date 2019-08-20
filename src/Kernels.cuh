@@ -8,8 +8,8 @@
 
 namespace cubble
 {
-extern __constant__ __device__ double devR;
-extern __constant__ __device__ double devR2;
+extern __device__ double devR;
+extern __device__ double devR2;
 extern __constant__ __device__ double dTotalArea;
 extern __constant__ __device__ double dTotalFreeArea;
 extern __constant__ __device__ double dTotalFreeAreaPerRadius;
