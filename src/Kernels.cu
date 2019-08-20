@@ -10,7 +10,6 @@ __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ double dVolumeMultiplier;
-__device__ double dInvRho;
 
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg)
@@ -641,6 +640,14 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   double *drdt, double *overlapArea, double *x,
                                   double *y, double *z)
 {
+  __shared__ double totalO[2];
+  if (threadIdx.x == 0)
+  {
+    totalO[0] = 0.0;
+    totalO[1] = 0.0;
+  }
+  __syncthreads();
+
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
@@ -681,13 +688,18 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
       atomicAdd(&overlapArea[idx1], overlapA);
       atomicAdd(&overlapArea[idx2], overlapA);
 
-      atomicAdd(&dTotalOverlap, 2 * overlapA);
-      atomicAdd(&dTotalOverlapPerRad, overlapA / r2 + overlapA / r1);
+      magnitude = overlapA * (1.0 / r2 - 1.0 / r1);
+      atomicAdd(&drdt[idx1], magnitude);
+      atomicAdd(&drdt[idx2], -magnitude);
 
-      overlapA *= (1.0 / r2 - 1.0 / r1);
-
-      atomicAdd(&drdt[idx1], overlapA);
-      atomicAdd(&drdt[idx2], -overlapA);
+      atomicAdd(&totalO[0], 2.0 * overlapA);
+      atomicAdd(&totalO[1], overlapA / r2 + overlapA / r1);
+      __syncthreads();
+      if (threadIdx.x == 0)
+      {
+        atomicAdd(&dTotalOverlap, totalO[0]);
+        atomicAdd(&dTotalOverlapPerRad, totalO[1]);
+      }
     }
   }
 }
