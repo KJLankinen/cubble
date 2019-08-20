@@ -300,6 +300,8 @@ struct Params
   // Device memory & arrays of pointers to those memory chunks.
   int *deviceIntMemory       = nullptr;
   double *deviceDoubleMemory = nullptr;
+  int *pinnedInt             = nullptr;
+  double *pinnedDouble       = nullptr;
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 
@@ -922,7 +924,6 @@ bool integrate(Params &params)
 
   double error              = 100000;
   uint32_t numLoopsDone     = 0;
-  int numBubblesAboveMinRad = 0;
 
   // Get some device global symbol addresses.
   double *totalArea              = nullptr;
@@ -1208,8 +1209,16 @@ bool integrate(Params &params)
                   params.ddps[(uint32_t)DDP::DRDT],
                   params.ddps[(uint32_t)DDP::DRDTP]);
 
+    params.cw.reduceNoCopy<double, double *, double *>(
+      &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
+      params.ddps[(uint32_t)DDP::TEMP8], params.state.numBubbles,
+      params.gasStream);
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+                              params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
+                              cudaMemcpyDeviceToHost, params.gasStream));
+
     // Calculate how many bubbles are below the minimum size.
-    // Also take note of maximum radius.
     KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize,
                   0, params.gasStream, params.state.numBubbles,
                   params.dips[(uint32_t)DIP::FLAGS],
@@ -1219,18 +1228,10 @@ bool integrate(Params &params)
       &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
       params.dips[(uint32_t)DIP::TEMP2], params.state.numBubbles,
       params.gasStream);
-    params.cw.reduceNoCopy<double, double *, double *>(
-      &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
-      params.ddps[(uint32_t)DDP::TEMP8], params.state.numBubbles,
-      params.gasStream);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&numBubblesAboveMinRad),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
                               params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
                               cudaMemcpyDeviceToHost, params.gasStream));
-    CUDA_CALL(
-      cudaMemcpyAsync(static_cast<void *>(&params.state.maxBubbleRadius),
-                      params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
-                      cudaMemcpyDeviceToHost, params.gasStream));
 
     // Error
     error = params.cw.reduce<double, double *, double *>(
@@ -1246,6 +1247,9 @@ bool integrate(Params &params)
 
     NVTX_RANGE_POP();
   } while (error > params.inputs.errorTolerance);
+
+  params.state.maxBubbleRadius = params.pinnedDouble[0];
+  int numBubblesAboveMinRad    = params.pinnedInt[0];
 
   // Update values
   const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
@@ -1325,6 +1329,8 @@ void deinit(Params &params)
 
   CUDA_CALL(cudaFree(static_cast<void *>(params.deviceDoubleMemory)));
   CUDA_CALL(cudaFree(static_cast<void *>(params.deviceIntMemory)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
+  CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedDouble)));
 
   CUDA_CALL(cudaStreamDestroy(params.velocityStream));
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
@@ -1450,6 +1456,11 @@ void commonSetup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   std::cout << "Reserving device memory to hold data." << std::endl;
+
+  CUDA_CALL(cudaMallocHost(reinterpret_cast<void **>(&params.pinnedDouble),
+                           sizeof(double)));
+  CUDA_CALL(
+    cudaMallocHost(reinterpret_cast<void **>(&params.pinnedInt), sizeof(int)));
 
   // Calculate the length of 'rows'. Will be divisible by 32, as that's the warp
   // size.
