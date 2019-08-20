@@ -1,4 +1,4 @@
-#include "Kerels.cuh"
+#include "Kernels.cuh"
 
 namespace cubble
 {
