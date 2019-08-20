@@ -1176,7 +1176,6 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::TEMP7]);
 
     // Predict
-#if (NUM_DIM == 3)
     KERNEL_LAUNCH(
       predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
       params.state.timeStep, params.ddps[(uint32_t)DDP::XP],
@@ -1188,17 +1187,6 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::DZDTO], params.ddps[(uint32_t)DDP::RP],
       params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
       params.ddps[(uint32_t)DDP::DRDTO]);
-#else
-    KERNEL_LAUNCH(
-      predictKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
-      params.state.timeStep, params.ddps[(uint32_t)DDP::XP],
-      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-      params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::YP],
-      params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-      params.ddps[(uint32_t)DDP::DYDTO], params.ddps[(uint32_t)DDP::RP],
-      params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
-      params.ddps[(uint32_t)DDP::DRDTO]);
-#endif
 
     gasExchangeCalculation(params);
     velocityCalculation(params);

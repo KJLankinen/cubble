@@ -8,6 +8,8 @@
 
 namespace cubble
 {
+extern __constant__ __device__ double devR;
+extern __constant__ __device__ double devR2;
 extern __constant__ __device__ double dTotalArea;
 extern __constant__ __device__ double dTotalFreeArea;
 extern __constant__ __device__ double dTotalFreeAreaPerRadius;
@@ -432,24 +434,11 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r,
                                                 int *aboveMinRadFlags,
                                                 int numValues);
 
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious);
-template <typename... Args>
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious,
-                               Args... args)
-{
-  adamsBashforth(idx, timeStep, yNext, y, f, fPrevious);
-  adamsBashforth(idx, timeStep, args...);
-}
-
-template <typename... Args>
-__global__ void predictKernel(int numValues, double timeStep, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    adamsBashforth(tid, timeStep, args...);
-}
+__global__ void predictKernel(int numValues, double timeStep, double *xp,
+                              double *x, double *vx, double *vxo, double *yp,
+                              double *y, double *vy, double *vyo, double *zp,
+                              double *z, double *vz, double *vzo, double *rp,
+                              double *r, double *vr, double *vro);
 
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
                                double *y, double *f, double *fNext);

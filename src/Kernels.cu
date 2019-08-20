@@ -2,6 +2,8 @@
 
 namespace cubble
 {
+__constant__ __device__ double devR;
+__constant__ __device__ double devR2;
 __constant__ __device__ double dTotalArea;
 __constant__ __device__ double dTotalFreeArea;
 __constant__ __device__ double dTotalFreeAreaPerRadius;
@@ -723,6 +725,12 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                         freeArea[i] * (dInvRho - invRadius);
     drdt[i] = kParam * invArea * vr;
   }
+
+  if (blockIdx.x == 0)
+  {
+    devR  = 0.0;
+    devR2 = 0.0;
+  }
 }
 
 __global__ void addVolume(double *r, int numValues)
@@ -765,10 +773,40 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r,
   }
 }
 
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious)
+__global__ void predictKernel(int numValues, double timeStep, double *xp,
+                              double *x, double *vx, double *vxo, double *yp,
+                              double *y, double *vy, double *vyo, double *zp,
+                              double *z, double *vz, double *vzo, double *rp,
+                              double *r, double *vr, double *vro)
 {
-  yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
+  __shared__ double totalR[2];
+  if (threadIdx.x == 0)
+  {
+    totalR[0] = 0.0;
+    totalR[1] = 0.0;
+  }
+  __syncthreads();
+
+  const int tid = getGlobalTid();
+  if (tid < numValues)
+  {
+    xp[tid] = x[tid] + 0.5 * timeStep * (3.0 * vx[tid] - vxo[tid]);
+    yp[tid] = y[tid] + 0.5 * timeStep * (3.0 * vy[tid] - vyo[tid]);
+    rp[tid] = r[tid] + 0.5 * timeStep * (3.0 * vr[tid] - vro[tid]);
+#if (NUM_DIM == 3)
+    zp[tid] = z[tid] + 0.5 * timeStep * (3.0 * vz[tid] - vzo[tid]);
+#endif
+  }
+
+  atomicAdd(&totalR[0], rp[tid]);
+  atomicAdd(&totalR[1], rp[tid] * rp[tid]);
+  __syncthreads();
+
+  if (threadIdx.x == 0)
+  {
+    atomicAdd(&devR, totalR[0]);
+    atomicAdd(&devR2, totalR[1]);
+  }
 }
 
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
