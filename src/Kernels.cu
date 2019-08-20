@@ -640,8 +640,8 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   double *drdt, double *overlapArea, double *x,
                                   double *y, double *z)
 {
-  __shared__ double totalO[blockDim.x];
-  __shared__ double totalOPR[blockDim.x];
+  __shared__ double totalO[128];
+  __shared__ double totalOPR[128];
 
   totalO[threadIdx.x]   = 0.0;
   totalOPR[threadIdx.x] = 0.0;
