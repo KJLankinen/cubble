@@ -1113,12 +1113,12 @@ void gasExchangeCalculation(Params &params)
   // Gas exchange
   KERNEL_LAUNCH(
     gasExchangeKernel, params.pairKernelSize, 0, params.gasStream,
-    params.dips[(uint32_t)DIP::PAIR1], params.dips[(uint32_t)DIP::PAIR2],
-    params.dips[(uint32_t)DIP::PAIR_B1], params.dips[(uint32_t)DIP::PAIR_B2],
-    params.state.interval, params.ddps[(uint32_t)DDP::RP],
-    params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
-    params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
-    params.ddps[(uint32_t)DDP::ZP]);
+    params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+    params.dips[(uint32_t)DIP::PAIR2], params.dips[(uint32_t)DIP::PAIR_B1],
+    params.dips[(uint32_t)DIP::PAIR_B2], params.state.interval,
+    params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
+    params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::XP],
+    params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
 
   // Free area
   KERNEL_LAUNCH(freeAreaKernel, params.defaultKernelSize, 0, params.gasStream,
@@ -1134,10 +1134,6 @@ void gasExchangeCalculation(Params &params)
   params.cw.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP2],
     params.totalFreeAreaPerRadius, params.state.numBubbles, params.gasStream);
-
-  params.cw.reduceNoCopy<double, double *, double *>(
-    &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP3],
-    params.totalArea, params.state.numBubbles, params.gasStream);
 
   KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.defaultKernelSize, 0,
                 params.gasStream, params.ddps[(uint32_t)DDP::DRDTP],

@@ -8,7 +8,7 @@
 
 namespace cubble
 {
-extern __constant__ __device__ double dTotalArea;
+__constant__ __device__ double dTotalArea;
 extern __constant__ __device__ double dTotalFreeArea;
 extern __constant__ __device__ double dTotalFreeAreaPerRadius;
 extern __constant__ __device__ double dTotalVolume;
@@ -416,10 +416,10 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
   }
 }
 
-__global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
-                                  int *pairB2, dvec interval, double *r,
-                                  double *drdt, double *freeArea, double *x,
-                                  double *y, double *z);
+__global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
+                                  int *pairB1, int *pairB2, dvec interval,
+                                  double *r, double *drdt, double *freeArea,
+                                  double *x, double *y, double *z);
 
 __global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
                                double *freeAreaPerRadius, double *area);

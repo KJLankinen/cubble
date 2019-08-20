@@ -2,7 +2,7 @@
 
 namespace cubble
 {
-__constant__ __device__ double dTotalArea;
+__device__ double dTotalArea;
 __constant__ __device__ double dTotalFreeArea;
 __constant__ __device__ double dTotalFreeAreaPerRadius;
 __constant__ __device__ double dTotalVolume;
@@ -635,10 +635,10 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
   }
 }
 
-__global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
-                                  int *pairB2, dvec interval, double *r,
-                                  double *drdt, double *freeArea, double *x,
-                                  double *y, double *z)
+__global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
+                                  int *pairB1, int *pairB2, dvec interval,
+                                  double *r, double *drdt, double *freeArea,
+                                  double *x, double *y, double *z)
 {
   __shared__ double totalArea[128];
   totalArea[threadIdx.x] = 0.0;
@@ -739,7 +739,6 @@ __global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
 #if (NUM_DIM == 3)
     totalArea *= 2.0 * r[i];
 #endif
-    area[i]              = totalArea;
     freeArea[i]          = totalArea - freeArea[i];
     freeAreaPerRadius[i] = freeArea[i] / r[i];
   }
