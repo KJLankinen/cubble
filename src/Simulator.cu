@@ -348,14 +348,15 @@ void doBoundaryWrap(KernelSize ks, int sm, cudaStream_t stream, int numValues,
 void startProfiling(bool start)
 {
   if (start)
-    cudaProfilerStart();
+    CUDA_CALL(cudaProfilerStart());
 }
 
 void stopProfiling(bool stop, bool &continueIntegration)
 {
   if (stop)
   {
-    cudaProfilerStop();
+    CUDA_CALL(cudaDeviceSynchronize());
+    CUDA_CALL(cudaProfilerStop());
     continueIntegration = false;
   }
 }
