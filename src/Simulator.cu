@@ -1180,30 +1180,6 @@ void gasExchangeCalculation(Params &params)
                 params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
                 params.ddps[(uint32_t)DDP::DRDT],
                 params.ddps[(uint32_t)DDP::DRDTP]);
-
-  params.cw.reduceNoCopy<double, double *, double *>(
-    &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
-    params.ddps[(uint32_t)DDP::TEMP8], params.state.numBubbles,
-    params.gasStream);
-
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
-                            params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
-                            cudaMemcpyDeviceToHost, params.gasStream));
-
-  // Calculate how many bubbles are below the minimum size.
-  KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize, 0,
-                params.gasStream, params.state.numBubbles,
-                params.dips[(uint32_t)DIP::FLAGS],
-                params.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
-
-  params.cw.reduceNoCopy<int, int *, int *>(
-    &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
-    params.dips[(uint32_t)DIP::TEMP2], params.state.numBubbles,
-    params.gasStream);
-
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
-                            params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
-                            cudaMemcpyDeviceToHost, params.gasStream));
 }
 
 bool integrate(Params &params)
@@ -1229,6 +1205,30 @@ bool integrate(Params &params)
     gasExchangeCalculation(params);
     velocityCalculation(params);
 
+    // Calculate maximum radius
+    params.cw.reduceNoCopy<double, double *, double *>(
+      &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
+      params.ddps[(uint32_t)DDP::TEMP8], params.state.numBubbles,
+      params.gasStream);
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+                              params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
+                              cudaMemcpyDeviceToHost, params.gasStream));
+
+    // Calculate how many bubbles are below the minimum size.
+    KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize,
+                  0, params.gasStream, params.state.numBubbles,
+                  params.dips[(uint32_t)DIP::FLAGS],
+                  params.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
+
+    params.cw.reduceNoCopy<int, int *, int *>(
+      &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
+      params.dips[(uint32_t)DIP::TEMP2], params.state.numBubbles,
+      params.gasStream);
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
+                              params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
+                              cudaMemcpyDeviceToHost, params.gasStream));
     // Error
     error = params.cw.reduce<double, double *, double *>(
       &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::ERROR],
