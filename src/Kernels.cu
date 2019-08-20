@@ -640,13 +640,11 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   double *drdt, double *overlapArea, double *x,
                                   double *y, double *z)
 {
-  __shared__ double totalO[2];
-  if (threadIdx.x == 0)
-  {
-    totalO[0] = 0.0;
-    totalO[1] = 0.0;
-  }
-  __syncthreads();
+  __shared__ double totalO[blockDim.x];
+  __shared__ double totalOPR[blockDim.x];
+
+  totalO[threadIdx.x]   = 0.0;
+  totalOPR[threadIdx.x] = 0.0;
 
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
@@ -692,15 +690,24 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
       atomicAdd(&drdt[idx1], magnitude);
       atomicAdd(&drdt[idx2], -magnitude);
 
-      atomicAdd(&totalO[0], 2.0 * overlapA);
-      atomicAdd(&totalO[1], overlapA / r2 + overlapA / r1);
-      __syncthreads();
-      if (threadIdx.x == 0)
-      {
-        atomicAdd(&dTotalOverlap, totalO[0]);
-        atomicAdd(&dTotalOverlapPerRad, totalO[1]);
-      }
+      totalO[threadIdx.x] += 2.0 * overlapA;
+      totalOPR[threadIdx.x] += overlapA / r2 + overlapA / r1;
     }
+  }
+
+  __syncthreads();
+
+  if (threadIdx.x == 0)
+  {
+    double to   = 0.0;
+    double topr = 0.0;
+    for (int i = 0; i < blockDim.x; ++i)
+    {
+      to += totalO[i];
+      topr += totalOPR[i];
+    }
+    atomicAdd(&dTotalOverlap, to);
+    atomicAdd(&dTotalOverlapPerRad, topr);
   }
 }
 
