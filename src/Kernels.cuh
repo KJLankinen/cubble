@@ -8,14 +8,14 @@
 
 namespace cubble
 {
-extern __device__ double devR;
-extern __device__ double devR2;
-extern __device__ double dTotalOverlap;
-extern __device__ double dTotalOverlapPerRad;
+extern __constant__ __device__ double dTotalArea;
+extern __constant__ __device__ double dTotalFreeArea;
+extern __constant__ __device__ double dTotalFreeAreaPerRadius;
 extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ double dVolumeMultiplier;
+extern __device__ double dInvRho;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
@@ -78,14 +78,6 @@ __global__ void resetKernel(double value, int numValues, Args... args)
   const int tid = getGlobalTid();
   if (tid < numValues)
     resetDoubleArrayToValue(value, tid, args...);
-
-  if (blockIdx.x == 0)
-  {
-    devR  = 0.0;
-    devR2 = 0.0;
-    dTotalOverlap       = 0.0;
-    dTotalOverlapPerRad = 0.0;
-  }
 }
 
 template <typename T>
@@ -423,11 +415,14 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
 
 __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   int *pairB2, dvec interval, double *r,
-                                  double *drdt, double *overlapArea, double *x,
+                                  double *drdt, double *freeArea, double *x,
                                   double *y, double *z);
 
+__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
+                               double *freeAreaPerRadius, double *area);
+
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
-                                            double *overlapArea, int numValues,
+                                            double *freeArea, int numValues,
                                             double kappa, double kParam,
                                             double averageSurfaceAreaIn);
 
@@ -437,11 +432,24 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r,
                                                 int *aboveMinRadFlags,
                                                 int numValues);
 
-__global__ void predictKernel(int numValues, double timeStep, double *xp,
-                              double *x, double *vx, double *vxo, double *yp,
-                              double *y, double *vy, double *vyo, double *zp,
-                              double *z, double *vz, double *vzo, double *rp,
-                              double *r, double *vr, double *vro);
+__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
+                               double *y, double *f, double *fPrevious);
+template <typename... Args>
+__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
+                               double *y, double *f, double *fPrevious,
+                               Args... args)
+{
+  adamsBashforth(idx, timeStep, yNext, y, f, fPrevious);
+  adamsBashforth(idx, timeStep, args...);
+}
+
+template <typename... Args>
+__global__ void predictKernel(int numValues, double timeStep, Args... args)
+{
+  const int tid = getGlobalTid();
+  if (tid < numValues)
+    adamsBashforth(tid, timeStep, args...);
+}
 
 __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
                                double *y, double *f, double *fNext);
@@ -467,7 +475,6 @@ __global__ void correctKernel(int numValues, double timeStep, double *errors,
     const double e = adamsMoulton(tid, timeStep, args...);
     errors[tid]    = e > errors[tid] ? e : errors[tid];
   }
-
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
