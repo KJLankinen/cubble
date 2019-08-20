@@ -309,8 +309,6 @@ struct Params
   std::vector<int> previousY;
   std::vector<int> previousZ;
 
-  double *totalArea              = nullptr;
-  double *totalFreeArea          = nullptr;
   double *totalFreeAreaPerRadius = nullptr;
 };
 
@@ -1128,10 +1126,6 @@ void gasExchangeCalculation(Params &params)
                 params.ddps[(uint32_t)DDP::TEMP3]);
 
   params.cw.reduceNoCopy<double, double *, double *>(
-    &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP1],
-    params.totalFreeArea, params.state.numBubbles, params.gasStream);
-
-  params.cw.reduceNoCopy<double, double *, double *>(
     &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP2],
     params.totalFreeAreaPerRadius, params.state.numBubbles, params.gasStream);
 
@@ -1448,10 +1442,6 @@ void commonSetup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   // Get some device global symbol addresses.
-  CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&params.totalArea),
-                                   dTotalArea));
-  CUDA_ASSERT(cudaGetSymbolAddress(
-    reinterpret_cast<void **>(&params.totalFreeArea), dTotalFreeArea));
   CUDA_ASSERT(cudaGetSymbolAddress(
     reinterpret_cast<void **>(&params.totalFreeAreaPerRadius),
     dTotalFreeAreaPerRadius));

@@ -9,13 +9,12 @@
 namespace cubble
 {
 extern __device__ double dTotalArea;
-extern __constant__ __device__ double dTotalFreeArea;
+extern __device__ double dTotalOverlapArea;
 extern __constant__ __device__ double dTotalFreeAreaPerRadius;
 extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ double dVolumeMultiplier;
-extern __device__ double dInvRho;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,

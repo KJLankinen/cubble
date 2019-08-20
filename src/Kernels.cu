@@ -3,13 +3,12 @@
 namespace cubble
 {
 __device__ double dTotalArea;
-__constant__ __device__ double dTotalFreeArea;
+__device__ double dTotalOverlapArea;
 __constant__ __device__ double dTotalFreeAreaPerRadius;
 __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ double dVolumeMultiplier;
-__device__ double dInvRho;
 
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg)
@@ -641,7 +640,9 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
                                   double *x, double *y, double *z)
 {
   __shared__ double totalArea[128];
+  __shared__ double totalOverlapArea[128];
   totalArea[threadIdx.x] = 0.0;
+  totalOverlapArea[threadIdx.x] = 0.0;
 
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
@@ -683,6 +684,8 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
       atomicAdd(&freeArea[idx1], overlapArea);
       atomicAdd(&freeArea[idx2], overlapArea);
 
+      totalOverlapArea[threadIdx.x] += 2.0 * overlapArea;
+
       overlapArea *= (1.0 / r2 - 1.0 / r1);
 
       atomicAdd(&drdt[idx1], overlapArea);
@@ -706,6 +709,10 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalArea[threadIdx.x] += totalArea[32 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[64 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[96 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[32 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[64 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[96 + threadIdx.x];
   }
 
   if (threadIdx.x < 8)
@@ -713,6 +720,10 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalArea[threadIdx.x] += totalArea[8 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[16 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[24 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[8 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[16 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[24 + threadIdx.x];
   }
 
   if (threadIdx.x < 2)
@@ -720,12 +731,18 @@ __global__ void gasExchangeKernel(int numValues, int *pairA1, int *pairA2,
     totalArea[threadIdx.x] += totalArea[2 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[4 + threadIdx.x];
     totalArea[threadIdx.x] += totalArea[6 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[2 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[4 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[6 + threadIdx.x];
   }
 
   if (threadIdx.x == 0)
   {
     totalArea[threadIdx.x] += totalArea[1];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[1];
     atomicAdd(&dTotalArea, totalArea[0]);
+    atomicAdd(&dTotalOverlapArea, totalOverlapArea[0]);
   }
 }
 
@@ -739,8 +756,7 @@ __global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
 #if (NUM_DIM == 3)
     totalArea *= 2.0 * r[i];
 #endif
-    freeArea[i]          = totalArea - freeArea[i];
-    freeAreaPerRadius[i] = freeArea[i] / r[i];
+    freeAreaPerRadius[i] = (totalArea - freeArea[i]) / r[i];
   }
 }
 
@@ -752,16 +768,15 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
-    dInvRho                = dTotalFreeAreaPerRadius / dTotalFreeArea;
-    const double invRadius = 1.0 / r[i];
-    double invArea         = 0.5 * CUBBLE_I_PI * invRadius;
+    double invRho = dTotalFreeAreaPerRadius / (dTotalArea - dTotalOverlapArea);
+    double area   = 2.0 * CUBBLE_PI * r[i];
 #if (NUM_DIM == 3)
-    invArea *= 0.5 * invRadius;
+    invArea *= 2.0 * r[i];
 #endif
-    const double vr = drdt[i] +
-                      kappa * averageSurfaceAreaIn * numValues / dTotalArea *
-                        freeArea[i] * (dInvRho - invRadius);
-    drdt[i] = kParam * invArea * vr;
+    const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
+                                  dTotalArea * (area - freeArea[i]) *
+                                  (invRho - 1.0 / r[i]);
+    drdt[i] = kParam * vr / area;
   }
 }
 
