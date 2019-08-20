@@ -751,8 +751,6 @@ double stabilize(Params &params)
   {
     do
     {
-#if (NUM_DIM == 3)
-      {
         KERNEL_LAUNCH(
           resetKernel, params.defaultKernelSize, 0, 0, 0.0,
           params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
@@ -770,16 +768,19 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
           params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTO]);
 
-        KERNEL_LAUNCH(
-          velocityPairKernel, params.pairKernelSize, 0, 0,
-          params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2],
-          params.dips[(uint32_t)DIP::PAIR_B1],
-          params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
-          params.state.interval, params.ddps[(uint32_t)DDP::XP],
-          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
-          params.ddps[(uint32_t)DDP::DZDTP]);
+#if (NUM_DIM == 3)
+        {
+          KERNEL_LAUNCH(
+            velocityPairKernel, params.pairKernelSize, 0, 0,
+            params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+            params.dips[(uint32_t)DIP::PAIR2],
+            params.dips[(uint32_t)DIP::PAIR_B1],
+            params.dips[(uint32_t)DIP::PAIR_B2], params.ddps[(uint32_t)DDP::RP],
+            params.state.interval, params.ddps[(uint32_t)DDP::XP],
+            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+            params.ddps[(uint32_t)DDP::DXDTP],
+            params.ddps[(uint32_t)DDP::DYDTP],
+            params.ddps[(uint32_t)DDP::DZDTP]);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         KERNEL_LAUNCH(
@@ -802,23 +803,9 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
           params.ddps[(uint32_t)DDP::DZDTP]);
-      }
+        }
 #else // Two dimensional case
       {
-        KERNEL_LAUNCH(
-          resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-          params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ERROR],
-          params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::TEMP2]);
-
-        KERNEL_LAUNCH(
-          predictKernel, params.defaultKernelSize, 0, 0,
-          params.state.numBubbles, params.state.timeStep,
-          params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
-          params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTO],
-          params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-          params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTO]);
-
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
