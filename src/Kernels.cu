@@ -734,8 +734,8 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
     totalO[0] += totalO[1];
     totalOPR[0] += totalOPR[1];
 
-    atomicAdd(&dTotalOverlap, totalO);
-    atomicAdd(&dTotalOverlapPerRad, totalOPR);
+    atomicAdd(&dTotalOverlap, totalO[0]);
+    atomicAdd(&dTotalOverlapPerRad, totalOPR[0]);
   }
 }
 
