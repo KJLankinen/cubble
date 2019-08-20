@@ -1,4 +1,4 @@
-#include "Kernels.cuh"
+#include "Kerels.cuh"
 
 namespace cubble
 {
@@ -640,6 +640,7 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
                                   double *drdt, double *overlapArea, double *x,
                                   double *y, double *z)
 {
+  // Assuming that blockDim.x == 128
   __shared__ double totalO[128];
   __shared__ double totalOPR[128];
 
@@ -697,17 +698,44 @@ __global__ void gasExchangeKernel(int *pairA1, int *pairA2, int *pairB1,
 
   __syncthreads();
 
+  // This assumes that blockDim.x == 128
+  if (threadIdx.x < 32)
+  {
+    totalO[threadIdx.x] += totalO[32 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[64 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[96 + threadIdx.x];
+
+    totalOPR[threadIdx.x] += totalOPR[32 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[64 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[96 + threadIdx.x];
+  }
+  if (threadIdx.x < 8)
+  {
+    totalO[threadIdx.x] += totalO[8 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[16 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[24 + threadIdx.x];
+
+    totalOPR[threadIdx.x] += totalOPR[8 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[16 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[24 + threadIdx.x];
+  }
+  if (threadIdx.x < 2)
+  {
+    totalO[threadIdx.x] += totalO[2 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[4 + threadIdx.x];
+    totalO[threadIdx.x] += totalO[6 + threadIdx.x];
+
+    totalOPR[threadIdx.x] += totalOPR[2 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[2 + threadIdx.x];
+    totalOPR[threadIdx.x] += totalOPR[2 + threadIdx.x];
+  }
   if (threadIdx.x == 0)
   {
-    double to   = 0.0;
-    double topr = 0.0;
-    for (int i = 0; i < blockDim.x; ++i)
-    {
-      to += totalO[i];
-      topr += totalOPR[i];
-    }
-    atomicAdd(&dTotalOverlap, to);
-    atomicAdd(&dTotalOverlapPerRad, topr);
+    totalO[0] += totalO[1];
+    totalOPR[0] += totalOPR[1];
+
+    atomicAdd(&dTotalOverlap, totalO);
+    atomicAdd(&dTotalOverlapPerRad, totalOPR);
   }
 }
 
