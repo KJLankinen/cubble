@@ -870,33 +870,19 @@ double stabilize(Params &params)
         params.state.timeStep *= 0.5;
 
     } while (error > params.inputs.errorTolerance);
-    // Update values
-    double *swap                      = params.ddps[(uint32_t)DDP::DXDTO];
-    params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::DXDT];
-    params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
-    params.ddps[(uint32_t)DDP::DXDTP] = swap;
 
-    swap                              = params.ddps[(uint32_t)DDP::DYDTO];
-    params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::DYDT];
-    params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
-    params.ddps[(uint32_t)DDP::DYDTP] = swap;
-
-    swap                              = params.ddps[(uint32_t)DDP::DZDTO];
-    params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::DZDT];
-    params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
-    params.ddps[(uint32_t)DDP::DZDTP] = swap;
-
-    swap                           = params.ddps[(uint32_t)DDP::X];
-    params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
-    params.ddps[(uint32_t)DDP::XP] = swap;
-
-    swap                           = params.ddps[(uint32_t)DDP::Y];
-    params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
-    params.ddps[(uint32_t)DDP::YP] = swap;
-
-    swap                           = params.ddps[(uint32_t)DDP::Z];
-    params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
-    params.ddps[(uint32_t)DDP::ZP] = swap;
+    // Update the current values with the calculated predictions
+    const uint64_t numBytesToCopy =
+      3 * sizeof(double) * params.state.dataStride;
+    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO],
+                              params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X],
+                              params.ddps[(uint32_t)DDP::XP], numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDT],
+                              params.ddps[(uint32_t)DDP::DXDTP], numBytesToCopy,
+                              cudaMemcpyDeviceToDevice, 0));
 
     elapsedTime += params.state.timeStep;
 
@@ -1199,60 +1185,24 @@ bool integrate(Params &params)
   } while (error > params.inputs.errorTolerance);
 
   // Update values
-  double *swap                      = params.ddps[(uint32_t)DDP::TEMP4];
-  params.ddps[(uint32_t)DDP::TEMP4] = params.ddps[(uint32_t)DDP::PATH];
-  params.ddps[(uint32_t)DDP::PATH]  = swap;
+  const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
+  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO],
+                            params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
+                            cudaMemcpyDeviceToDevice, params.gasStream));
 
-  swap                              = params.ddps[(uint32_t)DDP::DXDTO];
-  params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::DXDT];
-  params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
-  params.ddps[(uint32_t)DDP::DXDTP] = swap;
+  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X],
+                            params.ddps[(uint32_t)DDP::XP], 2 * numBytesToCopy,
+                            cudaMemcpyDeviceToDevice, params.gasStream));
 
-  swap                              = params.ddps[(uint32_t)DDP::DYDTO];
-  params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::DYDT];
-  params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
-  params.ddps[(uint32_t)DDP::DYDTP] = swap;
+  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::PATH],
+                            params.ddps[(uint32_t)DDP::TEMP4],
+                            sizeof(double) * params.state.dataStride,
+                            cudaMemcpyDeviceToDevice, params.velocityStream));
 
-  swap                              = params.ddps[(uint32_t)DDP::DZDTO];
-  params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::DZDT];
-  params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
-  params.ddps[(uint32_t)DDP::DZDTP] = swap;
-
-  swap                              = params.ddps[(uint32_t)DDP::DRDTO];
-  params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::DRDT];
-  params.ddps[(uint32_t)DDP::DRDT]  = params.ddps[(uint32_t)DDP::DRDTP];
-  params.ddps[(uint32_t)DDP::DRDTP] = swap;
-
-  swap                           = params.ddps[(uint32_t)DDP::X];
-  params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
-  params.ddps[(uint32_t)DDP::XP] = swap;
-
-  swap                           = params.ddps[(uint32_t)DDP::Y];
-  params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
-  params.ddps[(uint32_t)DDP::YP] = swap;
-
-  swap                           = params.ddps[(uint32_t)DDP::Z];
-  params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
-  params.ddps[(uint32_t)DDP::ZP] = swap;
-
-  swap                           = params.ddps[(uint32_t)DDP::R];
-  params.ddps[(uint32_t)DDP::R]  = params.ddps[(uint32_t)DDP::RP];
-  params.ddps[(uint32_t)DDP::RP] = swap;
-
-  int *swapInt = params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_XP] =
-    params.dips[(uint32_t)DIP::WRAP_COUNT_X];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_X] = swapInt;
-
-  swapInt = params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_YP] =
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_Y] = swapInt;
-
-  swapInt = params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] =
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
-  params.dips[(uint32_t)DIP::WRAP_COUNT_Z] = swapInt;
+  CUDA_CALL(cudaMemcpyAsync(params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                            params.dips[(uint32_t)DIP::WRAP_COUNT_X],
+                            params.state.dataStride * 3 * sizeof(int),
+                            cudaMemcpyDeviceToDevice, params.velocityStream));
 
   ++params.state.numIntegrationSteps;
 
