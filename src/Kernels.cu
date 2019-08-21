@@ -847,14 +847,16 @@ __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double *errors, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp)
+                              bool useGasExchange, double *errors, double *maxR,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp)
 {
   __shared__ double me[128];
+  __shared__ double mr[128];
   me[threadIdx.x] = 0.0;
+  mr[threadIdx.x] = 0.0;
 
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += blockDim.x * gridDim.x)
@@ -880,6 +882,8 @@ __global__ void correctKernel(int numValues, double timeStep,
       corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
       er        = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
       rp[i]     = corrected;
+      mr[threadIdx.x] =
+        mr[threadIdx.x] > corrected ? mr[threadIdx.x] : corrected;
     }
     corrected = ex > ey ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
                         : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
@@ -894,6 +898,10 @@ __global__ void correctKernel(int numValues, double timeStep,
     me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
     me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
     me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
+
+    mr[tid] = mr[tid] > mr[32 + tid] ? mr[tid] : mr[32 + tid];
+    mr[tid] = mr[tid] > mr[64 + tid] ? mr[tid] : mr[64 + tid];
+    mr[tid] = mr[tid] > mr[96 + tid] ? mr[tid] : mr[96 + tid];
   }
 
   if (tid < 8)
@@ -901,6 +909,10 @@ __global__ void correctKernel(int numValues, double timeStep,
     me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
     me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
     me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+
+    mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
+    mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
+    mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
   }
 
   if (tid < 2)
@@ -908,25 +920,39 @@ __global__ void correctKernel(int numValues, double timeStep,
     me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
     me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
     me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+
+    mr[tid] = mr[tid] > mr[2 + tid] ? mr[tid] : mr[2 + tid];
+    mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
+    mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
   }
 
   if (tid == 0)
   {
     me[tid]            = me[tid] > me[1] ? me[tid] : me[1];
     errors[blockIdx.x] = me[tid];
+
+    mr[tid]          = mr[tid] > mr[1] ? mr[tid] : mr[1];
+    maxR[blockIdx.x] = mr[1];
   }
 }
 
-__global__ void miscEndStepKernel(int numValues, double *errors, int numErrors)
+__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
+                                  int origBlockSize)
 {
   __shared__ double me[128];
   me[threadIdx.x] = 0.0;
 
-  if (blockIdx.x == 0)
+  if (blockIdx.x < 2)
   {
-    int tid = threadIdx.x;
-    for (int i = tid; i < numErrors; i += blockDim.x)
-      me[tid] = me[tid] > errors[i] ? me[tid] : errors[i];
+    int tid     = threadIdx.x;
+    double *arr = nullptr;
+    if (blockIdx.x == 0)
+      arr = errors;
+    if (blockIdx.x == 1)
+      arr = maxR;
+
+    for (int i = tid; i < origBlockSize; i += blockDim.x)
+      me[tid] = me[tid] > arr[i] ? me[tid] : arr[i];
 
     __syncthreads();
 
@@ -952,7 +978,7 @@ __global__ void miscEndStepKernel(int numValues, double *errors, int numErrors)
     }
 
     if (tid == 0)
-      errors[tid] = me[tid];
+      arr[tid] = me[tid];
   }
 }
 

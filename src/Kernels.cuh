@@ -456,13 +456,14 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double *errors, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp);
+                              bool useGasExchange, double *errors, double *maxR,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp);
 
-__global__ void miscEndStepKernel(int numValues, double *errors, int numErrors);
+__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
+                                  int origBlockSize);
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
 template <typename... Args>
