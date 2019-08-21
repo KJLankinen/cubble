@@ -521,6 +521,10 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
 
   CUDA_CALL(cudaMemset(static_cast<void *>(dVolMul), 0, sizeof(double)));
 
+  KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize, 0,
+                0, params.state.numBubbles, params.dips[(uint32_t)DIP::FLAGS],
+                params.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
+
   KERNEL_LAUNCH(calculateRedistributedGasVolume, params.defaultKernelSize, 0, 0,
                 params.ddps[(uint32_t)DDP::TEMP1],
                 params.ddps[(uint32_t)DDP::R],
