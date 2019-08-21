@@ -846,6 +846,116 @@ __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
   return error < 0 ? -error : error;
 }
 
+__global__ void correctKernel(int numValues, double timeStep,
+                              bool useGasExchange, double *errors, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp)
+{
+  __shared__ double me[128];
+  me[threadIdx.x] = 0.0;
+
+  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+       i += blockDim.x * gridDim.x)
+  {
+    double corrected = x[i] + 0.5 * timeStep * (vx[i] + vxp[i]);
+    double ex = corrected > xp[i] ? corrected - xp[i] : xp[i] - corrected;
+    xp[i]            = corrected;
+
+    corrected = y[i] + 0.5 * timeStep * (vy[i] + vyp[i]);
+    double ey = corrected > yp[i] ? corrected - yp[i] : yp[i] - corrected;
+    yp[i]     = corrected;
+
+    double ez = 0.0;
+#if (NUM_DIM == 3)
+    corrected = z[i] + 0.5 * timeStep * (vz[i] + vzp[i]);
+    ez        = corrected > zp[i] ? corrected - zp[i] : z[i] - corrected;
+    zp[i]     = corrected;
+#endif
+
+    double er = 0.0;
+    if (useGasExchange)
+    {
+      corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
+      er        = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
+      rp[i]     = corrected;
+    }
+    corrected = ex > ey ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
+                        : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
+    me[threadIdx.x] = me[threadIdx.x] > corrected ? me[threadIdx.x] : corrected;
+  }
+
+  __syncthreads();
+
+  int tid = threadIdx.x;
+  if (tid < 32)
+  {
+    me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
+    me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
+    me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
+  }
+
+  if (tid < 8)
+  {
+    me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+    me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+    me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+  }
+
+  if (tid < 2)
+  {
+    me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+    me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+    me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+  }
+
+  if (tid == 0)
+  {
+    me[tid]            = me[tid] > me[1] ? me[tid] : me[1];
+    errors[blockIdx.x] = me[tid];
+  }
+}
+
+__global__ void miscEndStepKernel(int numValues, double *errors, int numErrors)
+{
+  __shared__ double me[128];
+  me[threadIdx.x] = 0.0;
+
+  if (blockIdx.x == 0)
+  {
+    for (int i = threadIdx.x; i < numErrors; i += blockDim.x)
+      me[i] = me[i] > errors[i] ? me[i] : errors[i];
+
+    __syncthreads();
+
+    int tid = threadIdx.x;
+    if (tid < 32)
+    {
+      me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
+      me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
+      me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
+    }
+
+    if (tid < 8)
+    {
+      me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+      me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+      me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+    }
+
+    if (tid < 2)
+    {
+      me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+      me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+      me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+    }
+
+    if (tid == 0)
+      errors[tid] = me[tid];
+  }
+}
+
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
 {
   y[idx] += f[idx] * timeStep;

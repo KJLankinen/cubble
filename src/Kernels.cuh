@@ -455,31 +455,14 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
     adamsBashforth(tid, timeStep, args...);
 }
 
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fNext);
-template <typename... Args>
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fNext,
-                               Args... args)
-{
-  double error1       = adamsMoulton(idx, timeStep, yNext, y, f, fNext);
-  const double error2 = adamsMoulton(idx, timeStep, args...);
-  error1              = error1 > error2 ? error1 : error2;
+__global__ void correctKernel(int numValues, double timeStep,
+                              bool useGasExchange, double *errors, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp);
 
-  return error1;
-}
-
-template <typename... Args>
-__global__ void correctKernel(int numValues, double timeStep, double *errors,
-                              Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-  {
-    const double e = adamsMoulton(tid, timeStep, args...);
-    errors[tid]    = e > errors[tid] ? e : errors[tid];
-  }
-}
+__global__ void miscEndStepKernel(int numValues, double *errors, int numErrors);
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
 template <typename... Args>

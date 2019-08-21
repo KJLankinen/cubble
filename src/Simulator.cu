@@ -291,6 +291,8 @@ struct Params
   cudaStream_t velocityStream;
   cudaStream_t gasStream;
 
+  cudaEvent_t event1;
+
   KernelSize pairKernelSize = KernelSize(dim3(256, 1, 1), dim3(128, 1, 1));
   KernelSize defaultKernelSize;
 
@@ -775,17 +777,6 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
           params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
 #endif
-
-        KERNEL_LAUNCH(
-          correctKernel, params.defaultKernelSize, 0, 0,
-          params.state.numBubbles, params.state.timeStep,
-          params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::XP],
-          params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
-          params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
-          params.ddps[(uint32_t)DDP::DZDTP]);
       }
 #else // Two dimensional case
       {
@@ -822,17 +813,33 @@ double stabilize(Params &params)
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
           params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
 #endif
-
-        KERNEL_LAUNCH(
-          correctKernel, params.defaultKernelSize, 0, 0,
-          params.state.numBubbles, params.state.timeStep,
-          params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::XP],
-          params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-          params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-          params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-          params.ddps[(uint32_t)DDP::DYDTP]);
       }
 #endif
+
+      // Correct
+      KERNEL_LAUNCH(
+        correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+        params.state.timeStep, false, params.ddps[(uint32_t)DDP::ERROR],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
+        params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+        params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
+        params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTP],
+        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
+        params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP]);
+
+      KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0,
+                    params.gasStream, params.state.numBubbles,
+                    params.ddps[(uint32_t)DDP::ERROR],
+                    params.pairKernelSize.grid.x);
+
+      CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+                                params.ddps[(uint32_t)DDP::ERROR],
+                                sizeof(double), cudaMemcpyDeviceToHost,
+                                params.gasStream));
+
+      CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
 
       doBoundaryWrap(params.defaultKernelSize, 0, 0, params.state.numBubbles,
                      params.ddps[(uint32_t)DDP::XP],
@@ -846,9 +853,9 @@ double stabilize(Params &params)
                      params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
 
       // Error
-      error = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::ERROR],
-        params.state.numBubbles);
+      // Wait for event
+      CUDA_CALL(cudaEventSynchronize(params.event1));
+      error = params.pinnedDouble[0];
 
       if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
         params.state.timeStep *= 1.9;
@@ -958,45 +965,6 @@ void velocityCalculation(Params &params)
         params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
         params.inputs.wallDragStrength);
 #endif
-
-      // Correct
-      KERNEL_LAUNCH(
-        correctKernel, params.defaultKernelSize, 0, params.velocityStream,
-        params.state.numBubbles, params.state.timeStep,
-        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
-        params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
-        params.ddps[(uint32_t)DDP::DZDTP]);
-
-      // Path lenghts & distances
-      KERNEL_LAUNCH(
-        pathLengthDistanceKernel, params.defaultKernelSize, 0,
-        params.velocityStream, params.state.numBubbles,
-        params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
-        params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.interval.x,
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::Y0],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.interval.y,
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
-        params.ddps[(uint32_t)DDP::Z0],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP], params.state.interval.z);
-
-      // Boundary wrap
-      doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream,
-                     params.state.numBubbles, params.ddps[(uint32_t)DDP::XP],
-                     params.ddps[(uint32_t)DDP::YP],
-                     params.ddps[(uint32_t)DDP::ZP], params.state.lbb,
-                     params.state.tfr, params.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
     }
 #else // Two dimensions
     {
@@ -1050,40 +1018,6 @@ void velocityCalculation(Params &params)
           params.inputs.fZeroPerMuZero, params.inputs.wallDragStrength);
       }
 #endif
-
-      // Correct
-      KERNEL_LAUNCH(
-        correctKernel, params.defaultKernelSize, 0, params.velocityStream,
-        params.state.numBubbles, params.state.timeStep,
-        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-        params.ddps[(uint32_t)DDP::DYDTP]);
-
-      // Path lenghts & distances
-      KERNEL_LAUNCH(
-        pathLengthDistanceKernel, params.defaultKernelSize, 0,
-        params.velocityStream, params.state.numBubbles,
-        params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
-        params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.interval.x,
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::Y0],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP], params.state.interval.y);
-
-      // Boundary wrap
-      doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream,
-                     params.state.numBubbles, params.ddps[(uint32_t)DDP::XP],
-                     params.ddps[(uint32_t)DDP::YP],
-                     params.ddps[(uint32_t)DDP::ZP], params.state.lbb,
-                     params.state.tfr, params.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                     params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
     }
 #endif
 }
@@ -1105,14 +1039,6 @@ void gasExchangeCalculation(Params &params)
                 params.ddps[(uint32_t)DDP::TEMP1], params.state.numBubbles,
                 params.inputs.kappa, params.inputs.kParameter,
                 params.state.averageSurfaceAreaIn);
-
-  // Radius correct
-  KERNEL_LAUNCH(correctKernel, params.defaultKernelSize, 0, params.gasStream,
-                params.state.numBubbles, params.state.timeStep,
-                params.ddps[(uint32_t)DDP::ERROR],
-                params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
-                params.ddps[(uint32_t)DDP::DRDT],
-                params.ddps[(uint32_t)DDP::DRDTP]);
 }
 
 bool integrate(Params &params)
@@ -1163,13 +1089,76 @@ bool integrate(Params &params)
     gasExchangeCalculation(params);
     velocityCalculation(params);
 
+    // Correct
+    KERNEL_LAUNCH(
+      correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
+      params.state.timeStep, true, params.ddps[(uint32_t)DDP::ERROR],
+      params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
+      params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTP],
+      params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+      params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTP],
+      params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
+      params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTP],
+      params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
+      params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP]);
+
+    KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
+                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
+                  params.pairKernelSize.grid.x);
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+                              params.ddps[(uint32_t)DDP::ERROR], sizeof(double),
+                              cudaMemcpyDeviceToHost, params.gasStream));
+
+    CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
+
+#if (NUM_DIM == 3)
+    // Path lenghts & distances
+    KERNEL_LAUNCH(
+      pathLengthDistanceKernel, params.defaultKernelSize, 0,
+      params.velocityStream, params.state.numBubbles,
+      params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
+      params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
+      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
+      params.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.interval.x,
+      params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+      params.ddps[(uint32_t)DDP::Y0], params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+      params.state.interval.y, params.ddps[(uint32_t)DDP::ZP],
+      params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::Z0],
+      params.dips[(uint32_t)DIP::WRAP_COUNT_ZP], params.state.interval.z);
+#else
+    // Path lenghts & distances
+    KERNEL_LAUNCH(
+      pathLengthDistanceKernel, params.defaultKernelSize, 0,
+      params.velocityStream, params.state.numBubbles,
+      params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
+      params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
+      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
+      params.dips[(uint32_t)DIP::WRAP_COUNT_XP], params.state.interval.x,
+      params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+      params.ddps[(uint32_t)DDP::Y0], params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+      params.state.interval.y);
+#endif
+
+    // Boundary wrap
+    doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream,
+                   params.state.numBubbles, params.ddps[(uint32_t)DDP::XP],
+                   params.ddps[(uint32_t)DDP::YP],
+                   params.ddps[(uint32_t)DDP::ZP], params.state.lbb,
+                   params.state.tfr, params.dips[(uint32_t)DIP::WRAP_COUNT_X],
+                   params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
+                   params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
+                   params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+                   params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+                   params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+
     // Calculate maximum radius
     params.cw.reduceNoCopy<double, double *, double *>(
       &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::RP],
       params.ddps[(uint32_t)DDP::TEMP8], params.state.numBubbles,
       params.gasStream);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.pinnedDouble[1]),
                               params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
                               cudaMemcpyDeviceToHost, params.gasStream));
 
@@ -1187,10 +1176,10 @@ bool integrate(Params &params)
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
                               params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
                               cudaMemcpyDeviceToHost, params.gasStream));
-    // Error
-    error = params.cw.reduce<double, double *, double *>(
-      &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::ERROR],
-      params.state.numBubbles);
+
+    // Wait for event
+    CUDA_CALL(cudaEventSynchronize(params.event1));
+    error = params.pinnedDouble[0];
 
     if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
       params.state.timeStep *= 1.9;
@@ -1201,9 +1190,6 @@ bool integrate(Params &params)
 
     NVTX_RANGE_POP();
   } while (error > params.inputs.errorTolerance);
-
-  params.state.maxBubbleRadius = params.pinnedDouble[0];
-  int numBubblesAboveMinRad    = params.pinnedInt[0];
 
   // Update values
   const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
@@ -1235,6 +1221,9 @@ bool integrate(Params &params)
   params.state.timeInteger += (uint64_t)params.state.timeFraction;
   params.state.timeFraction =
     params.state.timeFraction - (uint64_t)params.state.timeFraction;
+
+  params.state.maxBubbleRadius = params.pinnedDouble[1];
+  int numBubblesAboveMinRad    = params.pinnedInt[0];
 
   // Delete & reorder
   bool updateNeighbors = params.state.numIntegrationSteps % 50 == 0;
@@ -1287,6 +1276,8 @@ void deinit(Params &params)
   CUDA_CALL(cudaFree(static_cast<void *>(params.deviceIntMemory)));
   CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
   CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedDouble)));
+
+  CUDA_CALL(cudaEventDestroy(params.event1));
 
   CUDA_CALL(cudaStreamDestroy(params.velocityStream));
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
@@ -1411,10 +1402,12 @@ void commonSetup(Params &params)
 
   printRelevantInfoOfCurrentDevice();
 
+  CUDA_CALL(cudaEventCreate(&params.event1));
+
   std::cout << "Reserving device memory to hold data." << std::endl;
 
   CUDA_CALL(cudaMallocHost(reinterpret_cast<void **>(&params.pinnedDouble),
-                           sizeof(double)));
+                           sizeof(double) * 2));
   CUDA_CALL(
     cudaMallocHost(reinterpret_cast<void **>(&params.pinnedInt), sizeof(int)));
 
