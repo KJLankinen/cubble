@@ -456,11 +456,76 @@ void updateCellsAndNeighbors(Params &params)
     params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
     params.dips[(uint32_t)DIP::INDEX], staticIndices);
 
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
-                            static_cast<void *>(params.ddps[(uint32_t)DDP::XP]),
-                            params.state.memReqD / 2,
-                            cudaMemcpyDeviceToDevice));
+  double *swapper                = params.ddps[(uint32_t)DDP::X];
+  params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
+  params.ddps[(uint32_t)DDP::XP] = swapper;
 
+  swapper                        = params.ddps[(uint32_t)DDP::Y];
+  params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
+  params.ddps[(uint32_t)DDP::YP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::Z];
+  params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
+  params.ddps[(uint32_t)DDP::ZP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::R];
+  params.ddps[(uint32_t)DDP::R]  = params.ddps[(uint32_t)DDP::RP];
+  params.ddps[(uint32_t)DDP::RP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DXDT];
+  params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
+  params.ddps[(uint32_t)DDP::DXDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DYDT];
+  params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
+  params.ddps[(uint32_t)DDP::DYDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DZDT];
+  params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
+  params.ddps[(uint32_t)DDP::DZDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DRDT];
+  params.ddps[(uint32_t)DDP::DRDT]  = params.ddps[(uint32_t)DDP::DRDTP];
+  params.ddps[(uint32_t)DDP::DRDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DXDTO];
+  params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::ERROR];
+  params.ddps[(uint32_t)DDP::ERROR] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DYDTO];
+  params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::TEMP1];
+  params.ddps[(uint32_t)DDP::TEMP1] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DZDTO];
+  params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::TEMP2];
+  params.ddps[(uint32_t)DDP::TEMP2] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DRDTO];
+  params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::TEMP3];
+  params.ddps[(uint32_t)DDP::TEMP3] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::X0];
+  params.ddps[(uint32_t)DDP::X0]    = params.ddps[(uint32_t)DDP::TEMP4];
+  params.ddps[(uint32_t)DDP::TEMP4] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::Y0];
+  params.ddps[(uint32_t)DDP::Y0]    = params.ddps[(uint32_t)DDP::TEMP5];
+  params.ddps[(uint32_t)DDP::TEMP5] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::Z0];
+  params.ddps[(uint32_t)DDP::Z0]    = params.ddps[(uint32_t)DDP::TEMP6];
+  params.ddps[(uint32_t)DDP::TEMP6] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::PATH];
+  params.ddps[(uint32_t)DDP::PATH]  = params.ddps[(uint32_t)DDP::TEMP7];
+  params.ddps[(uint32_t)DDP::TEMP7] = swapper;
+
+  swapper                              = params.ddps[(uint32_t)DDP::DISTANCE];
+  params.ddps[(uint32_t)DDP::DISTANCE] = params.ddps[(uint32_t)DDP::TEMP8];
+  params.ddps[(uint32_t)DDP::TEMP8]    = swapper;
+
+  // Must be copied, staticIndices points to a place inside TEMP1 and TEMP1
+  // has a longer stride than INDEX
   CUDA_CALL(cudaMemcpyAsync(
     static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
     static_cast<void *>(staticIndices), sizeof(int) * params.state.dataStride,
@@ -569,19 +634,91 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
     params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
     params.dips[(uint32_t)DIP::INDEX], params.dips[(uint32_t)DIP::TEMP2]);
 
-  CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
-                            static_cast<void *>(params.ddps[(uint32_t)DDP::XP]),
-                            params.state.memReqD / 2,
-                            cudaMemcpyDeviceToDevice));
+  double *swapper                = params.ddps[(uint32_t)DDP::X];
+  params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
+  params.ddps[(uint32_t)DDP::XP] = swapper;
 
-  // This needs to be copied as well, because after deletion the neighbors will
-  // be searched and the indices will be reordered again. This means they'll be
-  // wrong if the ones reordered here won't be copied back.
-  CUDA_CALL(cudaMemcpyAsync(
-    static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_X]),
-    static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
-    params.state.dataStride * 3 * sizeof(int), cudaMemcpyDeviceToDevice));
+  swapper                        = params.ddps[(uint32_t)DDP::Y];
+  params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
+  params.ddps[(uint32_t)DDP::YP] = swapper;
 
+  swapper                        = params.ddps[(uint32_t)DDP::Z];
+  params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
+  params.ddps[(uint32_t)DDP::ZP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::R];
+  params.ddps[(uint32_t)DDP::R]  = params.ddps[(uint32_t)DDP::RP];
+  params.ddps[(uint32_t)DDP::RP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DXDT];
+  params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
+  params.ddps[(uint32_t)DDP::DXDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DYDT];
+  params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
+  params.ddps[(uint32_t)DDP::DYDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DZDT];
+  params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
+  params.ddps[(uint32_t)DDP::DZDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DRDT];
+  params.ddps[(uint32_t)DDP::DRDT]  = params.ddps[(uint32_t)DDP::DRDTP];
+  params.ddps[(uint32_t)DDP::DRDTP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DXDTO];
+  params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::ERROR];
+  params.ddps[(uint32_t)DDP::ERROR] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DYDTO];
+  params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::TEMP1];
+  params.ddps[(uint32_t)DDP::TEMP1] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DZDTO];
+  params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::TEMP2];
+  params.ddps[(uint32_t)DDP::TEMP2] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::DRDTO];
+  params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::TEMP3];
+  params.ddps[(uint32_t)DDP::TEMP3] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::X0];
+  params.ddps[(uint32_t)DDP::X0]    = params.ddps[(uint32_t)DDP::TEMP4];
+  params.ddps[(uint32_t)DDP::TEMP4] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::Y0];
+  params.ddps[(uint32_t)DDP::Y0]    = params.ddps[(uint32_t)DDP::TEMP5];
+  params.ddps[(uint32_t)DDP::TEMP5] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::Z0];
+  params.ddps[(uint32_t)DDP::Z0]    = params.ddps[(uint32_t)DDP::TEMP6];
+  params.ddps[(uint32_t)DDP::TEMP6] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::PATH];
+  params.ddps[(uint32_t)DDP::PATH]  = params.ddps[(uint32_t)DDP::TEMP7];
+  params.ddps[(uint32_t)DDP::TEMP7] = swapper;
+
+  swapper                              = params.ddps[(uint32_t)DDP::DISTANCE];
+  params.ddps[(uint32_t)DDP::DISTANCE] = params.ddps[(uint32_t)DDP::TEMP8];
+  params.ddps[(uint32_t)DDP::TEMP8]    = swapper;
+
+  int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_XP] = swapperI;
+
+  swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_Y] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_YP] = swapperI;
+
+  swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_Z] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] = swapperI;
+
+  // These can't be swapped, because TEMP2 has a longer stride.
+  // They have to be copied.
   CUDA_CALL(cudaMemcpyAsync(
     static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
     static_cast<void *>(params.dips[(uint32_t)DIP::TEMP2]),
@@ -603,6 +740,7 @@ void saveSnapshotToFile(Params &params)
   std::ofstream file(ss.str().c_str(), std::ios::out);
   if (file.is_open())
   {
+    // TODO: COPY LINE BY LINE BECAUSE OF SWAP
     std::vector<double> doubleData;
     doubleData.resize(params.state.dataStride * (uint32_t)DDP::NUM_VALUES);
     CUDA_CALL(cudaMemcpy(doubleData.data(), params.deviceDoubleMemory,
@@ -1200,24 +1338,60 @@ bool integrate(Params &params)
   } while (error > params.inputs.errorTolerance);
 
   // Update values
-  const uint64_t numBytesToCopy = 4 * sizeof(double) * params.state.dataStride;
-  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO],
-                            params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
-                            cudaMemcpyDeviceToDevice, params.gasStream));
+  double *swapper                   = params.ddps[(uint32_t)DDP::DXDTO];
+  params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::DXDT];
+  params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
+  params.ddps[(uint32_t)DDP::DXDTP] = swapper;
 
-  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X],
-                            params.ddps[(uint32_t)DDP::XP], 2 * numBytesToCopy,
-                            cudaMemcpyDeviceToDevice, params.gasStream));
+  swapper                           = params.ddps[(uint32_t)DDP::DYDTO];
+  params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::DYDT];
+  params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
+  params.ddps[(uint32_t)DDP::DYDTP] = swapper;
 
-  CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::PATH],
-                            params.ddps[(uint32_t)DDP::TEMP4],
-                            sizeof(double) * params.state.dataStride,
-                            cudaMemcpyDeviceToDevice, params.velocityStream));
+  swapper                           = params.ddps[(uint32_t)DDP::DZDTO];
+  params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::DZDT];
+  params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
+  params.ddps[(uint32_t)DDP::DZDTP] = swapper;
 
-  CUDA_CALL(cudaMemcpyAsync(params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                            params.dips[(uint32_t)DIP::WRAP_COUNT_X],
-                            params.state.dataStride * 3 * sizeof(int),
-                            cudaMemcpyDeviceToDevice, params.velocityStream));
+  swapper                           = params.ddps[(uint32_t)DDP::DRDTO];
+  params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::DRDT];
+  params.ddps[(uint32_t)DDP::DRDT]  = params.ddps[(uint32_t)DDP::DRDTP];
+  params.ddps[(uint32_t)DDP::DRDTP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::X];
+  params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
+  params.ddps[(uint32_t)DDP::XP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::Y];
+  params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
+  params.ddps[(uint32_t)DDP::YP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::Z];
+  params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
+  params.ddps[(uint32_t)DDP::ZP] = swapper;
+
+  swapper                        = params.ddps[(uint32_t)DDP::R];
+  params.ddps[(uint32_t)DDP::R]  = params.ddps[(uint32_t)DDP::RP];
+  params.ddps[(uint32_t)DDP::RP] = swapper;
+
+  swapper                           = params.ddps[(uint32_t)DDP::PATH];
+  params.ddps[(uint32_t)DDP::PATH]  = params.ddps[(uint32_t)DDP::TEMP4];
+  params.ddps[(uint32_t)DDP::TEMP4] = swapper;
+
+  int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_XP] = swapperI;
+
+  swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_Y] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_YP] = swapperI;
+
+  swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_Z] =
+    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
+  params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] = swapperI;
 
   ++params.state.numIntegrationSteps;
 
@@ -1519,6 +1693,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
   const int numBubblesAboveMinRad = params.cw.reduce<int, int *, int *>(
     &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
     params.state.numBubbles);
+
   if (numBubblesAboveMinRad < params.state.numBubbles)
     deleteSmallBubbles(params, numBubblesAboveMinRad);
 
@@ -1725,11 +1900,22 @@ void initializeFromJson(const char *inputFileName, Params &params)
     ++numSteps;
   }
 
-  // Set starting positions and reset wrap counts to 0
-  const uint64_t numBytesToCopy = 3 * sizeof(double) * params.state.dataStride;
+  // Set starting positions
+  // Copying one by one, because pointers get swapped and although
+  // these three should be consecutive ones anyway, it's better
+  // to be safe than sorry in this case.
+  const uint64_t numBytesToCopy = sizeof(double) * params.state.dataStride;
   CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::X0],
                        params.ddps[(uint32_t)DDP::X], numBytesToCopy,
                        cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Y0],
+                       params.ddps[(uint32_t)DDP::y], numBytesToCopy,
+                       cudaMemcpyDeviceToDevice));
+  CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Z0],
+                       params.ddps[(uint32_t)DDP::Z], numBytesToCopy,
+                       cudaMemcpyDeviceToDevice));
+
+  // Reset wrap counts to 0
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_X], 0,
                        6 * params.state.dataStride * sizeof(int)));
 
@@ -2054,6 +2240,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     offset += sizeof(params.inputs);
 
     // Doubles
+    // TODO: COPY LINE BY LINE
     std::vector<double> doubleData;
     doubleData.resize(params.state.dataStride * numDoubleComponents);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(doubleData.data()),
@@ -2089,6 +2276,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     }
 
     // Ints
+    // TODO COPY LINE BY LINE
     std::vector<int> intData;
     intData.resize(params.state.dataStride * numIntComponents);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(intData.data()),
