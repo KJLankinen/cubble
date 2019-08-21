@@ -870,19 +870,21 @@ double stabilize(Params &params)
         params.state.timeStep *= 0.5;
 
     } while (error > params.inputs.errorTolerance);
+    // Update values
+    double *swap                      = params.ddps[(uint32_t)DDP::DXDTO];
+    params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::DXDT];
+    params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
+    params.ddps[(uint32_t)DDP::DXDTP] = swap;
 
-    // Update the current values with the calculated predictions
-    const uint64_t numBytesToCopy =
-      3 * sizeof(double) * params.state.dataStride;
-    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDTO],
-                              params.ddps[(uint32_t)DDP::DXDT], numBytesToCopy,
-                              cudaMemcpyDeviceToDevice, 0));
-    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::X],
-                              params.ddps[(uint32_t)DDP::XP], numBytesToCopy,
-                              cudaMemcpyDeviceToDevice, 0));
-    CUDA_CALL(cudaMemcpyAsync(params.ddps[(uint32_t)DDP::DXDT],
-                              params.ddps[(uint32_t)DDP::DXDTP], numBytesToCopy,
-                              cudaMemcpyDeviceToDevice, 0));
+    swap                              = params.ddps[(uint32_t)DDP::DYDTO];
+    params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::DYDT];
+    params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
+    params.ddps[(uint32_t)DDP::DYDTP] = swap;
+
+    swap                              = params.ddps[(uint32_t)DDP::DZDTO];
+    params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::DZDT];
+    params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
+    params.ddps[(uint32_t)DDP::DZDTP] = swap;
 
     elapsedTime += params.state.timeStep;
 
