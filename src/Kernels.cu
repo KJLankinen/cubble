@@ -847,18 +847,22 @@ __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double *errors, double *maxR,
+                              bool useGasExchange, double minRad,
+                              double *errors, double *maxR, int *numAboveMinRad,
                               double *xp, double *x, double *vx, double *vxp,
                               double *yp, double *y, double *vy, double *vyp,
                               double *zp, double *z, double *vz, double *vzp,
                               double *rp, double *r, double *vr, double *vrp)
 {
+  int tid = threadIdx, x;
   __shared__ double me[128];
   __shared__ double mr[128];
-  me[threadIdx.x] = 0.0;
-  mr[threadIdx.x] = 0.0;
+  __shared__ int namr[128];
+  me[tid]   = 0.0;
+  mr[tid]   = 0.0;
+  namr[tid] = 0;
 
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+  for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
        i += blockDim.x * gridDim.x)
   {
     double corrected = x[i] + 0.5 * timeStep * (vx[i] + vxp[i]);
@@ -882,17 +886,16 @@ __global__ void correctKernel(int numValues, double timeStep,
       corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
       er        = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
       rp[i]     = corrected;
-      mr[threadIdx.x] =
-        mr[threadIdx.x] > corrected ? mr[threadIdx.x] : corrected;
+      mr[tid]   = mr[tid] > corrected ? mr[tid] : corrected;
+      namr[tid] += (int)(corrected > minRad);
     }
     corrected = ex > ey ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
                         : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
-    me[threadIdx.x] = me[threadIdx.x] > corrected ? me[threadIdx.x] : corrected;
+    me[tid] = me[tid] > corrected ? me[tid] : corrected;
   }
 
   __syncthreads();
 
-  int tid = threadIdx.x;
   if (tid < 32)
   {
     me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
@@ -902,6 +905,10 @@ __global__ void correctKernel(int numValues, double timeStep,
     mr[tid] = mr[tid] > mr[32 + tid] ? mr[tid] : mr[32 + tid];
     mr[tid] = mr[tid] > mr[64 + tid] ? mr[tid] : mr[64 + tid];
     mr[tid] = mr[tid] > mr[96 + tid] ? mr[tid] : mr[96 + tid];
+
+    namr[tid] += namr[32 + tid];
+    namr[tid] += namr[64 + tid];
+    namr[tid] += namr[96 + tid];
   }
 
   if (tid < 8)
@@ -913,6 +920,10 @@ __global__ void correctKernel(int numValues, double timeStep,
     mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
     mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
     mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
+
+    namr[tid] += namr[8 + tid];
+    namr[tid] += namr[16 + tid];
+    namr[tid] += namr[24 + tid];
   }
 
   if (tid < 2)
@@ -924,6 +935,10 @@ __global__ void correctKernel(int numValues, double timeStep,
     mr[tid] = mr[tid] > mr[2 + tid] ? mr[tid] : mr[2 + tid];
     mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
     mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
+
+    namr[tid] += namr[2 + tid];
+    namr[tid] += namr[4 + tid];
+    namr[tid] += namr[6 + tid];
   }
 
   if (tid == 0)
@@ -933,6 +948,9 @@ __global__ void correctKernel(int numValues, double timeStep,
 
     mr[tid]          = mr[tid] > mr[1] ? mr[tid] : mr[1];
     maxR[blockIdx.x] = mr[1];
+
+    namr[tid] += namr[1];
+    atomicAdd(numAboveMinRad, namr[tid]);
   }
 }
 

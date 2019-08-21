@@ -456,7 +456,8 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double *errors, double *maxR,
+                              bool useGasExchange, double minRad,
+                              double *errors, double *maxR, int *numAboveMinRad,
                               double *xp, double *x, double *vx, double *vxp,
                               double *yp, double *y, double *vy, double *vyp,
                               double *zp, double *z, double *vz, double *vzp,

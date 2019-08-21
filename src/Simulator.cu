@@ -819,8 +819,9 @@ double stabilize(Params &params)
       // Correct
       KERNEL_LAUNCH(
         correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-        params.state.timeStep, false, params.ddps[(uint32_t)DDP::ERROR],
-        params.ddps[(uint32_t)DDP::TEMP8], params.ddps[(uint32_t)DDP::XP],
+        params.state.timeStep, false, params.inputs.minRad,
+        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP8],
+        params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
         params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
         params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
@@ -1093,8 +1094,9 @@ bool integrate(Params &params)
     // Correct
     KERNEL_LAUNCH(
       correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-      params.state.timeStep, true, params.ddps[(uint32_t)DDP::ERROR],
-      params.ddps[(uint32_t)DDP::TEMP8], params.ddps[(uint32_t)DDP::XP],
+      params.state.timeStep, true, params.inputs.minRad,
+      params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP8],
+      params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::XP],
       params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
       params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
       params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
@@ -1117,6 +1119,10 @@ bool integrate(Params &params)
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.pinnedDouble[1]),
                               params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
+                              cudaMemcpyDeviceToHost, params.gasStream));
+
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
+                              params.dips[(uint32_t)DIP::FLAGS], sizeof(int),
                               cudaMemcpyDeviceToHost, params.gasStream));
 
 #if (NUM_DIM == 3)
@@ -1158,21 +1164,6 @@ bool integrate(Params &params)
                    params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
                    params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
                    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
-
-    // Calculate how many bubbles are below the minimum size.
-    KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize,
-                  0, params.gasStream, params.state.numBubbles,
-                  params.dips[(uint32_t)DIP::FLAGS],
-                  params.ddps[(uint32_t)DDP::RP], params.inputs.minRad);
-
-    params.cw.reduceNoCopy<int, int *, int *>(
-      &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
-      params.dips[(uint32_t)DIP::TEMP2], params.state.numBubbles,
-      params.gasStream);
-
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
-                              params.dips[(uint32_t)DIP::TEMP2], sizeof(int),
-                              cudaMemcpyDeviceToHost, params.gasStream));
 
     // Wait for event
     CUDA_CALL(cudaEventSynchronize(params.event1));
