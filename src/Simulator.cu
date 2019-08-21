@@ -1189,23 +1189,23 @@ bool integrate(Params &params)
   params.ddps[(uint32_t)DDP::TEMP4] = params.ddps[(uint32_t)DDP::PATH];
   params.ddps[(uint32_t)DDP::PATH]  = swap;
 
-  swap                              = params.ddps[(uint32_t)DDP::DXDT0];
-  params.ddps[(uint32_t)DDP::DXDT0] = params.ddps[(uint32_t)DDP::DXDT];
+  swap                              = params.ddps[(uint32_t)DDP::DXDTO];
+  params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::DXDT];
   params.ddps[(uint32_t)DDP::DXDT]  = params.ddps[(uint32_t)DDP::DXDTP];
   params.ddps[(uint32_t)DDP::DXDTP] = swap;
 
-  swap                              = params.ddps[(uint32_t)DDP::DYDT0];
-  params.ddps[(uint32_t)DDP::DYDT0] = params.ddps[(uint32_t)DDP::DYDT];
+  swap                              = params.ddps[(uint32_t)DDP::DYDTO];
+  params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::DYDT];
   params.ddps[(uint32_t)DDP::DYDT]  = params.ddps[(uint32_t)DDP::DYDTP];
   params.ddps[(uint32_t)DDP::DYDTP] = swap;
 
-  swap                              = params.ddps[(uint32_t)DDP::DZDT0];
-  params.ddps[(uint32_t)DDP::DZDT0] = params.ddps[(uint32_t)DDP::DZDT];
+  swap                              = params.ddps[(uint32_t)DDP::DZDTO];
+  params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::DZDT];
   params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
   params.ddps[(uint32_t)DDP::DZDTP] = swap;
 
-  swap                              = params.ddps[(uint32_t)DDP::DRDT0];
-  params.ddps[(uint32_t)DDP::DRDT0] = params.ddps[(uint32_t)DDP::DRDT];
+  swap                              = params.ddps[(uint32_t)DDP::DRDTO];
+  params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::DRDT];
   params.ddps[(uint32_t)DDP::DRDT]  = params.ddps[(uint32_t)DDP::DRDTP];
   params.ddps[(uint32_t)DDP::DRDTP] = swap;
 
