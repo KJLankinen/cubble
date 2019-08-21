@@ -9,6 +9,7 @@ __device__ double dTotalAreaPerRadius;
 __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
+__device__ int dNumBubblesAboveMinRad;
 __device__ double dVolumeMultiplier;
 
 __device__ void logError(bool condition, const char *statement,
@@ -848,11 +849,11 @@ __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, int *numAboveMinRad,
-                              double *xp, double *x, double *vx, double *vxp,
-                              double *yp, double *y, double *vy, double *vyp,
-                              double *zp, double *z, double *vz, double *vzp,
-                              double *rp, double *r, double *vr, double *vrp)
+                              double *errors, double *maxR, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp)
 {
   int tid = threadIdx.x;
   __shared__ double me[128];
@@ -950,7 +951,7 @@ __global__ void correctKernel(int numValues, double timeStep,
     maxR[blockIdx.x] = mr[1];
 
     namr[tid] += namr[1];
-    atomicAdd(numAboveMinRad, namr[tid]);
+    atomicAdd(&dNumBubblesAboveMinRad, namr[tid]);
   }
 }
 

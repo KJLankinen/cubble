@@ -307,6 +307,8 @@ struct Params
   std::vector<int> previousX;
   std::vector<int> previousY;
   std::vector<int> previousZ;
+
+  int *numBubblesAboveMinRad = nullptr;
 };
 
 } // namespace cubble
@@ -825,15 +827,14 @@ double stabilize(Params &params)
         correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
         params.state.timeStep, false, params.inputs.minRad,
         params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP8],
-        params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-        params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
-        params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
-        params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::RP],
-        params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
-        params.ddps[(uint32_t)DDP::DRDTP]);
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
+        params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+        params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
+        params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTP],
+        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
+        params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP]);
 
       KERNEL_LAUNCH(
         miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
@@ -1100,15 +1101,14 @@ bool integrate(Params &params)
       correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
       params.state.timeStep, true, params.inputs.minRad,
       params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP8],
-      params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::XP],
-      params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
-      params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
-      params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
-      params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
-      params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
-      params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::RP],
-      params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
-      params.ddps[(uint32_t)DDP::DRDTP]);
+      params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
+      params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTP],
+      params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
+      params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTP],
+      params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
+      params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTP],
+      params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
+      params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP]);
 
     KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
@@ -1126,8 +1126,9 @@ bool integrate(Params &params)
                               cudaMemcpyDeviceToHost, params.gasStream));
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
-                              params.dips[(uint32_t)DIP::FLAGS], sizeof(int),
-                              cudaMemcpyDeviceToHost, params.gasStream));
+                              static_cast<void *>(params.numBubblesAboveMinRad),
+                              sizeof(int), cudaMemcpyDeviceToHost,
+                              params.gasStream));
 
 #if (NUM_DIM == 3)
     // Path lenghts & distances
@@ -1395,6 +1396,10 @@ void commonSetup(Params &params)
   printRelevantInfoOfCurrentDevice();
 
   CUDA_CALL(cudaEventCreate(&params.event1));
+
+  CUDA_CALL(cudaGetSymbolAddress(
+    reinterpret_cast<void **>(&params.numBubblesAboveMinRad),
+    dNumBubblesAboveMinRad));
 
   std::cout << "Reserving device memory to hold data." << std::endl;
 

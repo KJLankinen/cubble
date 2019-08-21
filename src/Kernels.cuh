@@ -15,6 +15,7 @@ extern __device__ double dTotalAreaPerRadius;
 extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
+extern __device__ int dNumBubblesAboveMinRad;
 extern __device__ double dVolumeMultiplier;
 
 template <typename... Arguments>
@@ -85,6 +86,7 @@ __global__ void resetKernel(double value, int numValues, Args... args)
     dTotalOverlapArea          = 0.0;
     dTotalOverlapAreaPerRadius = 0.0;
     dTotalAreaPerRadius        = 0.0;
+    dNumBubblesAboveMinRad     = 0:
   }
 }
 
@@ -457,11 +459,11 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, int *numAboveMinRad,
-                              double *xp, double *x, double *vx, double *vxp,
-                              double *yp, double *y, double *vy, double *vyp,
-                              double *zp, double *z, double *vz, double *vzp,
-                              double *rp, double *r, double *vr, double *vrp);
+                              double *errors, double *maxR, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp);
 
 __global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
                                   int origBlockSize);
