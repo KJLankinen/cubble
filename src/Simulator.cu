@@ -886,6 +886,18 @@ double stabilize(Params &params)
     params.ddps[(uint32_t)DDP::DZDT]  = params.ddps[(uint32_t)DDP::DZDTP];
     params.ddps[(uint32_t)DDP::DZDTP] = swap;
 
+    swap                           = params.ddps[(uint32_t)DDP::X];
+    params.ddps[(uint32_t)DDP::X]  = params.ddps[(uint32_t)DDP::XP];
+    params.ddps[(uint32_t)DDP::XP] = swap;
+
+    swap                           = params.ddps[(uint32_t)DDP::Y];
+    params.ddps[(uint32_t)DDP::Y]  = params.ddps[(uint32_t)DDP::YP];
+    params.ddps[(uint32_t)DDP::YP] = swap;
+
+    swap                           = params.ddps[(uint32_t)DDP::Z];
+    params.ddps[(uint32_t)DDP::Z]  = params.ddps[(uint32_t)DDP::ZP];
+    params.ddps[(uint32_t)DDP::ZP] = swap;
+
     elapsedTime += params.state.timeStep;
 
     if (i % 50 == 0)
