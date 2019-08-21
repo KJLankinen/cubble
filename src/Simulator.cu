@@ -832,7 +832,7 @@ double stabilize(Params &params)
       KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0,
                     params.gasStream, params.state.numBubbles,
                     params.ddps[(uint32_t)DDP::ERROR],
-                    params.pairKernelSize.grid.x);
+                    (int)params.pairKernelSize.grid.x);
 
       CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
                                 params.ddps[(uint32_t)DDP::ERROR],
@@ -1104,7 +1104,7 @@ bool integrate(Params &params)
 
     KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
-                  params.pairKernelSize.grid.x);
+                  (int)params.pairKernelSize.grid.x);
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
                               params.ddps[(uint32_t)DDP::ERROR], sizeof(double),
