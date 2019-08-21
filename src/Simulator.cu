@@ -1909,7 +1909,7 @@ void initializeFromJson(const char *inputFileName, Params &params)
                        params.ddps[(uint32_t)DDP::X], numBytesToCopy,
                        cudaMemcpyDeviceToDevice));
   CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Y0],
-                       params.ddps[(uint32_t)DDP::y], numBytesToCopy,
+                       params.ddps[(uint32_t)DDP::Y], numBytesToCopy,
                        cudaMemcpyDeviceToDevice));
   CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Z0],
                        params.ddps[(uint32_t)DDP::Z], numBytesToCopy,
