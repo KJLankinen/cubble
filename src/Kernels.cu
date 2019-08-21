@@ -854,7 +854,7 @@ __global__ void correctKernel(int numValues, double timeStep,
                               double *zp, double *z, double *vz, double *vzp,
                               double *rp, double *r, double *vr, double *vrp)
 {
-  int tid = threadIdx, x;
+  int tid = threadIdx.x;
   __shared__ double me[128];
   __shared__ double mr[128];
   __shared__ int namr[128];
