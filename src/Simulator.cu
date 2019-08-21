@@ -702,6 +702,7 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
   params.ddps[(uint32_t)DDP::DISTANCE] = params.ddps[(uint32_t)DDP::TEMP8];
   params.ddps[(uint32_t)DDP::TEMP8]    = swapper;
 
+  // TODO maybe must copy
   int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
   params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
     params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
@@ -1378,6 +1379,7 @@ bool integrate(Params &params)
   params.ddps[(uint32_t)DDP::PATH]  = params.ddps[(uint32_t)DDP::TEMP4];
   params.ddps[(uint32_t)DDP::TEMP4] = swapper;
 
+  // TODO maybe must copy
   int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
   params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
     params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
@@ -1822,6 +1824,8 @@ void initializeFromJson(const char *inputFileName, Params &params)
             << std::endl;
 
   stabilize(params);
+  stabilize(params);
+  stabilize(params);
 
   const double bubbleVolume = calculateVolumeOfBubbles(params);
 
@@ -1845,6 +1849,10 @@ void initializeFromJson(const char *inputFileName, Params &params)
     params.state.interval * params.inputs.flowLbb + params.state.lbb;
 
   transformPositions(params, false);
+
+  stabilize(params);
+  stabilize(params);
+  stabilize(params);
 
   std::cout << "Volume ratios: current: "
             << bubbleVolume / getSimulationBoxVolume(params)
