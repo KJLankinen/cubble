@@ -890,8 +890,7 @@ double stabilize(Params &params)
           resetKernel, params.defaultKernelSize, 0, 0, 0.0,
           params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
           params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-          params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::TEMP1],
-          params.ddps[(uint32_t)DDP::TEMP2]);
+          params.ddps[(uint32_t)DDP::ERROR]);
 
         KERNEL_LAUNCH(
           predictKernel, params.defaultKernelSize, 0, 0,
@@ -906,7 +905,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
           params.state.interval, params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -916,7 +915,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
-          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
@@ -928,8 +927,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           resetKernel, params.defaultKernelSize, 0, 0, 0.0,
           params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
-          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ERROR],
-          params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::TEMP2]);
+          params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ERROR]);
 
         KERNEL_LAUNCH(
           predictKernel, params.defaultKernelSize, 0, 0,
@@ -942,7 +940,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityPairKernel, params.pairKernelSize, 0, 0,
           params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
           params.state.interval, params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
@@ -952,7 +950,7 @@ double stabilize(Params &params)
         KERNEL_LAUNCH(
           velocityWallKernel, params.defaultKernelSize, 0,
           params.velocityStream, params.state.numBubbles,
-          params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
+          params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::XP],
           params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
           params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
           params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb, params.state.tfr,
