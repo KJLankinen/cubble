@@ -86,7 +86,7 @@ __global__ void resetKernel(double value, int numValues, Args... args)
     dTotalOverlapArea          = 0.0;
     dTotalOverlapAreaPerRadius = 0.0;
     dTotalAreaPerRadius        = 0.0;
-    dNumBubblesAboveMinRad     = 0:
+    dNumBubblesAboveMinRad     = 0;
   }
 }
 
