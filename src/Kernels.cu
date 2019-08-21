@@ -924,12 +924,12 @@ __global__ void miscEndStepKernel(int numValues, double *errors, int numErrors)
 
   if (blockIdx.x == 0)
   {
-    for (int i = threadIdx.x; i < numErrors; i += blockDim.x)
-      me[i] = me[i] > errors[i] ? me[i] : errors[i];
+    int tid = threadIdx.x;
+    for (int i = tid; i < numErrors; i += blockDim.x)
+      me[tid] = me[tid] > errors[i] ? me[tid] : errors[i];
 
     __syncthreads();
 
-    int tid = threadIdx.x;
     if (tid < 32)
     {
       me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
