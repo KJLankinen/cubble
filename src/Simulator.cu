@@ -1113,25 +1113,22 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
       params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP]);
 
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
+                              static_cast<void *>(params.numBubblesAboveMinRad),
+                              sizeof(int), cudaMemcpyDeviceToHost,
+                              params.velocityStream));
+
     KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
                   params.ddps[(uint32_t)DDP::TEMP8],
                   (int)params.pairKernelSize.grid.x);
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
-                              params.ddps[(uint32_t)DDP::ERROR], sizeof(double),
-                              cudaMemcpyDeviceToHost, params.gasStream));
+                              params.ddps[(uint32_t)DDP::ERROR],
+                              2 * sizeof(double), cudaMemcpyDeviceToHost,
+                              params.gasStream));
 
     CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
-
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(&params.pinnedDouble[1]),
-                              params.ddps[(uint32_t)DDP::TEMP8], sizeof(double),
-                              cudaMemcpyDeviceToHost, params.gasStream));
-
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
-                              static_cast<void *>(params.numBubblesAboveMinRad),
-                              sizeof(int), cudaMemcpyDeviceToHost,
-                              params.gasStream));
 
 #if (NUM_DIM == 3)
     // Path lenghts & distances

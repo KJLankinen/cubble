@@ -997,7 +997,7 @@ __global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
     }
 
     if (tid == 0)
-      arr[tid] = me[tid];
+      errors[blockIdx.x] = me[tid];
   }
 }
 
