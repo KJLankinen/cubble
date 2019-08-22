@@ -2003,9 +2003,15 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     inFile.seekg(0, inFile.end);
     const uint64_t fileSize = inFile.tellg();
     inFile.seekg(0);
-    if (fileSize <= sizeof(params.state) + sizeof(params.inputs) + HEADER_SIZE)
-      throw std::runtime_error("The given binary file is incorrect size. Check "
-                               "that the file is correct.");
+    uint64_t fs = sizeof(params.state) + sizeof(params.inputs) + HEADER_SIZE;
+    if (fileSize <= fs)
+    {
+      std::stringstream ss;
+      ss << "The given binary file is incorrect size. Check "
+            "that the file is correct. File size: "
+         << fileSize << ", required minimum: " << fs;
+      throw std::runtime_error(ss.str());
+    }
 
     std::vector<char> byteData;
     byteData.resize(fileSize);
@@ -2117,7 +2123,8 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     // This function reserves memory & sets up the device pointers.
     commonSetup(params);
 
-    const uint64_t doubleBytes = params.state.memReqD / 2;
+    const uint64_t doubleBytes =
+      sizeof(double) * (uint32_t)DDP::NUM_VALUES / 2 * params.state.dataStride;
     const uint64_t intBytes    = sizeof(int) * 4 * params.state.dataStride;
 
     // Previous positions of bubbles are saved on the cpu. They are accessed
@@ -2132,11 +2139,15 @@ void initializeFromBinary(const char *inputFileName, Params &params)
     const uint64_t previousPosBytes =
       params.previousX.size() * sizeof(params.previousX[0]);
 
-    if (fileSize != sizeof(params.state) + sizeof(params.inputs) + doubleBytes +
-                      intBytes + header.size() + 3 * previousPosBytes)
+    fs = sizeof(params.state) + sizeof(params.inputs) + doubleBytes + intBytes +
+         header.size() + 3 * previousPosBytes;
+    if (fileSize != fs)
     {
-      throw std::runtime_error("The given binary file is incorrect size. Check "
-                               "that the file is correct.");
+      std::stringstream ss;
+      ss << "The given binary file is incorrect size. Check "
+            "that the file is correct. File size: "
+         << fileSize << ", required minimum: " << fs;
+      throw std::runtime_error(ss.str());
     }
 
     // Doubles
@@ -2167,8 +2178,13 @@ void initializeFromBinary(const char *inputFileName, Params &params)
 
     // All the data should be used at this point
     if (offset != byteData.size())
-      throw std::runtime_error("The given binary file is incorrect size. Check "
-                               "that the file is correct.");
+    {
+      std::stringstream ss;
+      ss << "The given binary file is incorrect size. Check "
+            "that the file is correct. Used data: "
+         << offset << ", total size: " << byteData.size();
+      throw std::runtime_error(ss.str());
+    }
 
     // Setup pairs. Unnecessary to serialize them.
     updateCellsAndNeighbors(params);
@@ -2309,9 +2325,10 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     for (uint32_t i = 0; i < numIntComponents; ++i)
     {
       const uint64_t bytesToCopy = sizeof(int) * newDataStride;
-      CUDA_CALL(cudaMemcpy(static_cast<void *>(&byteData[offset]),
-                           params.dips[(uint32_t)DIP::WRAP_COUNT_XP + i],
-                           bytesToCopy, cudaMemcpyDeviceToHost));
+      CUDA_CALL(cudaMemcpy(
+        static_cast<void *>(&byteData[offset]),
+        static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP + i]),
+        bytesToCopy, cudaMemcpyDeviceToHost));
 
       offset += bytesToCopy;
     }
