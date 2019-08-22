@@ -1228,9 +1228,9 @@ bool integrate(Params &params)
       resetKernel, params.defaultKernelSize, 0, params.gasStream, 0.0,
       params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
       params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-      params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::ERROR],
-      params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::TEMP5],
-      params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::TEMP7]);
+      params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
+      params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::TEMP6],
+      params.ddps[(uint32_t)DDP::TEMP7]);
 
     // Predict
 #if (NUM_DIM == 3)
@@ -1282,6 +1282,7 @@ bool integrate(Params &params)
                               sizeof(int), cudaMemcpyDeviceToHost,
                               params.velocityStream));
 
+    // TODO: combine path & distance, reset and boundary wrap to this kernel
     KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
                   params.ddps[(uint32_t)DDP::TEMP8],
@@ -2339,8 +2340,8 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     std::cout << "Writing data. Calculated size: " << totalSize
               << "\nbyte vector size: " << byteData.size()
               << "\noffset: " << offset << "\ndouble data: " << doubleDataSize
-              << "\nint data: " << intDataSize << "\nheader size"
-              << header.size() << "\nprev pos size: "
+              << "\nint data: " << intDataSize
+              << "\nheader size: " << header.size() << "\nprev pos size: "
               << 3 * params.previousX.size() * sizeof(params.previousX[0])
               << "\nstate size: " << sizeof(params.state)
               << "\ninputs size: " << sizeof(params.inputs) << std::endl;
