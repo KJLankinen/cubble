@@ -2336,6 +2336,14 @@ void serializeStateAndData(const char *outputFileName, Params &params)
     if (offset != totalSize || offset != byteData.size())
       throw std::runtime_error("Error in data calculation at serialization!");
 
+    std::cout << "Writing data. Calculated size: " << totalSize
+              << "\nbyte vector size: " << byteData.size()
+              << "\noffset: " << offset << "\ndouble data: " << doubleDataSize
+              << "\nint data: " << intDataSize << "\nheader size"
+              << header.size() << "\nprev pos size: "
+              << 3 * params.previousX.size() * sizeof(params.previousX[0])
+              << "\nstate size: " << sizeof(params.state)
+              << "\ninputs size: " << sizeof(params.inputs) << std::endl;
     outFile.write(byteData.data(), byteData.size());
     outFile.close();
   }
