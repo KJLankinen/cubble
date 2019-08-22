@@ -773,10 +773,6 @@ void saveSnapshotToFile(Params &params)
 
     if (params.state.numSnapshots == 0)
     {
-        params.previousX.resize(params.state.dataStride);
-        params.previousY.resize(params.state.dataStride);
-        params.previousZ.resize(params.state.dataStride);
-
         for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i)
         {
           params.previousX[intData[i]] =
@@ -1649,6 +1645,10 @@ void commonSetup(Params &params)
     params.dips[i] = params.dips[(uint32_t)DIP::PAIR1] +
                      avgNumNeighbors * ++j * params.state.dataStride;
 
+  params.previousX.resize(params.state.dataStride);
+  params.previousY.resize(params.state.dataStride);
+  params.previousZ.resize(params.state.dataStride);
+
   std::cout << "Memory requirement for data:\n\tdouble: "
             << params.state.memReqD << " bytes\n\tint: " << params.state.memReqI
             << " bytes\n\ttotal: "
@@ -2344,6 +2344,7 @@ void serializeStateAndData(const char *outputFileName, Params &params)
               << 3 * params.previousX.size() * sizeof(params.previousX[0])
               << "\nstate size: " << sizeof(params.state)
               << "\ninputs size: " << sizeof(params.inputs) << std::endl;
+
     outFile.write(byteData.data(), byteData.size());
     outFile.close();
   }
