@@ -758,7 +758,7 @@ void saveSnapshotToFile(Params &params)
   {
     std::vector<double> doubleData;
     doubleData.resize(params.state.dataStride * (uint32_t)DDP::NUM_VALUES);
-    for (uint32_t i = 0; < (uint32_t)DDP::NUM_VALUES; ++i)
+    for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i)
     {
       CUDA_CALL(cudaMemcpy(
         &doubleData[i * params.state.dataStride], params.ddps[i],
