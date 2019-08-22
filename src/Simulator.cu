@@ -1836,9 +1836,8 @@ void initializeFromJson(const char *inputFileName, Params &params)
                "scaling or stabilization."
             << std::endl;
 
-  stabilize(params);
-  stabilize(params);
-  stabilize(params);
+  for (uint32_t i = 0; i < 3; ++i)
+    stabilize(params);
 
   const double bubbleVolume = calculateVolumeOfBubbles(params);
 
@@ -1863,9 +1862,8 @@ void initializeFromJson(const char *inputFileName, Params &params)
 
   transformPositions(params, false);
 
-  stabilize(params);
-  stabilize(params);
-  stabilize(params);
+  for (uint32_t i = 0; i < 3; ++i)
+    stabilize(params);
 
   std::cout << "Volume ratios: current: "
             << bubbleVolume / getSimulationBoxVolume(params)
@@ -1937,8 +1935,24 @@ void initializeFromJson(const char *inputFileName, Params &params)
                        cudaMemcpyDeviceToDevice));
 
   // Reset wrap counts to 0
+  // Again avoiding batched memset, because the pointers might not be in order
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_X], 0,
-                       6 * params.state.dataStride * sizeof(int)));
+                       params.state.dataStride * sizeof(int)));
+
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Y], 0,
+                       params.state.dataStride * sizeof(int)));
+
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Z], 0,
+                       params.state.dataStride * sizeof(int)));
+
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Xp], 0,
+                       params.state.dataStride * sizeof(int)));
+
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_YP], 0,
+                       params.state.dataStride * sizeof(int)));
+
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_ZP], 0,
+                       params.state.dataStride * sizeof(int)));
 
   // Calculate the energy at starting positions
   KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
