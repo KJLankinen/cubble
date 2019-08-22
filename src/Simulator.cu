@@ -304,9 +304,9 @@ struct Params
   std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
   std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 
-  std::vector<int> previousX;
-  std::vector<int> previousY;
-  std::vector<int> previousZ;
+  std::vector<double> previousX;
+  std::vector<double> previousY;
+  std::vector<double> previousZ;
 
   int *numBubblesAboveMinRad = nullptr;
 };
