@@ -1945,7 +1945,7 @@ void initializeFromJson(const char *inputFileName, Params &params)
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Z], 0,
                        params.state.dataStride * sizeof(int)));
 
-  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Xp], 0,
+  CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_XP], 0,
                        params.state.dataStride * sizeof(int)));
 
   CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_YP], 0,
