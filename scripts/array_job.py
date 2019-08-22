@@ -107,7 +107,7 @@ cd " + temp_dir.path + "\n\
 if [ -f " + result_file.path + " ]; then cp " + result_file.path + " .; fi\n\
 srun " + executable.path + " " + binary.path + " " + binary.name + "\n\
 rm " + binary.path + "\n\
-tar cf snapshots_$TIMES_CALLED.tar snapshot.csv.*\n\
+tar czf snapshots_$TIMES_CALLED.tar.gz snapshot.csv.*\n\
 rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
@@ -136,7 +136,7 @@ module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
 srun " + executable.path + " " + array_input.path + " " + binary.name + "\n\
-tar cf snapshots_0.tar snapshot.csv.*\n\
+tar czf snapshots_0.tar.gz snapshot.csv.*\n\
 rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n\
