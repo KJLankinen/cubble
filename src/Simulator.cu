@@ -291,8 +291,6 @@ struct Params
   cudaStream_t velocityStream;
   cudaStream_t gasStream;
 
-  cudaEvent_t event1;
-
   KernelSize pairKernelSize = KernelSize(dim3(256, 1, 1), dim3(128, 1, 1));
   KernelSize defaultKernelSize;
 
@@ -974,17 +972,11 @@ double stabilize(Params &params)
         params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
         params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
-      CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+      CUDA_CALL(cudaMemcpy(static_cast<void *>(params.pinnedDouble),
                                 params.ddps[(uint32_t)DDP::ERROR],
-                                sizeof(double), cudaMemcpyDeviceToHost,
-                                params.gasStream));
+                                sizeof(double), cudaMemcpyDeviceToHost));
 
-      CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
-
-      // Wait for event
-      CUDA_CALL(cudaEventSynchronize(params.event1));
       error = params.pinnedDouble[0];
-
       if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
         params.state.timeStep *= 1.9;
       else if (error > params.inputs.errorTolerance)
@@ -1230,7 +1222,6 @@ bool integrate(Params &params)
 #endif
 
     gasExchangeCalculation(params);
-    CUDA_CALL(cudaStreamWaitEvent(params.velocityStream, params.event1, 0));
     velocityCalculation(params);
 
     // Correct
@@ -1269,13 +1260,10 @@ bool integrate(Params &params)
       params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.pinnedDouble),
-                              params.ddps[(uint32_t)DDP::ERROR],
-                              2 * sizeof(double), cudaMemcpyDeviceToHost,
-                              params.gasStream));
+                         params.ddps[(uint32_t)DDP::ERROR], 2 * sizeof(double),
+                         cudaMemcpyDeviceToHost));
 
-    // Wait for event
     error = params.pinnedDouble[0];
-
     if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
       params.state.timeStep *= 1.9;
     else if (error > params.inputs.errorTolerance)
@@ -1409,8 +1397,6 @@ void deinit(Params &params)
   CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
   CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedDouble)));
 
-  CUDA_CALL(cudaEventDestroy(params.event1));
-
   CUDA_CALL(cudaStreamDestroy(params.velocityStream));
   CUDA_CALL(cudaStreamDestroy(params.gasStream));
 }
@@ -1533,8 +1519,6 @@ void commonSetup(Params &params)
   CUDA_ASSERT(cudaStreamCreate(&params.gasStream));
 
   printRelevantInfoOfCurrentDevice();
-
-  CUDA_CALL(cudaEventCreate(&params.event1));
 
   CUDA_CALL(cudaGetSymbolAddress(
     reinterpret_cast<void **>(&params.numBubblesAboveMinRad),
