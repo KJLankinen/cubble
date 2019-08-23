@@ -1017,7 +1017,7 @@ __global__ void miscEndStepKernel(
       smaller    = x[i] < lbb.x;
       larger     = x[i] > tfr.x;
       value =
-        smaller ? value + interval.x : (larger ? value - interval : value);
+        smaller ? value + interval.x : (larger ? value - interval.x : value);
       multiplier =
         smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
       wrapMulX[i] = multiplier;
@@ -1028,7 +1028,7 @@ __global__ void miscEndStepKernel(
       smaller    = y[i] < lbb.y;
       larger     = y[i] > tfr.y;
       value =
-        smaller ? value + interval.y : (larger ? value - interval : value);
+        smaller ? value + interval.y : (larger ? value - interval.x : value);
       multiplier =
         smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
       wrapMulY[i] = multiplier;
@@ -1039,7 +1039,7 @@ __global__ void miscEndStepKernel(
       smaller    = z[i] < lbb.z;
       larger     = z[i] > tfr.z;
       value =
-        smaller ? value + interval.z : (larger ? value - interval : value);
+        smaller ? value + interval.z : (larger ? value - interval.x : value);
       multiplier =
         smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
       wrapMulZ[i] = multiplier;
