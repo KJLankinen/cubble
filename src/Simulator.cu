@@ -1225,7 +1225,7 @@ bool integrate(Params &params)
 
     // Reset
     KERNEL_LAUNCH(
-      resetKernel, params.defaultKernelSize, 0, params.gasStream, 0.0,
+      resetKernel, params.defaultKernelSize, 0, params.velocityStream, 0.0,
       params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
       params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
       params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
@@ -1280,26 +1280,25 @@ bool integrate(Params &params)
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
                               static_cast<void *>(params.numBubblesAboveMinRad),
                               sizeof(int), cudaMemcpyDeviceToHost,
-                              params.velocityStream));
+                              params.gasStream));
 
-    // TODO: combine path & distance, reset and boundary wrap to this kernel
-    KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0, params.gasStream,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
-                  params.ddps[(uint32_t)DDP::TEMP8],
-                  (int)params.pairKernelSize.grid.x);
+    KERNEL_LAUNCH(
+      miscEndStepKernel, params.pairKernelSize, 0, params.velocityStream,
+      params.state.numBubbles, params.ddps[(uint32_t)DDP::ERROR],
+      params.ddps[(uint32_t)DDP::TEMP8], (int)params.pairKernelSize.grid.x);
 
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
                               params.ddps[(uint32_t)DDP::ERROR],
                               2 * sizeof(double), cudaMemcpyDeviceToHost,
-                              params.gasStream));
+                              params.velocityStream));
 
-    CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
+    CUDA_CALL(cudaEventRecord(params.event1, params.velocityStream));
 
 #if (NUM_DIM == 3)
     // Path lenghts & distances
     KERNEL_LAUNCH(
       pathLengthDistanceKernel, params.defaultKernelSize, 0,
-      params.velocityStream, params.state.numBubbles,
+      params.gasStream, params.state.numBubbles,
       params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
       params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
       params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
@@ -1313,7 +1312,7 @@ bool integrate(Params &params)
     // Path lenghts & distances
     KERNEL_LAUNCH(
       pathLengthDistanceKernel, params.defaultKernelSize, 0,
-      params.velocityStream, params.state.numBubbles,
+      params.gasStream, params.state.numBubbles,
       params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::PATH],
       params.ddps[(uint32_t)DDP::DISTANCE], params.ddps[(uint32_t)DDP::XP],
       params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::X0],
@@ -1324,7 +1323,7 @@ bool integrate(Params &params)
 #endif
 
     // Boundary wrap
-    doBoundaryWrap(params.defaultKernelSize, 0, params.velocityStream,
+    doBoundaryWrap(params.defaultKernelSize, 0, params.gasStream,
                    params.state.numBubbles, params.ddps[(uint32_t)DDP::XP],
                    params.ddps[(uint32_t)DDP::YP],
                    params.ddps[(uint32_t)DDP::ZP], params.state.lbb,
