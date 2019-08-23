@@ -1196,7 +1196,7 @@ bool integrate(Params &params)
 
     // Reset
     KERNEL_LAUNCH(
-      resetKernel, params.defaultKernelSize, 0, params.gasStream, 0.0,
+      resetKernel, params.defaultKernelSize, 0, 0, 0.0,
       params.state.numBubbles, params.ddps[(uint32_t)DDP::DXDTP],
       params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
       params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::TEMP1],
@@ -1206,7 +1206,7 @@ bool integrate(Params &params)
     // Predict
 #if (NUM_DIM == 3)
     KERNEL_LAUNCH(
-      predictKernel, params.defaultKernelSize, 0, params.gasStream,
+      predictKernel, params.defaultKernelSize, 0, 0,
       params.state.numBubbles, params.state.timeStep,
       params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTO],
@@ -1218,7 +1218,7 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTO]);
 #else
     KERNEL_LAUNCH(
-      predictKernel, params.defaultKernelSize, 0, params.gasStream,
+      predictKernel, params.defaultKernelSize, 0, 0,
       params.state.numBubbles, params.state.timeStep,
       params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
       params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTO],
@@ -1227,8 +1227,6 @@ bool integrate(Params &params)
       params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
       params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTO]);
 #endif
-
-    CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
 
     gasExchangeCalculation(params);
     CUDA_CALL(cudaStreamWaitEvent(params.velocityStream, params.event1, 0));
@@ -1269,15 +1267,12 @@ bool integrate(Params &params)
       params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
       params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.pinnedDouble),
                               params.ddps[(uint32_t)DDP::ERROR],
                               2 * sizeof(double), cudaMemcpyDeviceToHost,
                               params.gasStream));
 
-    CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
-
     // Wait for event
-    CUDA_CALL(cudaEventSynchronize(params.event1));
     error = params.pinnedDouble[0];
 
     if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
@@ -1704,7 +1699,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim)
       params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
       params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
-        KERNEL_LAUNCH(
+    KERNEL_LAUNCH(
       resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.state.numBubbles,
       params.ddps[(uint32_t)DDP::DXDTO], params.ddps[(uint32_t)DDP::DYDTO],
       params.ddps[(uint32_t)DDP::DZDTO], params.ddps[(uint32_t)DDP::DRDTO]);
