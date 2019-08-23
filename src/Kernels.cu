@@ -353,6 +353,24 @@ __device__ __host__ unsigned int compact1By2(unsigned int x)
   return x;
 }
 
+__device__ void wrapAround(int idx, double *coordinate, double minValue,
+                           double maxValue, int *wrapMultiplier,
+                           int *wrapMultiplierPrev)
+{
+  const double interval = maxValue - minValue;
+  double value          = coordinate[idx];
+  int multiplier        = wrapMultiplierPrev[idx];
+
+  const bool smaller = value < minValue;
+  const bool larger  = value > maxValue;
+
+  value = smaller ? value + interval : (larger ? value - interval : value);
+  multiplier =
+    smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
+
+  wrapMultiplier[idx] = multiplier;
+  coordinate[idx]     = value;
+}
 
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity)
@@ -937,12 +955,8 @@ __global__ void correctKernel(int numValues, double timeStep,
   }
 }
 
-__global__ void miscEndStepKernel(
-  int numValues, double *errors, double *maxR, int origBlockSize, dvec lbb,
-  dvec tfr, dvec interval, double *pathPrev, double *path, double *distance,
-  double *x, double *prevX, double *startX, int *wrapMulX, int *wrapMulXPrev,
-  double *y, double *prevY, double *startY, int *wrapMulY, int *wrapMulYPrev,
-  double *z, double *prevZ, double *startZ, int *wrapMulZ, int *wrapMulZPrev)
+__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
+                                  int origBlockSize)
 {
   __shared__ double me[128];
   me[threadIdx.x] = 0.0;
@@ -985,72 +999,29 @@ __global__ void miscEndStepKernel(
     if (tid == 0)
       errors[blockIdx.x] = me[tid];
   }
-
-  for (int i = threadIdx.x + gridDim.x * blockIdx.x; i < numValues;
-       i += gridDim.x * blockDim.x)
-  {
-      // Calculate distance from start and the total distance
-      // a bubble has travelled (= the path length)
-      double disX = x[i] - startX[i] + wrapMulX[i] * interval.x;
-      double disY = y[i] - startY[i] + wrapMulY[i] * interval.y;
-      double disZ = 0.0;
-#if (NUM_DIM == 3)
-      disZ = z[i] - startZ[i] + wrapMulZ[i] * interval.z;
-#endif
-      distance[i] = disX * disX + disY * disY + disZ * disZ;
-
-      disX = x[i] - prevX[i];
-      disY = y[i] - prevY[i];
-#if (NUM_DIM == 3)
-      disZ = z[i] - prevZ[i];
-#endif
-      path[i] = pathPrev[i] + sqrt(disX * disX + disY * disY + disZ * disZ);
-
-      // Wrap around periodic boundaries
-      int multiplier = 0;
-      bool smaller = false;
-      bool larger = false;
-      double value = 0.0;
-
-#if (PBC_X == 1)
-      multiplier = wrapMulXPrev[i];
-      smaller    = x[i] < lbb.x;
-      larger     = x[i] > tfr.x;
-      value =
-        smaller ? value + interval.x : (larger ? value - interval.x : value);
-      multiplier =
-        smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
-      wrapMulX[i] = multiplier;
-      x[i]        = value;
-#endif
-#if (PBC_Y == 1)
-      multiplier = wrapMulYPrev[i];
-      smaller    = y[i] < lbb.y;
-      larger     = y[i] > tfr.y;
-      value =
-        smaller ? value + interval.y : (larger ? value - interval.x : value);
-      multiplier =
-        smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
-      wrapMulY[i] = multiplier;
-      y[i]        = value;
-#endif
-#if (NUM_DIM == 3 && PBC_Z == 1)
-      multiplier = wrapMulZPrev[i];
-      smaller    = z[i] < lbb.z;
-      larger     = z[i] > tfr.z;
-      value =
-        smaller ? value + interval.z : (larger ? value - interval.x : value);
-      multiplier =
-        smaller ? multiplier - 1 : (larger ? multiplier + 1 : multiplier);
-      wrapMulZ[i] = multiplier;
-      z[i]        = value;
-#endif
-  }
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)
 {
   y[idx] += f[idx] * timeStep;
+}
+
+__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
+                                             double *xStart,
+                                             int *wrapMultiplier,
+                                             double interval)
+{
+  double distance = x[idx] - xStart[idx] + wrapMultiplier[idx] * interval;
+  return distance * distance;
+}
+
+__device__ double calculatePathLength(int idx, double *x, double *xPrev,
+                                      double *xStart, int *wrapMultiplier,
+                                      double interval)
+{
+  // Only works if done before boundary wrap
+  const double diff = x[idx] - xPrev[idx];
+  return diff * diff;
 }
 
 } // namespace cubble
