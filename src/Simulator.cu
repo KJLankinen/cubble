@@ -293,7 +293,7 @@ struct Params
 
   cudaEvent_t event1;
 
-  KernelSize pairKernelSize = KernelSize(dim3(256, 1, 1), dim3(128, 1, 1));
+  KernelSize pairKernelSize = KernelSize(dim3(1024, 1, 1), dim3(128, 1, 1));
   KernelSize defaultKernelSize;
 
   // Device memory & arrays of pointers to those memory chunks.
