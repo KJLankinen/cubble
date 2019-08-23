@@ -782,7 +782,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                     (dTotalArea - dTotalOverlapArea);
     double area   = 2.0 * CUBBLE_PI * r[i];
 #if (NUM_DIM == 3)
-    invArea *= 2.0 * r[i];
+    area *= 2.0 * r[i];
 #endif
     const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
                                   dTotalArea * (area - freeArea[i]) *
