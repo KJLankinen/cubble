@@ -751,6 +751,32 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad)
 
 void saveSnapshotToFile(Params &params)
 {
+  // Calculate total energy
+  KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
+
+  if (NUM_DIM == 3)
+  {
+    KERNEL_LAUNCH(
+      potentialEnergyKernel, params.pairKernelSize, 0, 0,
+      params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
+      params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
+      params.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
+      params.ddps[(uint32_t)DDP::Z]);
+  }
+  else
+  {
+    KERNEL_LAUNCH(
+      potentialEnergyKernel, params.pairKernelSize, 0, 0,
+      params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+      params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
+      params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
+      params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
+      params.ddps[(uint32_t)DDP::Y]);
+  }
+
   std::stringstream ss;
   ss << "snapshot.csv." << params.state.numSnapshots;
   std::ofstream file(ss.str().c_str(), std::ios::out);
@@ -2502,35 +2528,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName)
 
     if (params.state.timeInteger >= nextSnapshotTimeInteger &&
         params.state.timeFraction >= nextSnapshotTimeFraction)
-    {
-      // Calculate total energy
-      KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                    params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
-
-      if (NUM_DIM == 3)
-      {
-        KERNEL_LAUNCH(
-          potentialEnergyKernel, params.pairKernelSize, 0, 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-          params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-          PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-          PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
-          PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
-      }
-      else
-      {
-        KERNEL_LAUNCH(
-          potentialEnergyKernel, params.pairKernelSize, 0, 0,
-          params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-          params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-          params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-          PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-          PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
-      }
-
       saveSnapshotToFile(params);
-    }
 
     ++params.state.numStepsInTimeStep;
   }
