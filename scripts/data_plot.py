@@ -17,8 +17,8 @@ def plot_data_loglog(data_file, json_file, ax):
     phi = decoded_json["phiTarget"]
     kappa = decoded_json["kappa"]
     label_str = ""
-    #label_str += r"$\phi=$" + str(phi) 
-    label_str += r"$\kappa=$" + str(kappa)
+    label_str += r"$\phi=$" + str(phi) 
+    #label_str += r"$\kappa=$" + str(kappa)
     
     ax.loglog(x, y, '-', linewidth=5, label=label_str)
 
@@ -29,13 +29,13 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     ax.xaxis.label.set_fontsize(50)
     ax.xaxis.set_label_coords(0.035, 0.065)
     ax.yaxis.label.set_fontsize(50)
-    ax.yaxis.set_label_coords(0.035, 0.87)
+    ax.yaxis.set_label_coords(0.035, 0.75)
 
     ax.tick_params(axis='x', which='both', labelsize=40, direction='in', pad=-50)
-    ax.tick_params(axis='y', which='both', labelsize=40, direction='in', pad=-80)
+    ax.tick_params(axis='y', which='both', labelsize=40, direction='in', pad=-150)
 
-    ax.set_xlim(10.1, 3500)
-    ax.set_ylim(0.7, 22)
+    ax.set_xlim(20, 7500)
+    ax.set_ylim(1.36, 4.63)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{\langle R \rangle}{\langle R_{in} \rangle}$", rotation=0)
     ax.grid(0)
@@ -76,9 +76,9 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     data_files = [data_files[idx] for idx in indices]
 
     # line
-    alpha = 0.45
-    x = np.linspace(30, 1600, 1000)
-    y = pow(0.35 * x, alpha)
+    alpha = 0.3
+    x = np.linspace(50, 540, 1000)
+    y = pow(0.11 * x, alpha)
     line_color = (0, 0, 0)
     line_style = '--' 
     label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
@@ -89,15 +89,15 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
         plot_data_loglog(data_files[i], json_files[i], ax)
 
     # line
-    alpha = 0.33
-    x = np.linspace(100, 30000, 1000)
-    y = pow(0.12* x, alpha)
+    alpha = 0.25
+    x = np.linspace(60, 5700, 1000)
+    y = pow(0.07 * x, alpha)
     label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
     line_color = (0, 0, 0)
     line_style = '-.' 
-    #plot_line(ax, alpha, x, y, line_color, line_style, label_str)
+    plot_line(ax, alpha, x, y, line_color, line_style, label_str)
 
-    ax.legend(loc='lower right', fontsize=28)
+    ax.legend(loc='lower right', fontsize=25)
 
     plt.show()
     
