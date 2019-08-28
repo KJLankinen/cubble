@@ -2,14 +2,15 @@
 
 namespace cubble
 {
-__constant__ __device__ double dTotalArea;
-__constant__ __device__ double dTotalFreeArea;
-__constant__ __device__ double dTotalFreeAreaPerRadius;
+__device__ double dTotalArea;
+__device__ double dTotalOverlapArea;
+__device__ double dTotalOverlapAreaPerRadius;
+__device__ double dTotalAreaPerRadius;
 __constant__ __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
+__device__ int dNumBubblesAboveMinRad;
 __device__ double dVolumeMultiplier;
-__device__ double dInvRho;
 
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg)
@@ -371,17 +372,6 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue,
   coordinate[idx]     = value;
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier,
-                            double maxDistance, double minDistance,
-                            bool shouldWrap, double *x, double *v)
-{
-  const double velocity =
-    getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap) * multiplier;
-  atomicAdd(&v[idx1], velocity);
-  atomicAdd(&v[idx2], -velocity);
-}
-
-
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity)
 {
@@ -462,6 +452,41 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
   {
     cellIndices[i]   = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
     bubbleIndices[i] = i;
+  }
+}
+
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
+                                   int *pair2, double *r, dvec interval,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz)
+{
+  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+       i += gridDim.x * blockDim.x)
+  {
+    int idx1 = pair1[i];
+    int idx2 = pair2[i];
+
+    double radii = r[idx1] + r[idx2];
+    double disX  = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    double disY  = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    double disZ = 0.0;
+#if (NUM_DIM == 3)
+    disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+#endif
+
+    double distance = disX * disX + disY * disY + disZ * disZ;
+    if (radii * radii >= distance)
+    {
+      distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
+      atomicAdd(&vx[idx1], distance * disX);
+      atomicAdd(&vx[idx2], -distance * disX);
+      atomicAdd(&vy[idx1], distance * disY);
+      atomicAdd(&vy[idx2], -distance * disY);
+#if (NUM_DIM == 3)
+      atomicAdd(&vz[idx1], distance * disZ);
+      atomicAdd(&vz[idx2], -distance * disZ);
+#endif
+    }
   }
 }
 
@@ -557,33 +582,17 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *r, dvec flowVel, dvec flowTfr,
                                    dvec flowLbb)
 {
-  /* Function that implements a flow region inside the simulation box.
-   *
-   * Loops through each bubble. Bubble should be considered to be inside the
-   * flow region, if its centre (posX, posY, posZ) is within the the flow box or
-   * if the bubble is touching or overlapping the boundary of the box due to its
-   * spacial extent, i.e. the bubble is large enough to partially cross into the
-   * flow region. If the bubble is found to be inside the flow region its
-   * velocity is adjusted by the flow velocity
-   */
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
     const double multiplier =
       (numNeighbors[i] > 0 ? 1.0 / numNeighbors[i] : 0.0);
 
-    // Checks if the bubble centre point is within the flow region
-    // OR the distance between the lowest boundary and the centre is smaller or
-    // equal to the radius OR the distance between the highest boundary and the
-    // centre is smaller or equal to the radius If any condition True then
-    // inside will be 1, else 0
     int inside =
       (int)((posX[i] < flowTfr.x && posX[i] > flowLbb.x) ||
             ((flowLbb.x - posX[i]) * (flowLbb.x - posX[i]) <= r[i] * r[i]) ||
             ((flowTfr.x - posX[i]) * (flowTfr.x - posX[i]) <= r[i] * r[i]));
 
-    // Repeat same for y. Multiply result, since conditions must be satisfied in
-    // all coordinate directions
     inside *=
       (int)((posY[i] < flowTfr.y && posY[i] > flowLbb.y) ||
             ((flowLbb.y - posY[i]) * (flowLbb.y - posY[i]) <= r[i] * r[i]) ||
@@ -598,26 +607,166 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
     velZ[i] += !inside * multiplier * nVelZ[i] + flowVel.z * inside;
 #endif
 
-    // Velocities of the bubble will only change if inside is 1, i.e. it
-    // fulfilled the conditions in all coordinate directions
     velX[i] += !inside * multiplier * nVelX[i] + flowVel.x * inside;
     velY[i] += !inside * multiplier * nVelY[i] + flowVel.y * inside;
   }
 }
 
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area)
+__global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
+                                  dvec interval, double *r, double *drdt,
+                                  double *freeArea, double *x, double *y,
+                                  double *z)
 {
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+  __shared__ double totalArea[128];
+  __shared__ double totalOverlapArea[128];
+  __shared__ double totalAreaPerRadius[128];
+  __shared__ double totalOverlapAreaPerRadius[128];
+
+  totalArea[threadIdx.x]                 = 0.0;
+  totalOverlapArea[threadIdx.x]          = 0.0;
+  totalAreaPerRadius[threadIdx.x]        = 0.0;
+  totalOverlapAreaPerRadius[threadIdx.x] = 0.0;
+
+  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
        i += gridDim.x * blockDim.x)
   {
-    double totalArea = 2.0 * CUBBLE_PI * r[i];
+    int idx1 = pair1[i];
+    int idx2 = pair2[i];
+
+    double distX = getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
+    double distY = getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
+    double distZ = 0.0;
 #if (NUM_DIM == 3)
-    totalArea *= 2.0 * r[i];
+    distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
 #endif
-    area[i]              = totalArea;
-    freeArea[i]          = totalArea - freeArea[i];
-    freeAreaPerRadius[i] = freeArea[i] / r[i];
+
+    double magnitude = distX * distX + distY * distY + distZ * distZ;
+    double r1        = r[idx1];
+    double r2        = r[idx2];
+
+    if (magnitude < (r1 + r2) * (r1 + r2))
+    {
+      double overlapArea = 0;
+      if (magnitude < r1 * r1 || magnitude < r2 * r2)
+      {
+        overlapArea = r1 < r2 ? r1 : r2;
+        overlapArea *= overlapArea;
+      }
+      else
+      {
+        overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+        overlapArea *= overlapArea;
+        overlapArea = r2 * r2 - overlapArea;
+        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+      }
+#if (NUM_DIM == 3)
+      overlapArea *= CUBBLE_PI;
+#else
+      overlapArea = 2.0 * sqrt(overlapArea);
+#endif
+      atomicAdd(&freeArea[idx1], overlapArea);
+      atomicAdd(&freeArea[idx2], overlapArea);
+
+      totalOverlapArea[threadIdx.x] += 2.0 * overlapArea;
+      totalOverlapAreaPerRadius[threadIdx.x] +=
+        overlapArea / r1 + overlapArea / r2;
+
+      overlapArea *= (1.0 / r2 - 1.0 / r1);
+
+      atomicAdd(&drdt[idx1], overlapArea);
+      atomicAdd(&drdt[idx2], -overlapArea);
+    }
+
+    if (i < numValues)
+    {
+      double area = 2.0 * CUBBLE_PI * r[i];
+#if (NUM_DIM == 3)
+      area *= 2.0 * r[i];
+#endif
+      totalArea[threadIdx.x] += area;
+      totalAreaPerRadius[threadIdx.x] += area / r[i];
+    }
+  }
+
+  __syncthreads();
+
+  if (threadIdx.x < 32)
+  {
+    totalArea[threadIdx.x] += totalArea[32 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[64 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[96 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[32 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[64 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[96 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[32 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[64 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[96 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[32 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[64 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[96 + threadIdx.x];
+  }
+
+  if (threadIdx.x < 8)
+  {
+    totalArea[threadIdx.x] += totalArea[8 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[16 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[24 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[8 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[16 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[24 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[8 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[16 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[24 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[8 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[16 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[24 + threadIdx.x];
+  }
+
+  if (threadIdx.x < 2)
+  {
+    totalArea[threadIdx.x] += totalArea[2 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[4 + threadIdx.x];
+    totalArea[threadIdx.x] += totalArea[6 + threadIdx.x];
+
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[2 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[4 + threadIdx.x];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[6 + threadIdx.x];
+
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[2 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[4 + threadIdx.x];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[6 + threadIdx.x];
+
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[2 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[4 + threadIdx.x];
+    totalOverlapAreaPerRadius[threadIdx.x] +=
+      totalOverlapAreaPerRadius[6 + threadIdx.x];
+  }
+
+  if (threadIdx.x == 0)
+  {
+    totalArea[threadIdx.x] += totalArea[1];
+    totalOverlapArea[threadIdx.x] += totalOverlapArea[1];
+    totalAreaPerRadius[threadIdx.x] += totalAreaPerRadius[1];
+    totalOverlapAreaPerRadius[threadIdx.x] += totalOverlapAreaPerRadius[1];
+
+    atomicAdd(&dTotalArea, totalArea[0]);
+    atomicAdd(&dTotalOverlapArea, totalOverlapArea[0]);
+    atomicAdd(&dTotalAreaPerRadius, totalAreaPerRadius[0]);
+    atomicAdd(&dTotalOverlapAreaPerRadius, totalOverlapAreaPerRadius[0]);
   }
 }
 
@@ -629,16 +778,16 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
   for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
        i += gridDim.x * blockDim.x)
   {
-    dInvRho                = dTotalFreeAreaPerRadius / dTotalFreeArea;
-    const double invRadius = 1.0 / r[i];
-    double invArea         = 0.5 * CUBBLE_I_PI * invRadius;
+    double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
+                    (dTotalArea - dTotalOverlapArea);
+    double area   = 2.0 * CUBBLE_PI * r[i];
 #if (NUM_DIM == 3)
-    invArea *= 0.5 * invRadius;
+    area *= 2.0 * r[i];
 #endif
-    const double vr = drdt[i] +
-                      kappa * averageSurfaceAreaIn * numValues / dTotalArea *
-                        freeArea[i] * (dInvRho - invRadius);
-    drdt[i] = kParam * invArea * vr;
+    const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
+                                  dTotalArea * (area - freeArea[i]) *
+                                  (invRho - 1.0 / r[i]);
+    drdt[i] = kParam * vr / area;
   }
 }
 
@@ -696,6 +845,160 @@ __device__ double adamsMoulton(int idx, double timeStep, double *yNext,
   yNext[idx]             = corrected;
 
   return error < 0 ? -error : error;
+}
+
+__global__ void correctKernel(int numValues, double timeStep,
+                              bool useGasExchange, double minRad,
+                              double *errors, double *maxR, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp)
+{
+  int tid = threadIdx.x;
+  __shared__ double me[128];
+  __shared__ double mr[128];
+  __shared__ int namr[128];
+  me[tid]   = 0.0;
+  mr[tid]   = 0.0;
+  namr[tid] = 0;
+
+  for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
+       i += blockDim.x * gridDim.x)
+  {
+    double corrected = x[i] + 0.5 * timeStep * (vx[i] + vxp[i]);
+    double ex = corrected > xp[i] ? corrected - xp[i] : xp[i] - corrected;
+    xp[i]            = corrected;
+
+    corrected = y[i] + 0.5 * timeStep * (vy[i] + vyp[i]);
+    double ey = corrected > yp[i] ? corrected - yp[i] : yp[i] - corrected;
+    yp[i]     = corrected;
+
+    double ez = 0.0;
+#if (NUM_DIM == 3)
+    corrected = z[i] + 0.5 * timeStep * (vz[i] + vzp[i]);
+    ez        = corrected > zp[i] ? corrected - zp[i] : z[i] - corrected;
+    zp[i]     = corrected;
+#endif
+
+    double er = 0.0;
+    if (useGasExchange)
+    {
+      corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
+      er        = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
+      rp[i]     = corrected;
+      mr[tid]   = mr[tid] > corrected ? mr[tid] : corrected;
+      namr[tid] += (int)(corrected > minRad);
+    }
+    corrected = ex > ey ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
+                        : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
+    me[tid] = me[tid] > corrected ? me[tid] : corrected;
+  }
+
+  __syncthreads();
+
+  if (tid < 32)
+  {
+    me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
+    me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
+    me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
+
+    mr[tid] = mr[tid] > mr[32 + tid] ? mr[tid] : mr[32 + tid];
+    mr[tid] = mr[tid] > mr[64 + tid] ? mr[tid] : mr[64 + tid];
+    mr[tid] = mr[tid] > mr[96 + tid] ? mr[tid] : mr[96 + tid];
+
+    namr[tid] += namr[32 + tid];
+    namr[tid] += namr[64 + tid];
+    namr[tid] += namr[96 + tid];
+  }
+
+  if (tid < 8)
+  {
+    me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+    me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+    me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+
+    mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
+    mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
+    mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
+
+    namr[tid] += namr[8 + tid];
+    namr[tid] += namr[16 + tid];
+    namr[tid] += namr[24 + tid];
+  }
+
+  if (tid < 2)
+  {
+    me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+    me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+    me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+
+    mr[tid] = mr[tid] > mr[2 + tid] ? mr[tid] : mr[2 + tid];
+    mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
+    mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
+
+    namr[tid] += namr[2 + tid];
+    namr[tid] += namr[4 + tid];
+    namr[tid] += namr[6 + tid];
+  }
+
+  if (tid == 0)
+  {
+    me[tid]            = me[tid] > me[1] ? me[tid] : me[1];
+    errors[blockIdx.x] = me[tid];
+
+    mr[tid]          = mr[tid] > mr[1] ? mr[tid] : mr[1];
+    maxR[blockIdx.x] = mr[1];
+
+    namr[tid] += namr[1];
+    atomicAdd(&dNumBubblesAboveMinRad, namr[tid]);
+  }
+}
+
+__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
+                                  int origBlockSize)
+{
+  __shared__ double me[128];
+  me[threadIdx.x] = 0.0;
+
+  if (blockIdx.x < 2)
+  {
+    int tid     = threadIdx.x;
+    double *arr = nullptr;
+    if (blockIdx.x == 0)
+      arr = errors;
+    if (blockIdx.x == 1)
+      arr = maxR;
+
+    for (int i = tid; i < origBlockSize; i += blockDim.x)
+      me[tid] = me[tid] > arr[i] ? me[tid] : arr[i];
+
+    __syncthreads();
+
+    if (tid < 32)
+    {
+      me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
+      me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
+      me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
+    }
+
+    if (tid < 8)
+    {
+      me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+      me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+      me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+    }
+
+    if (tid < 2)
+    {
+      me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+      me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+      me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+    }
+
+    if (tid == 0)
+      errors[blockIdx.x] = me[tid];
+  }
 }
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f)

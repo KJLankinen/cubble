@@ -8,14 +8,15 @@
 
 namespace cubble
 {
-extern __constant__ __device__ double dTotalArea;
-extern __constant__ __device__ double dTotalFreeArea;
-extern __constant__ __device__ double dTotalFreeAreaPerRadius;
+extern __device__ double dTotalArea;
+extern __device__ double dTotalOverlapArea;
+extern __device__ double dTotalOverlapAreaPerRadius;
+extern __device__ double dTotalAreaPerRadius;
 extern __constant__ __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
+extern __device__ int dNumBubblesAboveMinRad;
 extern __device__ double dVolumeMultiplier;
-extern __device__ double dInvRho;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
@@ -78,6 +79,15 @@ __global__ void resetKernel(double value, int numValues, Args... args)
   const int tid = getGlobalTid();
   if (tid < numValues)
     resetDoubleArrayToValue(value, tid, args...);
+
+  if (tid == 0)
+  {
+    dTotalArea                 = 0.0;
+    dTotalOverlapArea          = 0.0;
+    dTotalOverlapAreaPerRadius = 0.0;
+    dTotalAreaPerRadius        = 0.0;
+    dNumBubblesAboveMinRad     = 0;
+  }
 }
 
 template <typename T>
@@ -262,34 +272,6 @@ __device__ void wrapAround(int idx, double *coordinate, double minValue,
   wrapAround(idx, args...);
 }
 
-__device__ void addVelocity(int idx1, int idx2, double multiplier,
-                            double maxDistance, double minDistance,
-                            bool shouldWrap, double *x, double *v);
-template <typename... Args>
-__device__ void addVelocity(int idx1, int idx2, double multiplier,
-                            double maxDistance, double minDistance,
-                            bool shouldWrap, double *x, double *v, Args... args)
-{
-  addVelocity(idx1, idx2, multiplier, maxDistance, minDistance, shouldWrap, x,
-              v);
-  addVelocity(idx1, idx2, multiplier, args...);
-}
-
-template <typename... Args>
-__device__ void forceBetweenPair(int idx1, int idx2, double fZeroPerMuZero,
-                                 double *r, Args... args)
-{
-  const double radii = r[idx1] + r[idx2];
-  double multiplier  = getDistanceSquared(idx1, idx2, args...);
-  if (radii * radii >= multiplier)
-  {
-    multiplier = sqrt(multiplier);
-    multiplier = fZeroPerMuZero * (radii - multiplier) / (radii * multiplier);
-    addVelocity(idx1, idx2, multiplier, args...);
-  }
-}
-
-
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity);
 template <typename... Args>
@@ -388,14 +370,10 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
   }
 }
 
-template <typename... Args>
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *first,
-                                   int *second, double *r, Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-    forceBetweenPair(first[i], second[i], fZeroPerMuZero, r, args...);
-}
+__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
+                                   int *pair2, double *r, dvec interval,
+                                   double *x, double *y, double *z, double *vx,
+                                   double *vy, double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
@@ -444,58 +422,10 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
   }
 }
 
-template <typename... Args>
-__global__ void gasExchangeKernel(int numValues, int *first, int *second,
-                                  double *r, double *drdt, double *freeArea,
-                                  Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-  {
-    const int idx1 = first[i];
-    const int idx2 = second[i];
-
-    const double magnitude = sqrt(getDistanceSquared(idx1, idx2, args...));
-    const double r1        = r[idx1];
-    const double r2        = r[idx2];
-
-    if (magnitude < r1 + r2)
-    {
-      double overlapArea = 0;
-
-      if (magnitude < r1 || magnitude < r2)
-      {
-        overlapArea = r1 < r2 ? r1 : r2;
-        overlapArea *= overlapArea;
-      }
-      else
-      {
-        overlapArea =
-          0.5 * (r2 * r2 - r1 * r1 + magnitude * magnitude) / magnitude;
-        overlapArea *= overlapArea;
-        overlapArea = r2 * r2 - overlapArea;
-        DEVICE_ASSERT(overlapArea > -0.0001, "Overlap area is negative!");
-        overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
-        DEVICE_ASSERT(overlapArea >= 0, "Overlap area is negative!");
-      }
-#if (NUM_DIM == 3)
-      overlapArea *= CUBBLE_PI;
-#else
-      overlapArea = 2.0 * sqrt(overlapArea);
-#endif
-      atomicAdd(&freeArea[idx1], overlapArea);
-      atomicAdd(&freeArea[idx2], overlapArea);
-
-      overlapArea *= (1.0 / r2 - 1.0 / r1);
-
-      atomicAdd(&drdt[idx1], overlapArea);
-      atomicAdd(&drdt[idx2], -overlapArea);
-    }
-  }
-}
-
-__global__ void freeAreaKernel(int numValues, double *r, double *freeArea,
-                               double *freeAreaPerRadius, double *area);
+__global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
+                                  dvec interval, double *r, double *drdt,
+                                  double *freeArea, double *x, double *y,
+                                  double *z);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                                             double *freeArea, int numValues,
@@ -527,31 +457,16 @@ __global__ void predictKernel(int numValues, double timeStep, Args... args)
     adamsBashforth(tid, timeStep, args...);
 }
 
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fNext);
-template <typename... Args>
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fNext,
-                               Args... args)
-{
-  double error1       = adamsMoulton(idx, timeStep, yNext, y, f, fNext);
-  const double error2 = adamsMoulton(idx, timeStep, args...);
-  error1              = error1 > error2 ? error1 : error2;
+__global__ void correctKernel(int numValues, double timeStep,
+                              bool useGasExchange, double minRad,
+                              double *errors, double *maxR, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp);
 
-  return error1;
-}
-
-template <typename... Args>
-__global__ void correctKernel(int numValues, double timeStep, double *errors,
-                              Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-  {
-    const double e = adamsMoulton(tid, timeStep, args...);
-    errors[tid]    = e > errors[tid] ? e : errors[tid];
-  }
-}
+__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
+                                  int origBlockSize);
 
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
 template <typename... Args>
