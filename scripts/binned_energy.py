@@ -4,7 +4,7 @@ import sys
 import json
 import os
 
-def bin_snapshot(snapshot, json_file):
+def bin_snapshot(snapshot, json_file, ax):
     data = np.loadtxt(snapshot, skiprows=1, delimiter=",")
 
     with open(json_file, 'r') as f:
@@ -26,14 +26,24 @@ def bin_snapshot(snapshot, json_file):
 
     binned_data[:,:,0] -= phi
     binned_data[:,:,1] /= binned_data[:,:,2]
-    plt.hist(binned_data[:,:,0].flatten())
-    plt.show()
+    binned_data[:,:,2] /= np.max(binned_data[:,:,2])
+
+    values, edges = np.histogram(binned_data[:,:,2].flatten(), bins='auto')
+    locs = (edges[1:] - edges[0:-1:1]) / 2 + edges[0:-1:1]
+
+    ax.plot(locs, values, 'D:', fillstyle='none', linewidth=3.0)
 
 def main():
     loc = sys.argv[1]
-    snapshot = os.path.join(loc, f"snapshot.csv.{sys.argv[2]}")
     input_params = os.path.join(loc, "input_parameters.json")
-    bin_snapshot(snapshot, input_params)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    for i in range(len(sys.argv) - 2):
+        bin_snapshot(os.path.join(loc, f"snapshot.csv.{sys.argv[i + 2]}"), input_params, ax)
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
