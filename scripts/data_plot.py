@@ -27,15 +27,15 @@ def plot_line(ax, alpha, x, y, line_color, line_style, label_str):
 
 def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plots):
     ax.xaxis.label.set_fontsize(50)
-    ax.xaxis.set_label_coords(0.035, 0.065)
+    ax.xaxis.set_label_coords(0.035, 0.095)
     ax.yaxis.label.set_fontsize(50)
-    ax.yaxis.set_label_coords(0.035, 0.75)
+    ax.yaxis.set_label_coords(0.05, 0.8)
 
     ax.tick_params(axis='x', which='both', labelsize=40, direction='in', pad=-50)
-    ax.tick_params(axis='y', which='both', labelsize=40, direction='in', pad=-150)
+    ax.tick_params(axis='y', which='both', labelsize=40, direction='in', pad=-100)
 
-    ax.set_xlim(20, 7500)
-    ax.set_ylim(1.36, 4.63)
+    ax.set_xlim(30, 38000)
+    ax.set_ylim(1.2, 25)
     ax.set_xlabel(r"$\tau$")
     ax.set_ylabel(r"$\frac{\langle R \rangle}{\langle R_{in} \rangle}$", rotation=0)
     ax.grid(0)
@@ -76,9 +76,9 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
     data_files = [data_files[idx] for idx in indices]
 
     # line
-    alpha = 0.3
-    x = np.linspace(50, 540, 1000)
-    y = pow(0.11 * x, alpha)
+    alpha = 0.42
+    x = np.linspace(50, 6450, 1000)
+    y = pow(0.18 * x, alpha)
     line_color = (0, 0, 0)
     line_style = '--' 
     label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
@@ -89,13 +89,13 @@ def plot_relative_radius(ax, parent_dir, data_file_name, json_file_name, num_plo
         plot_data_loglog(data_files[i], json_files[i], ax)
 
     # line
-    alpha = 0.25
-    x = np.linspace(60, 5700, 1000)
-    y = pow(0.07 * x, alpha)
+    alpha = 0.35
+    x = np.linspace(60, 10000, 1000)
+    y = pow(0.2 * x, alpha)
     label_str = r"$\tau^{\alpha}$" + r", $\alpha=$" + str(alpha)
     line_color = (0, 0, 0)
     line_style = '-.' 
-    plot_line(ax, alpha, x, y, line_color, line_style, label_str)
+    #plot_line(ax, alpha, x, y, line_color, line_style, label_str)
 
     ax.legend(loc='lower right', fontsize=25)
 
