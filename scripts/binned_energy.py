@@ -76,9 +76,9 @@ def bin_evolution(from_t, to_t, directory, input_params, num_bins, axes1, axes2)
 def main():
     loc = sys.argv[1]
     fig = plt.figure()
-    #dirs = ["phi_840", "phi_850", "phi_860","phi_876"]
-    dirs = ["phi_865","phi_866"]
-    #dirs = ["phi_864"]
+    dirs = ["phi_851", "phi_852", "phi_865","phi_876"]
+    #dirs = ["phi_851","phi_852"]
+    #dirs = ["phi_874", "phi_875", "phi_876"]
 
     if sys.argv[2] == "self" or sys.argv[2] == "peer":
         snaps = sys.argv[3:]
@@ -130,7 +130,7 @@ def main():
     elif sys.argv[2] == "time":
         from_t = int(sys.argv[3])
         to_t = int(sys.argv[4])
-        num_bins = 4
+        num_bins = 6
         axes1 = fig.subplots(num_bins, num_bins, sharex=True, sharey=True)
         fig2 = plt.figure()
         axes2 = fig2.subplots(2, 1) 
