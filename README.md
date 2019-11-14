@@ -7,7 +7,7 @@ This is a CUDA accelerated version of and older code for simulating the coarseni
 ## Contents of the repository
 In addition to this readme, the repository contains the following items:
 - **include/**: All the extra dependencies are put here. E.g. the json parser and cub related files.
-- **Makefile**: Used to build the program.
+- **makefile**: Used to build the program.
 - **scripts/**: Contains scripts for running the program on triton and some scripts for plotting data.
 - **src/**: Contains all of the source code.
 - **default/**: Directory for the binaries of Make target 'default'
@@ -37,7 +37,7 @@ make run
 ```
 or by manually writing the path to the executable and the io files, e.g.
 ```
-final/bin/cubble input_parameters.json output_parameters.json
+final/bin/cubble input_parameters.json state.bin
 ```
 The program runs until a certain amount of bubbles is left. After this, the program writes one final data file and returns.
 
