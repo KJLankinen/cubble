@@ -338,7 +338,6 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
         double value;
         double low;
         double high;
-        double interval;
         int mult;
 #if (PBC_X == 1)
         v = x;
