@@ -171,6 +171,8 @@ __global__ void setFlagIfGreaterThanConstantKernel(int numValues,
         setFlagIfGreaterThanConstant(tid, args...);
 }
 
+__device__ dvec distanceVec(dvec p1, dvec p2, dvec interval);
+
 __global__ void transformPositionsKernel(bool normalize, int numValues,
                                          dvec lbb, dvec tfr, double *x,
                                          double *y, double *z);
