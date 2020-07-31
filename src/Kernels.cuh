@@ -177,32 +177,6 @@ __global__ void transformPositionsKernel(bool normalize, int numValues,
                                          dvec lbb, dvec tfr, double *x,
                                          double *y, double *z);
 
-__device__ double getWrappedDistance(double x1, double x2, double maxDistance,
-                                     bool shouldWrap);
-
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     bool shouldWrap, double *x);
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     double minDistance, bool shouldWrap,
-                                     double *x, double *useless);
-template <typename... Args>
-__forceinline__ __device__ double
-getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance,
-                   bool shouldWrap, double *x, double *useless, Args... args) {
-    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
-    d += getDistanceSquared(idx1, idx2, args...);
-
-    return d;
-}
-template <typename... Args>
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     bool shouldWrap, double *x, Args... args) {
-    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
-    d += getDistanceSquared(idx1, idx2, args...);
-
-    return d;
-}
-
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ double getWrappedCoordinate(double val1, double val2,
                                        double multiplier);
@@ -290,22 +264,9 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *r, dvec flowVel, dvec flowTfr,
                                    dvec flowLbb);
 
-template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
-                                      double *r, double *energy, Args... args) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = first[i];
-        const int idx2 = second[i];
-        double e =
-            r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
-        if (e > 0) {
-            e *= e;
-            atomicAdd(&energy[idx1], e);
-            atomicAdd(&energy[idx2], e);
-        }
-    }
-}
+                                      double *r, double *energy, dvec interval,
+                                      double *x, double *y, double *z);
 
 __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
                                   dvec interval, double *r, double *drdt,

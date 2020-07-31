@@ -714,24 +714,13 @@ void saveSnapshotToFile(Params &params) {
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
 
-    if (NUM_DIM == 3) {
         KERNEL_LAUNCH(
             potentialEnergyKernel, params.pairKernelSize, 0, 0,
             params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
             params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-            params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-            PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-            PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
-            PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
-    } else {
-        KERNEL_LAUNCH(
-            potentialEnergyKernel, params.pairKernelSize, 0, 0,
-            params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-            params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-            params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-            PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-            PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
-    }
+            params.ddps[(uint32_t)DDP::TEMP4], params.state.interval,
+            params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+            params.ddps[(uint32_t)DDP::Z]);
 
     std::stringstream ss;
     ss << "snapshot.csv." << params.state.numSnapshots;
@@ -848,24 +837,13 @@ double stabilize(Params &params) {
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
 
-#if (NUM_DIM == 3)
-    KERNEL_LAUNCH(
-        potentialEnergyKernel, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
-        params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
-        params.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
-        params.ddps[(uint32_t)DDP::Z]);
-#else
-    KERNEL_LAUNCH(
-        potentialEnergyKernel, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
-        params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
-        params.ddps[(uint32_t)DDP::Y]);
-#endif
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
+                  params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+                  params.dips[(uint32_t)DIP::PAIR2],
+                  params.ddps[(uint32_t)DDP::R],
+                  params.ddps[(uint32_t)DDP::TEMP4], params.state.interval,
+                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                  params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy1 = params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP4],
@@ -1057,24 +1035,13 @@ double stabilize(Params &params) {
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
 
-#if (NUM_DIM == 3)
-    KERNEL_LAUNCH(
-        potentialEnergyKernel, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
-        params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
-        params.ddps[(uint32_t)DDP::Y], params.state.interval.z, PBC_Z == 1,
-        params.ddps[(uint32_t)DDP::Z]);
-#else
-    KERNEL_LAUNCH(
-        potentialEnergyKernel, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x, PBC_X == 1,
-        params.ddps[(uint32_t)DDP::X], params.state.interval.y, PBC_Y == 1,
-        params.ddps[(uint32_t)DDP::Y]);
-#endif
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
+                  params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+                  params.dips[(uint32_t)DIP::PAIR2],
+                  params.ddps[(uint32_t)DDP::R],
+                  params.ddps[(uint32_t)DDP::TEMP4], params.state.interval,
+                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                  params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy2 = params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP4],
@@ -1940,24 +1907,13 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
 
-    if (NUM_DIM == 3) {
-        KERNEL_LAUNCH(
-            potentialEnergyKernel, params.pairKernelSize, 0, 0,
-            params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-            params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-            params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-            PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-            PBC_Y == 1, params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
-            PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
-    } else {
-        KERNEL_LAUNCH(
-            potentialEnergyKernel, params.pairKernelSize, 0, 0,
-            params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-            params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
-            params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-            PBC_X == 1, params.ddps[(uint32_t)DDP::X], params.state.interval.y,
-            PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
-    }
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
+                  params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+                  params.dips[(uint32_t)DIP::PAIR2],
+                  params.ddps[(uint32_t)DDP::R],
+                  params.ddps[(uint32_t)DDP::TEMP4], params.state.interval,
+                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                  params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy1 = params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP4],
@@ -2389,28 +2345,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
                           params.state.numBubbles,
                           params.ddps[(uint32_t)DDP::TEMP4]);
 
-            if (NUM_DIM == 3) {
-                KERNEL_LAUNCH(
-                    potentialEnergyKernel, params.pairKernelSize, 0, 0,
-                    params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-                    params.dips[(uint32_t)DIP::PAIR2],
-                    params.ddps[(uint32_t)DDP::R],
-                    params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-                    PBC_X == 1, params.ddps[(uint32_t)DDP::X],
-                    params.state.interval.y, PBC_Y == 1,
-                    params.ddps[(uint32_t)DDP::Y], params.state.interval.z,
-                    PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
-            } else {
-                KERNEL_LAUNCH(
-                    potentialEnergyKernel, params.pairKernelSize, 0, 0,
-                    params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
-                    params.dips[(uint32_t)DIP::PAIR2],
-                    params.ddps[(uint32_t)DDP::R],
-                    params.ddps[(uint32_t)DDP::TEMP4], params.state.interval.x,
-                    PBC_X == 1, params.ddps[(uint32_t)DDP::X],
-                    params.state.interval.y, PBC_Y == 1,
-                    params.ddps[(uint32_t)DDP::Y]);
-            }
+            KERNEL_LAUNCH(
+                potentialEnergyKernel, params.pairKernelSize, 0, 0,
+                params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
+                params.dips[(uint32_t)DIP::PAIR2],
+                params.ddps[(uint32_t)DDP::R],
+                params.ddps[(uint32_t)DDP::TEMP4], params.state.interval,
+                params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                params.ddps[(uint32_t)DDP::Z]);
 
             auto getSum = [](double *p, Params &params) -> double {
                 return params.cw.reduce<double, double *, double *>(

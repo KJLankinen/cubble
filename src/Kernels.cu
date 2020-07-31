@@ -684,6 +684,29 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
     }
 }
 
+__global__ void potentialEnergyKernel(int numValues, int *first, int *second,
+                                      double *r, double *energy, dvec interval,
+                                      double *x, double *y, double *z) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        dvec p1 = dvec(x[idx1], y[idx1], 0.0);
+        dvec p2 = dvec(x[idx2], y[idx2], 0.0);
+#if (NUM_DIM == 3)
+        p1.z = z[idx1];
+        p2.z = z[idx2];
+#endif
+        double e =
+            r[idx1] + r[idx2] - distanceVec(p1, p2, interval).getLength();
+        if (e > 0) {
+            e *= e;
+            atomicAdd(&energy[idx1], e);
+            atomicAdd(&energy[idx2], e);
+        }
+    }
+}
+
 __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
                                   dvec interval, double *r, double *drdt,
                                   double *freeArea, double *x, double *y,
