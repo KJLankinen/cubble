@@ -341,9 +341,9 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
         double interval;
         int mult;
 #if (PBC_X == 1)
-        *v = x;
-        *m = mx;
-        *mp = mpx;
+        v = x;
+        m = mx;
+        mp = mpx;
         value = v[i];
         low = lbb.x;
         high = tfr.x;
@@ -353,9 +353,9 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
         m[i] = mp[i] - mult;
 #endif
 #if (PBC_Y == 1)
-        *v = y;
-        *m = my;
-        *mp = mpy;
+        v = y;
+        m = my;
+        mp = mpy;
         value = v[i];
         low = lbb.y;
         high = tfr.y;
@@ -365,9 +365,9 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
         m[i] = mp[i] - mult;
 #endif
 #if (PBC_Z == 1)
-        *v = z;
-        *m = mz;
-        *mp = mpz;
+        v = z;
+        m = mz;
+        mp = mpz;
         value = v[i];
         low = lbb.z;
         high = tfr.z;
