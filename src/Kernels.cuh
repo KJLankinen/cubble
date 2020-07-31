@@ -222,13 +222,22 @@ __device__ __host__ unsigned int part1By2(unsigned int x);
 __device__ __host__ unsigned int compact1By1(unsigned int x);
 __device__ __host__ unsigned int compact1By2(unsigned int x);
 
-template <typename... Args>
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, Args... args) {
-    double maxDistance = r[idx1] > r[idx2] ? r[idx1] : r[idx2];
+                            int *second, dvec interval, double *x, double *y,
+                            double *z) {
+    const double r1 = r[idx1];
+    const double r2 = r[idx2];
+    double maxDistance = r1 > r2 ? r1 : r2;
     maxDistance *= 2.5;
-    maxDistance += (r[idx1] < r[idx2]) ? r[idx1] : r[idx2];
-    if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance) {
+    maxDistance += (r1 < r2) ? r1 : r2;
+    dvec p1 = dvec(x[idx1], y[idx1], 0.0);
+    dvec p2 = dvec(x[idx2], y[idx2], 0.0);
+#if (NUM_DIM == 3)
+    p1.z = z[idx1];
+    p2.z = z[idx2];
+#endif
+    if (distanceVec(p1, p2, interval).getSquaredLength() <
+        maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
         int id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
@@ -267,11 +276,10 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
                                      dvec lbb, dvec tfr, ivec cellDim,
                                      int numValues);
 
-template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
                                int numCells, int numMaxPairs, int *offsets,
                                int *sizes, int *first, int *second, double *r,
-                               Args... args) {
+                               dvec interval, double *x, double *y, double *z) {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 =
@@ -304,7 +312,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, args...);
+                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -324,7 +332,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, args...);
+                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }

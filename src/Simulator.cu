@@ -525,26 +525,14 @@ void updateCellsAndNeighbors(Params &params) {
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
         cudaStream_t stream =
             (i % 2) ? params.velocityStream : params.gasStream;
-#if (NUM_DIM == 3)
         KERNEL_LAUNCH(
             neighborSearch, kernelSizeNeighbor, 0, stream, i,
             params.state.numBubbles, params.state.maxNumCells,
             (int)params.state.pairStride, offsets, sizes,
             params.dips[(uint32_t)DIP::TEMP1],
             params.dips[(uint32_t)DIP::TEMP2], params.ddps[(uint32_t)DDP::R],
-            params.state.interval.x, PBC_X == 1, params.ddps[(uint32_t)DDP::X],
-            params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::Y],
-            params.state.interval.z, PBC_Z == 1, params.ddps[(uint32_t)DDP::Z]);
-#else
-        KERNEL_LAUNCH(
-            neighborSearch, kernelSizeNeighbor, 0, stream, i,
-            params.state.numBubbles, params.state.maxNumCells,
-            (int)params.state.pairStride, offsets, sizes,
-            params.dips[(uint32_t)DIP::TEMP1],
-            params.dips[(uint32_t)DIP::TEMP2], params.ddps[(uint32_t)DDP::R],
-            params.state.interval.x, PBC_X == 1, params.ddps[(uint32_t)DDP::X],
-            params.state.interval.y, PBC_Y == 1, params.ddps[(uint32_t)DDP::Y]);
-#endif
+            params.state.interval, params.ddps[(uint32_t)DDP::X],
+            params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z]);
     }
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs),

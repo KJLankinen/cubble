@@ -53,29 +53,20 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__device__ double getWrappedDistance(double x1, double x2, double maxDistance,
-                                     bool shouldWrap) {
-    const double distance = x1 - x2;
-    x2 = distance < -0.5 * maxDistance
-             ? x2 - maxDistance
-             : (distance > 0.5 * maxDistance ? x2 + maxDistance : x2);
-    const double distance2 = x1 - x2;
+__device__ dvec distanceVec(dvec p1, dvec p2, dvec interval) {
+    const dvec d1 = (p1 - p2).getAbsolute();
+    dvec d2 = min(d1, interval - d1);
+#if (PBC_X == 0)
+    d2.x = d1.x;
+#endif
+#if (PBC_Y == 0)
+    d2.y = d1.y;
+#endif
+#if (PBC_Z == 0)
+    d2.z = d1.z;
+#endif
 
-    return shouldWrap ? distance2 : distance;
-}
-
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     bool shouldWrap, double *x) {
-    const double distance =
-        getWrappedDistance(x[idx1], x[idx2], maxDistance, shouldWrap);
-    DEVICE_ASSERT(distance * distance > 0, "Distance is zero!");
-    return distance * distance;
-}
-
-__device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     double minDistance, bool shouldWrap,
-                                     double *x, double *useless) {
-    return getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+    return d2;
 }
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
@@ -460,27 +451,25 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
          i += gridDim.x * blockDim.x) {
         int idx1 = pair1[i];
         int idx2 = pair2[i];
-
         double radii = r[idx1] + r[idx2];
-        double disX =
-            getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-        double disY =
-            getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-        double disZ = 0.0;
+        dvec p1 = dvec(x[idx1], y[idx1], 0.0);
+        dvec p2 = dvec(x[idx2], y[idx2], 0.0);
 #if (NUM_DIM == 3)
-        disZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
+        p1.z = z[idx1];
+        p2.z = z[idx2];
 #endif
-
-        double distance = disX * disX + disY * disY + disZ * disZ;
+        dvec distances = distanceVec(p1, p2, interval);
+        const double distance = distances.getSquaredLength();
         if (radii * radii >= distance) {
-            distance = fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
-            atomicAdd(&vx[idx1], distance * disX);
-            atomicAdd(&vx[idx2], -distance * disX);
-            atomicAdd(&vy[idx1], distance * disY);
-            atomicAdd(&vy[idx2], -distance * disY);
+            distances =
+                distances * fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
+            atomicAdd(&vx[idx1], distances.x);
+            atomicAdd(&vx[idx2], -distances.x);
+            atomicAdd(&vy[idx1], distances.y);
+            atomicAdd(&vy[idx2], -distances.y);
 #if (NUM_DIM == 3)
-            atomicAdd(&vz[idx1], distance * disZ);
-            atomicAdd(&vz[idx2], -distance * disZ);
+            atomicAdd(&vz[idx1], distances.z);
+            atomicAdd(&vz[idx2], -distances.z);
 #endif
         }
     }
@@ -622,20 +611,15 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
          i += gridDim.x * blockDim.x) {
         int idx1 = pair1[i];
         int idx2 = pair2[i];
-
-        double distX =
-            getWrappedDistance(x[idx1], x[idx2], interval.x, PBC_X == 1);
-        double distY =
-            getWrappedDistance(y[idx1], y[idx2], interval.y, PBC_Y == 1);
-        double distZ = 0.0;
-#if (NUM_DIM == 3)
-        distZ = getWrappedDistance(z[idx1], z[idx2], interval.z, PBC_Z == 1);
-#endif
-
-        double magnitude = distX * distX + distY * distY + distZ * distZ;
         double r1 = r[idx1];
         double r2 = r[idx2];
-
+        dvec p1 = dvec(x[idx1], y[idx1], 0.0);
+        dvec p2 = dvec(x[idx2], y[idx2], 0.0);
+#if (NUM_DIM == 3)
+        p1.z = z[idx1];
+        p2.z = z[idx2];
+#endif
+        double magnitude = distanceVec(p1, p2, interval).getSquaredLength();
         if (magnitude < (r1 + r2) * (r1 + r2)) {
             double overlapArea = 0;
             if (magnitude < r1 * r1 || magnitude < r2 * r2) {
