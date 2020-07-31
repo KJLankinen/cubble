@@ -314,6 +314,33 @@ __device__ __host__ unsigned int compact1By2(unsigned int x) {
     return x;
 }
 
+__device__ void comparePair(int idx1, int idx2, double *r, int *first,
+                            int *second, dvec interval, double *x, double *y,
+                            double *z) {
+    const double r1 = r[idx1];
+    const double r2 = r[idx2];
+    double maxDistance = r1 > r2 ? r1 : r2;
+    maxDistance *= 2.5;
+    maxDistance += (r1 < r2) ? r1 : r2;
+    dvec p1 = dvec(x[idx1], y[idx1], 0.0);
+    dvec p2 = dvec(x[idx2], y[idx2], 0.0);
+#if (NUM_DIM == 3)
+    p1.z = z[idx1];
+    p2.z = z[idx2];
+#endif
+    if (distanceVec(p1, p2, interval).getSquaredLength() <
+        maxDistance * maxDistance) {
+        // Set the smaller idx to idx1 and larger to idx2
+        int id = idx1 > idx2 ? idx1 : idx2;
+        idx1 = idx1 < idx2 ? idx1 : idx2;
+        idx2 = id;
+
+        id = atomicAdd(&dNumPairs, 1);
+        first[id] = idx1;
+        second[id] = idx2;
+    }
+}
+
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity) {
     atomicAdd(&sumOfVelocities[idx1], velocity[idx2]);
@@ -440,6 +467,70 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
          i += gridDim.x * blockDim.x) {
         cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
         bubbleIndices[i] = i;
+    }
+}
+
+__global__ void neighborSearch(int neighborCellNumber, int numValues,
+                               int numCells, int numMaxPairs, int *offsets,
+                               int *sizes, int *first, int *second, double *r,
+                               dvec interval, double *x, double *y, double *z) {
+    const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
+    const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
+    const int cellIdx2 =
+        getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
+
+    if (cellIdx2 >= 0) {
+        const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
+        DEVICE_ASSERT(cellIdx1 < numCells, "Invalid cell index!");
+        DEVICE_ASSERT(cellIdx2 < numCells, "Invalid cell index!");
+
+        if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
+            return;
+
+        // Self comparison only loops the upper triangle of values (n * (n - 1))
+        // / 2 comparisons instead of n^2.
+        if (cellIdx1 == cellIdx2) {
+            const int size = sizes[cellIdx1];
+            const int offset = offsets[cellIdx1];
+            for (int k = threadIdx.x; k < (size * (size - 1)) / 2;
+                 k += blockDim.x) {
+                int idx1 =
+                    size - 2 -
+                    (int)floor(
+                        sqrt(-8.0 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
+                const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 +
+                                 (size - idx1) * ((size - idx1) - 1) / 2;
+                idx1 += offset;
+
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
+
+                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
+                DEVICE_ASSERT(numMaxPairs > dNumPairs,
+                              "Too many neighbor indices!");
+            }
+        } else // Compare all values of one cell to all values of other cell,
+               // resulting in n1 * n2
+               // comparisons.
+        {
+            const int size1 = sizes[cellIdx1];
+            const int size2 = sizes[cellIdx2];
+            const int offset1 = offsets[cellIdx1];
+            const int offset2 = offsets[cellIdx2];
+            for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x) {
+                const int idx1 = offset1 + k / size2;
+                const int idx2 = offset2 + k % size2;
+
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
+
+                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
+                DEVICE_ASSERT(numMaxPairs > dNumPairs,
+                              "Too many neighbor indices!");
+            }
+        }
     }
 }
 
