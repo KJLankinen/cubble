@@ -363,6 +363,7 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
 
         v[i] = value + (high - low) * (double)mult;
         m[i] = mp[i] - mult;
+#endif
 #if (PBC_Z == 1)
         *v = z;
         *m = mz;
