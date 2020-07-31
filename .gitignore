@@ -10,3 +10,4 @@ default/bin
 final/bin
 debug/bin
 scripts/cubble_python_venv/*
+tags
