@@ -6,8 +6,7 @@
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 
-namespace cubble
-{
+namespace cubble {
 extern __device__ double dTotalArea;
 extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
@@ -21,40 +20,39 @@ extern __device__ double dVolumeMultiplier;
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
                 void (*f)(Arguments...), KernelSize kernelSize,
-                uint32_t sharedMemBytes, cudaStream_t stream, Arguments... args)
-{
+                uint32_t sharedMemBytes, cudaStream_t stream,
+                Arguments... args) {
 #ifndef NDEBUG
-  assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
-  assertBlockSizeBelowLimit(kernelNameStr, file, line, kernelSize.block);
-  assertGridSizeBelowLimit(kernelNameStr, file, line, kernelSize.grid);
+    assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
+    assertBlockSizeBelowLimit(kernelNameStr, file, line, kernelSize.block);
+    assertGridSizeBelowLimit(kernelNameStr, file, line, kernelSize.grid);
 #endif
 
-  f<<<kernelSize.grid, kernelSize.block, sharedMemBytes, stream>>>(args...);
+    f<<<kernelSize.grid, kernelSize.block, sharedMemBytes, stream>>>(args...);
 
 #ifndef NDEBUG
-  CUDA_ASSERT(cudaDeviceSynchronize());
-  CUDA_ASSERT(cudaPeekAtLastError());
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaPeekAtLastError());
 
-  bool errorEncountered = false;
-  void *dee             = nullptr;
-  CUDA_ASSERT(cudaGetSymbolAddress((void **)&dee, dErrorEncountered));
-  if (dee != nullptr)
-    CUDA_ASSERT(cudaMemcpy(static_cast<void *>(&errorEncountered), dee,
-                           sizeof(bool), cudaMemcpyDeviceToHost));
-  else
-    throw std::runtime_error(
-      "Couldn't get symbol address for dErrorEncountered variable!");
+    bool errorEncountered = false;
+    void *dee = nullptr;
+    CUDA_ASSERT(cudaGetSymbolAddress((void **)&dee, dErrorEncountered));
+    if (dee != nullptr)
+        CUDA_ASSERT(cudaMemcpy(static_cast<void *>(&errorEncountered), dee,
+                               sizeof(bool), cudaMemcpyDeviceToHost));
+    else
+        throw std::runtime_error(
+            "Couldn't get symbol address for dErrorEncountered variable!");
 
-  if (errorEncountered)
-  {
-    std::stringstream ss;
-    ss << "Error encountered during kernel execution."
-       << "\nError location: '" << kernelNameStr << "' @" << file << ":" << line
-       << "."
-       << "\nSee earlier messages for possible details.";
+    if (errorEncountered) {
+        std::stringstream ss;
+        ss << "Error encountered during kernel execution."
+           << "\nError location: '" << kernelNameStr << "' @" << file << ":"
+           << line << "."
+           << "\nSee earlier messages for possible details.";
 
-    throw std::runtime_error(ss.str());
-  }
+        throw std::runtime_error(ss.str());
+    }
 #endif
 }
 
@@ -67,84 +65,75 @@ __device__ void resetDoubleArrayToValue(double value, int idx, double *array);
 
 template <typename... Args>
 __device__ void resetDoubleArrayToValue(double value, int idx, double *array,
-                                        Args... args)
-{
-  resetDoubleArrayToValue(value, idx, array);
-  resetDoubleArrayToValue(value, idx, args...);
+                                        Args... args) {
+    resetDoubleArrayToValue(value, idx, array);
+    resetDoubleArrayToValue(value, idx, args...);
 }
 
 template <typename... Args>
-__global__ void resetKernel(double value, int numValues, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    resetDoubleArrayToValue(value, tid, args...);
+__global__ void resetKernel(double value, int numValues, Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+        resetDoubleArrayToValue(value, tid, args...);
 
-  if (tid == 0)
-  {
-    dTotalArea                 = 0.0;
-    dTotalOverlapArea          = 0.0;
-    dTotalOverlapAreaPerRadius = 0.0;
-    dTotalAreaPerRadius        = 0.0;
-    dNumBubblesAboveMinRad     = 0;
-  }
+    if (tid == 0) {
+        dTotalArea = 0.0;
+        dTotalOverlapArea = 0.0;
+        dTotalOverlapAreaPerRadius = 0.0;
+        dTotalAreaPerRadius = 0.0;
+        dNumBubblesAboveMinRad = 0;
+    }
 }
 
 template <typename T>
-__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray)
-{
-  toArray[toIndex] = fromArray[fromIndex];
-}
-
-template <typename T, typename... Args>
-__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray,
-                          Args... args)
-{
-  copyValue(fromIndex, toIndex, fromArray, toArray);
-  copyValue(fromIndex, toIndex, args...);
-}
-
-template <typename T>
-__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag,
-                               T *fromArray, T *toArray)
-{
-  if (flag)
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray,
+                          T *toArray) {
     toArray[toIndex] = fromArray[fromIndex];
 }
 
 template <typename T, typename... Args>
+__device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray,
+                          Args... args) {
+    copyValue(fromIndex, toIndex, fromArray, toArray);
+    copyValue(fromIndex, toIndex, args...);
+}
+
+template <typename T>
 __device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag,
-                               T *fromArray, T *toArray, Args... args)
-{
-  copyValueIfSet(fromIndex, toIndex, flag, fromArray, toArray);
-  copyValueIfSet(fromIndex, toIndex, flag, args...);
+                               T *fromArray, T *toArray) {
+    if (flag)
+        toArray[toIndex] = fromArray[fromIndex];
+}
+
+template <typename T, typename... Args>
+__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag,
+                               T *fromArray, T *toArray, Args... args) {
+    copyValueIfSet(fromIndex, toIndex, flag, fromArray, toArray);
+    copyValueIfSet(fromIndex, toIndex, flag, args...);
 }
 
 template <typename... Args>
 __global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType,
-                                 int *indices, int *flags, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-  {
-    switch (reorganizeType)
-    {
-      case ReorganizeType::COPY_FROM_INDEX:
-        copyValue(indices[tid], tid, args...);
-        break;
-      case ReorganizeType::COPY_TO_INDEX:
-        copyValue(tid, indices[tid], args...);
-        break;
-      case ReorganizeType::CONDITIONAL_FROM_INDEX:
-        copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
-        break;
-      case ReorganizeType::CONDITIONAL_TO_INDEX:
-        copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
-        break;
-      default:
-        break;
+                                 int *indices, int *flags, Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues) {
+        switch (reorganizeType) {
+        case ReorganizeType::COPY_FROM_INDEX:
+            copyValue(indices[tid], tid, args...);
+            break;
+        case ReorganizeType::COPY_TO_INDEX:
+            copyValue(tid, indices[tid], args...);
+            break;
+        case ReorganizeType::CONDITIONAL_FROM_INDEX:
+            copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
+            break;
+        case ReorganizeType::CONDITIONAL_TO_INDEX:
+            copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
+            break;
+        default:
+            break;
+        }
     }
-  }
 }
 
 // Could be generalized to accept any comparable type, but I've been too lazy to
@@ -153,18 +142,16 @@ __device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values,
                                           double constant);
 template <typename... Args>
 __device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values,
-                                          double constant, Args... args)
-{
-  setFlagIfLessThanConstant(idx, flags, values, constant);
-  setFlagIfLessThanConstant(idx, args...);
+                                          double constant, Args... args) {
+    setFlagIfLessThanConstant(idx, flags, values, constant);
+    setFlagIfLessThanConstant(idx, args...);
 }
 
 template <typename... Args>
-__global__ void setFlagIfLessThanConstantKernel(int numValues, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    setFlagIfLessThanConstant(tid, args...);
+__global__ void setFlagIfLessThanConstantKernel(int numValues, Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+        setFlagIfLessThanConstant(tid, args...);
 }
 
 __device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
@@ -172,18 +159,17 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
 template <typename... Args>
 __device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
                                              double *values, double constant,
-                                             Args... args)
-{
-  setFlagIfGreaterThanConstant(idx, flags, values, constant);
-  setFlagIfGreaterThanConstant(idx, args...);
+                                             Args... args) {
+    setFlagIfGreaterThanConstant(idx, flags, values, constant);
+    setFlagIfGreaterThanConstant(idx, args...);
 }
 
 template <typename... Args>
-__global__ void setFlagIfGreaterThanConstantKernel(int numValues, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    setFlagIfGreaterThanConstant(tid, args...);
+__global__ void setFlagIfGreaterThanConstantKernel(int numValues,
+                                                   Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+        setFlagIfGreaterThanConstant(tid, args...);
 }
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
@@ -199,23 +185,21 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
                                      double minDistance, bool shouldWrap,
                                      double *x, double *useless);
 template <typename... Args>
-__forceinline__ __device__ double getDistanceSquared(
-  int idx1, int idx2, double maxDistance, double minDistance, bool shouldWrap,
-  double *x, double *useless, Args... args)
-{
-  double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
-  d += getDistanceSquared(idx1, idx2, args...);
+__forceinline__ __device__ double
+getDistanceSquared(int idx1, int idx2, double maxDistance, double minDistance,
+                   bool shouldWrap, double *x, double *useless, Args... args) {
+    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+    d += getDistanceSquared(idx1, idx2, args...);
 
-  return d;
+    return d;
 }
 template <typename... Args>
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
-                                     bool shouldWrap, double *x, Args... args)
-{
-  double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
-  d += getDistanceSquared(idx1, idx2, args...);
+                                     bool shouldWrap, double *x, Args... args) {
+    double d = getDistanceSquared(idx1, idx2, maxDistance, shouldWrap, x);
+    d += getDistanceSquared(idx1, idx2, args...);
 
-  return d;
+    return d;
 }
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
@@ -241,54 +225,34 @@ __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Args>
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, Args... args)
-{
-  double maxDistance = r[idx1] > r[idx2] ? r[idx1] : r[idx2];
-  maxDistance *= 2.5;
-  maxDistance += (r[idx1] < r[idx2]) ? r[idx1] : r[idx2];
-  if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance)
-  {
-    // Set the smaller idx to idx1 and larger to idx2
-    int id = idx1 > idx2 ? idx1 : idx2;
-    idx1   = idx1 < idx2 ? idx1 : idx2;
-    idx2   = id;
+                            int *second, Args... args) {
+    double maxDistance = r[idx1] > r[idx2] ? r[idx1] : r[idx2];
+    maxDistance *= 2.5;
+    maxDistance += (r[idx1] < r[idx2]) ? r[idx1] : r[idx2];
+    if (getDistanceSquared(idx1, idx2, args...) < maxDistance * maxDistance) {
+        // Set the smaller idx to idx1 and larger to idx2
+        int id = idx1 > idx2 ? idx1 : idx2;
+        idx1 = idx1 < idx2 ? idx1 : idx2;
+        idx2 = id;
 
-    id         = atomicAdd(&dNumPairs, 1);
-    first[id]  = idx1;
-    second[id] = idx2;
-  }
-}
-
-__device__ void wrapAround(int idx, double *coordinate, double minValue,
-                           double maxValue, int *wrapMultiplier,
-                           int *wrapMultiplierPrev);
-template <typename... Args>
-__device__ void wrapAround(int idx, double *coordinate, double minValue,
-                           double maxValue, int *wrapMultiplier,
-                           int *wrapMultiplierPrev, Args... args)
-{
-  wrapAround(idx, coordinate, minValue, maxValue, wrapMultiplier,
-             wrapMultiplierPrev);
-  wrapAround(idx, args...);
+        id = atomicAdd(&dNumPairs, 1);
+        first[id] = idx1;
+        second[id] = idx2;
+    }
 }
 
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
                                     double *velocity);
 template <typename... Args>
 __device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
-                                    double *velocity, Args... args)
-{
-  addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
-  addNeighborVelocity(idx1, idx2, args...);
+                                    double *velocity, Args... args) {
+    addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
+    addNeighborVelocity(idx1, idx2, args...);
 }
 
-template <typename... Args>
-__global__ void boundaryWrapKernel(int numValues, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    wrapAround(tid, args...);
-}
+__global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
+                           double *y, double *z, int *mx, int *my, int *mz,
+                           int *mpx, int *mpy, int *mpz);
 
 __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
@@ -308,66 +272,65 @@ template <typename... Args>
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
                                int numCells, int numMaxPairs, int *offsets,
                                int *sizes, int *first, int *second, double *r,
-                               Args... args)
-{
-  const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
-  const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
-  const int cellIdx2 = getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
+                               Args... args) {
+    const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
+    const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
+    const int cellIdx2 =
+        getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
 
-  if (cellIdx2 >= 0)
-  {
-    const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
-    DEVICE_ASSERT(cellIdx1 < numCells, "Invalid cell index!");
-    DEVICE_ASSERT(cellIdx2 < numCells, "Invalid cell index!");
+    if (cellIdx2 >= 0) {
+        const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
+        DEVICE_ASSERT(cellIdx1 < numCells, "Invalid cell index!");
+        DEVICE_ASSERT(cellIdx2 < numCells, "Invalid cell index!");
 
-    if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
-      return;
+        if (sizes[cellIdx1] == 0 || sizes[cellIdx2] == 0)
+            return;
 
-    // Self comparison only loops the upper triangle of values (n * (n - 1)) / 2
-    // comparisons instead of n^2.
-    if (cellIdx1 == cellIdx2)
-    {
-      const int size   = sizes[cellIdx1];
-      const int offset = offsets[cellIdx1];
-      for (int k = threadIdx.x; k < (size * (size - 1)) / 2; k += blockDim.x)
-      {
-        int idx1 =
-          size - 2 -
-          (int)floor(sqrt(-8.0 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
-        const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 +
-                         (size - idx1) * ((size - idx1) - 1) / 2;
-        idx1 += offset;
+        // Self comparison only loops the upper triangle of values (n * (n - 1))
+        // / 2 comparisons instead of n^2.
+        if (cellIdx1 == cellIdx2) {
+            const int size = sizes[cellIdx1];
+            const int offset = offsets[cellIdx1];
+            for (int k = threadIdx.x; k < (size * (size - 1)) / 2;
+                 k += blockDim.x) {
+                int idx1 =
+                    size - 2 -
+                    (int)floor(
+                        sqrt(-8.0 * k + 4 * size * (size - 1) - 7) * 0.5 - 0.5);
+                const int idx2 = offset + k + idx1 + 1 - size * (size - 1) / 2 +
+                                 (size - idx1) * ((size - idx1) - 1) / 2;
+                idx1 += offset;
 
-        DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
-        DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
-        DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-        comparePair(idx1, idx2, r, first, second, args...);
-        DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
-      }
+                comparePair(idx1, idx2, r, first, second, args...);
+                DEVICE_ASSERT(numMaxPairs > dNumPairs,
+                              "Too many neighbor indices!");
+            }
+        } else // Compare all values of one cell to all values of other cell,
+               // resulting in n1 * n2
+               // comparisons.
+        {
+            const int size1 = sizes[cellIdx1];
+            const int size2 = sizes[cellIdx2];
+            const int offset1 = offsets[cellIdx1];
+            const int offset2 = offsets[cellIdx2];
+            for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x) {
+                const int idx1 = offset1 + k / size2;
+                const int idx2 = offset2 + k % size2;
+
+                DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
+                DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
+
+                comparePair(idx1, idx2, r, first, second, args...);
+                DEVICE_ASSERT(numMaxPairs > dNumPairs,
+                              "Too many neighbor indices!");
+            }
+        }
     }
-    else // Compare all values of one cell to all values of other cell,
-         // resulting in n1 * n2
-         // comparisons.
-    {
-      const int size1   = sizes[cellIdx1];
-      const int size2   = sizes[cellIdx2];
-      const int offset1 = offsets[cellIdx1];
-      const int offset2 = offsets[cellIdx2];
-      for (int k = threadIdx.x; k < size1 * size2; k += blockDim.x)
-      {
-        const int idx1 = offset1 + k / size2;
-        const int idx2 = offset2 + k % size2;
-
-        DEVICE_ASSERT(idx1 < numValues, "Invalid bubble index!");
-        DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
-        DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
-
-        comparePair(idx1, idx2, r, first, second, args...);
-        DEVICE_ASSERT(numMaxPairs > dNumPairs, "Too many neighbor indices!");
-      }
-    }
-  }
 }
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
@@ -382,17 +345,15 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
 
 template <typename... Args>
 __global__ void neighborVelocityKernel(int *first, int *second,
-                                       int *numNeighbors, Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-  {
-    const int idx1 = first[i];
-    const int idx2 = second[i];
-    atomicAdd(&numNeighbors[idx1], 1);
-    atomicAdd(&numNeighbors[idx2], 1);
-    addNeighborVelocity(idx1, idx2, args...);
-  }
+                                       int *numNeighbors, Args... args) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        atomicAdd(&numNeighbors[idx1], 1);
+        atomicAdd(&numNeighbors[idx2], 1);
+        addNeighborVelocity(idx1, idx2, args...);
+    }
 }
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
@@ -404,22 +365,19 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 
 template <typename... Args>
 __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
-                                      double *r, double *energy, Args... args)
-{
-  for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-       i += gridDim.x * blockDim.x)
-  {
-    const int idx1 = first[i];
-    const int idx2 = second[i];
-    double e =
-      r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
-    if (e > 0)
-    {
-      e *= e;
-      atomicAdd(&energy[idx1], e);
-      atomicAdd(&energy[idx2], e);
+                                      double *r, double *energy, Args... args) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        double e =
+            r[idx1] + r[idx2] - sqrt(getDistanceSquared(idx1, idx2, args...));
+        if (e > 0) {
+            e *= e;
+            atomicAdd(&energy[idx1], e);
+            atomicAdd(&energy[idx2], e);
+        }
     }
-  }
 }
 
 __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
@@ -443,18 +401,16 @@ __device__ void adamsBashforth(int idx, double timeStep, double *yNext,
 template <typename... Args>
 __device__ void adamsBashforth(int idx, double timeStep, double *yNext,
                                double *y, double *f, double *fPrevious,
-                               Args... args)
-{
-  adamsBashforth(idx, timeStep, yNext, y, f, fPrevious);
-  adamsBashforth(idx, timeStep, args...);
+                               Args... args) {
+    adamsBashforth(idx, timeStep, yNext, y, f, fPrevious);
+    adamsBashforth(idx, timeStep, args...);
 }
 
 template <typename... Args>
-__global__ void predictKernel(int numValues, double timeStep, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    adamsBashforth(tid, timeStep, args...);
+__global__ void predictKernel(int numValues, double timeStep, Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+        adamsBashforth(tid, timeStep, args...);
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
@@ -471,18 +427,16 @@ __global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
 template <typename... Args>
 __device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f,
-                               Args... args)
-{
-  eulerIntegrate(idx, timeStep, y, f);
-  eulerIntegrate(idx, timeStep, args...);
+                               Args... args) {
+    eulerIntegrate(idx, timeStep, y, f);
+    eulerIntegrate(idx, timeStep, args...);
 }
 
 template <typename... Args>
-__global__ void eulerKernel(int numValues, double timeStep, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-    eulerIntegrate(tid, timeStep, args...);
+__global__ void eulerKernel(int numValues, double timeStep, Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues)
+        eulerIntegrate(tid, timeStep, args...);
 }
 
 __device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
@@ -490,14 +444,12 @@ __device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
                                              int *wrapMultiplier,
                                              double interval);
 template <typename... Args>
-__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
-                                             double *xStart,
-                                             int *wrapMultiplier,
-                                             double interval, Args... args)
-{
-  return calculateDistanceFromStart(idx, args...) +
-         calculateDistanceFromStart(idx, x, xPrev, xStart, wrapMultiplier,
-                                    interval);
+__device__ double
+calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart,
+                           int *wrapMultiplier, double interval, Args... args) {
+    return calculateDistanceFromStart(idx, args...) +
+           calculateDistanceFromStart(idx, x, xPrev, xStart, wrapMultiplier,
+                                      interval);
 }
 
 __device__ double calculatePathLength(int idx, double *x, double *xPrev,
@@ -506,24 +458,22 @@ __device__ double calculatePathLength(int idx, double *x, double *xPrev,
 template <typename... Args>
 __device__ double calculatePathLength(int idx, double *x, double *xPrev,
                                       double *xStart, int *wrapMultiplier,
-                                      double interval, Args... args)
-{
-  return calculatePathLength(idx, args...) +
-         calculatePathLength(idx, x, xPrev, xStart, wrapMultiplier, interval);
+                                      double interval, Args... args) {
+    return calculatePathLength(idx, args...) +
+           calculatePathLength(idx, x, xPrev, xStart, wrapMultiplier, interval);
 }
 
 template <typename... Args>
 __global__ void pathLengthDistanceKernel(int numValues, double *pathLengths,
                                          double *pathLengthsPrev,
-                                         double *squaredDistances, Args... args)
-{
-  const int tid = getGlobalTid();
-  if (tid < numValues)
-  {
-    pathLengths[tid] =
-      pathLengthsPrev[tid] + sqrt(calculatePathLength(tid, args...));
-    squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
-  }
+                                         double *squaredDistances,
+                                         Args... args) {
+    const int tid = getGlobalTid();
+    if (tid < numValues) {
+        pathLengths[tid] =
+            pathLengthsPrev[tid] + sqrt(calculatePathLength(tid, args...));
+        squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
+    }
 }
 
 } // namespace cubble
