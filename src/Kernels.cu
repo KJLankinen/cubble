@@ -38,6 +38,7 @@ __device__ int getGlobalTid() {
 
     return tid;
 }
+
 __device__ void resetDoubleArrayToValue(double value, int idx, double *array) {
     array[idx] = value;
 }
@@ -70,6 +71,7 @@ __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
     DEVICE_ASSERT(distance * distance > 0, "Distance is zero!");
     return distance * distance;
 }
+
 __device__ double getDistanceSquared(int idx1, int idx2, double maxDistance,
                                      double minDistance, bool shouldWrap,
                                      double *x, double *useless) {

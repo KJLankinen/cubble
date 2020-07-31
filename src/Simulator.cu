@@ -397,9 +397,9 @@ void updateCellsAndNeighbors(Params &params) {
                                  params.state.maxNumCells);
 
     KERNEL_LAUNCH(
-        reorganizeKernel, params.defaultKernelSize, 0, 0,
-        params.state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
-        sortedBubbleIndices, sortedBubbleIndices, params.ddps[(uint32_t)DDP::X],
+        copyKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
+        ReorganizeType::COPY_FROM_INDEX, sortedBubbleIndices,
+        sortedBubbleIndices, params.ddps[(uint32_t)DDP::X],
         params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::Y],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Z],
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::R],
@@ -594,8 +594,8 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
                                  params.state.numBubbles);
 
     KERNEL_LAUNCH(
-        reorganizeKernel, params.defaultKernelSize, 0, 0,
-        params.state.numBubbles, ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
+        copyKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
+        ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
         params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::X],
         params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::Y],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Z],

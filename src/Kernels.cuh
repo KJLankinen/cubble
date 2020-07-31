@@ -98,40 +98,39 @@ __device__ void copyValue(int fromIndex, int toIndex, T *fromArray, T *toArray,
     copyValue(fromIndex, toIndex, args...);
 }
 
-template <typename T>
-__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag,
-                               T *fromArray, T *toArray) {
-    if (flag)
-        toArray[toIndex] = fromArray[fromIndex];
-}
-
-template <typename T, typename... Args>
-__device__ void copyValueIfSet(int fromIndex, int toIndex, bool flag,
-                               T *fromArray, T *toArray, Args... args) {
-    copyValueIfSet(fromIndex, toIndex, flag, fromArray, toArray);
-    copyValueIfSet(fromIndex, toIndex, flag, args...);
-}
-
 template <typename... Args>
-__global__ void reorganizeKernel(int numValues, ReorganizeType reorganizeType,
-                                 int *indices, int *flags, Args... args) {
+__global__ void copyKernel(int numValues, ReorganizeType reorganizeType,
+                           int *indices, int *flags, Args... args) {
     const int tid = getGlobalTid();
     if (tid < numValues) {
+        bool copy = true;
+        int from, to;
+
         switch (reorganizeType) {
         case ReorganizeType::COPY_FROM_INDEX:
-            copyValue(indices[tid], tid, args...);
+            from = indices[tid];
+            to = tid;
             break;
         case ReorganizeType::COPY_TO_INDEX:
-            copyValue(tid, indices[tid], args...);
+            from = tid;
+            to = indices[tid];
             break;
         case ReorganizeType::CONDITIONAL_FROM_INDEX:
-            copyValueIfSet(indices[tid], tid, 1 == flags[tid], args...);
+            from = indices[tid];
+            to = tid;
+            copy = 1 == flags[tid];
             break;
         case ReorganizeType::CONDITIONAL_TO_INDEX:
-            copyValueIfSet(tid, indices[tid], 1 == flags[tid], args...);
+            from = tid;
+            to = indices[tid];
+            copy = 1 == flags[tid];
             break;
         default:
             break;
+        }
+
+        if (copy) {
+            copyValue(from, to, args...);
         }
     }
 }
