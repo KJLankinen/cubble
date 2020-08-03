@@ -1051,130 +1051,59 @@ double stabilize(Params &params) {
 }
 
 void velocityCalculation(Params &params) {
-#if (NUM_DIM == 3)
+    // Velocity
+    KERNEL_LAUNCH(
+        velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
+        params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+        params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
+        params.state.interval, params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDTP],
+        params.ddps[(uint32_t)DDP::DZDTP]);
+
+    // Flow velocity
+#if (USE_FLOW == 1)
     {
-        // Velocity
+        CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
+                             sizeof(int) * params.state.pairStride));
+        int *numNeighbors = params.dips[(uint32_t)DIP::TEMP1];
+
+        KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
+                      params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
+                      params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
+                      params.ddps[(uint32_t)DDP::TEMP5],
+                      params.ddps[(uint32_t)DDP::TEMP6],
+                      params.ddps[(uint32_t)DDP::TEMP7],
+                      params.ddps[(uint32_t)DDP::DXDTO],
+                      params.ddps[(uint32_t)DDP::DYDTO],
+                      params.ddps[(uint32_t)DDP::DZDTO]);
+
         KERNEL_LAUNCH(
-            velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
-            params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-            params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-            params.state.interval, params.ddps[(uint32_t)DDP::XP],
-            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+            flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
+            params.state.numBubbles, numNeighbors,
             params.ddps[(uint32_t)DDP::DXDTP],
             params.ddps[(uint32_t)DDP::DYDTP],
-            params.ddps[(uint32_t)DDP::DZDTP]);
-
-        // Flow velocity
-#if (USE_FLOW == 1)
-        {
-            CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
-                                 sizeof(int) * params.state.pairStride));
-            int *numNeighbors = params.dips[(uint32_t)DIP::TEMP1];
-
-            KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
-                          params.velocityStream,
-                          params.dips[(uint32_t)DIP::PAIR1],
-                          params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-                          params.ddps[(uint32_t)DDP::TEMP5],
-                          params.ddps[(uint32_t)DDP::DXDTO],
-                          params.ddps[(uint32_t)DDP::TEMP6],
-                          params.ddps[(uint32_t)DDP::DYDTO],
-                          params.ddps[(uint32_t)DDP::TEMP7],
-                          params.ddps[(uint32_t)DDP::DZDTO]);
-
-            KERNEL_LAUNCH(flowVelocityKernel, params.pairKernelSize, 0,
-                          params.velocityStream, params.state.numBubbles,
-                          numNeighbors, params.ddps[(uint32_t)DDP::DXDTP],
-                          params.ddps[(uint32_t)DDP::DYDTP],
-                          params.ddps[(uint32_t)DDP::DZDTP],
-                          params.ddps[(uint32_t)DDP::TEMP5],
-                          params.ddps[(uint32_t)DDP::TEMP6],
-                          params.ddps[(uint32_t)DDP::TEMP7],
-                          params.ddps[(uint32_t)DDP::XP],
-                          params.ddps[(uint32_t)DDP::YP],
-                          params.ddps[(uint32_t)DDP::ZP],
-                          params.ddps[(uint32_t)DDP::RP], params.inputs.flowVel,
-                          params.inputs.flowTfr, params.inputs.flowLbb);
-        }
+            params.ddps[(uint32_t)DDP::DZDTP],
+            params.ddps[(uint32_t)DDP::TEMP5],
+            params.ddps[(uint32_t)DDP::TEMP6],
+            params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::XP],
+            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+            params.ddps[(uint32_t)DDP::RP], params.inputs.flowVel,
+            params.inputs.flowTfr, params.inputs.flowLbb);
+    }
 #endif
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-        // Wall velocity, should be after flow so that possible drag is applied
-        // correctly
-        KERNEL_LAUNCH(
-            velocityWallKernel, params.defaultKernelSize, 0,
-            params.velocityStream, params.state.numBubbles,
-            params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
-            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-            params.ddps[(uint32_t)DDP::DXDTP],
-            params.ddps[(uint32_t)DDP::DYDTP],
-            params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb,
-            params.state.tfr, params.inputs.fZeroPerMuZero,
-            params.inputs.wallDragStrength);
-#endif
-    }
-#else // Two dimensions
-    {
-        // Velocity
-        KERNEL_LAUNCH(
-            velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
-            params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
-            params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
-            params.state.interval, params.ddps[(uint32_t)DDP::XP],
-            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-            params.ddps[(uint32_t)DDP::DXDTP],
-            params.ddps[(uint32_t)DDP::DYDTP],
-            params.ddps[(uint32_t)DDP::DZDTP]);
-
-        // Flow velocity
-#if (USE_FLOW == 1)
-        {
-            CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
-                                 sizeof(int) * params.state.pairStride));
-            int *numNeighbors = params.dips[(uint32_t)DIP::TEMP1];
-
-            KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
-                          params.velocityStream,
-                          params.dips[(uint32_t)DIP::PAIR1],
-                          params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
-                          params.ddps[(uint32_t)DDP::TEMP5],
-                          params.ddps[(uint32_t)DDP::DXDTO],
-                          params.ddps[(uint32_t)DDP::TEMP6],
-                          params.ddps[(uint32_t)DDP::DYDTO]);
-
-            KERNEL_LAUNCH(flowVelocityKernel, params.pairKernelSize, 0,
-                          params.velocityStream, params.state.numBubbles,
-                          numNeighbors, params.ddps[(uint32_t)DDP::DXDTP],
-                          params.ddps[(uint32_t)DDP::DYDTP],
-                          params.ddps[(uint32_t)DDP::DZDTP],
-                          params.ddps[(uint32_t)DDP::TEMP5],
-                          params.ddps[(uint32_t)DDP::TEMP6],
-                          params.ddps[(uint32_t)DDP::TEMP7],
-                          params.ddps[(uint32_t)DDP::XP],
-                          params.ddps[(uint32_t)DDP::YP],
-                          params.ddps[(uint32_t)DDP::ZP],
-                          params.ddps[(uint32_t)DDP::RP], params.inputs.flowVel,
-                          params.inputs.flowTfr, params.inputs.flowLbb);
-        }
-#endif
-
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-        // Wall velocity, should be after flow so that possible drag is applied
-        // correctly
-        {
-            KERNEL_LAUNCH(
-                velocityWallKernel, params.defaultKernelSize, 0,
-                params.velocityStream, params.state.numBubbles,
-                params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::XP],
-                params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-                params.ddps[(uint32_t)DDP::DXDTP],
-                params.ddps[(uint32_t)DDP::DYDTP],
-                params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb,
-                params.state.tfr, params.inputs.fZeroPerMuZero,
-                params.inputs.wallDragStrength);
-        }
-#endif
-    }
+    // Wall velocity, should be after flow so that possible drag is applied
+    // correctly
+    KERNEL_LAUNCH(
+        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
+        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
+        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
+        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
+        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
+        params.inputs.wallDragStrength);
 #endif
 }
 

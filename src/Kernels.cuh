@@ -202,15 +202,6 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             int *second, dvec interval, double *x, double *y,
                             double *z);
 
-__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
-                                    double *velocity);
-template <typename... Args>
-__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
-                                    double *velocity, Args... args) {
-    addNeighborVelocity(idx1, idx2, sumOfVelocities, velocity);
-    addNeighborVelocity(idx1, idx2, args...);
-}
-
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
                            double *y, double *z, int *mx, int *my, int *mz,
                            int *mpx, int *mpy, int *mpz);
@@ -244,18 +235,10 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *vz, dvec lbb, dvec tfr,
                                    double fZeroPerMuZero, double dragCoeff);
 
-template <typename... Args>
 __global__ void neighborVelocityKernel(int *first, int *second,
-                                       int *numNeighbors, Args... args) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = first[i];
-        const int idx2 = second[i];
-        atomicAdd(&numNeighbors[idx1], 1);
-        atomicAdd(&numNeighbors[idx2], 1);
-        addNeighborVelocity(idx1, idx2, args...);
-    }
-}
+                                       int *numNeighbors, double *sumX,
+                                       double *sumY, double *sumZ, double *vx,
+                                       double *vy, double *vz);
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,

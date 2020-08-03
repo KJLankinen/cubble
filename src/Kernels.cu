@@ -348,12 +348,6 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
     }
 }
 
-__device__ void addNeighborVelocity(int idx1, int idx2, double *sumOfVelocities,
-                                    double *velocity) {
-    atomicAdd(&sumOfVelocities[idx1], velocity[idx2]);
-    atomicAdd(&sumOfVelocities[idx2], velocity[idx1]);
-}
-
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
                            double *y, double *z, int *mx, int *my, int *mz,
                            int *mpx, int *mpy, int *mpz) {
@@ -651,6 +645,30 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
 #else
     return;
 #endif
+}
+
+__global__ void neighborVelocityKernel(int *first, int *second,
+                                       int *numNeighbors, double *sumX,
+                                       double *sumY, double *sumZ, double *vx,
+                                       double *vy, double *vz) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = first[i];
+        const int idx2 = second[i];
+        atomicAdd(&numNeighbors[idx1], 1);
+        atomicAdd(&numNeighbors[idx2], 1);
+
+        atomicAdd(&sumX[idx1], vx[idx2]);
+        atomicAdd(&sumX[idx2], vx[idx1]);
+
+        atomicAdd(&sumY[idx1], vy[idx2]);
+        atomicAdd(&sumY[idx2], vy[idx1]);
+
+#if (NUM_DIM == 3)
+        atomicAdd(&sumZ[idx1], vz[idx2]);
+        atomicAdd(&sumZ[idx2], vz[idx1]);
+#endif
+    }
 }
 
 __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
