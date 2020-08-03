@@ -11,7 +11,7 @@ extern __device__ double dTotalArea;
 extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
 extern __device__ double dTotalAreaPerRadius;
-extern __constant__ __device__ double dTotalVolume;
+extern __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ int dNumBubblesAboveMinRad;

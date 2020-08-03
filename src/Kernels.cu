@@ -5,7 +5,7 @@ __device__ double dTotalArea;
 __device__ double dTotalOverlapArea;
 __device__ double dTotalOverlapAreaPerRadius;
 __device__ double dTotalAreaPerRadius;
-__constant__ __device__ double dTotalVolume;
+__device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ int dNumBubblesAboveMinRad;
@@ -446,7 +446,7 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         w[i] *= 2.0 * r[i];
 #endif
 
-        flags[i] = r > minRad ? 1 : 0;
+        flags[i] = r[i] > minRad ? 1 : 0;
     }
 }
 
