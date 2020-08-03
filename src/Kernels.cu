@@ -43,16 +43,6 @@ __device__ void resetDoubleArrayToValue(double value, int idx, double *array) {
     array[idx] = value;
 }
 
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values,
-                                          double constant) {
-    flags[idx] = values[idx] < constant ? 1 : 0;
-}
-
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
-                                             double *values, double constant) {
-    flags[idx] = values[idx] > constant ? 1 : 0;
-}
-
 __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
     const dvec d1 = p1 - p2;
     dvec d2 = d1;
@@ -414,7 +404,7 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues) {
 
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
-                                    double *r, double *w, int *aboveMinRadFlags,
+                                    double *r, double *w, int *flags,
                                     int *indices, ivec bubblesPerDim, dvec tfr,
                                     dvec lbb, double avgRad, double minRad,
                                     int numValues) {
@@ -456,7 +446,7 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         w[i] *= 2.0 * r[i];
 #endif
 
-        setFlagIfGreaterThanConstant(i, aboveMinRadFlags, r, minRad);
+        flags[i] = r > minRad ? 1 : 0;
     }
 }
 
@@ -912,25 +902,6 @@ __global__ void addVolume(double *r, int numValues) {
     }
 }
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r,
-                                                int *aboveMinRadFlags,
-                                                int numValues) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-         i += gridDim.x * blockDim.x) {
-        const double radius = r[i];
-        double vol = CUBBLE_PI * radius * radius;
-#if (NUM_DIM == 3)
-        vol *= 1.333333333333333333333333 * radius;
-#endif
-
-        if (aboveMinRadFlags[i] == 0) {
-            atomicAdd(&dVolumeMultiplier, vol);
-            volume[i] = 0;
-        } else
-            volume[i] = vol;
-    }
-}
-
 __global__ void predictKernel(int numValues, double timeStep,
                               bool useGasExchange, double *xn, double *x,
                               double *vx, double *vxp, double *yn, double *y,
@@ -953,18 +924,27 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp) {
+                              double *errors, double *maxR, int *flags,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp) {
     // Adams-Moulton integration
     int tid = threadIdx.x;
+    // maximum error
     __shared__ double me[128];
+    // maximum radius
     __shared__ double mr[128];
+    // volume of disappearing bubbles, i.e. volume multiplier
+    __shared__ double vm[128];
+    // volume of remaining bubbles, i.e. total volume
+    __shared__ double tv[128];
+    // #bubbles above minimum radius
     __shared__ int namr[128];
     me[tid] = 0.0;
     mr[tid] = 0.0;
+    vm[tid] = 0.0;
+    tv[tid] = 0.0;
     namr[tid] = 0;
 
     for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
@@ -989,8 +969,20 @@ __global__ void correctKernel(int numValues, double timeStep,
             corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
             er = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
             rp[i] = corrected;
+
+            double vol = corrected * corrected * CUBBLE_PI;
+#if (NUM_DIM == 3)
+            vol *= 1.333333333333333333333333 * corrected;
+#endif
+            if (corrected > minRad) {
+                tv[tid] += vol;
+                flags[i] = 1;
+            } else {
+                vm[tid] += vol;
+                flags[i] = 0;
+            }
             mr[tid] = mr[tid] > corrected ? mr[tid] : corrected;
-            namr[tid] += (int)(corrected > minRad);
+            namr[tid] += flags[i];
         }
         corrected = ex > ey
                         ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
@@ -1009,6 +1001,14 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[64 + tid] ? mr[tid] : mr[64 + tid];
         mr[tid] = mr[tid] > mr[96 + tid] ? mr[tid] : mr[96 + tid];
 
+        tv[tid] += tv[32 + tid];
+        tv[tid] += tv[64 + tid];
+        tv[tid] += tv[96 + tid];
+
+        vm[tid] += vm[32 + tid];
+        vm[tid] += vm[64 + tid];
+        vm[tid] += vm[96 + tid];
+
         namr[tid] += namr[32 + tid];
         namr[tid] += namr[64 + tid];
         namr[tid] += namr[96 + tid];
@@ -1022,6 +1022,14 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
         mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
         mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
+
+        tv[tid] += tv[8 + tid];
+        tv[tid] += tv[16 + tid];
+        tv[tid] += tv[24 + tid];
+
+        vm[tid] += vm[8 + tid];
+        vm[tid] += vm[16 + tid];
+        vm[tid] += vm[24 + tid];
 
         namr[tid] += namr[8 + tid];
         namr[tid] += namr[16 + tid];
@@ -1037,6 +1045,14 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
         mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
 
+        tv[tid] += tv[2 + tid];
+        tv[tid] += tv[4 + tid];
+        tv[tid] += tv[6 + tid];
+
+        vm[tid] += vm[2 + tid];
+        vm[tid] += vm[4 + tid];
+        vm[tid] += vm[6 + tid];
+
         namr[tid] += namr[2 + tid];
         namr[tid] += namr[4 + tid];
         namr[tid] += namr[6 + tid];
@@ -1047,15 +1063,21 @@ __global__ void correctKernel(int numValues, double timeStep,
         errors[blockIdx.x] = me[tid];
 
         mr[tid] = mr[tid] > mr[1] ? mr[tid] : mr[1];
-        maxR[blockIdx.x] = mr[1];
+        maxR[blockIdx.x] = mr[tid];
+
+        tv[tid] += tv[1];
+        atomicAdd(&dTotalVolume, tv[tid]);
+
+        vm[tid] += vm[1];
+        atomicAdd(&dVolumeMultiplier, vm[tid]);
 
         namr[tid] += namr[1];
         atomicAdd(&dNumBubblesAboveMinRad, namr[tid]);
     }
 }
 
-__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
-                                  int origBlockSize) {
+__global__ void endStepKernel(int numValues, double *errors, double *maxR,
+                              int origBlockSize) {
     __shared__ double me[128];
     me[threadIdx.x] = 0.0;
 

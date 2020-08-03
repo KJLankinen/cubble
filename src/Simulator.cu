@@ -549,33 +549,6 @@ void updateCellsAndNeighbors(Params &params) {
 
 void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
-
-    // Get symbol addresses. These could be cached, but this function is called
-    // sufficiently rarely and is already slow enough that fetching them every
-    // time isn't a significant impact on performace.
-    double *dVolMul = nullptr;
-    double *dTotalVol = nullptr;
-    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dVolMul),
-                                     dVolumeMultiplier));
-    CUDA_ASSERT(cudaGetSymbolAddress(reinterpret_cast<void **>(&dTotalVol),
-                                     dTotalVolume));
-
-    CUDA_CALL(cudaMemset(static_cast<void *>(dVolMul), 0, sizeof(double)));
-
-    KERNEL_LAUNCH(setFlagIfGreaterThanConstantKernel, params.defaultKernelSize,
-                  0, 0, params.state.numBubbles,
-                  params.dips[(uint32_t)DIP::FLAGS],
-                  params.ddps[(uint32_t)DDP::R], params.inputs.minRad);
-
-    KERNEL_LAUNCH(calculateRedistributedGasVolume, params.pairKernelSize, 0, 0,
-                  params.ddps[(uint32_t)DDP::TEMP1],
-                  params.ddps[(uint32_t)DDP::R],
-                  params.dips[(uint32_t)DIP::FLAGS], params.state.numBubbles);
-
-    params.cw.reduceNoCopy<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP1], dTotalVol,
-        params.state.numBubbles);
-
     int *newIdx = params.dips[(uint32_t)DIP::TEMP1];
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum,
                                  params.dips[(uint32_t)DIP::FLAGS], newIdx,
@@ -903,6 +876,7 @@ double stabilize(Params &params) {
                 params.state.numBubbles, params.state.timeStep, false,
                 params.inputs.minRad, params.ddps[(uint32_t)DDP::ERROR],
                 params.ddps[(uint32_t)DDP::TEMP8],
+                params.dips[(uint32_t)DIP::FLAGS],
                 params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
                 params.ddps[(uint32_t)DDP::DXDT],
                 params.ddps[(uint32_t)DDP::DXDTP],
@@ -916,7 +890,7 @@ double stabilize(Params &params) {
                 params.ddps[(uint32_t)DDP::DRDT],
                 params.ddps[(uint32_t)DDP::DRDTP]);
 
-            KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0,
+            KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
                           params.gasStream, params.state.numBubbles,
                           params.ddps[(uint32_t)DDP::ERROR],
                           params.ddps[(uint32_t)DDP::TEMP8],
@@ -1115,7 +1089,8 @@ bool integrate(Params &params) {
             correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
             params.state.timeStep, true, params.inputs.minRad,
             params.ddps[(uint32_t)DDP::ERROR],
-            params.ddps[(uint32_t)DDP::TEMP8], params.ddps[(uint32_t)DDP::XP],
+            params.ddps[(uint32_t)DDP::TEMP8],
+            params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::XP],
             params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
             params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
             params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
@@ -1130,7 +1105,7 @@ bool integrate(Params &params) {
             static_cast<void *>(params.numBubblesAboveMinRad), sizeof(int),
             cudaMemcpyDeviceToHost, params.gasStream));
 
-        KERNEL_LAUNCH(miscEndStepKernel, params.pairKernelSize, 0,
+        KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
                       params.velocityStream, params.state.numBubbles,
                       params.ddps[(uint32_t)DDP::ERROR],
                       params.ddps[(uint32_t)DDP::TEMP8],

@@ -81,6 +81,8 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalOverlapArea = 0.0;
         dTotalOverlapAreaPerRadius = 0.0;
         dTotalAreaPerRadius = 0.0;
+        dTotalVolume = 0.0;
+        dVolumeMultiplier = 0.0;
         dNumBubblesAboveMinRad = 0;
     }
 }
@@ -135,42 +137,6 @@ __global__ void copyKernel(int numValues, ReorganizeType reorganizeType,
     }
 }
 
-// Could be generalized to accept any comparable type, but I've been too lazy to
-// do that...
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values,
-                                          double constant);
-template <typename... Args>
-__device__ void setFlagIfLessThanConstant(int idx, int *flags, double *values,
-                                          double constant, Args... args) {
-    setFlagIfLessThanConstant(idx, flags, values, constant);
-    setFlagIfLessThanConstant(idx, args...);
-}
-
-template <typename... Args>
-__global__ void setFlagIfLessThanConstantKernel(int numValues, Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        setFlagIfLessThanConstant(tid, args...);
-}
-
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
-                                             double *values, double constant);
-template <typename... Args>
-__device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
-                                             double *values, double constant,
-                                             Args... args) {
-    setFlagIfGreaterThanConstant(idx, flags, values, constant);
-    setFlagIfGreaterThanConstant(idx, args...);
-}
-
-template <typename... Args>
-__global__ void setFlagIfGreaterThanConstantKernel(int numValues,
-                                                   Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        setFlagIfGreaterThanConstant(tid, args...);
-}
-
 __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
@@ -210,7 +176,7 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
-                                    double *r, double *w, int *aboveMinRadFlags,
+                                    double *r, double *w, int *flags,
                                     int *indices, ivec bubblesPerDim, dvec tfr,
                                     dvec lbb, double avgRad, double minRad,
                                     int numValues);
@@ -263,10 +229,6 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
 
 __global__ void addVolume(double *r, int numValues);
 
-__global__ void calculateRedistributedGasVolume(double *volume, double *r,
-                                                int *aboveMinRadFlags,
-                                                int numValues);
-
 __global__ void predictKernel(int numValues, double timeStep,
                               bool useGasExchange, double *xn, double *x,
                               double *vx, double *vxp, double *yn, double *y,
@@ -276,14 +238,14 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp);
+                              double *errors, double *maxR, int *flags,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp);
 
-__global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
-                                  int origBlockSize);
+__global__ void endStepKernel(int numValues, double *errors, double *maxR,
+                              int origBlockSize);
 
 __global__ void eulerKernel(int numValues, double timeStep, double *x,
                             double *vx, double *y, double *vy, double *z,
