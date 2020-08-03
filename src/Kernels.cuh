@@ -267,22 +267,12 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r,
                                                 int *aboveMinRadFlags,
                                                 int numValues);
 
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious);
-template <typename... Args>
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious,
-                               Args... args) {
-    adamsBashforth(idx, timeStep, yNext, y, f, fPrevious);
-    adamsBashforth(idx, timeStep, args...);
-}
-
-template <typename... Args>
-__global__ void predictKernel(int numValues, double timeStep, Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        adamsBashforth(tid, timeStep, args...);
-}
+__global__ void predictKernel(int numValues, double timeStep,
+                              bool useGasExchange, double *xn, double *x,
+                              double *vx, double *vxp, double *yn, double *y,
+                              double *vy, double *vyp, double *zn, double *z,
+                              double *vz, double *vzp, double *rn, double *r,
+                              double *vr, double *vrp);
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
@@ -295,56 +285,15 @@ __global__ void correctKernel(int numValues, double timeStep,
 __global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
                                   int origBlockSize);
 
-__device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f);
-template <typename... Args>
-__device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f,
-                               Args... args) {
-    eulerIntegrate(idx, timeStep, y, f);
-    eulerIntegrate(idx, timeStep, args...);
-}
+__global__ void eulerKernel(int numValues, double timeStep, double *x,
+                            double *vx, double *y, double *vy, double *z,
+                            double *vz);
 
-template <typename... Args>
-__global__ void eulerKernel(int numValues, double timeStep, Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        eulerIntegrate(tid, timeStep, args...);
-}
-
-__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
-                                             double *xStart,
-                                             int *wrapMultiplier,
-                                             double interval);
-template <typename... Args>
-__device__ double
-calculateDistanceFromStart(int idx, double *x, double *xPrev, double *xStart,
-                           int *wrapMultiplier, double interval, Args... args) {
-    return calculateDistanceFromStart(idx, args...) +
-           calculateDistanceFromStart(idx, x, xPrev, xStart, wrapMultiplier,
-                                      interval);
-}
-
-__device__ double calculatePathLength(int idx, double *x, double *xPrev,
-                                      double *xStart, int *wrapMultiplier,
-                                      double interval);
-template <typename... Args>
-__device__ double calculatePathLength(int idx, double *x, double *xPrev,
-                                      double *xStart, int *wrapMultiplier,
-                                      double interval, Args... args) {
-    return calculatePathLength(idx, args...) +
-           calculatePathLength(idx, x, xPrev, xStart, wrapMultiplier, interval);
-}
-
-template <typename... Args>
-__global__ void pathLengthDistanceKernel(int numValues, double *pathLengths,
-                                         double *pathLengthsPrev,
-                                         double *squaredDistances,
-                                         Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues) {
-        pathLengths[tid] =
-            pathLengthsPrev[tid] + sqrt(calculatePathLength(tid, args...));
-        squaredDistances[tid] = calculateDistanceFromStart(tid, args...);
-    }
-}
+__global__ void
+pathLengthDistanceKernel(int numValues, dvec interval, double *pathLength,
+                         double *pathLengthPrev, double *squaredDistance,
+                         double *x, double *xPrev, double *x0, int *wrapCountX,
+                         double *y, double *yPrev, double *y0, int *wrapCountY,
+                         double *z, double *zPrev, double *z0, int *wrapCountZ);
 
 } // namespace cubble

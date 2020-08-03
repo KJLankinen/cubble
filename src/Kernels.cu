@@ -931,18 +931,24 @@ __global__ void calculateRedistributedGasVolume(double *volume, double *r,
     }
 }
 
-__device__ void adamsBashforth(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fPrevious) {
-    yNext[idx] = y[idx] + 0.5 * timeStep * (3.0 * f[idx] - fPrevious[idx]);
-}
-
-__device__ double adamsMoulton(int idx, double timeStep, double *yNext,
-                               double *y, double *f, double *fNext) {
-    const double corrected = y[idx] + 0.5 * timeStep * (f[idx] + fNext[idx]);
-    const double error = corrected - yNext[idx];
-    yNext[idx] = corrected;
-
-    return error < 0 ? -error : error;
+__global__ void predictKernel(int numValues, double timeStep,
+                              bool useGasExchange, double *xn, double *x,
+                              double *vx, double *vxp, double *yn, double *y,
+                              double *vy, double *vyp, double *zn, double *z,
+                              double *vz, double *vzp, double *rn, double *r,
+                              double *vr, double *vrp) {
+    // Adams-Bashforth integration
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += blockDim.x * gridDim.x) {
+        xn[i] = x[i] + 0.5 * timeStep * (3.0 * vx[i] - vxp[i]);
+        yn[i] = y[i] + 0.5 * timeStep * (3.0 * vy[i] - vyp[i]);
+#if (NUM_DIM == 3)
+        zn[i] = z[i] + 0.5 * timeStep * (3.0 * vz[i] - vzp[i]);
+#endif
+        if (useGasExchange) {
+            rn[i] = r[i] + 0.5 * timeStep * (3.0 * vr[i] - vrp[i]);
+        }
+    }
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
@@ -952,6 +958,7 @@ __global__ void correctKernel(int numValues, double timeStep,
                               double *y, double *vy, double *vyp, double *zp,
                               double *z, double *vz, double *vzp, double *rp,
                               double *r, double *vr, double *vrp) {
+    // Adams-Moulton integration
     int tid = threadIdx.x;
     __shared__ double me[128];
     __shared__ double mr[128];
@@ -1088,24 +1095,51 @@ __global__ void miscEndStepKernel(int numValues, double *errors, double *maxR,
     }
 }
 
-__device__ void eulerIntegrate(int idx, double timeStep, double *y, double *f) {
-    y[idx] += f[idx] * timeStep;
+__global__ void eulerKernel(int numValues, double timeStep, double *x,
+                            double *vx, double *y, double *vy, double *z,
+                            double *vz) {
+    // Euler integration
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += blockDim.x * gridDim.x) {
+        x[i] += vx[i] * timeStep;
+        y[i] += vy[i] * timeStep;
+#if (NUM_DIM == 3)
+        z[i] += vz[i] * timeStep;
+#endif
+    }
 }
 
-__device__ double calculateDistanceFromStart(int idx, double *x, double *xPrev,
-                                             double *xStart,
-                                             int *wrapMultiplier,
-                                             double interval) {
-    double distance = x[idx] - xStart[idx] + wrapMultiplier[idx] * interval;
-    return distance * distance;
-}
+__global__ void pathLengthDistanceKernel(
+    int numValues, dvec interval, double *pathLength, double *pathLengthPrev,
+    double *squaredDistance, double *x, double *xPrev, double *x0,
+    int *wrapCountX, double *y, double *yPrev, double *y0, int *wrapCountY,
+    double *z, double *zPrev, double *z0, int *wrapCountZ) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += blockDim.x * gridDim.x) {
+        double diff = 0.0;
+        double pl = 0.0;
+        double fromStart = 0.0;
+        double dist = 0.0;
 
-__device__ double calculatePathLength(int idx, double *x, double *xPrev,
-                                      double *xStart, int *wrapMultiplier,
-                                      double interval) {
-    // Only works if done before boundary wrap
-    const double diff = x[idx] - xPrev[idx];
-    return diff * diff;
+        diff = xPrev[i] - x[i];
+        pl += diff * diff;
+        fromStart = x[i] - x0[i] + wrapCountX[i] * interval.x;
+        dist += fromStart * fromStart;
+
+        diff = yPrev[i] - y[i];
+        pl += diff * diff;
+        fromStart = y[i] - y0[i] + wrapCountY[i] * interval.y;
+        dist += fromStart * fromStart;
+
+#if (NUM_DIM == 3)
+        diff = zPrev[i] - z[i];
+        pl += diff * diff;
+        fromStart = z[i] - z0[i] + wrapCountZ[i] * interval.z;
+        dist += fromStart * fromStart;
+#endif
+        pathLength[i] = pathLengthPrev[i] + sqrt(pl);
+        squaredDistance[i] = dist;
+    }
 }
 
 } // namespace cubble
