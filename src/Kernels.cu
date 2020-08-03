@@ -53,17 +53,24 @@ __device__ void setFlagIfGreaterThanConstant(int idx, int *flags,
     flags[idx] = values[idx] > constant ? 1 : 0;
 }
 
-__device__ dvec distanceVec(dvec p1, dvec p2, dvec interval) {
-    const dvec d1 = (p1 - p2).getAbsolute();
-    dvec d2 = min(d1, interval - d1);
-#if (PBC_X == 0)
-    d2.x = d1.x;
+__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
+    const dvec d1 = p1 - p2;
+    dvec d2 = d1;
+    dvec temp = interval - d1.getAbsolute();
+#if (PBC_X == 1)
+    if (temp.x * temp.x < d1.x * d1.x) {
+        d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
+    }
 #endif
-#if (PBC_Y == 0)
-    d2.y = d1.y;
+#if (PBC_Y == 1)
+    if (temp.y * temp.y < d1.y * d1.y) {
+        d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
+    }
 #endif
-#if (PBC_Z == 0)
-    d2.z = d1.z;
+#if (PBC_Z == 1)
+    if (temp.z * temp.z < d1.z * d1.z) {
+        d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
+    }
 #endif
 
     return d2;
@@ -328,7 +335,7 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
     p1.z = z[idx1];
     p2.z = z[idx2];
 #endif
-    if (distanceVec(p1, p2, interval).getSquaredLength() <
+    if (wrappedDifference(p1, p2, interval).getSquaredLength() <
         maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
         int id = idx1 > idx2 ? idx1 : idx2;
@@ -549,7 +556,7 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
         p1.z = z[idx1];
         p2.z = z[idx2];
 #endif
-        dvec distances = distanceVec(p1, p2, interval);
+        dvec distances = wrappedDifference(p1, p2, interval);
         const double distance = distances.getSquaredLength();
         if (radii * radii >= distance) {
             distances =
@@ -698,7 +705,7 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
         p2.z = z[idx2];
 #endif
         double e =
-            r[idx1] + r[idx2] - distanceVec(p1, p2, interval).getLength();
+            r[idx1] + r[idx2] - wrappedDifference(p1, p2, interval).getLength();
         if (e > 0) {
             e *= e;
             atomicAdd(&energy[idx1], e);
@@ -733,7 +740,8 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
         p1.z = z[idx1];
         p2.z = z[idx2];
 #endif
-        double magnitude = distanceVec(p1, p2, interval).getSquaredLength();
+        double magnitude =
+            wrappedDifference(p1, p2, interval).getSquaredLength();
         if (magnitude < (r1 + r2) * (r1 + r2)) {
             double overlapArea = 0;
             if (magnitude < r1 * r1 || magnitude < r2 * r2) {
