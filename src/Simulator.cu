@@ -676,9 +676,9 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
     // Update kernel sizes based on number of remaining bubbles
     params.state.numBubbles = numBubblesAboveMinRad;
     params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
-    int numBlocks = std::min(1024, std::ceil(params.state.numBubbles / 128));
-    params.state.pairKernelSize =
-        KernelSize(dim3(numBlocks, 1, 1), dim3(128, 1, 1));
+    int numBlocks =
+        std::min(1024, (int)std::ceil(params.state.numBubbles / 128.0));
+    params.pairKernelSize = KernelSize(dim3(numBlocks, 1, 1), dim3(128, 1, 1));
 
     KERNEL_LAUNCH(addVolume, params.pairKernelSize, 0, 0,
                   params.ddps[(uint32_t)DDP::R], params.state.numBubbles);
