@@ -1482,15 +1482,15 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
                                    params.state.numBubbles, avgRad, stdDevRad));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(
-        assignDataToBubbles, params.pairKernelSize, 0, 0,
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-        params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::RP],
-        params.dips[(uint32_t)DIP::FLAGS], params.dips[(uint32_t)DIP::INDEX],
-        bubblesPerDim, params.state.tfr, params.state.lbb, avgRad,
-        params.inputs.minRad, params.state.numBubbles);
+    KERNEL_LAUNCH(assignDataToBubbles, params.pairKernelSize, 0, 0,
+                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                  params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
+                  params.ddps[(uint32_t)DDP::YP],
+                  params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::R],
+                  params.ddps[(uint32_t)DDP::RP],
+                  params.dips[(uint32_t)DIP::INDEX], bubblesPerDim,
+                  params.state.tfr, params.state.lbb, avgRad,
+                  params.inputs.minRad, params.state.numBubbles);
 
     params.state.averageSurfaceAreaIn =
         params.cw.reduce<double, double *, double *>(
@@ -1502,18 +1502,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
         static_cast<void *>(params.ddps[(uint32_t)DDP::R]),
         sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
 
-    std::cout << "Deleting small bubbles and updating neighbor lists."
-              << std::endl;
-    const int numBubblesAboveMinRad = params.cw.reduce<int, int *, int *>(
-        &cub::DeviceReduce::Sum, params.dips[(uint32_t)DIP::FLAGS],
-        params.state.numBubbles);
-
-    if (numBubblesAboveMinRad < params.state.numBubbles)
-        deleteSmallBubbles(params, numBubblesAboveMinRad);
-
-    params.state.maxBubbleRadius = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::R],
-        params.state.numBubbles);
+    std::cout << "Updating neighbor lists." << std::endl;
 
     updateCellsAndNeighbors(params);
 
@@ -1528,6 +1517,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
 
     std::cout << "Calculating some initial values as a part of setup."
               << std::endl;
+
     KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, 0,
         params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],

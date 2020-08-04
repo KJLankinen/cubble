@@ -404,9 +404,9 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues) {
 
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
                                     double *xPrd, double *yPrd, double *zPrd,
-                                    double *r, double *w, int *flags,
-                                    int *indices, ivec bubblesPerDim, dvec tfr,
-                                    dvec lbb, double avgRad, double minRad,
+                                    double *r, double *w, int *indices,
+                                    ivec bubblesPerDim, dvec tfr, dvec lbb,
+                                    double avgRad, double minRad,
                                     int numValues) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
@@ -427,8 +427,9 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
         pos += randomOffset;
 
-        r[i] = r[i] > 0 ? r[i] : -r[i];
-
+        double rad = r[i];
+        rad = rad > 0 ? rad : -rad;
+        r[i] = rad;
         x[i] = pos.x > lbb.x ? (pos.x < tfr.x ? pos.x : pos.x - interval.x)
                              : pos.x + interval.x;
         y[i] = pos.y > lbb.y ? (pos.y < tfr.y ? pos.y : pos.y - interval.y)
@@ -440,13 +441,11 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         yPrd[i] = pos.y;
         zPrd[i] = pos.z;
 
-        w[i] = 2.0 * CUBBLE_PI * r[i] / numValues;
-
+        double area = 2.0 * CUBBLE_PI * rad;
 #if (NUM_DIM == 3)
-        w[i] *= 2.0 * r[i];
+        area *= 2.0 * rad;
 #endif
-
-        flags[i] = r[i] > minRad ? 1 : 0;
+        w[i] = area / numValues;
     }
 }
 
