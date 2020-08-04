@@ -561,80 +561,78 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
                                    double *vz, dvec lbb, dvec tfr,
                                    double fZeroPerMuZero, double dragCoeff) {
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    const int tid = getGlobalTid();
-    if (tid < numValues) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += gridDim.x * blockDim.x) {
         double distance1 = 0.0;
         double distance2 = 0.0;
         double distance = 0.0;
         double xDrag = 1.0;
         double yDrag = 1.0;
+        const double rad = r[i];
+        const double invRad = 1.0 / rad;
 
 #if (PBC_X == 0)
-        distance1 = x[tid] - lbb.x;
-        distance2 = x[tid] - tfr.x;
+        distance1 = x[i] - lbb.x;
+        distance2 = x[i] - tfr.x;
         distance = distance1 * distance1 < distance2 * distance2 ? distance1
                                                                  : distance2;
-        if (r[tid] * r[tid] >= distance * distance) {
+        if (rad * rad >= distance * distance) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
-            const double velocity = direction * distance * fZeroPerMuZero *
-                                    (r[tid] - distance) / (r[tid] * distance);
-            vx[tid] += velocity;
+            const double velocity =
+                direction * fZeroPerMuZero * (rad - distance) * invRad;
+            vx[i] += velocity;
             xDrag = 1.0 - dragCoeff;
 
             // Drag of x wall to y & z
-            vy[tid] *= xDrag;
-            vz[tid] *= xDrag;
+            vy[i] *= xDrag;
+            vz[i] *= xDrag;
         }
 #endif
 
 #if (PBC_Y == 0)
-        distance1 = y[tid] - lbb.y;
-        distance2 = y[tid] - tfr.y;
+        distance1 = y[i] - lbb.y;
+        distance2 = y[i] - tfr.y;
         distance = distance1 * distance1 < distance2 * distance2 ? distance1
                                                                  : distance2;
-        if (r[tid] * r[tid] >= distance * distance) {
+        if (rad * rad >= distance * distance) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
-            const double velocity = direction * distance * fZeroPerMuZero *
-                                    (r[tid] - distance) / (r[tid] * distance);
+            const double velocity =
+                direction * fZeroPerMuZero * (rad - distance) * invRad;
 
             // Retroactively apply possible drag from x wall to the velocity the
             // y wall causes
-            vy[tid] += velocity * xDrag;
+            vy[i] += velocity * xDrag;
             yDrag = 1.0 - dragCoeff;
 
             // Drag of y wall to x & z
-            vx[tid] *= yDrag;
-            vz[tid] *= yDrag;
+            vx[i] *= yDrag;
+            vz[i] *= yDrag;
         }
 #endif
 
 #if (PBC_Z == 0)
-        distance1 = z[tid] - lbb.z;
-        distance2 = z[tid] - tfr.z;
+        distance1 = z[i] - lbb.z;
+        distance2 = z[i] - tfr.z;
         distance = distance1 * distance1 < distance2 * distance2 ? distance1
                                                                  : distance2;
-        if (r[tid] * r[tid] >= distance * distance) {
+        if (rad * rad >= distance * distance) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
-            const double velocity = direction * distance * fZeroPerMuZero *
-                                    (r[tid] - distance) / (r[tid] * distance);
+            const double velocity =
+                direction * fZeroPerMuZero * (rad - distance) * invRad;
 
             // Retroactively apply possible drag from x & y walls to the
             // velocity the z wall causes
-            vz[tid] += velocity * xDrag * yDrag;
+            vz[i] += velocity * xDrag * yDrag;
 
             // Drag of z wall to x & y directions
-            vx[tid] *= 1.0 - dragCoeff;
-            vy[tid] *= 1.0 - dragCoeff;
+            vx[i] *= 1.0 - dragCoeff;
+            vy[i] *= 1.0 - dragCoeff;
         }
 #endif
     }
-#else
-    return;
-#endif
 }
 
 __global__ void neighborVelocityKernel(int *first, int *second,

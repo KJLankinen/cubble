@@ -673,8 +673,12 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
         static_cast<void *>(params.dips[(uint32_t)DIP::TEMP2]),
         sizeof(int) * params.state.dataStride, cudaMemcpyDeviceToDevice));
 
+    // Update kernel sizes based on number of remaining bubbles
     params.state.numBubbles = numBubblesAboveMinRad;
     params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
+    int numBlocks = std::min(1024, std::ceil(params.state.numBubbles / 128));
+    params.state.pairKernelSize =
+        KernelSize(dim3(numBlocks, 1, 1), dim3(128, 1, 1));
 
     KERNEL_LAUNCH(addVolume, params.pairKernelSize, 0, 0,
                   params.ddps[(uint32_t)DDP::R], params.state.numBubbles);
@@ -860,7 +864,7 @@ double stabilize(Params &params) {
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
             KERNEL_LAUNCH(
-                velocityWallKernel, params.defaultKernelSize, 0,
+                velocityWallKernel, params.pairKernelSize, 0,
                 params.velocityStream, params.state.numBubbles,
                 params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::XP],
                 params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
@@ -1016,7 +1020,7 @@ void velocityCalculation(Params &params) {
     // Wall velocity, should be after flow so that possible drag is applied
     // correctly
     KERNEL_LAUNCH(
-        velocityWallKernel, params.defaultKernelSize, 0, params.velocityStream,
+        velocityWallKernel, params.pairKernelSize, 0, params.velocityStream,
         params.state.numBubbles, params.ddps[(uint32_t)DDP::RP],
         params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
