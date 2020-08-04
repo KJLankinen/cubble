@@ -163,8 +163,8 @@ __device__ __host__ unsigned int compact1By1(unsigned int x);
 __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, dvec interval, double *x, double *y,
-                            double *z);
+                            int *second, dvec interval, double skinRadius,
+                            double *x, double *y, double *z);
 
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
                            double *y, double *z, int *mx, int *my, int *mz);
@@ -184,9 +184,10 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
                                      int numValues);
 
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
-                               int numCells, int numMaxPairs, int *offsets,
-                               int *sizes, int *first, int *second, double *r,
-                               dvec interval, double *x, double *y, double *z);
+                               int numCells, int numMaxPairs, double skinRadius,
+                               int *offsets, int *sizes, int *first,
+                               int *second, double *r, dvec interval, double *x,
+                               double *y, double *z);
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
                                    int *pair2, double *r, dvec interval,
@@ -235,13 +236,15 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, int *flags,
-                              double *xp, double *x, double *vx, double *vxp,
-                              double *yp, double *y, double *vy, double *vyp,
-                              double *zp, double *z, double *vz, double *vzp,
-                              double *rp, double *r, double *vr, double *vrp);
+                              double *errors, int *flags, double *xp, double *x,
+                              double *vx, double *vxp, double *yp, double *y,
+                              double *vy, double *vyp, double *zp, double *z,
+                              double *vz, double *vzp, double *rp, double *r,
+                              double *vr, double *vrp, double *x0, double *y0,
+                              double *z0, double *r0);
 
-__global__ void endStepKernel(int numValues, double *errors, double *maxR,
+__global__ void endStepKernel(int numValues, double *errors, double *x0,
+                              double *y0, double *z0, double *r0,
                               int origBlockSize);
 
 __global__ void eulerKernel(int numValues, double timeStep, double *x,

@@ -301,13 +301,11 @@ __device__ __host__ unsigned int compact1By2(unsigned int x) {
 }
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, dvec interval, double *x, double *y,
-                            double *z) {
+                            int *second, dvec interval, double skinRadius,
+                            double *x, double *y, double *z) {
     const double r1 = r[idx1];
     const double r2 = r[idx2];
-    double maxDistance = r1 > r2 ? r1 : r2;
-    maxDistance *= 2.5;
-    maxDistance += (r1 < r2) ? r1 : r2;
+    double maxDistance = r1 + r2 + skinRadius;
     dvec p1 = dvec(x[idx1], y[idx1], 0.0);
     dvec p2 = dvec(x[idx2], y[idx2], 0.0);
 #if (NUM_DIM == 3)
@@ -445,9 +443,10 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
 }
 
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
-                               int numCells, int numMaxPairs, int *offsets,
-                               int *sizes, int *first, int *second, double *r,
-                               dvec interval, double *x, double *y, double *z) {
+                               int numCells, int numMaxPairs, double skinRadius,
+                               int *offsets, int *sizes, int *first,
+                               int *second, double *r, dvec interval, double *x,
+                               double *y, double *z) {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 =
@@ -480,7 +479,8 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
+                comparePair(idx1, idx2, r, first, second, interval, skinRadius,
+                            x, y, z);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -500,7 +500,8 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, interval, x, y, z);
+                comparePair(idx1, idx2, r, first, second, interval, skinRadius,
+                            x, y, z);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -913,11 +914,12 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, double *maxR, int *flags,
-                              double *xp, double *x, double *vx, double *vxp,
-                              double *yp, double *y, double *vy, double *vyp,
-                              double *zp, double *z, double *vz, double *vzp,
-                              double *rp, double *r, double *vr, double *vrp) {
+                              double *errors, int *flags, double *xp, double *x,
+                              double *vx, double *vxp, double *yp, double *y,
+                              double *vy, double *vyp, double *zp, double *z,
+                              double *vz, double *vzp, double *rp, double *r,
+                              double *vr, double *vrp, double *x0, double *y0,
+                              double *z0, double *r0) {
     // Adams-Moulton integration
     int tid = threadIdx.x;
     // maximum error
@@ -928,12 +930,16 @@ __global__ void correctKernel(int numValues, double timeStep,
     __shared__ double vm[128];
     // volume of remaining bubbles, i.e. total volume
     __shared__ double tv[128];
+    // expansion, i.e. how far the boundary of a bubble has moved since
+    // neighbors were last searched
+    __shared__ double boundexp[128];
     // #bubbles above minimum radius
     __shared__ int namr[128];
     me[tid] = 0.0;
     mr[tid] = 0.0;
     vm[tid] = 0.0;
     tv[tid] = 0.0;
+    boundexp[tid] = 0.0;
     namr[tid] = 0;
 
     for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
@@ -941,23 +947,31 @@ __global__ void correctKernel(int numValues, double timeStep,
         double corrected = x[i] + 0.5 * timeStep * (vx[i] + vxp[i]);
         double ex = corrected > xp[i] ? corrected - xp[i] : xp[i] - corrected;
         xp[i] = corrected;
+        double delta = x0[i] - corrected;
+        double dist = delta * delta;
 
         corrected = y[i] + 0.5 * timeStep * (vy[i] + vyp[i]);
         double ey = corrected > yp[i] ? corrected - yp[i] : yp[i] - corrected;
         yp[i] = corrected;
+        delta = y0[i] - corrected;
+        dist += delta * delta;
 
         double ez = 0.0;
 #if (NUM_DIM == 3)
         corrected = z[i] + 0.5 * timeStep * (vz[i] + vzp[i]);
         ez = corrected > zp[i] ? corrected - zp[i] : z[i] - corrected;
         zp[i] = corrected;
+        delta = z0[i] - corrected;
+        dist += delta * delta;
 #endif
+        dist = sqrt(dist);
 
         double er = 0.0;
         if (useGasExchange) {
             corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
             er = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
             rp[i] = corrected;
+            dist += corrected - r0;
 
             double vol = corrected * corrected * CUBBLE_PI;
 #if (NUM_DIM == 3)
@@ -977,6 +991,8 @@ __global__ void correctKernel(int numValues, double timeStep,
                         ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
                         : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
         me[tid] = me[tid] > corrected ? me[tid] : corrected;
+
+        boundexp[tid] = boundexp[tid] > dist ? boundexp[tid] : dist;
     }
 
     __syncthreads();
@@ -989,6 +1005,13 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[32 + tid] ? mr[tid] : mr[32 + tid];
         mr[tid] = mr[tid] > mr[64 + tid] ? mr[tid] : mr[64 + tid];
         mr[tid] = mr[tid] > mr[96 + tid] ? mr[tid] : mr[96 + tid];
+
+        boundexp[tid] = boundexp[tid] > boundexp[32 + tid] ? boundexp[tid]
+                                                           : boundexp[32 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[64 + tid] ? boundexp[tid]
+                                                           : boundexp[64 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[96 + tid] ? boundexp[tid]
+                                                           : boundexp[96 + tid];
 
         tv[tid] += tv[32 + tid];
         tv[tid] += tv[64 + tid];
@@ -1012,6 +1035,13 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
         mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
 
+        boundexp[tid] = boundexp[tid] > boundexp[8 + tid] ? boundexp[tid]
+                                                          : boundexp[8 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[16 + tid] ? boundexp[tid]
+                                                           : boundexp[16 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[24 + tid] ? boundexp[tid]
+                                                           : boundexp[24 + tid];
+
         tv[tid] += tv[8 + tid];
         tv[tid] += tv[16 + tid];
         tv[tid] += tv[24 + tid];
@@ -1034,6 +1064,13 @@ __global__ void correctKernel(int numValues, double timeStep,
         mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
         mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
 
+        boundexp[tid] = boundexp[tid] > boundexp[2 + tid] ? boundexp[tid]
+                                                          : boundexp[2 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[4 + tid] ? boundexp[tid]
+                                                          : boundexp[4 + tid];
+        boundexp[tid] = boundexp[tid] > boundexp[6 + tid] ? boundexp[tid]
+                                                          : boundexp[6 + tid];
+
         tv[tid] += tv[2 + tid];
         tv[tid] += tv[4 + tid];
         tv[tid] += tv[6 + tid];
@@ -1052,7 +1089,11 @@ __global__ void correctKernel(int numValues, double timeStep,
         errors[blockIdx.x] = me[tid];
 
         mr[tid] = mr[tid] > mr[1] ? mr[tid] : mr[1];
-        maxR[blockIdx.x] = mr[tid];
+        errors[blockIdx.x + gridDim.x] = mr[tid];
+
+        boundexp[tid] =
+            boundxp[tid] > boundexp[1] ? boundexp[tid] : boundexp[1];
+        errors[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
 
         tv[tid] += tv[1];
         atomicAdd(&dTotalVolume, tv[tid]);
@@ -1065,18 +1106,21 @@ __global__ void correctKernel(int numValues, double timeStep,
     }
 }
 
-__global__ void endStepKernel(int numValues, double *errors, double *maxR,
+__global__ void endStepKernel(int numValues, double *errors, double *x0,
+                              double *y0, double *z0, double *r0,
                               int origBlockSize) {
     __shared__ double me[128];
     me[threadIdx.x] = 0.0;
 
-    if (blockIdx.x < 2) {
+    if (blockIdx.x < 3) {
         int tid = threadIdx.x;
         double *arr = nullptr;
         if (blockIdx.x == 0)
             arr = errors;
         if (blockIdx.x == 1)
-            arr = maxR;
+            arr = errors + origBlockSize;
+        if (blockIdx.x == 2)
+            arr = errors + 2 * origBlockSize;
 
         for (int i = tid; i < origBlockSize; i += blockDim.x)
             me[tid] = me[tid] > arr[i] ? me[tid] : arr[i];
