@@ -388,8 +388,8 @@ void updateCellsAndNeighbors(Params &params) {
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
                                  params.state.maxNumCells);
 
-    auto copyAndSwap = [](Params &params, auto &arr, int *inds, uint32_t from,
-                          uint32_t to) {
+    auto copyAndSwap = [](Params &params, std::array<auto, auto> &arr,
+                          int *inds, uint32_t from, uint32_t to) {
         KERNEL_LAUNCH(copyKernel, params.defaultKernelSize, 0, 0,
                       params.state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
                       inds, inds, arr[from], arr[to]);
