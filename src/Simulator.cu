@@ -950,7 +950,7 @@ double stabilize(Params &params) {
 
         elapsedTime += params.state.timeStep;
 
-        if (i % 50 == 0)
+        if (i % 500 == 0)
             updateCellsAndNeighbors(params);
     }
 
@@ -1225,7 +1225,7 @@ bool integrate(Params &params) {
     int numBubblesAboveMinRad = params.pinnedInt[0];
 
     // Delete & reorder
-    bool updateNeighbors = params.state.numIntegrationSteps % 50 == 0;
+    bool updateNeighbors = params.state.numIntegrationSteps % 500 == 0;
     if (numBubblesAboveMinRad < params.state.numBubbles) {
         deleteSmallBubbles(params, numBubblesAboveMinRad);
         updateNeighbors = true;
