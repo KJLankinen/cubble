@@ -1318,7 +1318,7 @@ void commonSetup(Params &params) {
     // Integers
     // It seems to roughly hold that in 3 dimensions the total number of
     // neighbors is < (24 x numBubbles) and in 2D < (8 x numBubbles)
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 8;
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 20;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
