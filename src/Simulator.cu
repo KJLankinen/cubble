@@ -394,7 +394,7 @@ void updateCellsAndNeighbors(Params &params) {
                       params.state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
                       inds, inds, arr[from], arr[to]);
 
-        T *swapper = arr[from];
+        decltype(arr)::value_type *swapper = arr[from];
         arr[from] = arr[to];
         arr[to] = swapper;
     };
