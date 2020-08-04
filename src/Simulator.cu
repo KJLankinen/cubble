@@ -850,8 +850,11 @@ double stabilize(Params &params) {
 
         elapsedTime += params.state.timeStep;
 
-        if (2 * params.pinnedDouble[2] >= params.inputs.skinRadius)
+        if (2 * params.pinnedDouble[2] >= params.inputs.skinRadius) {
+            std::cout << "pinned double " << params.pinnedDouble[2]
+                      << std::endl;
             updateCellsAndNeighbors(params);
+        }
     }
 
     // Energy after stabilization
