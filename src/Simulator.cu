@@ -354,11 +354,11 @@ void updateCellsAndNeighbors(Params &params) {
                   params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
     // Update saved values
-    CUDA_CALL(cudaMemcpyAsync(
-        static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_X]),
-        static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
-        4 * sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice,
-        0));
+    CUDA_CALL(
+        cudaMemcpy(static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_X]),
+                   static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
+                   4 * sizeof(double) * params.state.dataStride,
+                   cudaMemcpyDeviceToDevice));
 
     dim3 gridSize = getGridSize(params);
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
