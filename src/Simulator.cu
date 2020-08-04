@@ -847,7 +847,7 @@ double stabilize(Params &params) {
 
         elapsedTime += params.state.timeStep;
 
-        if (2 * params.pinnedDouble[2] >= params.input.skinRadius)
+        if (2 * params.pinnedDouble[2] >= params.inputs.skinRadius)
             updateCellsAndNeighbors(params);
     }
 
