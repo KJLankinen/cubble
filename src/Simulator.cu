@@ -96,6 +96,7 @@ struct SimulationState {
     uint64_t memReqD = 0;
     uint64_t memReqI = 0;
     uint64_t numIntegrationSteps = 0;
+    uint64_t numNeighborsSearched = 0;
     uint64_t numStepsInTimeStep = 0;
     uint64_t timeInteger = 0;
     double timeFraction = 0.0;
@@ -344,6 +345,7 @@ dim3 getGridSize(Params &params) {
 }
 
 void updateCellsAndNeighbors(Params &params) {
+    params.state.numNeighborsSearched++;
     // Boundary wrap
     KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.state.lbb, params.state.tfr,
@@ -354,11 +356,22 @@ void updateCellsAndNeighbors(Params &params) {
                   params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
     // Update saved values
-    CUDA_CALL(
-        cudaMemcpy(static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_X]),
-                   static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
-                   4 * sizeof(double) * params.state.dataStride,
-                   cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpyAsync(
+        static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_X]),
+        static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
+        sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(
+        static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_Y]),
+        static_cast<void *>(params.ddps[(uint32_t)DDP::Y]),
+        sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(
+        static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_Z]),
+        static_cast<void *>(params.ddps[(uint32_t)DDP::Z]),
+        sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
+    CUDA_CALL(cudaMemcpyAsync(
+        static_cast<void *>(params.ddps[(uint32_t)DDP::SAVED_R]),
+        static_cast<void *>(params.ddps[(uint32_t)DDP::R]),
+        sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
 
     dim3 gridSize = getGridSize(params);
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
@@ -484,9 +497,6 @@ void updateCellsAndNeighbors(Params &params) {
     CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs),
                          static_cast<void *>(dnp), sizeof(int),
                          cudaMemcpyDeviceToHost));
-
-    std::cout << "========================DEBUG::::::::::::::: "
-              << params.state.numPairs << std::endl;
 
     params.cw.sortPairs<int, int>(
         &cub::DeviceRadixSort::SortPairs,
@@ -851,8 +861,6 @@ double stabilize(Params &params) {
         elapsedTime += params.state.timeStep;
 
         if (2 * params.pinnedDouble[2] >= params.inputs.skinRadius) {
-            std::cout << "pinned double " << params.pinnedDouble[2]
-                      << std::endl;
             updateCellsAndNeighbors(params);
         }
     }
@@ -1324,7 +1332,7 @@ void commonSetup(Params &params) {
     // Integers
     // It seems to roughly hold that in 3 dimensions the total number of
     // neighbors is < (24 x numBubbles) and in 2D < (8 x numBubbles)
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 20;
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 8;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
@@ -1507,7 +1515,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     std::cout << std::setw(10) << std::left << "#steps" << std::setw(12)
               << std::left << "dE" << std::setw(15) << std::left << "e1"
-              << std::setw(15) << std::left << "e2" << std::endl;
+              << std::setw(15) << std::left << "e2" << std::setw(5) << std::left
+              << "#searches" << std::endl;
 
     while (true) {
         double time = stabilize(params);
@@ -1537,7 +1546,9 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                       << std::left << std::setprecision(5) << std::fixed
                       << params.state.energy1 << std::setw(15) << std::left
                       << std::setprecision(5) << std::fixed
-                      << params.state.energy2 << std::endl;
+                      << params.state.energy2 << std::setw(5) << std::left
+                      << params.state.numNeighborsSearched << std::endl;
+            params.state.numNeighborsSearched = 0;
         }
 
         ++numSteps;
@@ -1984,7 +1995,8 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
     std::cout << std::setw(10) << std::left << "T" << std::setw(10) << std::left
               << "phi" << std::setw(10) << std::left << "R" << std::setw(10)
               << std::left << "#b" << std::setw(10) << std::left << "#pairs"
-              << std::setw(10) << std::left << "#steps" << std::endl;
+              << std::setw(10) << std::left << "#steps" << std::setw(10)
+              << std::left << "#searches" << std::endl;
 
     bool continueIntegration = true;
     while (continueIntegration) {
@@ -2075,11 +2087,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
                       << std::setw(10) << std::left << params.state.numBubbles
                       << std::setw(10) << std::left << params.state.numPairs
                       << std::setw(10) << std::left
-                      << params.state.numStepsInTimeStep << std::endl;
+                      << params.state.numStepsInTimeStep << std::setw(10)
+                      << std::left << params.state.numNeighborsSearched
+                      << std::endl;
 
             ++params.state.timesPrinted;
             params.state.numStepsInTimeStep = 0;
             params.state.energy1 = params.state.energy2;
+            params.state.numNeighborsSearched = 0;
         }
 
         const double nextSnapshotTime = params.state.numSnapshots /
