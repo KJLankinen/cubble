@@ -328,13 +328,11 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
 }
 
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
-                           double *y, double *z, int *mx, int *my, int *mz,
-                           int *mpx, int *mpy, int *mpz) {
+                           double *y, double *z, int *mx, int *my, int *mz) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         double *v;
         int *m;
-        int *mp;
         double value;
         double low;
         double high;
@@ -342,38 +340,35 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
 #if (PBC_X == 1)
         v = x;
         m = mx;
-        mp = mpx;
         value = v[i];
         low = lbb.x;
         high = tfr.x;
         mult = value < low ? 1 : (value > high ? -1 : 0);
 
         v[i] = value + (high - low) * (double)mult;
-        m[i] = mp[i] - mult;
+        m[i] -= mult;
 #endif
 #if (PBC_Y == 1)
         v = y;
         m = my;
-        mp = mpy;
         value = v[i];
         low = lbb.y;
         high = tfr.y;
         mult = value < low ? 1 : (value > high ? -1 : 0);
 
         v[i] = value + (high - low) * (double)mult;
-        m[i] = mp[i] - mult;
+        m[i] -= mult;
 #endif
 #if (PBC_Z == 1)
         v = z;
         m = mz;
-        mp = mpz;
         value = v[i];
         low = lbb.z;
         high = tfr.z;
         mult = value < low ? 1 : (value > high ? -1 : 0);
 
         v[i] = value + (high - low) * (double)mult;
-        m[i] = mp[i] - mult;
+        m[i] -= mult;
 #endif
     }
 }

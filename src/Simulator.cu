@@ -69,22 +69,19 @@ enum class DDP {
 // Device int pointer names
 enum class DIP {
     FLAGS,
+    TEMP,
 
     WRAP_COUNT_X,
     WRAP_COUNT_Y,
     WRAP_COUNT_Z,
-
-    WRAP_COUNT_XP,
-    WRAP_COUNT_YP,
-    WRAP_COUNT_ZP,
 
     INDEX,
 
     PAIR1,
     PAIR2,
 
-    TEMP1,
-    TEMP2,
+    PAIR1COPY,
+    PAIR2COPY,
 
     NUM_VALUES
 };
@@ -351,10 +348,7 @@ void updateCellsAndNeighbors(Params &params) {
                   params.ddps[(uint32_t)DDP::Z],
                   params.dips[(uint32_t)DIP::WRAP_COUNT_X],
                   params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-                  params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-                  params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-                  params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-                  params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+                  params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
     dim3 gridSize = getGridSize(params);
     const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
@@ -362,15 +356,13 @@ void updateCellsAndNeighbors(Params &params) {
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
     int *sizes = params.dips[(uint32_t)DIP::PAIR1] + params.state.maxNumCells;
     int *cellIndices =
-        params.dips[(uint32_t)DIP::TEMP1] + 0 * params.state.dataStride;
+        params.dips[(uint32_t)DIP::PAIR1COPY] + 0 * params.state.dataStride;
     int *bubbleIndices =
-        params.dips[(uint32_t)DIP::TEMP1] + 1 * params.state.dataStride;
+        params.dips[(uint32_t)DIP::PAIR1COPY] + 1 * params.state.dataStride;
     int *sortedCellIndices =
-        params.dips[(uint32_t)DIP::TEMP1] + 2 * params.state.dataStride;
+        params.dips[(uint32_t)DIP::PAIR1COPY] + 2 * params.state.dataStride;
     int *sortedBubbleIndices =
-        params.dips[(uint32_t)DIP::TEMP1] + 3 * params.state.dataStride;
-    int *staticIndices =
-        params.dips[(uint32_t)DIP::TEMP1] + 4 * params.state.dataStride;
+        params.dips[(uint32_t)DIP::PAIR1COPY] + 3 * params.state.dataStride;
 
     const uint64_t resetBytes =
         sizeof(int) * params.state.pairStride *
@@ -396,124 +388,60 @@ void updateCellsAndNeighbors(Params &params) {
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
                                  params.state.maxNumCells);
 
-    KERNEL_LAUNCH(
-        copyKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
-        ReorganizeType::COPY_FROM_INDEX, sortedBubbleIndices,
-        sortedBubbleIndices, params.ddps[(uint32_t)DDP::X],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Z],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DXDT],
-        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDT],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDT],
-        params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::DRDT],
-        params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::DXDTO],
-        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::DYDTO],
-        params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::DZDTO],
-        params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::DRDTO],
-        params.ddps[(uint32_t)DDP::TEMP3], params.ddps[(uint32_t)DDP::X0],
-        params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::Y0],
-        params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::Z0],
-        params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::PATH],
-        params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::DISTANCE],
-        params.ddps[(uint32_t)DDP::TEMP8],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_X],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-        params.dips[(uint32_t)DIP::INDEX], staticIndices);
+    template <T, std::size_t N>
+    auto copyAndSwap = [](Params &params, std::array<T *, N> &arr, int *inds,
+                          uint32_t from, uint32_t to) {
+        KERNEL_LAUNCH(copyKernel, params.defaultKernelSize, 0, 0,
+                      params.state.numBubbles, ReorganizeType::COPY_FROM_INDEX,
+                      inds, inds, arr[from], arr[to]);
 
-    double *swapper = params.ddps[(uint32_t)DDP::X];
-    params.ddps[(uint32_t)DDP::X] = params.ddps[(uint32_t)DDP::XP];
-    params.ddps[(uint32_t)DDP::XP] = swapper;
+        T *swapper = arr[from];
+        arr[from] = arr[to];
+        arr[to] = swapper;
+    };
 
-    swapper = params.ddps[(uint32_t)DDP::Y];
-    params.ddps[(uint32_t)DDP::Y] = params.ddps[(uint32_t)DDP::YP];
-    params.ddps[(uint32_t)DDP::YP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Z];
-    params.ddps[(uint32_t)DDP::Z] = params.ddps[(uint32_t)DDP::ZP];
-    params.ddps[(uint32_t)DDP::ZP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::R];
-    params.ddps[(uint32_t)DDP::R] = params.ddps[(uint32_t)DDP::RP];
-    params.ddps[(uint32_t)DDP::RP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DXDT];
-    params.ddps[(uint32_t)DDP::DXDT] = params.ddps[(uint32_t)DDP::DXDTP];
-    params.ddps[(uint32_t)DDP::DXDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DYDT];
-    params.ddps[(uint32_t)DDP::DYDT] = params.ddps[(uint32_t)DDP::DYDTP];
-    params.ddps[(uint32_t)DDP::DYDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DZDT];
-    params.ddps[(uint32_t)DDP::DZDT] = params.ddps[(uint32_t)DDP::DZDTP];
-    params.ddps[(uint32_t)DDP::DZDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DRDT];
-    params.ddps[(uint32_t)DDP::DRDT] = params.ddps[(uint32_t)DDP::DRDTP];
-    params.ddps[(uint32_t)DDP::DRDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DXDTO];
-    params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::ERROR];
-    params.ddps[(uint32_t)DDP::ERROR] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DYDTO];
-    params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::TEMP1];
-    params.ddps[(uint32_t)DDP::TEMP1] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DZDTO];
-    params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::TEMP2];
-    params.ddps[(uint32_t)DDP::TEMP2] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DRDTO];
-    params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::TEMP3];
-    params.ddps[(uint32_t)DDP::TEMP3] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::X0];
-    params.ddps[(uint32_t)DDP::X0] = params.ddps[(uint32_t)DDP::TEMP4];
-    params.ddps[(uint32_t)DDP::TEMP4] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Y0];
-    params.ddps[(uint32_t)DDP::Y0] = params.ddps[(uint32_t)DDP::TEMP5];
-    params.ddps[(uint32_t)DDP::TEMP5] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Z0];
-    params.ddps[(uint32_t)DDP::Z0] = params.ddps[(uint32_t)DDP::TEMP6];
-    params.ddps[(uint32_t)DDP::TEMP6] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::PATH];
-    params.ddps[(uint32_t)DDP::PATH] = params.ddps[(uint32_t)DDP::TEMP7];
-    params.ddps[(uint32_t)DDP::TEMP7] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DISTANCE];
-    params.ddps[(uint32_t)DDP::DISTANCE] = params.ddps[(uint32_t)DDP::TEMP8];
-    params.ddps[(uint32_t)DDP::TEMP8] = swapper;
-
-    int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_XP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Y] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_YP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Z] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] = swapperI;
-
-    // Must be copied, staticIndices points to a place inside TEMP1 and TEMP1
-    // has a longer stride than INDEX
-    CUDA_CALL(cudaMemcpyAsync(
-        static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
-        static_cast<void *>(staticIndices),
-        sizeof(int) * params.state.dataStride, cudaMemcpyDeviceToDevice));
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::X,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Y,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Z,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::R,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DXDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DYDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DZDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DRDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DXDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DYDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DZDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DRDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::X0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Y0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Z0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::PATH,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps,
+                (uint32_t)DDP::DISTANCE, (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, sortedBubbleIndices, params.dips,
+                (uint32_t)DIP::WRAP_COUNT_X, (uint32_t)DIP::TEMP);
+    copyAndSwap(params, sortedBubbleIndices, params.dips,
+                (uint32_t)DIP::WRAP_COUNT_Y, (uint32_t)DIP::TEMP);
+    copyAndSwap(params, sortedBubbleIndices, params.dips,
+                (uint32_t)DIP::WRAP_COUNT_Z, (uint32_t)DIP::TEMP);
+    copyAndSwap(params, sortedBubbleIndices, params.dips, (uint32_t)DIP::INDEX,
+                (uint32_t)DIP::TEMP);
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
 
@@ -525,14 +453,15 @@ void updateCellsAndNeighbors(Params &params) {
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
         cudaStream_t stream =
             (i % 2) ? params.velocityStream : params.gasStream;
-        KERNEL_LAUNCH(
-            neighborSearch, kernelSizeNeighbor, 0, stream, i,
-            params.state.numBubbles, params.state.maxNumCells,
-            (int)params.state.pairStride, offsets, sizes,
-            params.dips[(uint32_t)DIP::TEMP1],
-            params.dips[(uint32_t)DIP::TEMP2], params.ddps[(uint32_t)DDP::R],
-            params.state.interval, params.ddps[(uint32_t)DDP::X],
-            params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z]);
+        KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
+                      params.state.numBubbles, params.state.maxNumCells,
+                      (int)params.state.pairStride, offsets, sizes,
+                      params.dips[(uint32_t)DIP::PAIR1COPY],
+                      params.dips[(uint32_t)DIP::PAIR2COPY],
+                      params.ddps[(uint32_t)DDP::R], params.state.interval,
+                      params.ddps[(uint32_t)DDP::X],
+                      params.ddps[(uint32_t)DDP::Y],
+                      params.ddps[(uint32_t)DDP::Z]);
     }
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs),
@@ -541,137 +470,75 @@ void updateCellsAndNeighbors(Params &params) {
 
     params.cw.sortPairs<int, int>(
         &cub::DeviceRadixSort::SortPairs,
-        const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP1]),
+        const_cast<const int *>(params.dips[(uint32_t)DIP::PAIR1COPY]),
         params.dips[(uint32_t)DIP::PAIR1],
-        const_cast<const int *>(params.dips[(uint32_t)DIP::TEMP2]),
+        const_cast<const int *>(params.dips[(uint32_t)DIP::PAIR2COPY]),
         params.dips[(uint32_t)DIP::PAIR2], params.state.numPairs);
 }
 
 void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
-    int *newIdx = params.dips[(uint32_t)DIP::TEMP1];
-    params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum,
-                                 params.dips[(uint32_t)DIP::FLAGS], newIdx,
+
+    int *flags = params.dips[(uint32_t)DIP::FLAGS];
+    int *newIdx = params.dips[(uint32_t)DIP::PAIR1COPY];
+    params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flags, newIdx,
                                  params.state.numBubbles);
 
-    KERNEL_LAUNCH(
-        copyKernel, params.defaultKernelSize, 0, 0, params.state.numBubbles,
-        ReorganizeType::CONDITIONAL_TO_INDEX, newIdx,
-        params.dips[(uint32_t)DIP::FLAGS], params.ddps[(uint32_t)DDP::X],
-        params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Z],
-        params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::R],
-        params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DXDT],
-        params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::DYDT],
-        params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDT],
-        params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::DRDT],
-        params.ddps[(uint32_t)DDP::DRDTP], params.ddps[(uint32_t)DDP::DXDTO],
-        params.ddps[(uint32_t)DDP::ERROR], params.ddps[(uint32_t)DDP::DYDTO],
-        params.ddps[(uint32_t)DDP::TEMP1], params.ddps[(uint32_t)DDP::DZDTO],
-        params.ddps[(uint32_t)DDP::TEMP2], params.ddps[(uint32_t)DDP::DRDTO],
-        params.ddps[(uint32_t)DDP::TEMP3], params.ddps[(uint32_t)DDP::X0],
-        params.ddps[(uint32_t)DDP::TEMP4], params.ddps[(uint32_t)DDP::Y0],
-        params.ddps[(uint32_t)DDP::TEMP5], params.ddps[(uint32_t)DDP::Z0],
-        params.ddps[(uint32_t)DDP::TEMP6], params.ddps[(uint32_t)DDP::PATH],
-        params.ddps[(uint32_t)DDP::TEMP7], params.ddps[(uint32_t)DDP::DISTANCE],
-        params.ddps[(uint32_t)DDP::TEMP8],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_X],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP],
-        params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-        params.dips[(uint32_t)DIP::INDEX], params.dips[(uint32_t)DIP::TEMP2]);
+    template <T, std::size_t N>
+    auto copyAndSwap = [](Params &params, std::array<T *, N> &arr, int *inds,
+                          int *flags, uint32_t from, uint32_t to) {
+        KERNEL_LAUNCH(copyKernel, params.defaultKernelSize, 0, 0,
+                      params.state.numBubbles,
+                      ReorganizeType::CONDITIONAL_TO_INDEX, inds, flags,
+                      arr[from], arr[to]);
 
-    double *swapper = params.ddps[(uint32_t)DDP::X];
-    params.ddps[(uint32_t)DDP::X] = params.ddps[(uint32_t)DDP::XP];
-    params.ddps[(uint32_t)DDP::XP] = swapper;
+        T *swapper = arr[from];
+        arr[from] = arr[to];
+        arr[to] = swapper;
+    };
 
-    swapper = params.ddps[(uint32_t)DDP::Y];
-    params.ddps[(uint32_t)DDP::Y] = params.ddps[(uint32_t)DDP::YP];
-    params.ddps[(uint32_t)DDP::YP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Z];
-    params.ddps[(uint32_t)DDP::Z] = params.ddps[(uint32_t)DDP::ZP];
-    params.ddps[(uint32_t)DDP::ZP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::R];
-    params.ddps[(uint32_t)DDP::R] = params.ddps[(uint32_t)DDP::RP];
-    params.ddps[(uint32_t)DDP::RP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DXDT];
-    params.ddps[(uint32_t)DDP::DXDT] = params.ddps[(uint32_t)DDP::DXDTP];
-    params.ddps[(uint32_t)DDP::DXDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DYDT];
-    params.ddps[(uint32_t)DDP::DYDT] = params.ddps[(uint32_t)DDP::DYDTP];
-    params.ddps[(uint32_t)DDP::DYDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DZDT];
-    params.ddps[(uint32_t)DDP::DZDT] = params.ddps[(uint32_t)DDP::DZDTP];
-    params.ddps[(uint32_t)DDP::DZDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DRDT];
-    params.ddps[(uint32_t)DDP::DRDT] = params.ddps[(uint32_t)DDP::DRDTP];
-    params.ddps[(uint32_t)DDP::DRDTP] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DXDTO];
-    params.ddps[(uint32_t)DDP::DXDTO] = params.ddps[(uint32_t)DDP::ERROR];
-    params.ddps[(uint32_t)DDP::ERROR] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DYDTO];
-    params.ddps[(uint32_t)DDP::DYDTO] = params.ddps[(uint32_t)DDP::TEMP1];
-    params.ddps[(uint32_t)DDP::TEMP1] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DZDTO];
-    params.ddps[(uint32_t)DDP::DZDTO] = params.ddps[(uint32_t)DDP::TEMP2];
-    params.ddps[(uint32_t)DDP::TEMP2] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DRDTO];
-    params.ddps[(uint32_t)DDP::DRDTO] = params.ddps[(uint32_t)DDP::TEMP3];
-    params.ddps[(uint32_t)DDP::TEMP3] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::X0];
-    params.ddps[(uint32_t)DDP::X0] = params.ddps[(uint32_t)DDP::TEMP4];
-    params.ddps[(uint32_t)DDP::TEMP4] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Y0];
-    params.ddps[(uint32_t)DDP::Y0] = params.ddps[(uint32_t)DDP::TEMP5];
-    params.ddps[(uint32_t)DDP::TEMP5] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::Z0];
-    params.ddps[(uint32_t)DDP::Z0] = params.ddps[(uint32_t)DDP::TEMP6];
-    params.ddps[(uint32_t)DDP::TEMP6] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::PATH];
-    params.ddps[(uint32_t)DDP::PATH] = params.ddps[(uint32_t)DDP::TEMP7];
-    params.ddps[(uint32_t)DDP::TEMP7] = swapper;
-
-    swapper = params.ddps[(uint32_t)DDP::DISTANCE];
-    params.ddps[(uint32_t)DDP::DISTANCE] = params.ddps[(uint32_t)DDP::TEMP8];
-    params.ddps[(uint32_t)DDP::TEMP8] = swapper;
-
-    int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_XP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Y] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_YP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Z] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] = swapperI;
-
-    // These can't be swapped, because TEMP2 has a longer stride.
-    // They have to be copied.
-    CUDA_CALL(cudaMemcpyAsync(
-        static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
-        static_cast<void *>(params.dips[(uint32_t)DIP::TEMP2]),
-        sizeof(int) * params.state.dataStride, cudaMemcpyDeviceToDevice));
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::X,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::Y,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::Z,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::R,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DXDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DYDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DZDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DRDT,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DXDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DYDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DZDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DRDTO,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::X0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::Y0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::Z0,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::PATH,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.ddps, (uint32_t)DDP::DISTANCE,
+                (uint32_t)DDP::TEMP1);
+    copyAndSwap(params, newIdx, flags, params.dips, (uint32_t)DIP::WRAP_COUNT_X,
+                (uint32_t)DIP::TEMP);
+    copyAndSwap(params, newIdx, flags, params.dips, (uint32_t)DIP::WRAP_COUNT_Y,
+                (uint32_t)DIP::TEMP);
+    copyAndSwap(params, newIdx, flags, params.dips, (uint32_t)DIP::WRAP_COUNT_Z,
+                (uint32_t)DIP::TEMP);
+    copyAndSwap(params, newIdx, flags, params.dips, (uint32_t)DIP::INDEX,
+                (uint32_t)DIP::TEMP);
 
     // Update kernel sizes based on number of remaining bubbles
     params.state.numBubbles = numBubblesAboveMinRad;
@@ -987,9 +854,9 @@ void velocityCalculation(Params &params) {
     // Flow velocity
 #if (USE_FLOW == 1)
     {
-        CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::TEMP1], 0,
+        CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::PAIR1COPY], 0,
                              sizeof(int) * params.state.pairStride));
-        int *numNeighbors = params.dips[(uint32_t)DIP::TEMP1];
+        int *numNeighbors = params.dips[(uint32_t)DIP::PAIR1COPY];
 
         KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
                       params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
@@ -1130,13 +997,13 @@ bool integrate(Params &params) {
             params.ddps[(uint32_t)DDP::DISTANCE],
             params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
             params.ddps[(uint32_t)DDP::X0],
-            params.dips[(uint32_t)DIP::WRAP_COUNT_XP],
+            params.dips[(uint32_t)DIP::WRAP_COUNT_X],
             params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
             params.ddps[(uint32_t)DDP::Y0],
-            params.dips[(uint32_t)DIP::WRAP_COUNT_YP],
+            params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
             params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
             params.ddps[(uint32_t)DDP::Z0],
-            params.dips[(uint32_t)DIP::WRAP_COUNT_ZP]);
+            params.dips[(uint32_t)DIP::WRAP_COUNT_Z]);
 
         // Wait for event
         CUDA_CALL(cudaEventSynchronize(params.event1));
@@ -1192,21 +1059,6 @@ bool integrate(Params &params) {
     swapper = params.ddps[(uint32_t)DDP::PATH];
     params.ddps[(uint32_t)DDP::PATH] = params.ddps[(uint32_t)DDP::TEMP4];
     params.ddps[(uint32_t)DDP::TEMP4] = swapper;
-
-    int *swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_X];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_X] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_XP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_XP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Y];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Y] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_YP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_YP] = swapperI;
-
-    swapperI = params.dips[(uint32_t)DIP::WRAP_COUNT_Z];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_Z] =
-        params.dips[(uint32_t)DIP::WRAP_COUNT_ZP];
-    params.dips[(uint32_t)DIP::WRAP_COUNT_ZP] = swapperI;
 
     ++params.state.numIntegrationSteps;
 
@@ -1671,15 +1523,6 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Z], 0,
                          params.state.dataStride * sizeof(int)));
 
-    CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_XP], 0,
-                         params.state.dataStride * sizeof(int)));
-
-    CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_YP], 0,
-                         params.state.dataStride * sizeof(int)));
-
-    CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_ZP], 0,
-                         params.state.dataStride * sizeof(int)));
-
     // Calculate the energy at starting positions
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles, params.ddps[(uint32_t)DDP::TEMP4]);
@@ -1884,7 +1727,7 @@ void initializeFromBinary(const char *inputFileName, Params &params) {
 
         // Ints
         CUDA_CALL(cudaMemcpy(
-            static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_XP]),
+            static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_X]),
             static_cast<void *>(&byteData[offset]), intBytes,
             cudaMemcpyHostToDevice));
         offset += intBytes;
@@ -2039,7 +1882,7 @@ void serializeStateAndData(const char *outputFileName, Params &params) {
             CUDA_CALL(
                 cudaMemcpy(static_cast<void *>(&byteData[offset]),
                            static_cast<void *>(
-                               params.dips[(uint32_t)DIP::WRAP_COUNT_XP + i]),
+                               params.dips[(uint32_t)DIP::WRAP_COUNT_X + i]),
                            bytesToCopy, cudaMemcpyDeviceToHost));
 
             offset += bytesToCopy;
