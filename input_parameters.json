@@ -79,5 +79,5 @@
   "snapshotFrequency" : 1.0,
 
   "skinRadiusExpl" : "How far away are neighboring bubbles searched from. Relative to input average radius.",
-  "skinRadiusExpl" : 1.0
+  "skinRadius" : 1.0
 }
