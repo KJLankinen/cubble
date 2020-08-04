@@ -869,13 +869,14 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
          i += gridDim.x * blockDim.x) {
         double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
                         (dTotalArea - dTotalOverlapArea);
-        double area = 2.0 * CUBBLE_PI * r[i];
+        const double rad = r[i];
+        double area = 2.0 * CUBBLE_PI * rad;
 #if (NUM_DIM == 3)
-        area *= 2.0 * r[i];
+        area *= 2.0 * rad;
 #endif
         const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
                                         dTotalArea * (area - freeArea[i]) *
-                                        (invRho - 1.0 / r[i]);
+                                        (invRho - 1.0 / rad);
         drdt[i] = kParam * vr / area;
     }
 }
