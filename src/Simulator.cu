@@ -485,6 +485,9 @@ void updateCellsAndNeighbors(Params &params) {
                          static_cast<void *>(dnp), sizeof(int),
                          cudaMemcpyDeviceToHost));
 
+    std::cout "========================DEBUG::::::::::::::: "
+        << params.state.numPairs << std::endl;
+
     params.cw.sortPairs<int, int>(
         &cub::DeviceRadixSort::SortPairs,
         const_cast<const int *>(params.dips[(uint32_t)DIP::PAIR1COPY]),
