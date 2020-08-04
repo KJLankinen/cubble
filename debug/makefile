@@ -10,7 +10,7 @@ NUM_DIM := 2
 # -----------------------------------------------------
 
 PBC_X := 1
-PBC_Y := 1
+PBC_Y := 0
 PBC_Z := 1
 
 
@@ -18,7 +18,7 @@ PBC_Z := 1
 # Use flow or not?
 # -----------------------------------------------------
 
-USE_FLOW := 1
+USE_FLOW := 0
 
 
 # -----------------------------------------------------
@@ -92,7 +92,7 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 CUDA_ARCH := sm_60
 CPU_FLAGS := -Wall -std=c++14 -m64 -g3
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr -g -G
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++14 --expt-relaxed-constexpr -g -G
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O0
 

@@ -17,7 +17,7 @@ PBC_Z := 1
 # Use flow or not?
 # -----------------------------------------------------
 
-USE_FLOW := 1
+USE_FLOW := 0
 
 # -----------------------------------------------------
 # Directories
@@ -90,7 +90,7 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 CUDA_ARCH := sm_60
 CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++11 --expt-relaxed-constexpr
+GPU_FLAGS := -arch=$(CUDA_ARCH) -std=c++14 --expt-relaxed-constexpr
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O2
 
