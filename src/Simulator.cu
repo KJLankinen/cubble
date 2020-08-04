@@ -483,7 +483,7 @@ void deleteSmallBubbles(Params &params, int numBubblesAboveMinRad) {
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, flags, newIdx,
                                  params.state.numBubbles);
 
-    auto copyAndSwap = [](Params &params, auto &&arr, int *inds, int *flags,
+    auto copyAndSwap = [](Params &params, int *inds, int *flags, auto &&arr,
                           uint32_t from, uint32_t to) {
         KERNEL_LAUNCH(copyKernel, params.defaultKernelSize, 0, 0,
                       params.state.numBubbles,
