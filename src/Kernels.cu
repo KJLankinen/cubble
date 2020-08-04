@@ -165,17 +165,6 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
     return get1DIdxFrom3DIdx(idxVec, dim);
 }
 
-__device__ double getWrappedCoordinate(double val1, double val2,
-                                       double multiplier) {
-    double difference = val1 - val2;
-    val2 = difference < -0.5 * multiplier
-               ? val2 - multiplier
-               : (difference > 0.5 * multiplier ? val2 + multiplier : val2);
-    val2 = val1 - val2;
-
-    return val2;
-}
-
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
                                  dvec tfr, ivec cellDim) {
     const dvec interval = tfr - lbb;
@@ -737,8 +726,13 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
          i += gridDim.x * blockDim.x) {
         int idx1 = pair1[i];
         int idx2 = pair2[i];
+
         double r1 = r[idx1];
         double r2 = r[idx2];
+        const double r1sq = r1 * r1;
+        const double r2sq = r2 * r2;
+        const double radii = r1 + r2;
+
         dvec p1 = dvec(x[idx1], y[idx1], 0.0);
         dvec p2 = dvec(x[idx2], y[idx2], 0.0);
 #if (NUM_DIM == 3)
@@ -747,16 +741,15 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
 #endif
         double magnitude =
             wrappedDifference(p1, p2, interval).getSquaredLength();
-        if (magnitude < (r1 + r2) * (r1 + r2)) {
+        if (magnitude < radii * radii) {
             double overlapArea = 0;
-            if (magnitude < r1 * r1 || magnitude < r2 * r2) {
-                overlapArea = r1 < r2 ? r1 : r2;
-                overlapArea *= overlapArea;
+            if (magnitude < r1sq || magnitude < r2sq) {
+                overlapArea = r1sq < r2sq ? r1sq : r2sq;
             } else {
-                overlapArea =
-                    0.5 * (r2 * r2 - r1 * r1 + magnitude) * rsqrt(magnitude);
+                overlapArea = 0.5 * (r2sq - r1sq + magnitude);
                 overlapArea *= overlapArea;
-                overlapArea = r2 * r2 - overlapArea;
+                overlapArea /= magnitude;
+                overlapArea = r2sq - overlapArea;
                 overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
             }
 #if (NUM_DIM == 3)
@@ -767,23 +760,26 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
             atomicAdd(&freeArea[idx1], overlapArea);
             atomicAdd(&freeArea[idx2], overlapArea);
 
-            totalOverlapArea[threadIdx.x] += 2.0 * overlapArea;
-            totalOverlapAreaPerRadius[threadIdx.x] +=
-                overlapArea / r1 + overlapArea / r2;
+            r1 = 1.0 / r1;
+            r2 = 1.0 / r2;
 
-            overlapArea *= (1.0 / r2 - 1.0 / r1);
+            totalOverlapArea[threadIdx.x] += 2.0 * overlapArea;
+            totalOverlapAreaPerRadius[threadIdx.x] += overlapArea * (r1 + r2);
+
+            overlapArea *= (r2 - r1);
 
             atomicAdd(&drdt[idx1], overlapArea);
             atomicAdd(&drdt[idx2], -overlapArea);
         }
 
         if (i < numValues) {
-            double area = 2.0 * CUBBLE_PI * r[i];
+            r1 = r[i];
+            double areaPerRad = 2.0 * CUBBLE_PI;
 #if (NUM_DIM == 3)
-            area *= 2.0 * r[i];
+            areaPerRad *= 2.0 * r1;
 #endif
-            totalArea[threadIdx.x] += area;
-            totalAreaPerRadius[threadIdx.x] += area / r[i];
+            totalArea[threadIdx.x] += areaPerRad * r1;
+            totalAreaPerRadius[threadIdx.x] += areaPerRad;
         }
     }
 

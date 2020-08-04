@@ -144,8 +144,6 @@ __global__ void transformPositionsKernel(bool normalize, int numValues,
                                          double *y, double *z);
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-__device__ double getWrappedCoordinate(double val1, double val2,
-                                       double multiplier);
 __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
                                  dvec tfr, ivec cellDim);
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
