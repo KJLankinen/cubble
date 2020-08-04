@@ -971,7 +971,7 @@ __global__ void correctKernel(int numValues, double timeStep,
             corrected = r[i] + 0.5 * timeStep * (vr[i] + vrp[i]);
             er = corrected > rp[i] ? corrected - rp[i] : rp[i] - corrected;
             rp[i] = corrected;
-            dist += corrected - r0;
+            dist += corrected - r0[i];
 
             double vol = corrected * corrected * CUBBLE_PI;
 #if (NUM_DIM == 3)
@@ -1092,7 +1092,7 @@ __global__ void correctKernel(int numValues, double timeStep,
         errors[blockIdx.x + gridDim.x] = mr[tid];
 
         boundexp[tid] =
-            boundxp[tid] > boundexp[1] ? boundexp[tid] : boundexp[1];
+            boundexp[tid] > boundexp[1] ? boundexp[tid] : boundexp[1];
         errors[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
 
         tv[tid] += tv[1];
