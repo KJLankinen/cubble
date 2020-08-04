@@ -167,8 +167,7 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             double *z);
 
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
-                           double *y, double *z, int *mx, int *my, int *mz,
-                           int *mpx, int *mpy, int *mpz);
+                           double *y, double *z, int *mx, int *my, int *mz);
 
 __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
