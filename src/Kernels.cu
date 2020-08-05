@@ -550,6 +550,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double fZeroPerMuZero, double dragCoeff) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
         double distance1 = 0.0;
         double distance2 = 0.0;
         double distance = 0.0;
@@ -557,6 +558,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
         double yDrag = 1.0;
         const double rad = r[i];
         const double invRad = 1.0 / rad;
+#endif
 
 #if (PBC_X == 0)
         distance1 = x[i] - lbb.x;
@@ -1176,7 +1178,7 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
     // If the to-be-added volume is very small, don't add it yet.
     double volMul = 1.0;
-    if (dVolumeMultiplier > dTotalVolume * 0.0001) {
+    if (dVolumeMultiplier > dTotalVolume * 0.00001) {
         volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
         if (threadIdx.x == 0 && blockIdx.x == 0) {
             dResetVolume = true;
@@ -1244,7 +1246,7 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
             j += 1;
         }
 
-        if (i < numValues) {
+        if (i < numValues - dNumToBeDeleted) {
             r[i] = r[i] * volMul;
         }
     }
