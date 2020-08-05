@@ -88,6 +88,7 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dNumPairsNew = dNumPairs;
 
         if (dResetVolume) {
+            dResetVolume = false;
             dVolumeMultiplier = 0.0;
         }
     }

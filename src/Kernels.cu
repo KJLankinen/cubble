@@ -182,10 +182,11 @@ __device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
 }
 
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
-// Linear encoding
-// return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
+    // Linear encoding
+    // return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x +
+    // idxVec.x;
 
-// Morton encoding
+    // Morton encoding
 #if (NUM_DIM == 3)
     return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
                          (unsigned int)idxVec.z);
@@ -196,14 +197,14 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
 
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
     ivec idxVec(0, 0, 0);
-// Linear decoding
-/*
-idxVec.x = idx % cellDim.x;
-idxVec.y = (idx / cellDim.x) % cellDim.y;
+    // Linear decoding
+    /*
+       idxVec.x = idx % cellDim.x;
+       idxVec.y = (idx / cellDim.x) % cellDim.y;
 #if (NUM_DIM == 3)
 idxVec.z = idx / (cellDim.x * cellDim.y);
 #endif
-*/
+     */
 #if (NUM_DIM == 3)
     idxVec.x = decodeMorton3x((unsigned int)idx);
     idxVec.y = decodeMorton3y((unsigned int)idx);
@@ -1173,24 +1174,19 @@ __global__ void pathLengthDistanceKernel(
 
 __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
-    // If the to-be-added volume is a very small amount, don't add it yet.
-    double volMul = dVolumeMultiplier / dTotalVolume;
-    if (volMul < 0.001) {
-        volMul = 1.0;
-        if (threadIdx.x == 0 && blockIdx.x == 0) {
-            dResetVolume = false;
-        }
-    } else {
-        volMul += 1.0;
+    // If the to-be-added volume is very small, don't add it yet.
+    double volMul = 1.0;
+    if (dVolumeMultiplier > dTotalVolume * 0.001) {
+        volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
         if (threadIdx.x == 0 && blockIdx.x == 0) {
             dResetVolume = true;
         }
-    }
 #if (NUM_DIM == 3)
-    volMul = cbrt(volMul);
+        volMul = cbrt(volMul);
 #else
-    volMul = sqrt(volMul);
+        volMul = sqrt(volMul);
 #endif
+    }
 
     for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairsNew;
          i += blockDim.x * gridDim.x) {

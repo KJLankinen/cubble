@@ -1263,6 +1263,34 @@ void commonSetup(Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(
         reinterpret_cast<void **>(&params.numToBeDeleted), dNumToBeDeleted));
 
+    // Set device globals to zero
+    const double zero = 0.0;
+    const int zeroI = 0;
+    const bool falseB = false;
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalArea, reinterpret_cast<void *>(&zero),
+                                 sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dTotalOverlapArea, reinterpret_cast<void *>(&zero), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalOverlapAreaPerRadius,
+                                 reinterpret_cast<void *>(&zero),
+                                 sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dTotalAreaPerRadius, reinterpret_cast<void *>(&zero), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalVolume, reinterpret_cast<void *>(&zero),
+                                 sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dVolumeMultiplier, reinterpret_cast<void *>(&zero), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dErrorEncountered, reinterpret_cast<void *>(&falseB), sizeof(bool)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dResetVolume, reinterpret_cast<void *>(&falseB), sizeof(bool)));
+    CUDA_CALL(cudaMemcpyToSymbol(dNumPairs, reinterpret_cast<void *>(&zeroI),
+                                 sizeof(int)));
+    CUDA_CALL(cudaMemcpyToSymbol(dNumPairsNew, reinterpret_cast<void *>(&zeroI),
+                                 sizeof(int)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dNumToBeDeleted, reinterpret_cast<void *>(&zeroI), sizeof(int)));
+
     std::cout << "Reserving device memory to hold data." << std::endl;
 
     CUDA_CALL(cudaMallocHost(reinterpret_cast<void **>(&params.pinnedDouble),
