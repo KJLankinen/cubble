@@ -1282,8 +1282,6 @@ void commonSetup(Params &params) {
         dVolumeMultiplier, reinterpret_cast<void *>(&zero), sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(
         dErrorEncountered, reinterpret_cast<void *>(&falseB), sizeof(bool)));
-    CUDA_CALL(cudaMemcpyToSymbol(
-        dResetVolume, reinterpret_cast<void *>(&falseB), sizeof(bool)));
     CUDA_CALL(cudaMemcpyToSymbol(dNumPairs, reinterpret_cast<void *>(&zeroI),
                                  sizeof(int)));
     CUDA_CALL(cudaMemcpyToSymbol(dNumPairsNew, reinterpret_cast<void *>(&zeroI),
