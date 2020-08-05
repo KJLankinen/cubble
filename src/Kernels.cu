@@ -7,6 +7,7 @@ __device__ double dTotalOverlapAreaPerRadius;
 __device__ double dTotalAreaPerRadius;
 __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
+__device__ bool dResetVolume;
 __device__ int dNumPairs;
 __device__ int dNumPairsNew;
 __device__ int dNumToBeDeleted;
@@ -1172,7 +1173,19 @@ __global__ void pathLengthDistanceKernel(
 
 __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
-    double volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
+    // If the to-be-added volume is a very small amount, don't add it yet.
+    double volMul = dVolumeMultiplier / dTotalVolume;
+    if (volMul < 0.001) {
+        volMul = 1.0;
+        if (threadIdx.x == 0 && blockIdx.x == 0) {
+            dResetVolume = false;
+        }
+    } else {
+        volMul += 1.0;
+        if (threadIdx.x == 0 && blockIdx.x == 0) {
+            dResetVolume = true;
+        }
+    }
 #if (NUM_DIM == 3)
     volMul = cbrt(volMul);
 #else
