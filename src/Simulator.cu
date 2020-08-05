@@ -508,8 +508,6 @@ void updateCellsAndNeighbors(Params &params) {
 void deleteSmallBubbles(Params &params, int numToBeDeleted) {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
 
-    std::cout << "Swapping and removing " << numToBeDeleted << " bubbles."
-              << std::endl;
     KERNEL_LAUNCH(
         swapDataCountPairs, params.pairKernelSize, 0, 0,
         params.state.numBubbles, params.inputs.minRad,
@@ -532,14 +530,10 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
         params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
         params.dips[(uint32_t)DIP::INDEX]);
 
-    std::cout << "Adding volume and fixing pairs" << std::endl;
-
     KERNEL_LAUNCH(
         addVolumeFixPairs, params.pairKernelSize, 0, 0, params.state.numBubbles,
         params.dips[(uint32_t)DIP::PAIR1], params.dips[(uint32_t)DIP::PAIR2],
         params.dips[(uint32_t)DIP::TEMP], params.ddps[(uint32_t)DDP::R]);
-
-    std::cout << "Pairs fixed." << std::endl;
 
     // Update kernel sizes based on number of remaining bubbles
     params.state.numBubbles -= numToBeDeleted;
