@@ -8,7 +8,8 @@ __device__ double dTotalAreaPerRadius;
 __device__ double dTotalVolume;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
-__device__ int dNumBubblesAboveMinRad;
+__device__ int dNumPairsNew;
+__device__ int dNumToBeDeleted;
 __device__ double dVolumeMultiplier;
 
 __device__ void logError(bool condition, const char *statement,
@@ -880,8 +881,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
 __global__ void addVolume(double *r, int numValues) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
-        double multiplier = dVolumeMultiplier / dTotalVolume;
-        multiplier += 1.0;
+        double multiplier = 1.0 + dVolumeMultiplier / dTotalVolume;
 
 #if (NUM_DIM == 3)
         multiplier = cbrt(multiplier);
@@ -914,12 +914,12 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, int *flags, double *xp, double *x,
-                              double *vx, double *vxp, double *yp, double *y,
-                              double *vy, double *vyp, double *zp, double *z,
-                              double *vz, double *vzp, double *rp, double *r,
-                              double *vr, double *vrp, double *x0, double *y0,
-                              double *z0, double *r0) {
+                              double *errors, int *toBeDeleted, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp, double *x0,
+                              double *y0, double *z0, double *r0) {
     // Adams-Moulton integration
     int tid = threadIdx.x;
     // maximum error
@@ -931,16 +931,14 @@ __global__ void correctKernel(int numValues, double timeStep,
     // volume of remaining bubbles, i.e. total volume
     __shared__ double tv[128];
     // expansion, i.e. how far the boundary of a bubble has moved since
-    // neighbors were last searched
+    // neighbors were last searched. Boundary expansion =
+    // distance moved + radius increased with gas exchange.
     __shared__ double boundexp[128];
-    // #bubbles above minimum radius
-    __shared__ int namr[128];
     me[tid] = 0.0;
     mr[tid] = 0.0;
     vm[tid] = 0.0;
     tv[tid] = 0.0;
     boundexp[tid] = 0.0;
-    namr[tid] = 0;
 
     for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
          i += blockDim.x * gridDim.x) {
@@ -979,13 +977,11 @@ __global__ void correctKernel(int numValues, double timeStep,
 #endif
             if (corrected > minRad) {
                 tv[tid] += vol;
-                flags[i] = 1;
             } else {
                 vm[tid] += vol;
-                flags[i] = 0;
+                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = mr[tid] > corrected ? mr[tid] : corrected;
-            namr[tid] += flags[i];
         }
         corrected = ex > ey
                         ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
@@ -1021,88 +1017,79 @@ __global__ void correctKernel(int numValues, double timeStep,
         vm[tid] += vm[64 + tid];
         vm[tid] += vm[96 + tid];
 
-        namr[tid] += namr[32 + tid];
-        namr[tid] += namr[64 + tid];
-        namr[tid] += namr[96 + tid];
-    }
+        if (tid < 8) {
+            me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+            me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+            me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
 
-    if (tid < 8) {
-        me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
-        me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
-        me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
+            mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
+            mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
+            mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
 
-        mr[tid] = mr[tid] > mr[8 + tid] ? mr[tid] : mr[8 + tid];
-        mr[tid] = mr[tid] > mr[16 + tid] ? mr[tid] : mr[16 + tid];
-        mr[tid] = mr[tid] > mr[24 + tid] ? mr[tid] : mr[24 + tid];
+            boundexp[tid] = boundexp[tid] > boundexp[8 + tid]
+                                ? boundexp[tid]
+                                : boundexp[8 + tid];
+            boundexp[tid] = boundexp[tid] > boundexp[16 + tid]
+                                ? boundexp[tid]
+                                : boundexp[16 + tid];
+            boundexp[tid] = boundexp[tid] > boundexp[24 + tid]
+                                ? boundexp[tid]
+                                : boundexp[24 + tid];
 
-        boundexp[tid] = boundexp[tid] > boundexp[8 + tid] ? boundexp[tid]
-                                                          : boundexp[8 + tid];
-        boundexp[tid] = boundexp[tid] > boundexp[16 + tid] ? boundexp[tid]
-                                                           : boundexp[16 + tid];
-        boundexp[tid] = boundexp[tid] > boundexp[24 + tid] ? boundexp[tid]
-                                                           : boundexp[24 + tid];
+            tv[tid] += tv[8 + tid];
+            tv[tid] += tv[16 + tid];
+            tv[tid] += tv[24 + tid];
 
-        tv[tid] += tv[8 + tid];
-        tv[tid] += tv[16 + tid];
-        tv[tid] += tv[24 + tid];
+            vm[tid] += vm[8 + tid];
+            vm[tid] += vm[16 + tid];
+            vm[tid] += vm[24 + tid];
 
-        vm[tid] += vm[8 + tid];
-        vm[tid] += vm[16 + tid];
-        vm[tid] += vm[24 + tid];
+            if (tid < 2) {
+                me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+                me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+                me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
 
-        namr[tid] += namr[8 + tid];
-        namr[tid] += namr[16 + tid];
-        namr[tid] += namr[24 + tid];
-    }
+                mr[tid] = mr[tid] > mr[2 + tid] ? mr[tid] : mr[2 + tid];
+                mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
+                mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
 
-    if (tid < 2) {
-        me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
-        me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
-        me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
+                boundexp[tid] = boundexp[tid] > boundexp[2 + tid]
+                                    ? boundexp[tid]
+                                    : boundexp[2 + tid];
+                boundexp[tid] = boundexp[tid] > boundexp[4 + tid]
+                                    ? boundexp[tid]
+                                    : boundexp[4 + tid];
+                boundexp[tid] = boundexp[tid] > boundexp[6 + tid]
+                                    ? boundexp[tid]
+                                    : boundexp[6 + tid];
 
-        mr[tid] = mr[tid] > mr[2 + tid] ? mr[tid] : mr[2 + tid];
-        mr[tid] = mr[tid] > mr[4 + tid] ? mr[tid] : mr[4 + tid];
-        mr[tid] = mr[tid] > mr[6 + tid] ? mr[tid] : mr[6 + tid];
+                tv[tid] += tv[2 + tid];
+                tv[tid] += tv[4 + tid];
+                tv[tid] += tv[6 + tid];
 
-        boundexp[tid] = boundexp[tid] > boundexp[2 + tid] ? boundexp[tid]
-                                                          : boundexp[2 + tid];
-        boundexp[tid] = boundexp[tid] > boundexp[4 + tid] ? boundexp[tid]
-                                                          : boundexp[4 + tid];
-        boundexp[tid] = boundexp[tid] > boundexp[6 + tid] ? boundexp[tid]
-                                                          : boundexp[6 + tid];
+                vm[tid] += vm[2 + tid];
+                vm[tid] += vm[4 + tid];
+                vm[tid] += vm[6 + tid];
 
-        tv[tid] += tv[2 + tid];
-        tv[tid] += tv[4 + tid];
-        tv[tid] += tv[6 + tid];
+                if (tid == 0) {
+                    me[tid] = me[tid] > me[1] ? me[tid] : me[1];
+                    errors[blockIdx.x] = me[tid];
 
-        vm[tid] += vm[2 + tid];
-        vm[tid] += vm[4 + tid];
-        vm[tid] += vm[6 + tid];
+                    mr[tid] = mr[tid] > mr[1] ? mr[tid] : mr[1];
+                    errors[blockIdx.x + gridDim.x] = mr[tid];
 
-        namr[tid] += namr[2 + tid];
-        namr[tid] += namr[4 + tid];
-        namr[tid] += namr[6 + tid];
-    }
+                    boundexp[tid] = boundexp[tid] > boundexp[1] ? boundexp[tid]
+                                                                : boundexp[1];
+                    errors[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
 
-    if (tid == 0) {
-        me[tid] = me[tid] > me[1] ? me[tid] : me[1];
-        errors[blockIdx.x] = me[tid];
+                    tv[tid] += tv[1];
+                    atomicAdd(&dTotalVolume, tv[tid]);
 
-        mr[tid] = mr[tid] > mr[1] ? mr[tid] : mr[1];
-        errors[blockIdx.x + gridDim.x] = mr[tid];
-
-        boundexp[tid] =
-            boundexp[tid] > boundexp[1] ? boundexp[tid] : boundexp[1];
-        errors[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
-
-        tv[tid] += tv[1];
-        atomicAdd(&dTotalVolume, tv[tid]);
-
-        vm[tid] += vm[1];
-        atomicAdd(&dVolumeMultiplier, vm[tid]);
-
-        namr[tid] += namr[1];
-        atomicAdd(&dNumBubblesAboveMinRad, namr[tid]);
+                    vm[tid] += vm[1];
+                    atomicAdd(&dVolumeMultiplier, vm[tid]);
+                }
+            }
+        }
     }
 }
 
@@ -1131,22 +1118,22 @@ __global__ void endStepKernel(int numValues, double *errors, double *x0,
             me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
             me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
             me[tid] = me[tid] > me[96 + tid] ? me[tid] : me[96 + tid];
-        }
 
-        if (tid < 8) {
-            me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
-            me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
-            me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
-        }
+            if (tid < 8) {
+                me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
+                me[tid] = me[tid] > me[16 + tid] ? me[tid] : me[16 + tid];
+                me[tid] = me[tid] > me[24 + tid] ? me[tid] : me[24 + tid];
 
-        if (tid < 2) {
-            me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
-            me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
-            me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
-        }
+                if (tid < 2) {
+                    me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
+                    me[tid] = me[tid] > me[4 + tid] ? me[tid] : me[4 + tid];
+                    me[tid] = me[tid] > me[6 + tid] ? me[tid] : me[6 + tid];
 
-        if (tid == 0)
-            errors[blockIdx.x] = me[tid];
+                    if (tid == 0)
+                        errors[blockIdx.x] = me[tid];
+                }
+            }
+        }
     }
 }
 
@@ -1197,4 +1184,73 @@ __global__ void pathLengthDistanceKernel(
     }
 }
 
+__global__ void addVolumeFixPairs(int numValues, int *first, int *second,
+                                  int *toBeDeleted, double *r) {
+    double volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
+#if (NUM_DIM == 3)
+    volMul = cbrt(volMul);
+#else
+    volMul = sqrt(volMul);
+#endif
+
+    for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairsNew;
+         i += blockDim.x * gridDim.x) {
+        // Check if either of the indices of this pair is any of the
+        // to-be-deleted indices. If so, delete the pair, i.e.
+        // swap a different pair on its place from the back of the list.
+        int idx1 = first[i];
+        int idx2 = second[i];
+        int j = 0;
+        while (j < dNumToBeDeleted) {
+            int tbd = toBeDeleted[j];
+            if (idx1 == tbd || idx2 == tbd) {
+                // Start from the back of pair list and go backwards until
+                // neither of the pairs is in the to-be-deleted list.
+                bool pairFound = false;
+                int swapIdx = 0;
+                while
+                    !pairFound {
+                        pairFound = true;
+                        swapIdx = atomicAdd(&dNumPairs, -1) - 1;
+                        const int swap1 = first[swapIdx];
+                        const int swap2 = second[swapIdx];
+                        int k = 0;
+                        while (k < dNumToBeDeleted) {
+                            tbd = toBeDeleted[k];
+                            if (swap1 == tbd || swap2 == tbd) {
+                                pairFound = false;
+                                break;
+                            }
+                            k += 1;
+                        }
+                    }
+                first[i] = first[swapIdx];
+                second[i] = second[swapIdx];
+                break;
+            }
+            j += 1;
+        }
+
+        // Check if either of the indices should be updated. In other words,
+        // if either of the indices is a value that is beyond the new range of
+        // indices, change the value to the index it was swapped to by the
+        // swapDataCountPairs kernel.
+        idx1 = first[i];
+        idx2 = second[i];
+        j = 0;
+        while (j < dNumToBeDeleted) {
+            // The old, swapped indices were stored after the deleted indices
+            int swapped = toBeDeleted[dNumToBeDeleted + j];
+            if (idx1 == swapped) {
+                first[i] = toBeDeleted[j];
+            } else if (idx2 == swapped) {
+                second[i] = toBeDeleted[j];
+            }
+        }
+
+        if (i < numValues) {
+            r[i] = r[i] * volMul;
+        }
+    }
+}
 } // namespace cubble

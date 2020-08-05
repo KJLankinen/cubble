@@ -14,6 +14,8 @@ extern __device__ double dTotalAreaPerRadius;
 extern __device__ double dTotalVolume;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
+extern __device__ int dNumPairsNew;
+extern __device__ int dNumToBeDeleted;
 extern __device__ int dNumBubblesAboveMinRad;
 extern __device__ double dVolumeMultiplier;
 
@@ -84,6 +86,8 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalVolume = 0.0;
         dVolumeMultiplier = 0.0;
         dNumBubblesAboveMinRad = 0;
+        dNumToBeDeleted = 0;
+        dNumPairsNew = dNumPairs;
     }
 }
 
@@ -225,8 +229,6 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                                             double kappa, double kParam,
                                             double averageSurfaceAreaIn);
 
-__global__ void addVolume(double *r, int numValues);
-
 __global__ void predictKernel(int numValues, double timeStep,
                               bool useGasExchange, double *xn, double *x,
                               double *vx, double *vxp, double *yn, double *y,
@@ -236,12 +238,12 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, int *flags, double *xp, double *x,
-                              double *vx, double *vxp, double *yp, double *y,
-                              double *vy, double *vyp, double *zp, double *z,
-                              double *vz, double *vzp, double *rp, double *r,
-                              double *vr, double *vrp, double *x0, double *y0,
-                              double *z0, double *r0);
+                              double *errors, int *toBeDeleted, double *xp,
+                              double *x, double *vx, double *vxp, double *yp,
+                              double *y, double *vy, double *vyp, double *zp,
+                              double *z, double *vz, double *vzp, double *rp,
+                              double *r, double *vr, double *vrp, double *x0,
+                              double *y0, double *z0, double *r0);
 
 __global__ void endStepKernel(int numValues, double *errors, double *x0,
                               double *y0, double *z0, double *r0,
@@ -257,5 +259,111 @@ pathLengthDistanceKernel(int numValues, dvec interval, double *pathLength,
                          double *x, double *xPrev, double *x0, int *wrapCountX,
                          double *y, double *yPrev, double *y0, int *wrapCountY,
                          double *z, double *zPrev, double *z0, int *wrapCountZ);
+
+template <typename T> __device__ void swapValues(int from, int to, T *arr) {
+    arr[to] = arr[from];
+}
+
+template <typename T, typename... Args>
+__device__ void swapValues(int from, int to, T *arr, Args... args) {
+    swapValues(from, to, arr);
+    swapValues(from, to, args...);
+}
+
+template <typename... Args>
+__global__ void swapDataCountPairs(int numValues, double minRad, int *first,
+                                   int *second, int *toBeDeleted, double *r,
+                                   Args... args) {
+    // Count of pairs to be deleted
+    __shared__ int tbds[128];
+    tbds[threadIdx.x] = 0;
+
+    // The first 32 threads of the first block swap the data
+    if (blockIdx.x == 0 && threadIdx.x < 32) {
+        const int nNew = numValues - dNumToBeDeleted;
+        for (int i = threadIdx.x; i < dNumToBeDeleted; i += 32) {
+            // If the to-be-deleted index is inside the remaining indices,
+            // it will be swapped with one from the back that won't be
+            // removed but which is outside the new range (i.e. would be
+            // erroneously removed).
+            const int idx1 = toBeDeleted[i];
+            if (idx1 < nNew) {
+                // Count how many values before this ith value are swapped
+                // from the back. In other words, count how many good values
+                // to skip, before we choose which one to swap with idx1.
+                int fromBack = i;
+                int j = 0;
+                while (j < i) {
+                    if (toBeDeleted[j] >= nNew) {
+                        fromBack -= 1;
+                    }
+                    j += 1;
+                }
+
+                // Find the index idx2 of the jth remaining (i.e. "good")
+                // value from the back, which still lies outside the new
+                // range.
+                j = 0;
+                int idx2 = numValues - 1;
+                while (idx2 >= nNew && (r[idx2] < minRad || j != fromBack)) {
+                    if (r[idx2] >= minRad) {
+                        j += 1;
+                    }
+                    idx2 -= 1;
+                }
+
+                // Append the old indices for later use
+                toBeDeleted[i + dNumToBeDeleted] = idx2;
+
+                // Swap all the given arrays, including radius
+                swapValues(idx2, idx1, r);
+                swapValues(idx2, idx1, args...);
+            } else {
+                toBeDeleted[i + dNumToBeDeleted] = idx1;
+            }
+        }
+    }
+
+    // All threads check how many pairs are to be deleted
+    for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairs;
+         i += blockDim.x * gridDim.x) {
+        int j = 0;
+        while (j < dNumToBeDeleted) {
+            const int tbd = toBeDeleted[j];
+            if (first[i] == tbd || second[i] == tbd) {
+                tbds[threadIdx.x] += 1;
+            }
+            j += 1;
+        }
+    }
+
+    __syncthreads();
+
+    if (threadIdx.x < 32) {
+        tbds[threadIdx.x] += tbds[threadIdx.x + 32];
+        tbds[threadIdx.x] += tbds[threadIdx.x + 64];
+        tbds[threadIdx.x] += tbds[threadIdx.x + 96];
+
+        if (threadIdx.x < 8) {
+            tbds[threadIdx.x] += tbds[threadIdx.x + 8];
+            tbds[threadIdx.x] += tbds[threadIdx.x + 16];
+            tbds[threadIdx.x] += tbds[threadIdx.x + 24];
+
+            if (threadIdx.x < 2) {
+                tbds[threadIdx.x] += tbds[threadIdx.x + 2];
+                tbds[threadIdx.x] += tbds[threadIdx.x + 4];
+                tbds[threadIdx.x] += tbds[threadIdx.x + 6];
+
+                if (threadIdx.x < 1) {
+                    tbds[threadIdx.x] += tbds[threadIdx.x + 1];
+                    atomicAdd(&dNumPairsNew, -tbds[0]);
+                }
+            }
+        }
+    }
+}
+
+__global__ void addVolumeFixPairs(int numValues, int *first, int *second,
+                                  int *toBeDeleted, double *r);
 
 } // namespace cubble
