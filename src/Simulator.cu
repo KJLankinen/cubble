@@ -1264,9 +1264,9 @@ void commonSetup(Params &params) {
         reinterpret_cast<void **>(&params.numToBeDeleted), dNumToBeDeleted));
 
     // Set device globals to zero
-    const double zero = 0.0;
-    const int zeroI = 0;
-    const bool falseB = false;
+    double zero = 0.0;
+    int zeroI = 0;
+    bool falseB = false;
     CUDA_CALL(cudaMemcpyToSymbol(dTotalArea, reinterpret_cast<void *>(&zero),
                                  sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(
