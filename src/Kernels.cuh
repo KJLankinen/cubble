@@ -84,7 +84,6 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalAreaPerRadius = 0.0;
         dTotalVolume = 0.0;
         dVolumeMultiplier = 0.0;
-        dNumBubblesAboveMinRad = 0;
         dNumToBeDeleted = 0;
         dNumPairsNew = dNumPairs;
     }
