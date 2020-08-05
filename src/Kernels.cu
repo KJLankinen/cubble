@@ -878,20 +878,6 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
     }
 }
 
-__global__ void addVolume(double *r, int numValues) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-         i += gridDim.x * blockDim.x) {
-        double multiplier = 1.0 + dVolumeMultiplier / dTotalVolume;
-
-#if (NUM_DIM == 3)
-        multiplier = cbrt(multiplier);
-#else
-        multiplier = sqrt(multiplier);
-#endif
-        r[i] = r[i] * multiplier;
-    }
-}
-
 __global__ void predictKernel(int numValues, double timeStep,
                               bool useGasExchange, double *xn, double *x,
                               double *vx, double *vxp, double *yn, double *y,
