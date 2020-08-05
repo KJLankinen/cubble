@@ -1208,22 +1208,21 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                 // neither of the pairs is in the to-be-deleted list.
                 bool pairFound = false;
                 int swapIdx = 0;
-                while
-                    !pairFound {
-                        pairFound = true;
-                        swapIdx = atomicAdd(&dNumPairs, -1) - 1;
-                        const int swap1 = first[swapIdx];
-                        const int swap2 = second[swapIdx];
-                        int k = 0;
-                        while (k < dNumToBeDeleted) {
-                            tbd = toBeDeleted[k];
-                            if (swap1 == tbd || swap2 == tbd) {
-                                pairFound = false;
-                                break;
-                            }
-                            k += 1;
+                while (!pairFound) {
+                    pairFound = true;
+                    swapIdx = atomicAdd(&dNumPairs, -1) - 1;
+                    const int swap1 = first[swapIdx];
+                    const int swap2 = second[swapIdx];
+                    int k = 0;
+                    while (k < dNumToBeDeleted) {
+                        tbd = toBeDeleted[k];
+                        if (swap1 == tbd || swap2 == tbd) {
+                            pairFound = false;
+                            break;
                         }
+                        k += 1;
                     }
+                }
                 first[i] = first[swapIdx];
                 second[i] = second[swapIdx];
                 break;
