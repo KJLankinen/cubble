@@ -16,7 +16,6 @@ extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
-extern __device__ int dNumBubblesAboveMinRad;
 extern __device__ double dVolumeMultiplier;
 
 template <typename... Arguments>
