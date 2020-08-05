@@ -1176,7 +1176,7 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
     // If the to-be-added volume is very small, don't add it yet.
     double volMul = 1.0;
-    if (dVolumeMultiplier > dTotalVolume * 0.001) {
+    if (dVolumeMultiplier > dTotalVolume * 0.0001) {
         volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
         if (threadIdx.x == 0 && blockIdx.x == 0) {
             dResetVolume = true;
