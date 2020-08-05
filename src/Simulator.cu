@@ -607,6 +607,12 @@ void saveSnapshotToFile(Params &params) {
                 doubleData[i + (uint32_t)DDP::DZDT * params.state.dataStride];
             const double vr =
                 doubleData[i + (uint32_t)DDP::DRDT * params.state.dataStride];
+            const double path =
+                doubleData[i + (uint32_t)DDP::PATH * params.state.dataStride];
+            const double distance = doubleData[i + (uint32_t)DDP::DISTANCE *
+                                                       params.state.dataStride];
+            const double energy =
+                doubleData[i + (uint32_t)DDP::ENERGY * params.state.dataStride];
             const double px = params.previousX[intData[i]];
             const double py = params.previousY[intData[i]];
             const double pz = params.previousZ[intData[i]];
@@ -642,11 +648,11 @@ void saveSnapshotToFile(Params &params) {
             file << ",";
             file << vr;
             file << ",";
-            file << doubleData[i + 15 * params.state.dataStride];
+            file << path;
             file << ",";
-            file << doubleData[i + 16 * params.state.dataStride];
+            file << distance;
             file << ",";
-            file << doubleData[i + 29 * params.state.dataStride];
+            file << energy;
             file << ",";
             file << sqrt(displX * displX + displY * displY + displZ * displZ);
             file << ",";
@@ -1315,8 +1321,10 @@ void commonSetup(Params &params) {
 
     // Integers
     // It seems to roughly hold that in 3 dimensions the total number of
-    // neighbors is < (24 x numBubbles) and in 2D < (8 x numBubbles)
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 8;
+    // neighbors is < (10 x numBubbles) and in 2D < (3.5 x numBubbles)
+    // Note that these numbers depend on the "skin radius", i.e.
+    // from how far are the neighbors looked for.
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 4;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
