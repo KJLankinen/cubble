@@ -1231,6 +1231,8 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
             } else if (idx2 == swapped) {
                 second[i] = toBeDeleted[j];
             }
+
+            j += 1;
         }
 
         if (i < numValues) {
