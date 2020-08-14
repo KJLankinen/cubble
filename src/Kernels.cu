@@ -304,7 +304,8 @@ __device__ __host__ unsigned int compact1By2(unsigned int x) {
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             int *second, dvec interval, double skinRadius,
-                            double *x, double *y, double *z) {
+                            double *x, double *y, double *z,
+                            int *numNeighbors) {
     const double r1 = r[idx1];
     const double r2 = r[idx2];
     double maxDistance = r1 + r2 + skinRadius;
@@ -321,6 +322,8 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
+        atomicAdd(&numNeighbors[idx1], 1);
+        atomicAdd(&numNeighbors[idx2], 1);
         id = atomicAdd(&dNumPairs, 1);
         first[id] = idx1;
         second[id] = idx2;
@@ -448,7 +451,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                                int numCells, int numMaxPairs, double skinRadius,
                                int *offsets, int *sizes, int *first,
                                int *second, double *r, dvec interval, double *x,
-                               double *y, double *z) {
+                               double *y, double *z, int *numNeighbors) {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 =
@@ -482,7 +485,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, r, first, second, interval, skinRadius,
-                            x, y, z);
+                            x, y, z, numNeighbors);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -503,7 +506,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, r, first, second, interval, skinRadius,
-                            x, y, z);
+                            x, y, z, numNeighbors);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -631,8 +634,6 @@ __global__ void neighborVelocityKernel(int *first, int *second,
          i += gridDim.x * blockDim.x) {
         const int idx1 = first[i];
         const int idx2 = second[i];
-        atomicAdd(&numNeighbors[idx1], 1);
-        atomicAdd(&numNeighbors[idx2], 1);
 
         atomicAdd(&sumX[idx1], vx[idx2]);
         atomicAdd(&sumX[idx2], vx[idx1]);

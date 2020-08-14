@@ -166,7 +166,7 @@ __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
                             int *second, dvec interval, double skinRadius,
-                            double *x, double *y, double *z);
+                            double *x, double *y, double *z, int *numNeighbors);
 
 __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
                            double *y, double *z, int *mx, int *my, int *mz);
@@ -189,7 +189,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                                int numCells, int numMaxPairs, double skinRadius,
                                int *offsets, int *sizes, int *first,
                                int *second, double *r, dvec interval, double *x,
-                               double *y, double *z);
+                               double *y, double *z, int *numNeighbors);
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
                                    int *pair2, double *r, dvec interval,
@@ -201,8 +201,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *vz, dvec lbb, dvec tfr,
                                    double fZeroPerMuZero, double dragCoeff);
 
-__global__ void neighborVelocityKernel(int *first, int *second,
-                                       int *numNeighbors, double *sumX,
+__global__ void neighborVelocityKernel(int *first, int *second, double *sumX,
                                        double *sumY, double *sumZ, double *vx,
                                        double *vy, double *vz);
 

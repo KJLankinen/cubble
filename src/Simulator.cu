@@ -75,6 +75,7 @@ enum class DIP {
     WRAP_COUNT_Z,
 
     INDEX,
+    NUM_NEIGHBORS,
 
     PAIR1,
     PAIR2,
@@ -344,6 +345,7 @@ dim3 getGridSize(Params &params) {
 }
 
 void updateCellsAndNeighbors(Params &params) {
+    NVTX_RANGE_PUSH_A("Neighbors");
     params.state.numNeighborsSearched++;
     // Boundary wrap
     KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, 0,
@@ -390,6 +392,10 @@ void updateCellsAndNeighbors(Params &params) {
         sizeof(int) * params.state.pairStride *
         ((uint64_t)DIP::NUM_VALUES - (uint64_t)DIP::PAIR1);
     CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::PAIR1], 0, resetBytes));
+
+    // Reset number of neighbors to zero as they will be calculated again
+    CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::NUM_NEIGHBORS], 0,
+                         sizeof(int) * params.state.dataStride));
 
     KERNEL_LAUNCH(assignBubblesToCells, params.pairKernelSize, 0, 0,
                   params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
@@ -490,7 +496,8 @@ void updateCellsAndNeighbors(Params &params) {
                       params.ddps[(uint32_t)DDP::R], params.state.interval,
                       params.ddps[(uint32_t)DDP::X],
                       params.ddps[(uint32_t)DDP::Y],
-                      params.ddps[(uint32_t)DDP::Z]);
+                      params.ddps[(uint32_t)DDP::Z],
+                      params.dips[(uint32_t)DIP::NUM_NEIGHBORS]);
     }
 
     CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.state.numPairs),
@@ -503,6 +510,7 @@ void updateCellsAndNeighbors(Params &params) {
         params.dips[(uint32_t)DIP::PAIR1],
         const_cast<const int *>(params.dips[(uint32_t)DIP::PAIR2COPY]),
         params.dips[(uint32_t)DIP::PAIR2], params.state.numPairs);
+    NVTX_RANGE_POP();
 }
 
 void deleteSmallBubbles(Params &params, int numToBeDeleted) {
@@ -528,7 +536,8 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
         params.dips[(uint32_t)DIP::WRAP_COUNT_X],
         params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
         params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
-        params.dips[(uint32_t)DIP::INDEX]);
+        params.dips[(uint32_t)DIP::INDEX],
+        params.dips[(uint32_t)DIP::NUM_NEIGHBORS]);
 
     KERNEL_LAUNCH(
         addVolumeFixPairs, params.pairKernelSize, 0, 0, params.state.numBubbles,
@@ -859,13 +868,9 @@ void velocityCalculation(Params &params) {
     // Flow velocity
 #if (USE_FLOW == 1)
     {
-        CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::PAIR1COPY], 0,
-                             sizeof(int) * params.state.pairStride));
-        int *numNeighbors = params.dips[(uint32_t)DIP::PAIR1COPY];
-
         KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
                       params.velocityStream, params.dips[(uint32_t)DIP::PAIR1],
-                      params.dips[(uint32_t)DIP::PAIR2], numNeighbors,
+                      params.dips[(uint32_t)DIP::PAIR2],
                       params.ddps[(uint32_t)DDP::FLOW_VX],
                       params.ddps[(uint32_t)DDP::FLOW_VY],
                       params.ddps[(uint32_t)DDP::FLOW_VZ],
@@ -875,7 +880,7 @@ void velocityCalculation(Params &params) {
 
         KERNEL_LAUNCH(
             flowVelocityKernel, params.pairKernelSize, 0, params.velocityStream,
-            params.state.numBubbles, numNeighbors,
+            params.state.numBubbles, params.dips[(uint32_t)DIP::NUM_NEIGHBORS],
             params.ddps[(uint32_t)DDP::DXDTP],
             params.ddps[(uint32_t)DDP::DYDTP],
             params.ddps[(uint32_t)DDP::DZDTP],
