@@ -626,8 +626,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
     }
 }
 
-__global__ void neighborVelocityKernel(int *first, int *second,
-                                       int *numNeighbors, double *sumX,
+__global__ void neighborVelocityKernel(int *first, int *second, double *sumX,
                                        double *sumY, double *sumZ, double *vx,
                                        double *vy, double *vz) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
