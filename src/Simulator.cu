@@ -1993,15 +1993,33 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
               << "phi" << std::setw(10) << std::left << "R" << std::setw(10)
               << std::left << "#b" << std::setw(10) << std::left << "#pairs"
               << std::setw(10) << std::left << "#steps" << std::setw(10)
-              << std::left << "#searches" << std::endl;
+              << std::left << "#searches" << std::setw(10) << std::left
+              << "min ts" << std::setw(10) << std::left << "max ts"
+              << std::setw(10) << std::left << "avg ts" << std::endl;
 
     bool continueIntegration = true;
     while (continueIntegration) {
+        double minTimestep = 9999999.9;
+        double maxTimestep = -1.0;
+        double avgTimestep = 0.0;
+
         continueIntegration = integrate(params);
+
+        // For profiling
         CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
         CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 5000,
                            continueIntegration);
+
         continueIntegration &= signalReceived == 0;
+
+        // Track timestep
+        minTimestep = params.state.timeStep < minTimestep
+                          ? params.state.timeStep
+                          : minTimestep;
+        maxTimestep = params.state.timeStep > maxTimestep
+                          ? params.state.timeStep
+                          : maxTimestep;
+        avgTimestep += params.state.timeStep;
 
         // Here we compare potentially very large integers (> 10e6) to each
         // other and small doubles (<= 1.0) to each other to preserve precision.
@@ -2086,6 +2104,10 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
                       << std::setw(10) << std::left
                       << params.state.numStepsInTimeStep << std::setw(10)
                       << std::left << params.state.numNeighborsSearched
+                      << std::setw(10) << std::left << minTimestep
+                      << std::setw(10) << std::left << maxTimestep
+                      << std::setw(10) << std::left
+                      << avgTimestep / params.state.numStepsInTimeStep
                       << std::endl;
 
             ++params.state.timesPrinted;
