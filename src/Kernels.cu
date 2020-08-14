@@ -903,12 +903,13 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, int *toBeDeleted, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp, double *x0,
-                              double *y0, double *z0, double *r0) {
+                              double *errors, double *reducedValues,
+                              int *toBeDeleted, double *xp, double *x,
+                              double *vx, double *vxp, double *yp, double *y,
+                              double *vy, double *vyp, double *zp, double *z,
+                              double *vz, double *vzp, double *rp, double *r,
+                              double *vr, double *vrp, double *x0, double *y0,
+                              double *z0, double *r0) {
     // Adams-Moulton integration
     int tid = threadIdx.x;
     // maximum error
@@ -975,6 +976,10 @@ __global__ void correctKernel(int numValues, double timeStep,
         corrected = ex > ey
                         ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
                         : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
+        // Store the maximum error per bubble in device memory
+        errors[i] = corrected;
+
+        // Store the maximum error this thread has encountered
         me[tid] = me[tid] > corrected ? me[tid] : corrected;
 
         boundexp[tid] = boundexp[tid] > dist ? boundexp[tid] : dist;
@@ -982,6 +987,7 @@ __global__ void correctKernel(int numValues, double timeStep,
 
     __syncthreads();
 
+    // Perform reductions for the values stored in shared memory
     if (tid < 32) {
         me[tid] = me[tid] > me[32 + tid] ? me[tid] : me[32 + tid];
         me[tid] = me[tid] > me[64 + tid] ? me[tid] : me[64 + tid];
@@ -1062,14 +1068,14 @@ __global__ void correctKernel(int numValues, double timeStep,
 
                 if (tid == 0) {
                     me[tid] = me[tid] > me[1] ? me[tid] : me[1];
-                    errors[blockIdx.x] = me[tid];
+                    reducedValues[blockIdx.x] = me[tid];
 
                     mr[tid] = mr[tid] > mr[1] ? mr[tid] : mr[1];
-                    errors[blockIdx.x + gridDim.x] = mr[tid];
+                    reducedValues[blockIdx.x + gridDim.x] = mr[tid];
 
                     boundexp[tid] = boundexp[tid] > boundexp[1] ? boundexp[tid]
                                                                 : boundexp[1];
-                    errors[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
+                    reducedValues[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
 
                     tv[tid] += tv[1];
                     atomicAdd(&dTotalVolume, tv[tid]);

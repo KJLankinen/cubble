@@ -51,8 +51,8 @@ enum class DDP {
 
     PATH,
     DISTANCE,
-    ENERGY,
     ERROR,
+    TEMP_DATA,
 
     FLOW_VX,
     FLOW_VY,
@@ -428,47 +428,49 @@ void updateCellsAndNeighbors(Params &params) {
     };
 
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::X,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Y,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Z,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::R,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DXDT,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DYDT,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DZDT,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DRDT,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DXDTO,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DYDTO,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DZDTO,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::DRDTO,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::X0,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Y0,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::Z0,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::PATH,
-                (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps,
-                (uint32_t)DDP::DISTANCE, (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::DISTANCE, (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps,
-                (uint32_t)DDP::SAVED_X, (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::SAVED_X, (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps,
-                (uint32_t)DDP::SAVED_Y, (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::SAVED_Y, (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps,
-                (uint32_t)DDP::SAVED_Z, (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::SAVED_Z, (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.ddps,
-                (uint32_t)DDP::SAVED_R, (uint32_t)DDP::ENERGY);
+                (uint32_t)DDP::SAVED_R, (uint32_t)DDP::TEMP_DATA);
+    copyAndSwap(params, sortedBubbleIndices, params.ddps, (uint32_t)DDP::ERROR,
+                (uint32_t)DDP::TEMP_DATA);
     copyAndSwap(params, sortedBubbleIndices, params.dips,
                 (uint32_t)DIP::WRAP_COUNT_X, (uint32_t)DIP::TEMP);
     copyAndSwap(params, sortedBubbleIndices, params.dips,
@@ -532,7 +534,7 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
         params.ddps[(uint32_t)DDP::SAVED_X],
         params.ddps[(uint32_t)DDP::SAVED_Y],
         params.ddps[(uint32_t)DDP::SAVED_Z],
-        params.ddps[(uint32_t)DDP::SAVED_R],
+        params.ddps[(uint32_t)DDP::SAVED_R], params.ddps[(uint32_t)DDP::ERROR],
         params.dips[(uint32_t)DIP::WRAP_COUNT_X],
         params.dips[(uint32_t)DIP::WRAP_COUNT_Y],
         params.dips[(uint32_t)DIP::WRAP_COUNT_Z],
@@ -557,13 +559,14 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
 void saveSnapshotToFile(Params &params) {
     // Calculate total energy
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ENERGY]);
+                  params.state.numBubbles,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA]);
 
     KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                   params.dips[(uint32_t)DIP::PAIR2],
                   params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.interval,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                   params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                   params.ddps[(uint32_t)DDP::Z]);
 
@@ -598,7 +601,7 @@ void saveSnapshotToFile(Params &params) {
         }
 
         file << "x,y,z,r,vx,vy,vz,vtot,vr,path,distance,energy,displacement,"
-                "index\n";
+                "error,index\n ";
         for (uint64_t i = 0; i < (uint64_t)params.state.numBubbles; ++i) {
             const double x =
                 doubleData[i + (uint32_t)DDP::X * params.state.dataStride];
@@ -620,8 +623,10 @@ void saveSnapshotToFile(Params &params) {
                 doubleData[i + (uint32_t)DDP::PATH * params.state.dataStride];
             const double distance = doubleData[i + (uint32_t)DDP::DISTANCE *
                                                        params.state.dataStride];
-            const double energy =
-                doubleData[i + (uint32_t)DDP::ENERGY * params.state.dataStride];
+            const double error =
+                doubleData[i + (uint32_t)DDP::ERROR * params.state.dataStride];
+            const double energy = doubleData[i + (uint32_t)DDP::TEMP_DATA *
+                                                     params.state.dataStride];
             const double px = params.previousX[intData[i]];
             const double py = params.previousY[intData[i]];
             const double pz = params.previousZ[intData[i]];
@@ -665,6 +670,8 @@ void saveSnapshotToFile(Params &params) {
             file << ",";
             file << sqrt(displX * displX + displY * displY + displZ * displZ);
             file << ",";
+            file << error;
+            file << ",";
             file << intData[i + 0 * params.state.dataStride];
             file << "\n";
 
@@ -686,18 +693,19 @@ double stabilize(Params &params) {
 
     // Energy before stabilization
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ENERGY]);
+                  params.state.numBubbles,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA]);
 
     KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                   params.dips[(uint32_t)DIP::PAIR2],
                   params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.interval,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                   params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                   params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy1 = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::ENERGY],
+        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP_DATA],
         params.state.numBubbles);
 
     for (int i = 0; i < params.inputs.numStepsToRelax; ++i) {
@@ -706,8 +714,7 @@ double stabilize(Params &params) {
                           params.state.numBubbles,
                           params.ddps[(uint32_t)DDP::DXDTP],
                           params.ddps[(uint32_t)DDP::DYDTP],
-                          params.ddps[(uint32_t)DDP::DZDTP],
-                          params.ddps[(uint32_t)DDP::ERROR]);
+                          params.ddps[(uint32_t)DDP::DZDTP]);
 
             KERNEL_LAUNCH(
                 predictKernel, params.pairKernelSize, 0, 0,
@@ -753,6 +760,7 @@ double stabilize(Params &params) {
                 correctKernel, params.pairKernelSize, 0, 0,
                 params.state.numBubbles, params.state.timeStep, false,
                 params.inputs.minRad, params.ddps[(uint32_t)DDP::ERROR],
+                params.ddps[(uint32_t)DDP::TEMP_DATA],
                 params.dips[(uint32_t)DIP::TEMP],
                 params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
                 params.ddps[(uint32_t)DDP::DXDT],
@@ -773,7 +781,7 @@ double stabilize(Params &params) {
 
             KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
                           params.gasStream, params.state.numBubbles,
-                          params.ddps[(uint32_t)DDP::ERROR],
+                          params.ddps[(uint32_t)DDP::TEMP_DATA],
                           params.ddps[(uint32_t)DDP::SAVED_X],
                           params.ddps[(uint32_t)DDP::SAVED_Y],
                           params.ddps[(uint32_t)DDP::SAVED_Z],
@@ -782,7 +790,7 @@ double stabilize(Params &params) {
 
             CUDA_CALL(cudaMemcpyAsync(
                 static_cast<void *>(params.pinnedDouble),
-                params.ddps[(uint32_t)DDP::ERROR], 3 * sizeof(double),
+                params.ddps[(uint32_t)DDP::TEMP_DATA], 3 * sizeof(double),
                 cudaMemcpyDeviceToHost, params.gasStream));
 
             CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
@@ -837,18 +845,19 @@ double stabilize(Params &params) {
 
     // Energy after stabilization
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ENERGY]);
+                  params.state.numBubbles,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA]);
 
     KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                   params.dips[(uint32_t)DIP::PAIR2],
                   params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.interval,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                   params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                   params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy2 = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::ENERGY],
+        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP_DATA],
         params.state.numBubbles);
 
     return elapsedTime;
@@ -914,15 +923,15 @@ void gasExchangeCalculation(Params &params) {
         params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.state.interval,
         params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::DRDTP],
-        params.ddps[(uint32_t)DDP::ENERGY], params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::TEMP_DATA], params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP]);
 
     KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.pairKernelSize, 0,
                   params.gasStream, params.ddps[(uint32_t)DDP::DRDTP],
                   params.ddps[(uint32_t)DDP::RP],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.numBubbles,
-                  params.inputs.kappa, params.inputs.kParameter,
-                  params.state.averageSurfaceAreaIn);
+                  params.ddps[(uint32_t)DDP::TEMP_DATA],
+                  params.state.numBubbles, params.inputs.kappa,
+                  params.inputs.kParameter, params.state.averageSurfaceAreaIn);
 }
 
 bool integrate(Params &params) {
@@ -941,7 +950,7 @@ bool integrate(Params &params) {
                       params.ddps[(uint32_t)DDP::DYDTP],
                       params.ddps[(uint32_t)DDP::DZDTP],
                       params.ddps[(uint32_t)DDP::DRDTP],
-                      params.ddps[(uint32_t)DDP::ENERGY],
+                      params.ddps[(uint32_t)DDP::TEMP_DATA],
                       params.ddps[(uint32_t)DDP::FLOW_VX],
                       params.ddps[(uint32_t)DDP::FLOW_VY],
                       params.ddps[(uint32_t)DDP::FLOW_VZ]);
@@ -969,15 +978,17 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(
             correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
             params.state.timeStep, true, params.inputs.minRad,
-            params.ddps[(uint32_t)DDP::ERROR], params.dips[(uint32_t)DIP::TEMP],
-            params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
-            params.ddps[(uint32_t)DDP::DXDT], params.ddps[(uint32_t)DDP::DXDTP],
-            params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::Y],
-            params.ddps[(uint32_t)DDP::DYDT], params.ddps[(uint32_t)DDP::DYDTP],
-            params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::Z],
-            params.ddps[(uint32_t)DDP::DZDT], params.ddps[(uint32_t)DDP::DZDTP],
-            params.ddps[(uint32_t)DDP::RP], params.ddps[(uint32_t)DDP::R],
-            params.ddps[(uint32_t)DDP::DRDT], params.ddps[(uint32_t)DDP::DRDTP],
+            params.ddps[(uint32_t)DDP::ERROR],
+            params.ddps[(uint32_t)DDP::TEMP_DATA],
+            params.dips[(uint32_t)DIP::TEMP], params.ddps[(uint32_t)DDP::XP],
+            params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
+            params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
+            params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::DYDT],
+            params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::ZP],
+            params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::DZDT],
+            params.ddps[(uint32_t)DDP::DZDTP], params.ddps[(uint32_t)DDP::RP],
+            params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::DRDT],
+            params.ddps[(uint32_t)DDP::DRDTP],
             params.ddps[(uint32_t)DDP::SAVED_X],
             params.ddps[(uint32_t)DDP::SAVED_Y],
             params.ddps[(uint32_t)DDP::SAVED_Z],
@@ -991,7 +1002,7 @@ bool integrate(Params &params) {
 
         KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
                       params.velocityStream, params.state.numBubbles,
-                      params.ddps[(uint32_t)DDP::ERROR],
+                      params.ddps[(uint32_t)DDP::TEMP_DATA],
                       params.ddps[(uint32_t)DDP::SAVED_X],
                       params.ddps[(uint32_t)DDP::SAVED_Y],
                       params.ddps[(uint32_t)DDP::SAVED_Z],
@@ -1001,7 +1012,7 @@ bool integrate(Params &params) {
         // Copy maximum error, maximum radius and maximum boundary expansion to
         // pinned memory. See correctKernel and endStepKernel for details.
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
-                                  params.ddps[(uint32_t)DDP::ERROR],
+                                  params.ddps[(uint32_t)DDP::TEMP_DATA],
                                   3 * sizeof(double), cudaMemcpyDeviceToHost,
                                   params.velocityStream));
 
@@ -1011,7 +1022,7 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(
             pathLengthDistanceKernel, params.pairKernelSize, 0,
             params.gasStream, params.state.numBubbles, params.state.interval,
-            params.ddps[(uint32_t)DDP::ENERGY],
+            params.ddps[(uint32_t)DDP::TEMP_DATA],
             params.ddps[(uint32_t)DDP::PATH],
             params.ddps[(uint32_t)DDP::DISTANCE],
             params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
@@ -1076,8 +1087,8 @@ bool integrate(Params &params) {
     params.ddps[(uint32_t)DDP::RP] = swapper;
 
     swapper = params.ddps[(uint32_t)DDP::PATH];
-    params.ddps[(uint32_t)DDP::PATH] = params.ddps[(uint32_t)DDP::ENERGY];
-    params.ddps[(uint32_t)DDP::ENERGY] = swapper;
+    params.ddps[(uint32_t)DDP::PATH] = params.ddps[(uint32_t)DDP::TEMP_DATA];
+    params.ddps[(uint32_t)DDP::TEMP_DATA] = swapper;
 
     ++params.state.numIntegrationSteps;
 
@@ -1131,10 +1142,11 @@ void transformPositions(Params &params, bool normalize) {
 double calculateVolumeOfBubbles(Params &params) {
     KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
                   params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.numBubbles);
+                  params.ddps[(uint32_t)DDP::TEMP_DATA],
+                  params.state.numBubbles);
 
     return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::ENERGY],
+        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP_DATA],
         params.state.numBubbles);
 }
 
@@ -1579,18 +1591,19 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     // Calculate the energy at starting positions
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.state.numBubbles, params.ddps[(uint32_t)DDP::ENERGY]);
+                  params.state.numBubbles,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA]);
 
     KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                   params.dips[(uint32_t)DIP::PAIR2],
                   params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::ENERGY], params.state.interval,
+                  params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                   params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                   params.ddps[(uint32_t)DDP::Z]);
 
     params.state.energy1 = params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::ENERGY],
+        &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP_DATA],
         params.state.numBubbles);
     params.state.timeInteger = 0;
     params.state.timeFraction = 0.0;
@@ -2036,14 +2049,14 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
             // Calculate total energy
             KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                           params.state.numBubbles,
-                          params.ddps[(uint32_t)DDP::ENERGY]);
+                          params.ddps[(uint32_t)DDP::TEMP_DATA]);
 
             KERNEL_LAUNCH(
                 potentialEnergyKernel, params.pairKernelSize, 0, 0,
                 params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                 params.dips[(uint32_t)DIP::PAIR2],
                 params.ddps[(uint32_t)DDP::R],
-                params.ddps[(uint32_t)DDP::ENERGY], params.state.interval,
+                params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                 params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                 params.ddps[(uint32_t)DDP::Z]);
 
@@ -2057,7 +2070,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
             };
 
             params.state.energy2 =
-                getSum(params.ddps[(uint32_t)DDP::ENERGY], params);
+                getSum(params.ddps[(uint32_t)DDP::TEMP_DATA], params);
             const double dE = (params.state.energy2 - params.state.energy1) /
                               params.state.energy2;
             const double relRad =

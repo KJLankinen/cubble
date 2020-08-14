@@ -235,12 +235,13 @@ __global__ void predictKernel(int numValues, double timeStep,
 
 __global__ void correctKernel(int numValues, double timeStep,
                               bool useGasExchange, double minRad,
-                              double *errors, int *toBeDeleted, double *xp,
-                              double *x, double *vx, double *vxp, double *yp,
-                              double *y, double *vy, double *vyp, double *zp,
-                              double *z, double *vz, double *vzp, double *rp,
-                              double *r, double *vr, double *vrp, double *x0,
-                              double *y0, double *z0, double *r0);
+                              double *errors, double *reducedValues,
+                              int *toBeDeleted, double *xp, double *x,
+                              double *vx, double *vxp, double *yp, double *y,
+                              double *vy, double *vyp, double *zp, double *z,
+                              double *vz, double *vzp, double *rp, double *r,
+                              double *vr, double *vrp, double *x0, double *y0,
+                              double *z0, double *r0);
 
 __global__ void endStepKernel(int numValues, double *errors, double *x0,
                               double *y0, double *z0, double *r0,
