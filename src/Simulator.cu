@@ -1589,11 +1589,13 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemset(params.dips[(uint32_t)DIP::WRAP_COUNT_Z], 0,
                          params.state.dataStride * sizeof(int)));
 
-    // Calculate the energy at starting positions
+    // Reset temp for energy, and errors since integration starts after this
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.state.numBubbles,
-                  params.ddps[(uint32_t)DDP::TEMP_DATA]);
+                  params.ddps[(uint32_t)DDP::TEMP_DATA],
+                  params.ddps[(uint32_t)DDP::ERROR]);
 
+    // Calculate the energy at starting positions
     KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
                   params.state.numBubbles, params.dips[(uint32_t)DIP::PAIR1],
                   params.dips[(uint32_t)DIP::PAIR2],
@@ -2014,6 +2016,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
     double minTimestep = 9999999.9;
     double maxTimestep = -1.0;
     double avgTimestep = 0.0;
+    bool resetErrors = false;
 
     while (continueIntegration) {
         continueIntegration = integrate(params);
@@ -2130,18 +2133,29 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
             minTimestep = 9999999.9;
             maxTimestep = -1.0;
             avgTimestep = 0.0;
+            resetErrors = true;
         }
 
-        const double nextSnapshotTime = params.state.numSnapshots /
-                                        params.inputs.snapshotFrequency /
-                                        params.inputs.timeScalingFactor;
-        const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
-        const double nextSnapshotTimeFraction =
-            nextSnapshotTime - nextSnapshotTimeInteger;
+        // Save snapshot
+        if (params.inputs.snapshotFrequency > 0.0) {
+            const double nextSnapshotTime = params.state.numSnapshots /
+                                            params.inputs.snapshotFrequency /
+                                            params.inputs.timeScalingFactor;
+            const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
+            const double nextSnapshotTimeFraction =
+                nextSnapshotTime - nextSnapshotTimeInteger;
 
-        if (params.state.timeInteger >= nextSnapshotTimeInteger &&
-            params.state.timeFraction >= nextSnapshotTimeFraction)
-            saveSnapshotToFile(params);
+            if (params.state.timeInteger >= nextSnapshotTimeInteger &&
+                params.state.timeFraction >= nextSnapshotTimeFraction)
+                saveSnapshotToFile(params);
+        }
+
+        if (resetErrors) {
+            KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                          params.state.numBubbles,
+                          params.ddps[(uint32_t)DDP::ERROR]);
+            resetErrors = false;
+        }
 
         ++params.state.numStepsInTimeStep;
     }

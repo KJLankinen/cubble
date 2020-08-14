@@ -977,7 +977,9 @@ __global__ void correctKernel(int numValues, double timeStep,
                         ? (ex > ez ? (ex > er ? ex : er) : (ez > er ? ez : er))
                         : (ey > ez ? (ey > er ? ey : er) : (ez > er ? ez : er));
         // Store the maximum error per bubble in device memory
-        errors[i] = corrected;
+        // The errors are reset to zero between time steps
+        ez = errors[i];
+        errors[i] = corrected > ez ? corrected : ez;
 
         // Store the maximum error this thread has encountered
         me[tid] = me[tid] > corrected ? me[tid] : corrected;
