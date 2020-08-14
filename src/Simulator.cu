@@ -1998,11 +1998,11 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
               << std::setw(10) << std::left << "avg ts" << std::endl;
 
     bool continueIntegration = true;
-    while (continueIntegration) {
-        double minTimestep = 9999999.9;
-        double maxTimestep = -1.0;
-        double avgTimestep = 0.0;
+    double minTimestep = 9999999.9;
+    double maxTimestep = -1.0;
+    double avgTimestep = 0.0;
 
+    while (continueIntegration) {
         continueIntegration = integrate(params);
 
         // For profiling
@@ -2114,6 +2114,9 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
             params.state.numStepsInTimeStep = 0;
             params.state.energy1 = params.state.energy2;
             params.state.numNeighborsSearched = 0;
+            minTimestep = 9999999.9;
+            maxTimestep = -1.0;
+            avgTimestep = 0.0;
         }
 
         const double nextSnapshotTime = params.state.numSnapshots /
