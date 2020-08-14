@@ -979,7 +979,7 @@ bool integrate(Params &params) {
             correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
             params.state.timeStep, true, params.inputs.minRad,
             params.ddps[(uint32_t)DDP::ERROR],
-            params.ddps[(uint32_t)DDP::FLOW_X],
+            params.ddps[(uint32_t)DDP::FLOW_VX],
             params.dips[(uint32_t)DIP::TEMP], params.ddps[(uint32_t)DDP::XP],
             params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::DXDT],
             params.ddps[(uint32_t)DDP::DXDTP], params.ddps[(uint32_t)DDP::YP],
@@ -1002,7 +1002,7 @@ bool integrate(Params &params) {
 
         KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
                       params.velocityStream, params.state.numBubbles,
-                      params.ddps[(uint32_t)DDP::FLOW_X],
+                      params.ddps[(uint32_t)DDP::FLOW_VX],
                       params.ddps[(uint32_t)DDP::SAVED_X],
                       params.ddps[(uint32_t)DDP::SAVED_Y],
                       params.ddps[(uint32_t)DDP::SAVED_Z],
@@ -1012,7 +1012,7 @@ bool integrate(Params &params) {
         // Copy maximum error, maximum radius and maximum boundary expansion to
         // pinned memory. See correctKernel and endStepKernel for details.
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
-                                  params.ddps[(uint32_t)DDP::FLOW_X],
+                                  params.ddps[(uint32_t)DDP::FLOW_VX],
                                   3 * sizeof(double), cudaMemcpyDeviceToHost,
                                   params.velocityStream));
 
