@@ -101,7 +101,7 @@ TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
-srun " + executable.path + " " + array_input.path "\n\
+srun " + executable.path + " " + array_input.path + "\n\
 tar czf snapshots.tar.gz snapshot.csv.*\n\
 rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
