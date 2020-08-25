@@ -1228,8 +1228,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
             inputJson["sigmaZero"] * params.state.avgRad / inputJson["muZero"];
         params.state.flowLbb = inputJson["flowLbb"];
         params.state.flowTfr = inputJson["flowTfr"];
-        params.state.flowVel =
-            inputJson["flowVel"] * params.state.fZeroPerMuZero;
+        params.state.flowVel = inputJson["flowVel"];
+        params.state.flowVel *= params.state.fZeroPerMuZero;
         params.state.kParameter = inputJson["kParameter"];
         params.state.kappa = inputJson["kappa"];
         params.state.skinRadius = inputJson["skinRadius"] * params.state.avgRad;
@@ -1252,7 +1252,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     relDim = relDim / relDim.x;
     const float d = 2 * params.state.avgRad;
-    float x = inputJson["numBubblesIn"] * d * d / relDim.y;
+    float x = (float)inputJson["numBubblesIn"] * d * d / relDim.y;
     ivec bubblesPerDim = ivec(0, 0, 0);
 
     if (NUM_DIM == 3) {
@@ -1319,7 +1319,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     relDim = inputJson["boxRelDim"];
     relDim.z = (NUM_DIM == 2) ? 1 : relDim.z;
     double t = bubbleVolume /
-               (inputJson["phiTarget"] * relDim.x * relDim.y * relDim.z);
+               ((float)inputJson["phiTarget"] * relDim.x * relDim.y * relDim.z);
     t = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
     params.state.tfr = dvec(t, t, t) * relDim;
     params.state.interval = params.state.tfr - params.state.lbb;
@@ -1350,11 +1350,11 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         double time = stabilize(params, inputJson["numStepsToRelax"]);
         double deltaEnergy =
             std::abs(params.state.energy2 - params.state.energy1) / time;
-        deltaEnergy *= 0.5 * inputJson["sigmaZero"];
+        deltaEnergy *= 0.5 * (float)inputJson["sigmaZero"];
 
         if (deltaEnergy < inputJson["maxDeltaEnergy"]) {
             std::cout << "Final delta energy " << deltaEnergy << " after "
-                      << (numSteps + 1) * inputJson["numStepsToRelax"]
+                      << (numSteps + 1) * (int)inputJson["numStepsToRelax"]
                       << " steps."
                       << "\nEnergy before: " << params.state.energy1
                       << ", energy after: " << params.state.energy2
@@ -1362,13 +1362,13 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                       << std::endl;
             break;
         } else if (numSteps > failsafe) {
-            std::cout << "Over " << failsafe * inputJson["numStepsToRelax"]
+            std::cout << "Over " << failsafe * (int)inputJson["numStepsToRelax"]
                       << " steps taken and required delta energy not reached."
                       << " Check parameters." << std::endl;
             break;
         } else {
             std::cout << std::setw(10) << std::left
-                      << (numSteps + 1) * inputJson["numStepsToRelax"]
+                      << (numSteps + 1) * (int)inputJson["numStepsToRelax"]
                       << std::setw(12) << std::left << std::setprecision(5)
                       << std::scientific << deltaEnergy << std::setw(15)
                       << std::left << std::setprecision(5) << std::fixed
