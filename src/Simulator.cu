@@ -1218,14 +1218,15 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     if (file.is_open()) {
         file >> inputJson;
 
-        assert(inputJson["muZero"] > 0);
+        const double mu = inputJson["muZero"];
+        assert(mu > 0);
         assert(inputJson["wallDragStrength"] >= 0.0 &&
                inputJson["wallDragStrength"] <= 1.0);
 
         params.state.avgRad = inputJson["avgRad"];
         params.state.minRad = 0.1 * params.state.avgRad;
         params.state.fZeroPerMuZero =
-            inputJson["sigmaZero"] * params.state.avgRad / inputJson["muZero"];
+            (float)inputJson["sigmaZero"] * params.state.avgRad / mu;
         params.state.flowLbb = inputJson["flowLbb"];
         params.state.flowTfr = inputJson["flowTfr"];
         params.state.flowVel = inputJson["flowVel"];
