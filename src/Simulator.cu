@@ -1233,7 +1233,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.state.flowVel *= params.state.fZeroPerMuZero;
         params.state.kParameter = inputJson["kParameter"];
         params.state.kappa = inputJson["kappa"];
-        params.state.skinRadius = inputJson["skinRadius"] * params.state.avgRad;
+        params.state.skinRadius =
+            (float)inputJson["skinRadius"] * params.state.avgRad;
         params.state.timeScalingFactor =
             params.state.kParameter /
             (params.state.avgRad * params.state.avgRad);
