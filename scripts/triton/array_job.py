@@ -23,7 +23,6 @@ def main():
     sb_constraint =     "\"volta\""
     sb_mail_user =      os.popen('git config user.email').read().replace("\n", "")
     sb_mail_type =      "ALL"
-    sb_signal =         "USR1@180"
 
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
@@ -40,8 +39,6 @@ def main():
     executable =            File("cubble", data_dir.path)
     array_work_dir =        File("run_$RUN_NUM", data_dir.path)
     array_input =           File(default_input.name, array_work_dir.path)
-    continue_script =       File("continue_script.sh", array_work_dir.path)
-    binary =                File("state.bin", array_work_dir.path) 
     result_file =           File("results.dat", array_work_dir.path)
     temp_dir =              File("$TEMP_DIR", "/tmp")
     print("----------------------------------\n")
@@ -88,36 +85,6 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
             create_folder_and_data_file(run_dir, outfile_path, copy.deepcopy(json_data), json.loads(line.strip()))
             num_runs = counter
 
-    continue_script_str = "\
-#!/bin/bash\n\
-#SBATCH --job-name=cubble_" + sb_name +"\n\
-#SBATCH --mem=" + sb_mem + "\n\
-#SBATCH --time=" + sb_time + "\n\
-#SBATCH --gres=" + sb_gres + "\n\
-#SBATCH --constraint=" + sb_constraint + "\n\
-#SBATCH --mail-user=" + sb_mail_user + "\n\
-#SBATCH --mail-type=" + sb_mail_type + "\n\
-#SBATCH --signal=" + sb_signal + "\n\
-RUN_NUM=$1\n\
-TIMES_CALLED=$2\n\
-TEMP_DIR=$SLURM_JOB_ID\n\
-module load " + sb_modules + "\n\
-mkdir " + temp_dir.path + "\n\
-cd " + temp_dir.path + "\n\
-if [ -f " + result_file.path + " ]; then cp " + result_file.path + " .; fi\n\
-srun " + executable.path + " " + binary.path + " " + binary.name + "\n\
-rm " + binary.path + "\n\
-tar czf snapshots_$TIMES_CALLED.tar.gz snapshot.csv.*\n\
-rm snapshot.csv.*\n\
-mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
-cd " + array_work_dir.path + "\n\
-if [ -f " + binary.name + " ] && [ -f " + continue_script.name + " ] && [[ ( $TIMES_CALLED < 3 ) ]]; \
-then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM $(($TIMES_CALLED + 1)); \
-elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; fi"
-
-    # Important to echo the continue script to file with single quotes to avoid bash variable expansion
-    # See the second to last line of this script.
-
     array_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_" + sb_name + "\n\
@@ -129,19 +96,16 @@ elif [ -f " + continue_script.name + " ]; then rm " + continue_script.name + "; 
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
 #SBATCH --array=0-" + str(num_runs) + "\n\
-#SBATCH --signal=" + sb_signal + "\n\
 RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
-srun " + executable.path + " " + array_input.path + " " + binary.name + "\n\
-tar czf snapshots_0.tar.gz snapshot.csv.*\n\
+srun " + executable.path + " " + array_input.path "\n\
+tar czf snapshots.tar.gz snapshot.csv.*\n\
 rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
-cd " + array_work_dir.path + "\n\
-if [ -f " + binary.name + " ]; then echo \'" + continue_script_str + "\' > " + continue_script.name + "; fi\n\
-if [ -f " + continue_script.name + " ]; then cd " + root_dir.path + "; sbatch " + continue_script.path + " $RUN_NUM 1; fi\n"\
+cd " + array_work_dir.path + "\n"
 
     print("Launching an array of processes that run the simulation.")
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
