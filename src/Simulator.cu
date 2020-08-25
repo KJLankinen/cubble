@@ -89,6 +89,9 @@ struct SimulationState {
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
     dvec interval = dvec(0.0, 0.0, 0.0);
+    dvec flowLbb = dvec(0.0, 0.0, 0.0);
+    dvec flowTfr = dvec(0.0, 0.0, 0.0);
+    dvec flowVel = dvec(0.0, 0.0, 0.0);
 
     uint64_t memReqD = 0;
     uint64_t memReqI = 0;
@@ -102,178 +105,31 @@ struct SimulationState {
     double maxBubbleRadius = 0.0;
     double timeStep = 0.0;
     double averageSurfaceAreaIn = 0.0;
+    double avgRad = 0.0;
+    double minRad = 0.0;
+    double fZeroPerMuZero = 0.0;
+    double kParameter = 0.0;
+    double kappa = 0.0;
+    double timeScalingFactor = 0.0;
+    double skinRadius = 0.0;
+    double errorTolerance = 0.0;
+    double wallDragStrength = 0.0;
+    double snapshotFrequency = 0.0;
 
     int numBubbles = 0;
+    int numBubblesPerCell = 0;
     int maxNumCells = 0;
     int numPairs = 0;
+    int minNumBubbles = 0;
     uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
     uint32_t originalDataStride = 0;
     uint32_t dataStride = 0;
     uint32_t pairStride = 0;
-
-    bool operator==(const SimulationState &o) {
-        bool equal = true;
-        equal &= lbb == o.lbb;
-        equal &= tfr == o.tfr;
-        equal &= interval == o.interval;
-
-        equal &= memReqD == o.memReqD;
-        equal &= memReqI == o.memReqI;
-        equal &= numIntegrationSteps == o.numIntegrationSteps;
-
-        equal &= numStepsInTimeStep == o.numStepsInTimeStep;
-        equal &= timeInteger == o.timeInteger;
-        equal &= timeFraction == o.timeFraction;
-        equal &= energy1 == o.energy1;
-
-        equal &= energy2 == o.energy2;
-        equal &= maxBubbleRadius == o.maxBubbleRadius;
-        equal &= timeStep == o.timeStep;
-
-        equal &= numBubbles == o.numBubbles;
-        equal &= maxNumCells == o.maxNumCells;
-        equal &= numPairs == o.numPairs;
-
-        equal &= numSnapshots == o.numSnapshots;
-        equal &= timesPrinted == o.timesPrinted;
-
-        equal &= originalDataStride == o.originalDataStride;
-        equal &= dataStride == o.dataStride;
-        equal &= pairStride == o.pairStride;
-
-        return equal;
-    }
-
-    void print() {
-        std::cout << "\n---------------State---------------" << std::endl;
-        PRINT_PARAM(lbb);
-        PRINT_PARAM(tfr);
-        PRINT_PARAM(interval);
-        PRINT_PARAM(memReqD);
-        PRINT_PARAM(memReqI);
-        PRINT_PARAM(numIntegrationSteps);
-        PRINT_PARAM(numStepsInTimeStep);
-        PRINT_PARAM(timeInteger);
-        PRINT_PARAM(timeFraction);
-        PRINT_PARAM(energy1);
-        PRINT_PARAM(energy2);
-        PRINT_PARAM(maxBubbleRadius);
-        PRINT_PARAM(timeStep);
-        PRINT_PARAM(averageSurfaceAreaIn);
-        PRINT_PARAM(numBubbles);
-        PRINT_PARAM(maxNumCells);
-        PRINT_PARAM(numPairs);
-        PRINT_PARAM(numSnapshots);
-        PRINT_PARAM(timesPrinted);
-        PRINT_PARAM(originalDataStride);
-        PRINT_PARAM(dataStride);
-        PRINT_PARAM(pairStride);
-        std::cout << "----------------End----------------\n" << std::endl;
-    }
-};
-
-struct SimulationInputs {
-    dvec boxRelDim = dvec(0.0, 0.0, 0.0);
-    dvec flowLbb = dvec(0.0, 0.0, 0.0);
-    dvec flowTfr = dvec(0.0, 0.0, 0.0);
-    dvec flowVel = dvec(0.0, 0.0, 0.0);
-
-    double avgRad = 0.0;
-    double stdDevRad = 0.0;
-    double minRad = 0.0;
-    double phiTarget = 0.0;
-    double muZero = 0.0;
-    double sigmaZero = 0.0;
-    double fZeroPerMuZero = 0.0;
-    double errorTolerance = 0.0;
-    double maxDeltaEnergy = 0.0;
-    double kParameter = 0.0;
-    double kappa = 0.0;
-    double timeScalingFactor = 0.0;
-    double timeStepIn = 0.0;
-    double wallDragStrength = 0.0;
-    double snapshotFrequency = 0.0;
-    double skinRadius = 0.0;
-
-    int numBubblesPerCell = 0;
-    int rngSeed = 0;
-    int numStepsToRelax = 0;
-    int numBubblesIn = 0;
-    int minNumBubbles = 0;
-
-    bool operator==(const SimulationInputs &o) {
-        bool equal = true;
-        equal &= boxRelDim == o.boxRelDim;
-        equal &= flowLbb == o.flowLbb;
-        equal &= flowTfr == o.flowTfr;
-
-        equal &= flowVel == o.flowVel;
-        equal &= avgRad == o.avgRad;
-        equal &= stdDevRad == o.stdDevRad;
-
-        equal &= minRad == o.minRad;
-        equal &= phiTarget == o.phiTarget;
-        equal &= muZero == o.muZero;
-
-        equal &= sigmaZero == o.sigmaZero;
-        equal &= fZeroPerMuZero == o.fZeroPerMuZero;
-        equal &= errorTolerance == o.errorTolerance;
-
-        equal &= maxDeltaEnergy == o.maxDeltaEnergy;
-        equal &= kParameter == o.kParameter;
-        equal &= kappa == o.kappa;
-
-        equal &= timeScalingFactor == o.timeScalingFactor;
-        equal &= timeStepIn == o.timeStepIn;
-
-        equal &= numBubblesPerCell == o.numBubblesPerCell;
-        equal &= rngSeed == o.rngSeed;
-
-        equal &= numStepsToRelax == o.numStepsToRelax;
-        equal &= numBubblesIn == o.numBubblesIn;
-        equal &= minNumBubbles == o.minNumBubbles;
-        equal &= wallDragStrength == o.wallDragStrength;
-        equal &= snapshotFrequency == o.snapshotFrequency;
-        equal &= skinRadius == o.skinRadius;
-
-        return equal;
-    }
-
-    void print() {
-        std::cout << "\n---------------Inputs---------------" << std::endl;
-        PRINT_PARAM(boxRelDim);
-        PRINT_PARAM(flowLbb);
-        PRINT_PARAM(flowTfr);
-        PRINT_PARAM(flowVel);
-        PRINT_PARAM(avgRad);
-        PRINT_PARAM(stdDevRad);
-        PRINT_PARAM(minRad);
-        PRINT_PARAM(phiTarget);
-        PRINT_PARAM(muZero);
-        PRINT_PARAM(sigmaZero);
-        PRINT_PARAM(fZeroPerMuZero);
-        PRINT_PARAM(errorTolerance);
-        PRINT_PARAM(maxDeltaEnergy);
-        PRINT_PARAM(kParameter);
-        PRINT_PARAM(kappa);
-        PRINT_PARAM(timeScalingFactor);
-        PRINT_PARAM(timeStepIn);
-        PRINT_PARAM(numBubblesPerCell);
-        PRINT_PARAM(rngSeed);
-        PRINT_PARAM(numStepsToRelax);
-        PRINT_PARAM(numBubblesIn);
-        PRINT_PARAM(minNumBubbles);
-        PRINT_PARAM(wallDragStrength);
-        PRINT_PARAM(snapshotFrequency);
-        PRINT_PARAM(skinRadius);
-        std::cout << "-----------------End----------------\n" << std::endl;
-    }
 };
 
 struct Params {
     SimulationState state;
-    SimulationInputs inputs;
     CubWrapper cw;
 
     cudaStream_t velocityStream;
@@ -323,7 +179,7 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 
 dim3 getGridSize(Params &params) {
     const int totalNumCells = std::ceil((float)params.state.numBubbles /
-                                        params.inputs.numBubblesPerCell);
+                                        params.state.numBubblesPerCell);
     dvec relativeInterval = params.state.interval / params.state.interval.x;
     float nx = (float)totalNumCells / relativeInterval.y;
 #if (NUM_DIM == 3)
@@ -489,7 +345,7 @@ void updateCellsAndNeighbors(Params &params) {
             (i % 2) ? params.velocityStream : params.gasStream;
         KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
                       params.state.numBubbles, params.state.maxNumCells,
-                      (int)params.state.pairStride, params.inputs.skinRadius,
+                      (int)params.state.pairStride, params.state.skinRadius,
                       offsets, sizes, params.dips[(uint32_t)DIP::PAIR1COPY],
                       params.dips[(uint32_t)DIP::PAIR2COPY],
                       params.ddps[(uint32_t)DDP::R], params.state.interval,
@@ -517,7 +373,7 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
 
     KERNEL_LAUNCH(
         swapDataCountPairs, params.pairKernelSize, 0, 0,
-        params.state.numBubbles, params.inputs.minRad,
+        params.state.numBubbles, params.state.minRad,
         params.dips[(uint32_t)DIP::PAIR1], params.dips[(uint32_t)DIP::PAIR2],
         params.dips[(uint32_t)DIP::TEMP], params.ddps[(uint32_t)DDP::R],
         params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
@@ -681,7 +537,7 @@ void saveSnapshotToFile(Params &params) {
     }
 }
 
-double stabilize(Params &params) {
+double stabilize(Params &params, int numStepsToRelax) {
     // This function integrates only the positions of the bubbles.
     // Gas exchange is not used. This is used for equilibrating the foam.
 
@@ -705,7 +561,7 @@ double stabilize(Params &params) {
         &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::TEMP_DATA],
         params.state.numBubbles);
 
-    for (int i = 0; i < params.inputs.numStepsToRelax; ++i) {
+    for (int i = 0; i < numStepsToRelax; ++i) {
         do {
             KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                           params.state.numBubbles,
@@ -731,7 +587,7 @@ double stabilize(Params &params) {
 
             KERNEL_LAUNCH(
                 velocityPairKernel, params.pairKernelSize, 0, 0,
-                params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+                params.state.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
                 params.dips[(uint32_t)DIP::PAIR2],
                 params.ddps[(uint32_t)DDP::R], params.state.interval,
                 params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
@@ -749,14 +605,14 @@ double stabilize(Params &params) {
                 params.ddps[(uint32_t)DDP::DXDTP],
                 params.ddps[(uint32_t)DDP::DYDTP],
                 params.ddps[(uint32_t)DDP::DZDTP], params.state.lbb,
-                params.state.tfr, params.inputs.fZeroPerMuZero,
-                params.inputs.wallDragStrength);
+                params.state.tfr, params.state.fZeroPerMuZero,
+                params.state.wallDragStrength);
 #endif
             // Correct
             KERNEL_LAUNCH(
                 correctKernel, params.pairKernelSize, 0, 0,
                 params.state.numBubbles, params.state.timeStep, false,
-                params.inputs.minRad, params.ddps[(uint32_t)DDP::ERROR],
+                params.state.minRad, params.ddps[(uint32_t)DDP::ERROR],
                 params.ddps[(uint32_t)DDP::TEMP_DATA],
                 params.dips[(uint32_t)DIP::TEMP],
                 params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::X],
@@ -797,13 +653,13 @@ double stabilize(Params &params) {
             CUDA_CALL(cudaEventSynchronize(params.event1));
             error = params.pinnedDouble[0];
 
-            if (error < params.inputs.errorTolerance &&
+            if (error < params.state.errorTolerance &&
                 params.state.timeStep < 0.1)
                 params.state.timeStep *= 1.9;
-            else if (error > params.inputs.errorTolerance)
+            else if (error > params.state.errorTolerance)
                 params.state.timeStep *= 0.5;
 
-        } while (error > params.inputs.errorTolerance);
+        } while (error > params.state.errorTolerance);
 
         // Update the current values with the calculated predictions
         double *swapper = params.ddps[(uint32_t)DDP::DXDTO];
@@ -835,7 +691,7 @@ double stabilize(Params &params) {
 
         elapsedTime += params.state.timeStep;
 
-        if (2 * params.pinnedDouble[2] >= params.inputs.skinRadius) {
+        if (2 * params.pinnedDouble[2] >= params.state.skinRadius) {
             updateCellsAndNeighbors(params);
         }
     }
@@ -864,7 +720,7 @@ void velocityCalculation(Params &params) {
     // Velocity
     KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, params.velocityStream,
-        params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+        params.state.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::RP],
         params.state.interval, params.ddps[(uint32_t)DDP::XP],
         params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
@@ -894,8 +750,8 @@ void velocityCalculation(Params &params) {
             params.ddps[(uint32_t)DDP::FLOW_VY],
             params.ddps[(uint32_t)DDP::FLOW_VZ], params.ddps[(uint32_t)DDP::XP],
             params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-            params.ddps[(uint32_t)DDP::RP], params.inputs.flowVel,
-            params.inputs.flowTfr, params.inputs.flowLbb);
+            params.ddps[(uint32_t)DDP::RP], params.state.flowVel,
+            params.state.flowTfr, params.state.flowLbb);
     }
 #endif
 
@@ -908,8 +764,8 @@ void velocityCalculation(Params &params) {
         params.ddps[(uint32_t)DDP::XP], params.ddps[(uint32_t)DDP::YP],
         params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::DXDTP],
         params.ddps[(uint32_t)DDP::DYDTP], params.ddps[(uint32_t)DDP::DZDTP],
-        params.state.lbb, params.state.tfr, params.inputs.fZeroPerMuZero,
-        params.inputs.wallDragStrength);
+        params.state.lbb, params.state.tfr, params.state.fZeroPerMuZero,
+        params.state.wallDragStrength);
 #endif
 }
 
@@ -927,8 +783,8 @@ void gasExchangeCalculation(Params &params) {
                   params.gasStream, params.ddps[(uint32_t)DDP::DRDTP],
                   params.ddps[(uint32_t)DDP::RP],
                   params.ddps[(uint32_t)DDP::TEMP_DATA],
-                  params.state.numBubbles, params.inputs.kappa,
-                  params.inputs.kParameter, params.state.averageSurfaceAreaIn);
+                  params.state.numBubbles, params.state.kappa,
+                  params.state.kParameter, params.state.averageSurfaceAreaIn);
 }
 
 bool integrate(Params &params) {
@@ -974,7 +830,7 @@ bool integrate(Params &params) {
         // Correct
         KERNEL_LAUNCH(
             correctKernel, params.pairKernelSize, 0, 0, params.state.numBubbles,
-            params.state.timeStep, true, params.inputs.minRad,
+            params.state.timeStep, true, params.state.minRad,
             params.ddps[(uint32_t)DDP::ERROR],
             params.ddps[(uint32_t)DDP::FLOW_VX],
             params.dips[(uint32_t)DIP::TEMP], params.ddps[(uint32_t)DDP::XP],
@@ -1036,15 +892,15 @@ bool integrate(Params &params) {
         CUDA_CALL(cudaEventSynchronize(params.event1));
 
         error = params.pinnedDouble[0];
-        if (error < params.inputs.errorTolerance && params.state.timeStep < 0.1)
+        if (error < params.state.errorTolerance && params.state.timeStep < 0.1)
             params.state.timeStep *= 1.9;
-        else if (error > params.inputs.errorTolerance)
+        else if (error > params.state.errorTolerance)
             params.state.timeStep *= 0.5;
 
         ++numLoopsDone;
 
         NVTX_RANGE_POP();
-    } while (error > params.inputs.errorTolerance);
+    } while (error > params.state.errorTolerance);
 
     // Update values
     double *swapper = params.ddps[(uint32_t)DDP::DXDTO];
@@ -1112,12 +968,12 @@ bool integrate(Params &params) {
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
     // See correctKernel, comparePair for details.
-    if (params.pinnedDouble[2] >= 0.5 * params.inputs.skinRadius) {
+    if (params.pinnedDouble[2] >= 0.5 * params.state.skinRadius) {
         updateCellsAndNeighbors(params);
     }
 
     bool continueSimulation =
-        params.state.numBubbles > params.inputs.minNumBubbles;
+        params.state.numBubbles > params.state.minNumBubbles;
     continueSimulation &=
         (NUM_DIM == 3)
             ? params.state.maxBubbleRadius <
@@ -1165,109 +1021,6 @@ double getSimulationBoxVolume(Params &params) {
     dvec temp = params.state.tfr - params.state.lbb;
     return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
 }
-
-#define JSON_READ(i, j, arg) i.arg = j[#arg]
-
-void readInputs(Params &params, const char *inputFileName,
-                ivec &bubblesPerDim) {
-    std::cout << "Reading inputs from file \"" << inputFileName << "\""
-              << std::endl;
-    nlohmann::json j;
-    std::fstream file(inputFileName, std::ios::in);
-
-    if (file.is_open()) {
-        file >> j;
-        SimulationInputs &inputs = params.inputs;
-
-        JSON_READ(inputs, j, phiTarget);
-        JSON_READ(inputs, j, muZero);
-        JSON_READ(inputs, j, sigmaZero);
-        JSON_READ(inputs, j, avgRad);
-        JSON_READ(inputs, j, stdDevRad);
-        JSON_READ(inputs, j, errorTolerance);
-        JSON_READ(inputs, j, timeStepIn);
-        JSON_READ(inputs, j, rngSeed);
-        JSON_READ(inputs, j, numBubblesPerCell);
-        JSON_READ(inputs, j, numStepsToRelax);
-        JSON_READ(inputs, j, maxDeltaEnergy);
-        JSON_READ(inputs, j, kParameter);
-        JSON_READ(inputs, j, numBubblesIn);
-        JSON_READ(inputs, j, kappa);
-        JSON_READ(inputs, j, minNumBubbles);
-        JSON_READ(inputs, j, boxRelDim);
-        JSON_READ(inputs, j, flowLbb);
-        JSON_READ(inputs, j, flowTfr);
-        JSON_READ(inputs, j, flowVel);
-        JSON_READ(inputs, j, wallDragStrength);
-        JSON_READ(inputs, j, snapshotFrequency);
-        JSON_READ(inputs, j, skinRadius);
-
-        assert(inputs.muZero > 0);
-        assert(inputs.boxRelDim.x > 0);
-        assert(inputs.boxRelDim.y > 0);
-        assert(inputs.boxRelDim.z > 0);
-        assert(inputs.wallDragStrength >= 0.0 &&
-               inputs.wallDragStrength <= 1.0);
-
-        inputs.fZeroPerMuZero =
-            inputs.sigmaZero * inputs.avgRad / inputs.muZero;
-        inputs.minRad = 0.1 * inputs.avgRad;
-        inputs.timeScalingFactor =
-            inputs.kParameter / (inputs.avgRad * inputs.avgRad);
-        inputs.flowVel *= inputs.fZeroPerMuZero;
-        inputs.skinRadius *= inputs.avgRad;
-    } else
-        throw std::runtime_error("Couldn't open input file!");
-
-    // First calculate the size of the box and the starting number of bubbles
-    dvec relDim = params.inputs.boxRelDim;
-    relDim = relDim / relDim.x;
-    const float d = 2 * params.inputs.avgRad;
-    float x = params.inputs.numBubblesIn * d * d / relDim.y;
-    bubblesPerDim = ivec(0, 0, 0);
-
-    if (NUM_DIM == 3) {
-        x = x * d / relDim.z;
-        x = std::cbrt(x);
-        relDim = relDim * x;
-        bubblesPerDim = ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d),
-                             std::ceil(relDim.z / d));
-        params.state.numBubbles =
-            bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
-    } else {
-        x = std::sqrt(x);
-        relDim = relDim * x;
-        bubblesPerDim =
-            ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d), 0);
-        params.state.numBubbles = bubblesPerDim.x * bubblesPerDim.y;
-    }
-
-    params.state.tfr = d * bubblesPerDim.asType<double>() + params.state.lbb;
-    params.state.interval = params.state.tfr - params.state.lbb;
-    params.state.timeStep = params.inputs.timeStepIn;
-
-    // Determine the maximum number of Morton numbers for the simulation box
-    dim3 gridDim = getGridSize(params);
-    const int maxGridDim =
-        gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
-                              : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
-    int maxNumCells = 1;
-    while (maxNumCells < maxGridDim)
-        maxNumCells = maxNumCells << 1;
-
-    if (NUM_DIM == 3)
-        maxNumCells = maxNumCells * maxNumCells * maxNumCells;
-    else
-        maxNumCells = maxNumCells * maxNumCells;
-
-    params.state.maxNumCells = maxNumCells;
-
-    std::cout << "Maximum (theoretical) number of cells: "
-              << params.state.maxNumCells
-              << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y
-              << ", " << gridDim.z << std::endl;
-}
-#undef JSON_READ
 
 void commonSetup(Params &params) {
     params.defaultKernelSize = KernelSize(128, params.state.numBubbles);
@@ -1368,14 +1121,12 @@ void commonSetup(Params &params) {
               << std::endl;
 
     params.state.print();
-    params.inputs.print();
 }
 
-void generateStartingData(Params &params, ivec bubblesPerDim) {
+void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
+                          int rngSeed) {
     std::cout << "Starting to generate data for bubbles." << std::endl;
-    const int rngSeed = params.inputs.rngSeed;
-    const double avgRad = params.inputs.avgRad;
-    const double stdDevRad = params.inputs.stdDevRad;
+    const double avgRad = params.state.avgRad;
 
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
@@ -1394,15 +1145,14 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
                                    params.state.numBubbles, avgRad, stdDevRad));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(assignDataToBubbles, params.pairKernelSize, 0, 0,
-                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
-                  params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
-                  params.ddps[(uint32_t)DDP::YP],
-                  params.ddps[(uint32_t)DDP::ZP], params.ddps[(uint32_t)DDP::R],
-                  params.ddps[(uint32_t)DDP::RP],
-                  params.dips[(uint32_t)DIP::INDEX], bubblesPerDim,
-                  params.state.tfr, params.state.lbb, avgRad,
-                  params.inputs.minRad, params.state.numBubbles);
+    KERNEL_LAUNCH(
+        assignDataToBubbles, params.pairKernelSize, 0, 0,
+        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+        params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
+        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
+        params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::RP],
+        params.dips[(uint32_t)DIP::INDEX], bubblesPerDim, params.state.tfr,
+        params.state.lbb, avgRad, params.state.minRad, params.state.numBubbles);
 
     params.state.averageSurfaceAreaIn =
         params.cw.reduce<double, double *, double *>(
@@ -1432,7 +1182,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
 
     KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, 0,
-        params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+        params.state.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
         params.state.interval, params.ddps[(uint32_t)DDP::X],
         params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
@@ -1454,7 +1204,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
 
     KERNEL_LAUNCH(
         velocityPairKernel, params.pairKernelSize, 0, 0,
-        params.inputs.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
+        params.state.fZeroPerMuZero, params.dips[(uint32_t)DIP::PAIR1],
         params.dips[(uint32_t)DIP::PAIR2], params.ddps[(uint32_t)DDP::R],
         params.state.interval, params.ddps[(uint32_t)DDP::X],
         params.ddps[(uint32_t)DDP::Y], params.ddps[(uint32_t)DDP::Z],
@@ -1463,57 +1213,133 @@ void generateStartingData(Params &params, ivec bubblesPerDim) {
 }
 
 void initializeFromJson(const char *inputFileName, Params &params) {
-    // Initialize everything, starting with an input .json file.
-    // The end state of this function is 'prepared state' that can then be used
-    // immediately to run the integration loop.
+    std::cout << "\n=====\nSetup\n====="
+              << "Reading inputs from file \"" << inputFileName << "\""
+              << std::endl;
 
-    std::cout << "\n=====\nSetup\n=====" << std::endl;
+    nlohmann::json inputJson;
+    std::fstream file(inputFileName, std::ios::in);
+    if (file.is_open()) {
+        file >> inputJson;
+
+        assert(inputJson["muZero"] > 0);
+        assert(inputJson["wallDragStrength"] >= 0.0 &&
+               inputJson["wallDragStrength"] <= 1.0);
+
+        params.state.avgRad = inputJson["avgRad"];
+        params.state.minRad = 0.1 * params.state.avgRad;
+        params.state.fZeroPerMuZero =
+            inputJson["sigmaZero"] * params.state.avgRad / inputJson["muZero"];
+        params.state.flowLbb = inputJson["flowLbb"];
+        params.state.flowTfr = inputJson["flowTfr"];
+        params.state.flowVel =
+            inputJson["flowVel"] * params.state.fZeroPerMuZero;
+        params.state.kParameter = inputJson["kParameter"];
+        params.state.kappa = inputJson["kappa"];
+        params.state.skinRadius = inputJson["skinRadius"] * params.state.avgRad;
+        params.state.timeScalingFactor =
+            params.state.kParameter /
+            (params.state.avgRad * params.state.avgRad);
+        params.state.errorTolerance = inputJson["errorTolerance"];
+        params.state.wallDragStrength = inputJson["wallDragStrength"];
+        params.state.snapshotFrequency = inputJson["snapshotFrequency"];
+        params.state.numBubblesPerCell = inputJson["numBubblesPerCell"];
+        params.state.minNumBubbles = inputJson["minNumBubbles"];
+    } else
+        throw std::runtime_error("Couldn't open input file!");
+
+    // First calculate the size of the box and the starting number of bubbles
+    dvec relDim = inputJson["boxRelDim"];
+    assert(relDim.x > 0);
+    assert(relDim.y > 0);
+    assert(relDim.z > 0);
+
+    relDim = relDim / relDim.x;
+    const float d = 2 * params.state.avgRad;
+    float x = inputJson["numBubblesIn"] * d * d / relDim.y;
     ivec bubblesPerDim = ivec(0, 0, 0);
-    readInputs(params, inputFileName, bubblesPerDim);
+
+    if (NUM_DIM == 3) {
+        x = x * d / relDim.z;
+        x = std::cbrt(x);
+        relDim = relDim * x;
+        bubblesPerDim = ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d),
+                             std::ceil(relDim.z / d));
+        params.state.numBubbles =
+            bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
+    } else {
+        x = std::sqrt(x);
+        relDim = relDim * x;
+        bubblesPerDim =
+            ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d), 0);
+        params.state.numBubbles = bubblesPerDim.x * bubblesPerDim.y;
+    }
+
+    params.state.tfr = d * bubblesPerDim.asType<double>() + params.state.lbb;
+    params.state.interval = params.state.tfr - params.state.lbb;
+    params.state.timeStep = inputJson["timeStepIn"];
+
+    // Determine the maximum number of Morton numbers for the simulation box
+    dim3 gridDim = getGridSize(params);
+    const int maxGridDim =
+        gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
+                              : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
+    int maxNumCells = 1;
+    while (maxNumCells < maxGridDim)
+        maxNumCells = maxNumCells << 1;
+
+    if (NUM_DIM == 3)
+        maxNumCells = maxNumCells * maxNumCells * maxNumCells;
+    else
+        maxNumCells = maxNumCells * maxNumCells;
+
+    params.state.maxNumCells = maxNumCells;
+
+    std::cout << "Maximum (theoretical) number of cells: "
+              << params.state.maxNumCells
+              << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y
+              << ", " << gridDim.z << std::endl;
+
+    // Reserve memory etc.
     commonSetup(params);
-
-    // This parameter is used with serialization. It should be immutable and
-    // never be changed after this. It just saves the original dataStride.
-    params.state.originalDataStride = params.state.dataStride;
-
-    generateStartingData(params, bubblesPerDim);
+    generateStartingData(params, bubblesPerDim, inputJson["stdDevRad"],
+                         inputJson["rngSeed"]);
 
     std::cout << "Letting bubbles settle after they've been created and before "
                  "scaling or stabilization."
               << std::endl;
 
     for (uint32_t i = 0; i < 3; ++i)
-        stabilize(params);
+        stabilize(params, inputJson["numStepsToRelax"]);
 
     const double bubbleVolume = calculateVolumeOfBubbles(params);
-
     std::cout << "Volume ratios: current: "
               << bubbleVolume / getSimulationBoxVolume(params)
-              << ", target: " << params.inputs.phiTarget
+              << ", target: " << inputJson["phiTarget"]
               << "\nScaling the simulation box." << std::endl;
 
     transformPositions(params, true);
 
-    dvec relativeSize = params.inputs.boxRelDim;
-    relativeSize.z = (NUM_DIM == 2) ? 1 : relativeSize.z;
-    double t = bubbleVolume / (params.inputs.phiTarget * relativeSize.x *
-                               relativeSize.y * relativeSize.z);
+    relDim = inputJson["boxRelDim"];
+    relDim.z = (NUM_DIM == 2) ? 1 : relDim.z;
+    double t = bubbleVolume /
+               (inputJson["phiTarget"] * relDim.x * relDim.y * relDim.z);
     t = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
-    params.state.tfr = dvec(t, t, t) * relativeSize;
+    params.state.tfr = dvec(t, t, t) * relDim;
     params.state.interval = params.state.tfr - params.state.lbb;
-    params.inputs.flowTfr =
-        params.state.interval * params.inputs.flowTfr + params.state.lbb;
-    params.inputs.flowLbb =
-        params.state.interval * params.inputs.flowLbb + params.state.lbb;
+    params.state.flowTfr =
+        params.state.interval * params.state.flowTfr + params.state.lbb;
+    params.state.flowLbb =
+        params.state.interval * params.state.flowLbb + params.state.lbb;
 
     transformPositions(params, false);
 
     for (uint32_t i = 0; i < 3; ++i)
-        stabilize(params);
+        stabilize(params, inputJson["numStepsToRelax"]);
 
     std::cout << "Volume ratios: current: "
               << bubbleVolume / getSimulationBoxVolume(params)
-              << ", target: " << params.inputs.phiTarget
+              << ", target: " << inputJson["phiTarget"]
               << "\n\n=============\nStabilization\n=============" << std::endl;
 
     int numSteps = 0;
@@ -1525,28 +1351,28 @@ void initializeFromJson(const char *inputFileName, Params &params) {
               << "#searches" << std::endl;
 
     while (true) {
-        double time = stabilize(params);
+        double time = stabilize(params, inputJson["numStepsToRelax"]);
         double deltaEnergy =
             std::abs(params.state.energy2 - params.state.energy1) / time;
-        deltaEnergy *= 0.5 * params.inputs.sigmaZero;
+        deltaEnergy *= 0.5 * inputJson["sigmaZero"];
 
-        if (deltaEnergy < params.inputs.maxDeltaEnergy) {
+        if (deltaEnergy < inputJson["maxDeltaEnergy"]) {
             std::cout << "Final delta energy " << deltaEnergy << " after "
-                      << (numSteps + 1) * params.inputs.numStepsToRelax
+                      << (numSteps + 1) * inputJson["numStepsToRelax"]
                       << " steps."
                       << "\nEnergy before: " << params.state.energy1
                       << ", energy after: " << params.state.energy2
-                      << ", time: " << time * params.inputs.timeScalingFactor
+                      << ", time: " << time * params.state.timeScalingFactor
                       << std::endl;
             break;
         } else if (numSteps > failsafe) {
-            std::cout << "Over " << failsafe * params.inputs.numStepsToRelax
+            std::cout << "Over " << failsafe * inputJson["numStepsToRelax"]
                       << " steps taken and required delta energy not reached."
                       << " Check parameters." << std::endl;
             break;
         } else {
             std::cout << std::setw(10) << std::left
-                      << (numSteps + 1) * params.inputs.numStepsToRelax
+                      << (numSteps + 1) * inputJson["numStepsToRelax"]
                       << std::setw(12) << std::left << std::setprecision(5)
                       << std::scientific << deltaEnergy << std::setw(15)
                       << std::left << std::setprecision(5) << std::fixed
@@ -1615,7 +1441,7 @@ namespace cubble {
 void run(std::string &&inputFileName) {
     Params params;
     initializeFromJson(inputFileName.c_str(), params);
-    if (params.inputs.snapshotFrequency > 0.0)
+    if (params.state.snapshotFrequency > 0.0)
         saveSnapshotToFile(params);
 
     std::cout << "\n==========\nIntegration\n==========" << std::endl;
@@ -1669,7 +1495,7 @@ void run(std::string &&inputFileName) {
         // Here we compare potentially very large integers (> 10e6) to each
         // other and small doubles (<= 1.0) to each other to preserve precision.
         const double nextPrintTime =
-            params.state.timesPrinted / params.inputs.timeScalingFactor;
+            params.state.timesPrinted / params.state.timeScalingFactor;
         const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
         const double nextPrintTimeFraction =
             nextPrintTime - nextPrintTimeInteger;
@@ -1698,7 +1524,7 @@ void run(std::string &&inputFileName) {
                               params.state.energy2;
             const double relRad =
                 getAvg(params.ddps[(uint32_t)DDP::R], params) /
-                params.inputs.avgRad;
+                params.state.avgRad;
 
             // Add values to data stream
             std::ofstream resultFile("results.dat", std::ios_base::app);
@@ -1757,10 +1583,10 @@ void run(std::string &&inputFileName) {
         }
 
         // Save snapshot
-        if (params.inputs.snapshotFrequency > 0.0) {
+        if (params.state.snapshotFrequency > 0.0) {
             const double nextSnapshotTime = params.state.numSnapshots /
-                                            params.inputs.snapshotFrequency /
-                                            params.inputs.timeScalingFactor;
+                                            params.state.snapshotFrequency /
+                                            params.state.timeScalingFactor;
             const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
             const double nextSnapshotTimeFraction =
                 nextSnapshotTime - nextSnapshotTimeInteger;
@@ -1780,7 +1606,7 @@ void run(std::string &&inputFileName) {
         ++params.state.numStepsInTimeStep;
     }
 
-    if (params.inputs.snapshotFrequency > 0.0)
+    if (params.state.snapshotFrequency > 0.0)
         saveSnapshotToFile(params);
 
     deinit(params);
