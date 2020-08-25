@@ -5,16 +5,13 @@
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <array>
-#include <cstring>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
 #include <iostream>
 #include <nvToolsExt.h>
-#include <signal.h>
 #include <sstream>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 namespace cubble {
@@ -1564,9 +1561,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     }
 
     // Set starting positions
-    // Copying one by one, because pointers get swapped and although
-    // these three should be consecutive ones anyway, it's better
-    // to be safe than sorry in this case.
+    // Avoiding batched memset, because the pointers might not be in order
     const uint64_t numBytesToCopy = sizeof(double) * params.state.dataStride;
     CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::X0],
                          params.ddps[(uint32_t)DDP::X], numBytesToCopy,
@@ -1613,394 +1608,15 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     params.state.numIntegrationSteps = 0;
 }
 
-// Needed for serialization and deserialization
-#define NAME_MAX_LEN 64
-#define HEADER_SIZE 256 // <-- Needs to be > 2x NAME_MAX_LEN
-
-void initializeFromBinary(const char *inputFileName, Params &params) {
-    std::cout << "Initializing simulation from a binary dump." << std::endl;
-
-    std::ifstream inFile(inputFileName, std::ifstream::binary);
-    if (inFile.is_open()) {
-        inFile.seekg(0, inFile.end);
-        const uint64_t fileSize = inFile.tellg();
-        inFile.seekg(0);
-        uint64_t fs =
-            sizeof(params.state) + sizeof(params.inputs) + HEADER_SIZE;
-        if (fileSize <= fs) {
-            std::stringstream ss;
-            ss << "The given binary file is incorrect size. Check "
-                  "that the file is correct. File size: "
-               << fileSize << ", required minimum: " << fs;
-            throw std::runtime_error(ss.str());
-        }
-
-        std::vector<char> byteData;
-        byteData.resize(fileSize);
-        inFile.read(byteData.data(), fileSize);
-
-        uint64_t offset = 0;
-        std::array<char, HEADER_SIZE> header;
-
-        // Header
-        std::memcpy(static_cast<void *>(header.data()),
-                    static_cast<void *>(&byteData[offset]), header.size());
-        offset += header.size();
-
-        // Check some values from header for compatibility
-        uint32_t headerOffset = 0;
-        char *nulLoc =
-            std::find(header.begin() + headerOffset,
-                      header.begin() + headerOffset + NAME_MAX_LEN, '\0');
-        std::string hostName(header.begin() + headerOffset, nulLoc);
-        headerOffset += NAME_MAX_LEN;
-
-        nulLoc = std::find(header.begin() + headerOffset,
-                           header.begin() + headerOffset + NAME_MAX_LEN, '\0');
-        std::string gpuName(header.begin() + headerOffset, nulLoc);
-        headerOffset += NAME_MAX_LEN;
-
-        int binNumDim = 0;
-        std::memcpy(static_cast<void *>(&binNumDim),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        int binUseProfiling = 0;
-        std::memcpy(static_cast<void *>(&binUseProfiling),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        int binUseFlow = 0;
-        std::memcpy(static_cast<void *>(&binUseFlow),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        int binPbcx = 0;
-        std::memcpy(static_cast<void *>(&binPbcx),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        int binPbcy = 0;
-        std::memcpy(static_cast<void *>(&binPbcy),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        int binPbcz = 0;
-        std::memcpy(static_cast<void *>(&binPbcz),
-                    static_cast<void *>(&header[headerOffset]), sizeof(int));
-        headerOffset += sizeof(int);
-
-        std::cout << "Binary header:\n\tHostname: " << hostName
-                  << "\n\tGPU name: " << gpuName << "\n\tNUM_DIM: " << binNumDim
-                  << "\n\tUSE_PROFILING: " << binUseProfiling
-                  << "\n\tUSE_FLOW: " << binUseFlow << "\n\tPBC_X: " << binPbcx
-                  << "\n\tPBC_Y: " << binPbcy << "\n\tPBC_Z: " << binPbcz
-                  << std::endl;
-
-        // Get current host name
-        std::array<char, NAME_MAX_LEN> charArr;
-        gethostname(charArr.data(), charArr.size());
-        nulLoc = std::find(charArr.data(), charArr.end(), '\0');
-        hostName = std::string(charArr.begin(), nulLoc);
-
-        // Get current GPU name
-        cudaDeviceProp prop;
-        int device = 0;
-        CUDA_ASSERT(cudaDeviceSynchronize());
-        CUDA_ASSERT(cudaGetDevice(&device));
-        CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
-        gpuName = std::string(prop.name);
-        gpuName = gpuName.substr(0, NAME_MAX_LEN);
-
-        std::cout << "Current program:\n\tHostname: " << hostName
-                  << "\n\tGPU name: " << gpuName << "\n\tNUM_DIM: " << NUM_DIM
-                  << "\n\tUSE_PROFILING: " << USE_PROFILING
-                  << "\n\tUSE_FLOW: " << USE_FLOW << "\n\tPBC_X: " << PBC_X
-                  << "\n\tPBC_Y: " << PBC_Y << "\n\tPBC_Z: " << PBC_Z
-                  << std::endl;
-
-        const bool isBinaryCompatible =
-            (NUM_DIM == binNumDim) && (USE_PROFILING == binUseProfiling) &&
-            (USE_FLOW == binUseFlow) && (PBC_X == binPbcx) &&
-            (PBC_Y == binPbcy) && (PBC_Z == binPbcz);
-        if (!isBinaryCompatible)
-            throw std::runtime_error("Incompatible binary file!");
-
-        // State
-        std::memcpy(static_cast<void *>(&params.state),
-                    static_cast<void *>(&byteData[offset]),
-                    sizeof(params.state));
-        offset += sizeof(params.state);
-
-        // Inputs
-        std::memcpy(static_cast<void *>(&params.inputs),
-                    static_cast<void *>(&byteData[offset]),
-                    sizeof(params.inputs));
-        offset += sizeof(params.inputs);
-
-        int *dnp = nullptr;
-        CUDA_ASSERT(
-            cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(dnp),
-                             static_cast<void *>(&params.state.numPairs),
-                             sizeof(int), cudaMemcpyHostToDevice));
-
-        // This function reserves memory & sets up the device pointers.
-        commonSetup(params);
-
-        const uint64_t doubleBytes = sizeof(double) *
-                                     (uint32_t)DDP::NUM_VALUES / 2 *
-                                     params.state.dataStride;
-        const uint64_t intBytes = sizeof(int) * 4 * params.state.dataStride;
-
-        // Previous positions of bubbles are saved on the cpu. They are accessed
-        // with the immutable index of a bubble and thus they 'must' contain all
-        // the data from the start of the simulation. This could be done in a
-        // better way (by e.g. having a separate map where immutable indices are
-        // translated to indices to these vectors) but I've thought that's just
-        // unnecessary complication.
-        params.previousX.resize(params.state.originalDataStride);
-        params.previousY.resize(params.state.originalDataStride);
-        params.previousZ.resize(params.state.originalDataStride);
-        const uint64_t previousPosBytes =
-            params.previousX.size() * sizeof(params.previousX[0]);
-
-        fs = sizeof(params.state) + sizeof(params.inputs) + doubleBytes +
-             intBytes + header.size() + 3 * previousPosBytes;
-        if (fileSize != fs) {
-            std::stringstream ss;
-            ss << "The given binary file is incorrect size. Check "
-                  "that the file is correct. File size: "
-               << fileSize << ", required minimum: " << fs;
-            throw std::runtime_error(ss.str());
-        }
-
-        // Doubles
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceDoubleMemory),
-                             static_cast<void *>(&byteData[offset]),
-                             doubleBytes, cudaMemcpyHostToDevice));
-        offset += doubleBytes;
-
-        // Previous positions
-        std::memcpy(static_cast<void *>(params.previousX.data()),
-                    static_cast<void *>(&byteData[offset]), previousPosBytes);
-        offset += previousPosBytes;
-
-        std::memcpy(static_cast<void *>(params.previousY.data()),
-                    static_cast<void *>(&byteData[offset]), previousPosBytes);
-        offset += previousPosBytes;
-
-        std::memcpy(static_cast<void *>(params.previousZ.data()),
-                    static_cast<void *>(&byteData[offset]), previousPosBytes);
-        offset += previousPosBytes;
-
-        // Ints
-        CUDA_CALL(cudaMemcpy(
-            static_cast<void *>(params.dips[(uint32_t)DIP::WRAP_COUNT_X]),
-            static_cast<void *>(&byteData[offset]), intBytes,
-            cudaMemcpyHostToDevice));
-        offset += intBytes;
-
-        // All the data should be used at this point
-        if (offset != byteData.size()) {
-            std::stringstream ss;
-            ss << "The given binary file is incorrect size. Check "
-                  "that the file is correct. Used data: "
-               << offset << ", total size: " << byteData.size();
-            throw std::runtime_error(ss.str());
-        }
-
-        // Setup pairs. Unnecessary to serialize them.
-        updateCellsAndNeighbors(params);
-    } else
-        throw std::runtime_error("Couldn't open binary file for reading!");
-
-    std::cout << "Binary initialization done." << std::endl;
-}
-
-void serializeStateAndData(const char *outputFileName, Params &params) {
-    std::cout << "Serializing simulation state and data to a binary file."
-              << std::endl;
-
-    std::ofstream outFile(outputFileName, std::ofstream::binary);
-    if (outFile.is_open()) {
-        // Get host name
-        std::array<char, NAME_MAX_LEN> charArr;
-        gethostname(charArr.data(), charArr.size());
-        char *nulLoc = std::find(charArr.data(), charArr.end(), '\0');
-        std::string hostName(charArr.begin(), nulLoc);
-
-        // Get GPU name
-        cudaDeviceProp prop;
-        int device = 0;
-        CUDA_ASSERT(cudaDeviceSynchronize());
-        CUDA_ASSERT(cudaGetDevice(&device));
-        CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
-        std::string gpuName(prop.name);
-        gpuName = gpuName.substr(0, NAME_MAX_LEN);
-
-        std::array<char, HEADER_SIZE> header;
-        uint64_t offset = 0;
-
-        strncpy(&header[offset], hostName.data(), NAME_MAX_LEN);
-        offset += NAME_MAX_LEN;
-
-        strncpy(&header[offset], gpuName.data(), NAME_MAX_LEN);
-        offset += NAME_MAX_LEN;
-
-        int temp = NUM_DIM;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        temp = USE_PROFILING;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        temp = USE_FLOW;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        temp = PBC_X;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        temp = PBC_Y;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        temp = PBC_Z;
-        std::memcpy(static_cast<void *>(&header[offset]),
-                    static_cast<void *>(&temp), sizeof(int));
-        offset += sizeof(int);
-
-        // Divisible by 32 and >= numBubbles
-        const uint64_t newDataStride =
-            params.state.numBubbles + !!(params.state.numBubbles % 32) *
-                                          (32 - params.state.numBubbles % 32);
-        const uint32_t numIntComponents = 4;
-        const uint32_t numDoubleComponents = (uint32_t)DDP::NUM_VALUES / 2;
-        const uint64_t doubleDataSize =
-            numDoubleComponents * newDataStride * sizeof(double);
-        const uint64_t intDataSize =
-            numIntComponents * newDataStride * sizeof(int);
-        const uint64_t totalSize =
-            sizeof(params.state) + sizeof(params.inputs) + doubleDataSize +
-            intDataSize + header.size() +
-            3 * params.previousX.size() * sizeof(params.previousX[0]);
-
-        std::vector<char> byteData;
-        byteData.resize(totalSize);
-        offset = 0;
-
-        // Header
-        std::memcpy(static_cast<void *>(&byteData[offset]),
-                    static_cast<void *>(header.data()), header.size());
-        offset += header.size();
-
-        // State
-        std::memcpy(static_cast<void *>(&byteData[offset]),
-                    static_cast<void *>(&params.state), sizeof(params.state));
-        offset += sizeof(params.state);
-
-        // Inputs
-        std::memcpy(static_cast<void *>(&byteData[offset]),
-                    static_cast<void *>(&params.inputs), sizeof(params.inputs));
-        offset += sizeof(params.inputs);
-
-        // Doubles
-        for (uint32_t i = 0; i < numDoubleComponents; ++i) {
-            const uint64_t bytesToCopy = sizeof(double) * newDataStride;
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(&byteData[offset]),
-                                 static_cast<void *>(params.ddps[i]),
-                                 bytesToCopy, cudaMemcpyDeviceToHost));
-
-            offset += bytesToCopy;
-        }
-
-        // CPU vectors for previous bubble positions
-        {
-            const uint64_t bytesToCopy =
-                params.previousX.size() * sizeof(params.previousX[0]);
-
-            std::memcpy(static_cast<void *>(&byteData[offset]),
-                        static_cast<void *>(params.previousX.data()),
-                        bytesToCopy);
-            offset += bytesToCopy;
-
-            std::memcpy(static_cast<void *>(&byteData[offset]),
-                        static_cast<void *>(params.previousY.data()),
-                        bytesToCopy);
-            offset += bytesToCopy;
-
-            std::memcpy(static_cast<void *>(&byteData[offset]),
-                        static_cast<void *>(params.previousZ.data()),
-                        bytesToCopy);
-            offset += bytesToCopy;
-        }
-
-        // Ints
-        // Copy line by line, since the pointers in dips
-        // might not be in any particular order
-        for (uint32_t i = 0; i < numIntComponents; ++i) {
-            const uint64_t bytesToCopy = sizeof(int) * newDataStride;
-            CUDA_CALL(
-                cudaMemcpy(static_cast<void *>(&byteData[offset]),
-                           static_cast<void *>(
-                               params.dips[(uint32_t)DIP::WRAP_COUNT_X + i]),
-                           bytesToCopy, cudaMemcpyDeviceToHost));
-
-            offset += bytesToCopy;
-        }
-
-        if (offset != totalSize || offset != byteData.size())
-            throw std::runtime_error(
-                "Error in data calculation at serialization!");
-
-        std::cout << "Writing data. Calculated size: " << totalSize
-                  << "\nbyte vector size: " << byteData.size()
-                  << "\noffset: " << offset
-                  << "\ndouble data: " << doubleDataSize
-                  << "\nint data: " << intDataSize
-                  << "\nheader size: " << header.size() << "\nprev pos size: "
-                  << 3 * params.previousX.size() * sizeof(params.previousX[0])
-                  << "\nstate size: " << sizeof(params.state)
-                  << "\ninputs size: " << sizeof(params.inputs) << std::endl;
-
-        outFile.write(byteData.data(), byteData.size());
-        outFile.close();
-    } else
-        throw std::runtime_error("Couldn't open file for writing!");
-
-    std::cout << "Serialization done." << std::endl;
-}
-
 } // namespace
 
 namespace cubble {
-sig_atomic_t signalReceived = 0;
 
-void signalHandler(int sigNum) {
-    signalReceived = (sigNum == SIGUSR1) ? 1 : signalReceived;
-}
-
-void run(std::string &&inputFileName, std::string &&outputFileName) {
-    // Register signal handler
-    signal(SIGUSR1, signalHandler);
-
+void run(std::string &&inputFileName) {
     Params params;
-    // If input file name ends with .bin, it's a serialized state.
-    if (inputFileName.compare(inputFileName.size() - 4, 4, ".bin") == 0)
-        initializeFromBinary(inputFileName.c_str(), params);
-    else {
-        initializeFromJson(inputFileName.c_str(), params);
-        if (params.inputs.snapshotFrequency > 0.0)
-            saveSnapshotToFile(params);
-    }
+    initializeFromJson(inputFileName.c_str(), params);
+    if (params.inputs.snapshotFrequency > 0.0)
+        saveSnapshotToFile(params);
 
     std::cout << "\n==========\nIntegration\n==========" << std::endl;
 
@@ -2018,15 +1634,28 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
     double avgTimestep = 0.0;
     bool resetErrors = false;
 
+    // This is the simulation loop, which runs until (at least) one
+    // end condition is met
     while (continueIntegration) {
+        // Define two lambas for later use
+        auto getSum = [](double *p, Params &params) -> double {
+            return params.cw.reduce<double, double *, double *>(
+                &cub::DeviceReduce::Sum, p, params.state.numBubbles);
+        };
+
+        auto getAvg = [getSum](double *p, Params &params) -> double {
+            return getSum(p, params) / params.state.numBubbles;
+        };
+
+        // Perform one integration step
         continueIntegration = integrate(params);
 
-        // For profiling
+        // When profiling, we don't want to run the entire simulation until the
+        // end, but rather just enough simulation steps to get a representative
+        // view of the entire simulation
         CUDA_PROFILER_START(params.state.numIntegrationSteps == 2000);
-        CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 5000,
+        CUDA_PROFILER_STOP(params.state.numIntegrationSteps == 12000,
                            continueIntegration);
-
-        continueIntegration &= signalReceived == 0;
 
         // Track timestep
         minTimestep = params.state.timeStep < minTimestep
@@ -2045,8 +1674,8 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
         const double nextPrintTimeFraction =
             nextPrintTime - nextPrintTimeInteger;
 
-        // Print at the earliest possible moment when simulation time is larger
-        // than scaled time
+        // Print stuff to stdout at the earliest possible moment
+        // when simulation time is larger than scaled time
         if (params.state.timeInteger >= nextPrintTimeInteger &&
             params.state.timeFraction >= nextPrintTimeFraction) {
             // Calculate total energy
@@ -2062,15 +1691,6 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
                 params.ddps[(uint32_t)DDP::TEMP_DATA], params.state.interval,
                 params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
                 params.ddps[(uint32_t)DDP::Z]);
-
-            auto getSum = [](double *p, Params &params) -> double {
-                return params.cw.reduce<double, double *, double *>(
-                    &cub::DeviceReduce::Sum, p, params.state.numBubbles);
-            };
-
-            auto getAvg = [getSum](double *p, Params &params) -> double {
-                return getSum(p, params) / params.state.numBubbles;
-            };
 
             params.state.energy2 =
                 getSum(params.ddps[(uint32_t)DDP::TEMP_DATA], params);
@@ -2160,10 +1780,7 @@ void run(std::string &&inputFileName, std::string &&outputFileName) {
         ++params.state.numStepsInTimeStep;
     }
 
-    if (signalReceived == 1) {
-        std::cout << "Timeout signal received." << std::endl;
-        serializeStateAndData(outputFileName.c_str(), params);
-    } else if (params.inputs.snapshotFrequency > 0.0)
+    if (params.inputs.snapshotFrequency > 0.0)
         saveSnapshotToFile(params);
 
     deinit(params);

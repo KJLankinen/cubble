@@ -6,21 +6,16 @@
 #include <string>
 
 namespace cubble {
-void run(std::string &&inputFileName, std::string &&outputFileName);
+void run(std::string &&inputFileName);
 }
 
 int main(int argc, char **argv) {
     std::exception_ptr pExc = nullptr;
 
-    if (argc != 3) {
-        std::cout
-            << "\nUsage: " << argv[0] << " inputFile outputFile"
-            << "\ninputFile = the name of the (.json) file that contains"
-            << " the necessary inputs, or the name of the binary file that "
-               "contains the serialized state of a non-finished "
-               "simulation.\noutputFile = (.bin) file name where to save "
-               "data if simulation ends before completion"
-            << std::endl;
+    if (argc != 2) {
+        std::cout << "\nUsage: " << argv[0] << " inputFile"
+                  << "\ninputFile = the name of the (.json) file that contains"
+                  << " the necessary inputs" << std::endl;
 
         return EXIT_FAILURE;
     }
@@ -38,7 +33,7 @@ int main(int argc, char **argv) {
                "-----------\n"
             << std::endl;
 
-        cubble::run(std::string(argv[1]), std::string(argv[2]));
+        cubble::run(std::string(argv[1]));
     } catch (const std::exception &e) {
         pExc = std::current_exception();
         cubble::handleException(pExc);
