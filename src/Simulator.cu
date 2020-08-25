@@ -83,8 +83,6 @@ enum class DIP {
     NUM_VALUES
 };
 
-#define PRINT_PARAM(p) std::cout << #p << ": " << p << std::endl
-
 struct SimulationState {
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
@@ -1119,8 +1117,6 @@ void commonSetup(Params &params) {
               << " bytes\n\ttotal: "
               << params.state.memReqI + params.state.memReqD << " bytes"
               << std::endl;
-
-    params.state.print();
 }
 
 void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
