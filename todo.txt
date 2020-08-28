@@ -1,0 +1,10 @@
+- Naapurisolujen koon muutos: solun seinän pituus minimissään 2x(max(R) + R_skin). Tällöin pitäisi olla alle 32 kuplaa solussa, ja vähemmän turhia vertailuja.
+- Pienen kuplan poistuessa kuplan kaasun tilavuus lisätään ainoastaan samassa kyseisen kuplan naapureille/saman solun kuplille. 
+  (Voi olla ongelmallista, jos kuplalla ei ole naapureita, eli kupla on rattler...). Myöskään soluinformaatiota ei välttämättä pidetä ajantasalla...
+  Tarkoitus lähinnä estää floating point virheitä: jos simulaatiossa on sata miljoonaa kuplaa, yhden pienen kuplan tilavuus jaettuna sadalla miljoonalla ei ole paljoa, ja sen tuottama lisäys saattaa jäädä virheen varjoon.
+- MPI:
+    -- Kukin node aloittakoon aina laskemisen omilla kuplillaan, tällöin datan siirtäminen voidaan ehkä hoitaa samanaikaisesti, eli datan siirron vaikutus voidaan piilottaa.
+       Tarkoittaa sitä, että täytyy pitää kirjaa tai jotenkin huoli siitä, että tiedetään mitkä kuplat kuuluvat omiin, mitkä muille nodeille.
+    -- Kaasunvaihdon laskeminen ennen muita, koska parivaihdon lisäksi globaalia vaihtoa, mikä tarkoittaa datan siirtoa: lokaalin kaasunvaihdon jälkeen lähetetään omat datat muille, otetaan muiden datat vastaan,
+       samalla kun lasketaan nopeuksia: taas piilotetaan datan vaihtoon kuluva aika.
+    -- Indeksien miettiminen: jokaisella nodella omat indeksit + jokin globaali indeksointi systeemi, jolla voidaan pyytää oikeat kuplat muilta.
