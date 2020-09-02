@@ -1178,13 +1178,13 @@ __global__ void pathLengthDistanceKernel(
 
 __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
-    double volMul = dVolumeMultiplier / dTotalVolume;
+    double volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
+    DEVICE_ASSERT(volMul > 1.0, "Added volume can't be negative!");
 #if (NUM_DIM == 3)
     volMul = cbrt(volMul);
 #else
     volMul = sqrt(volMul);
 #endif
-    volMul += 1.0;
 
     for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairsNew;
          i += blockDim.x * gridDim.x) {
