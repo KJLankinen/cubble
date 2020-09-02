@@ -227,8 +227,8 @@ void updateCellsAndNeighbors(Params &params) {
     std::cout << "Max num cells: " << maxNumCells << ", grid size: ("
               << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
               << "), avg num bubbles per cell: "
-              << params.state.numBubbles /
-                     (gridSize.x * gridSize.y * gridSize.z)
+              << params.state.numBubbles / (gridSize.x * gridSize.y *
+                                            (gridSize.z > 0 ? gridSize.z : 1))
               << std::endl;
 
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
