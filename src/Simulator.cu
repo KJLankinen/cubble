@@ -1300,10 +1300,16 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     transformPositions(params, true);
 
     relDim = inputJson["boxRelDim"];
-    relDim.z = (NUM_DIM == 2) ? 1 : relDim.z;
-    double t = bubbleVolume /
-               ((float)inputJson["phiTarget"] * relDim.x * relDim.y * relDim.z);
-    t = (NUM_DIM == 3) ? std::cbrt(t) : std::sqrt(t);
+    double t =
+        bubbleVolume / ((float)inputJson["phiTarget"] * relDim.x * relDim.y);
+    if (NUM_DIM == 3) {
+        t /= relDim.z;
+        t = std::cbrt(t);
+    } else {
+        t = std::sqrt(t);
+        relDim.z = 0.0;
+    }
+
     params.state.tfr = dvec(t, t, t) * relDim;
     params.state.interval = params.state.tfr - params.state.lbb;
     params.state.flowTfr =
