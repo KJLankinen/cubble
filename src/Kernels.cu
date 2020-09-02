@@ -390,7 +390,6 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues) {
 }
 
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
-                                    double *xPrd, double *yPrd, double *zPrd,
                                     double *r, double *w, int *indices,
                                     ivec bubblesPerDim, dvec tfr, dvec lbb,
                                     double avgRad, double minRad,
@@ -423,10 +422,6 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
                              : pos.y + interval.y;
         z[i] = pos.z > lbb.z ? (pos.z < tfr.z ? pos.z : pos.z - interval.z)
                              : pos.z + interval.z;
-
-        xPrd[i] = pos.x;
-        yPrd[i] = pos.y;
-        zPrd[i] = pos.z;
 
         double area = 2.0 * CUBBLE_PI * rad;
 #if (NUM_DIM == 3)

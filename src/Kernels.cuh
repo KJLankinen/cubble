@@ -174,7 +174,6 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
 __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
 __global__ void assignDataToBubbles(double *x, double *y, double *z,
-                                    double *xPrd, double *yPrd, double *zPrd,
                                     double *r, double *w, int *indices,
                                     ivec bubblesPerDim, dvec tfr, dvec lbb,
                                     double avgRad, double minRad,

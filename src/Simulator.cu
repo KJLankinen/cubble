@@ -90,6 +90,15 @@ struct SimulationState {
     dvec flowLbb = dvec(0.0, 0.0, 0.0);
     dvec flowTfr = dvec(0.0, 0.0, 0.0);
     dvec flowVel = dvec(0.0, 0.0, 0.0);
+    double timeStep = 0.0;
+    double averageSurfaceAreaIn = 0.0;
+    double avgRad = 0.0;
+    double minRad = 0.0;
+    double fZeroPerMuZero = 0.0;
+    double kParameter = 0.0;
+    double kappa = 0.0;
+    double wallDragStrength = 0.0;
+    double skinRadius = 0.0;
 
     uint64_t memReqD = 0;
     uint64_t memReqI = 0;
@@ -101,27 +110,17 @@ struct SimulationState {
     double energy1 = 0.0;
     double energy2 = 0.0;
     double maxBubbleRadius = 0.0;
-    double timeStep = 0.0;
-    double averageSurfaceAreaIn = 0.0;
-    double avgRad = 0.0;
-    double minRad = 0.0;
-    double fZeroPerMuZero = 0.0;
-    double kParameter = 0.0;
-    double kappa = 0.0;
     double timeScalingFactor = 0.0;
-    double skinRadius = 0.0;
     double errorTolerance = 0.0;
-    double wallDragStrength = 0.0;
     double snapshotFrequency = 0.0;
 
     int numBubbles = 0;
-    int numBubblesPerCell = 0;
-    int maxNumCells = 0;
     int numPairs = 0;
+
+    int numBubblesPerCell = 0;
     int minNumBubbles = 0;
     uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
-    uint32_t originalDataStride = 0;
     uint32_t dataStride = 0;
     uint32_t pairStride = 0;
 };
@@ -175,26 +174,6 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 }
 #endif
 
-dim3 getGridSize(Params &params) {
-    const int totalNumCells = std::ceil((float)params.state.numBubbles /
-                                        params.state.numBubblesPerCell);
-    dvec relativeInterval = params.state.interval / params.state.interval.x;
-    float nx = (float)totalNumCells / relativeInterval.y;
-#if (NUM_DIM == 3)
-    nx = std::cbrt(nx / relativeInterval.z);
-#else
-    nx = std::sqrt(nx);
-    relativeInterval.z = 0;
-#endif
-
-    ivec grid = (nx * relativeInterval).floor() + 1;
-    assert(grid.x > 0);
-    assert(grid.y > 0);
-    assert(grid.z > 0);
-
-    return dim3(grid.x, grid.y, grid.z);
-}
-
 void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.state.numNeighborsSearched++;
@@ -225,11 +204,36 @@ void updateCellsAndNeighbors(Params &params) {
         static_cast<void *>(params.ddps[(uint32_t)DDP::R]),
         sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
 
-    dim3 gridSize = getGridSize(params);
-    const ivec cellDim(gridSize.x, gridSize.y, gridSize.z);
+    // Minimum size of cell is twice the sum of the skin and max bubble radius
+    const ivec cellDim =
+        (params.state.interval /
+         (2 * (params.state.maxBubbleRadius + params.state.skinRadius)))
+            .floor();
+    dim3 gridSize = dim3(cellDim.x, cellDim.y, cellDim.z);
+
+    // Determine the maximum number of Morton numbers for the simulation box
+    const int maxGridSize =
+        gridSize.x > gridSize.y
+            ? (gridSize.x > gridSize.z ? gridSize.x : gridSize.z)
+            : (gridSize.y > gridSize.z ? gridSize.y : gridSize.z);
+    int maxNumCells = 1;
+    while (maxNumCells < maxGridSize)
+        maxNumCells = maxNumCells << 1;
+
+    if (NUM_DIM == 3)
+        maxNumCells = maxNumCells * maxNumCells * maxNumCells;
+    else
+        maxNumCells = maxNumCells * maxNumCells;
+
+    std::cout << "Max num cells: " << maxNumCells << ", grid size: ("
+              << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
+              << "), avg num bubbles per cell: "
+              << params.state.numBubbles /
+                     (gridSize.x * gridSize.y * gridSize.z)
+              << std::endl;
 
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
-    int *sizes = params.dips[(uint32_t)DIP::PAIR1] + params.state.maxNumCells;
+    int *sizes = params.dips[(uint32_t)DIP::PAIR1] + maxNumCells;
     int *cellIndices =
         params.dips[(uint32_t)DIP::PAIR1COPY] + 0 * params.state.dataStride;
     int *bubbleIndices =
@@ -261,11 +265,10 @@ void updateCellsAndNeighbors(Params &params) {
 
     params.cw.histogram<int *, int, int, int>(
         &cub::DeviceHistogram::HistogramEven, cellIndices, sizes,
-        params.state.maxNumCells + 1, 0, params.state.maxNumCells,
-        params.state.numBubbles);
+        maxNumCells + 1, 0, maxNumCells, params.state.numBubbles);
 
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
-                                 params.state.maxNumCells);
+                                 maxNumCells);
 
     auto copyAndSwap = [](Params &params, int *inds, auto &&arr, uint32_t from,
                           uint32_t to) {
@@ -342,7 +345,7 @@ void updateCellsAndNeighbors(Params &params) {
         cudaStream_t stream =
             (i % 2) ? params.velocityStream : params.gasStream;
         KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
-                      params.state.numBubbles, params.state.maxNumCells,
+                      params.state.numBubbles, maxNumCells,
                       (int)params.state.pairStride, params.state.skinRadius,
                       offsets, sizes, params.dips[(uint32_t)DIP::PAIR1COPY],
                       params.dips[(uint32_t)DIP::PAIR2COPY],
@@ -1141,27 +1144,24 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
                                    params.state.numBubbles, avgRad, stdDevRad));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(
-        assignDataToBubbles, params.pairKernelSize, 0, 0,
-        params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
-        params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::XP],
-        params.ddps[(uint32_t)DDP::YP], params.ddps[(uint32_t)DDP::ZP],
-        params.ddps[(uint32_t)DDP::R], params.ddps[(uint32_t)DDP::RP],
-        params.dips[(uint32_t)DIP::INDEX], bubblesPerDim, params.state.tfr,
-        params.state.lbb, avgRad, params.state.minRad, params.state.numBubbles);
+    KERNEL_LAUNCH(assignDataToBubbles, params.pairKernelSize, 0, 0,
+                  params.ddps[(uint32_t)DDP::X], params.ddps[(uint32_t)DDP::Y],
+                  params.ddps[(uint32_t)DDP::Z], params.ddps[(uint32_t)DDP::R],
+                  params.ddps[(uint32_t)DDP::RP],
+                  params.dips[(uint32_t)DIP::INDEX], bubblesPerDim,
+                  params.state.tfr, params.state.lbb, avgRad,
+                  params.state.minRad, params.state.numBubbles);
 
     params.state.averageSurfaceAreaIn =
         params.cw.reduce<double, double *, double *>(
             &cub::DeviceReduce::Sum, params.ddps[(uint32_t)DDP::RP],
             params.state.numBubbles, 0);
 
-    CUDA_CALL(cudaMemcpyAsync(
-        static_cast<void *>(params.ddps[(uint32_t)DDP::RP]),
-        static_cast<void *>(params.ddps[(uint32_t)DDP::R]),
-        sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
+    params.state.maxBubbleRadius = params.cw.reduce<double, double *, double *>(
+        &cub::DeviceReduce::Max, params.ddps[(uint32_t)DDP::R],
+        params.state.numBubbles, 0);
 
     std::cout << "Updating neighbor lists." << std::endl;
-
     updateCellsAndNeighbors(params);
 
     // Calculate some initial values which are needed
@@ -1276,27 +1276,6 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     params.state.tfr = d * bubblesPerDim.asType<double>() + params.state.lbb;
     params.state.interval = params.state.tfr - params.state.lbb;
     params.state.timeStep = inputJson["timeStepIn"];
-
-    // Determine the maximum number of Morton numbers for the simulation box
-    dim3 gridDim = getGridSize(params);
-    const int maxGridDim =
-        gridDim.x > gridDim.y ? (gridDim.x > gridDim.z ? gridDim.x : gridDim.z)
-                              : (gridDim.y > gridDim.z ? gridDim.y : gridDim.z);
-    int maxNumCells = 1;
-    while (maxNumCells < maxGridDim)
-        maxNumCells = maxNumCells << 1;
-
-    if (NUM_DIM == 3)
-        maxNumCells = maxNumCells * maxNumCells * maxNumCells;
-    else
-        maxNumCells = maxNumCells * maxNumCells;
-
-    params.state.maxNumCells = maxNumCells;
-
-    std::cout << "Maximum (theoretical) number of cells: "
-              << params.state.maxNumCells
-              << ", actual grid dimensions: " << gridDim.x << ", " << gridDim.y
-              << ", " << gridDim.z << std::endl;
 
     // Reserve memory etc.
     commonSetup(params);
