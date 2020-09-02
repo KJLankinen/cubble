@@ -204,10 +204,11 @@ void updateCellsAndNeighbors(Params &params) {
         sizeof(double) * params.state.dataStride, cudaMemcpyDeviceToDevice, 0));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
-    const ivec cellDim =
+    ivec cellDim =
         (params.state.interval /
          (2 * (params.state.maxBubbleRadius + params.state.skinRadius)))
             .floor();
+    cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
     dim3 gridSize = dim3(cellDim.x, cellDim.y, cellDim.z);
 
     // Determine the maximum number of Morton numbers for the simulation box
@@ -227,8 +228,8 @@ void updateCellsAndNeighbors(Params &params) {
     std::cout << "Max num cells: " << maxNumCells << ", grid size: ("
               << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
               << "), avg num bubbles per cell: "
-              << params.state.numBubbles / (gridSize.x * gridSize.y *
-                                            (gridSize.z > 0 ? gridSize.z : 1))
+              << params.state.numBubbles /
+                     (gridSize.x * gridSize.y * gridSize.z)
               << std::endl;
 
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
