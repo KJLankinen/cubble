@@ -1092,7 +1092,7 @@ void commonSetup(Params &params) {
     // neighbors is < (10 x numBubbles) and in 2D < (3.5 x numBubbles)
     // Note that these numbers depend on the "skin radius", i.e.
     // from how far are the neighbors looked for.
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 4;
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 10;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
