@@ -66,9 +66,6 @@
   "rngSeedExpl": "The seed for the RNG.",
   "rngSeed": 4,
 
-  "numBubblesPerCellExpl": "How many bubbles per cell.",
-  "numBubblesPerCell": 32,
-
   "numStepsToRelaxExpl": "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
   "numStepsToRelax": 1e4,
 
