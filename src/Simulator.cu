@@ -225,12 +225,14 @@ void updateCellsAndNeighbors(Params &params) {
     else
         maxNumCells = maxNumCells * maxNumCells;
 
+#ifndef NDEBUG
     std::cout << "Max num cells: " << maxNumCells << ", grid size: ("
               << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
               << "), avg num bubbles per cell: "
               << params.state.numBubbles /
                      (gridSize.x * gridSize.y * gridSize.z)
               << std::endl;
+#endif
 
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
     int *sizes = params.dips[(uint32_t)DIP::PAIR1] + maxNumCells;
@@ -360,8 +362,10 @@ void updateCellsAndNeighbors(Params &params) {
                          static_cast<void *>(dnp), sizeof(int),
                          cudaMemcpyDeviceToHost));
 
+#ifndef NDEBUG
     std::cout << "Max num pairs: " << params.state.pairStride
               << ", actual num pairs: " << params.state.numPairs << std::endl;
+#endif
 
     params.cw.sortPairs<int, int>(
         &cub::DeviceRadixSort::SortPairs,
@@ -1092,10 +1096,10 @@ void commonSetup(Params &params) {
 
     // Integers
     // It seems to roughly hold that in 3 dimensions the total number of
-    // neighbors is < (10 x numBubbles) and in 2D < (3.5 x numBubbles)
+    // neighbors is < (10 x numBubbles) and in 2D < (3.2 x numBubbles)
     // Note that these numbers depend on the "skin radius", i.e.
     // from how far are the neighbors looked for.
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 10;
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 4;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
