@@ -1342,8 +1342,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     while (true) {
         double time = stabilize(params, inputJson["numStepsToRelax"]);
         double deltaEnergy =
-            std::abs(params.state.energy2 - params.state.energy1) / time;
-        deltaEnergy *= 0.5 * (float)inputJson["sigmaZero"];
+            std::abs(1.0 - params.state.energy1 / params.state.energy2) / time;
+        // deltaEnergy *= 0.5 * (float)inputJson["sigmaZero"];
 
         if (deltaEnergy < inputJson["maxDeltaEnergy"]) {
             std::cout << "Final delta energy " << deltaEnergy << " after "
