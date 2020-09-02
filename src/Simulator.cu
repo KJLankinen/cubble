@@ -233,6 +233,7 @@ void updateCellsAndNeighbors(Params &params) {
                      (gridSize.x * gridSize.y * gridSize.z)
               << std::endl;
 #endif
+    assert(maxNumCells < params.state.pairStride);
 
     int *offsets = params.dips[(uint32_t)DIP::PAIR1];
     int *sizes = params.dips[(uint32_t)DIP::PAIR1] + maxNumCells;
