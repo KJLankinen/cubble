@@ -1095,11 +1095,11 @@ void commonSetup(Params &params) {
             params.deviceDoubleMemory + i * params.state.dataStride;
 
     // Integers
-    // It seems to roughly hold that in 3 dimensions the total number of
-    // neighbors is < (10 x numBubbles) and in 2D < (3.2 x numBubbles)
+    // It seems to hold that in 3 dimensions the total number of
+    // bubble pairs is 10x and in two dimensions 4x numBubbles.
     // Note that these numbers depend on the "skin radius", i.e.
     // from how far are the neighbors looked for.
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 24 : 4;
+    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 10 : 4;
     params.state.pairStride = avgNumNeighbors * params.state.dataStride;
 
     params.state.memReqI =
