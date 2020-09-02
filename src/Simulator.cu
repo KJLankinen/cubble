@@ -117,7 +117,6 @@ struct SimulationState {
     int numBubbles = 0;
     int numPairs = 0;
 
-    int numBubblesPerCell = 0;
     int minNumBubbles = 0;
     uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
@@ -1241,7 +1240,6 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.state.errorTolerance = inputJson["errorTolerance"];
         params.state.wallDragStrength = inputJson["wallDragStrength"];
         params.state.snapshotFrequency = inputJson["snapshotFrequency"];
-        params.state.numBubblesPerCell = inputJson["numBubblesPerCell"];
         params.state.minNumBubbles = inputJson["minNumBubbles"];
     } else
         throw std::runtime_error("Couldn't open input file!");
