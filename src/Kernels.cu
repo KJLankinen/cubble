@@ -414,7 +414,8 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         pos += randomOffset;
 
         double rad = r[i];
-        rad = rad > 0 ? rad : -rad;
+        rad = abs(rad);
+        rad = rad > minRad ? rad : rad + minRad;
         r[i] = rad;
         x[i] = pos.x > lbb.x ? (pos.x < tfr.x ? pos.x : pos.x - interval.x)
                              : pos.x + interval.x;
