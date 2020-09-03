@@ -5,12 +5,12 @@ __device__ double dTotalArea;
 __device__ double dTotalOverlapArea;
 __device__ double dTotalOverlapAreaPerRadius;
 __device__ double dTotalAreaPerRadius;
-__device__ double dTotalVolume;
+__device__ double dTotalVolumeOld;
+__device__ double dTotalVolumeNew;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ int dNumPairsNew;
 __device__ int dNumToBeDeleted;
-__device__ double dVolumeMultiplier;
 
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg) {
@@ -912,18 +912,18 @@ __global__ void correctKernel(int numValues, double timeStep,
     __shared__ double me[128];
     // maximum radius
     __shared__ double mr[128];
-    // volume of disappearing bubbles, i.e. volume multiplier
-    __shared__ double vm[128];
-    // volume of remaining bubbles, i.e. total volume
-    __shared__ double tv[128];
+    // volume of all bubbles, i.e. old total volume
+    __shared__ double tvo[128];
+    // volume of remaining bubbles, i.e. new total volume
+    __shared__ double tvn[128];
     // expansion, i.e. how far the boundary of a bubble has moved since
     // neighbors were last searched. Boundary expansion =
     // distance moved + radius increased with gas exchange.
     __shared__ double boundexp[128];
     me[tid] = 0.0;
     mr[tid] = 0.0;
-    vm[tid] = 0.0;
-    tv[tid] = 0.0;
+    tvo[tid] = 0.0;
+    tvn[tid] = 0.0;
     boundexp[tid] = 0.0;
 
     for (int i = tid + blockIdx.x * blockDim.x; i < numValues;
@@ -957,14 +957,16 @@ __global__ void correctKernel(int numValues, double timeStep,
             rp[i] = corrected;
             dist += corrected - r0[i];
 
-            double vol = corrected * corrected * CUBBLE_PI;
+            double vol = corrected * corrected;
 #if (NUM_DIM == 3)
-            vol *= 1.333333333333333333333333 * corrected;
+            vol *= corrected;
 #endif
+            // Add all bubbles to old total volume
+            tvo[tid] += vol;
+            // Add remaining bubbles to new total volume
             if (corrected > minRad) {
-                tv[tid] += vol;
+                tvn[tid] += vol;
             } else {
-                vm[tid] += vol;
                 toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = mr[tid] > corrected ? mr[tid] : corrected;
@@ -1002,13 +1004,15 @@ __global__ void correctKernel(int numValues, double timeStep,
         boundexp[tid] = boundexp[tid] > boundexp[96 + tid] ? boundexp[tid]
                                                            : boundexp[96 + tid];
 
-        tv[tid] += tv[32 + tid];
-        tv[tid] += tv[64 + tid];
-        tv[tid] += tv[96 + tid];
+        tvn[tid] += tvn[32 + tid];
+        tvn[tid] += tvn[64 + tid];
+        tvn[tid] += tvn[96 + tid];
 
-        vm[tid] += vm[32 + tid];
-        vm[tid] += vm[64 + tid];
-        vm[tid] += vm[96 + tid];
+        tvo[tid] += tvo[32 + tid];
+        tvo[tid] += tvo[64 + tid];
+        tvo[tid] += tvo[96 + tid];
+
+        __syncwarp();
 
         if (tid < 8) {
             me[tid] = me[tid] > me[8 + tid] ? me[tid] : me[8 + tid];
@@ -1029,13 +1033,15 @@ __global__ void correctKernel(int numValues, double timeStep,
                                 ? boundexp[tid]
                                 : boundexp[24 + tid];
 
-            tv[tid] += tv[8 + tid];
-            tv[tid] += tv[16 + tid];
-            tv[tid] += tv[24 + tid];
+            tvn[tid] += tvn[8 + tid];
+            tvn[tid] += tvn[16 + tid];
+            tvn[tid] += tvn[24 + tid];
 
-            vm[tid] += vm[8 + tid];
-            vm[tid] += vm[16 + tid];
-            vm[tid] += vm[24 + tid];
+            tvo[tid] += tvo[8 + tid];
+            tvo[tid] += tvo[16 + tid];
+            tvo[tid] += tvo[24 + tid];
+
+            __syncwarp();
 
             if (tid < 2) {
                 me[tid] = me[tid] > me[2 + tid] ? me[tid] : me[2 + tid];
@@ -1056,13 +1062,15 @@ __global__ void correctKernel(int numValues, double timeStep,
                                     ? boundexp[tid]
                                     : boundexp[6 + tid];
 
-                tv[tid] += tv[2 + tid];
-                tv[tid] += tv[4 + tid];
-                tv[tid] += tv[6 + tid];
+                tvn[tid] += tvn[2 + tid];
+                tvn[tid] += tvn[4 + tid];
+                tvn[tid] += tvn[6 + tid];
 
-                vm[tid] += vm[2 + tid];
-                vm[tid] += vm[4 + tid];
-                vm[tid] += vm[6 + tid];
+                tvo[tid] += tvo[2 + tid];
+                tvo[tid] += tvo[4 + tid];
+                tvo[tid] += tvo[6 + tid];
+
+                __syncwarp();
 
                 if (tid == 0) {
                     me[tid] = me[tid] > me[1] ? me[tid] : me[1];
@@ -1075,11 +1083,11 @@ __global__ void correctKernel(int numValues, double timeStep,
                                                                 : boundexp[1];
                     reducedValues[blockIdx.x + 2 * gridDim.x] = boundexp[tid];
 
-                    tv[tid] += tv[1];
-                    atomicAdd(&dTotalVolume, tv[tid]);
+                    tvn[tid] += tvn[1];
+                    atomicAdd(&dTotalVolumeNew, tvn[tid]);
 
-                    vm[tid] += vm[1];
-                    atomicAdd(&dVolumeMultiplier, vm[tid]);
+                    tvo[tid] += tvo[1];
+                    atomicAdd(&dTotalVolumeOld, tvo[tid]);
                 }
             }
         }
@@ -1179,8 +1187,7 @@ __global__ void pathLengthDistanceKernel(
 
 __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
                                   int *toBeDeleted, double *r) {
-    double volMul = 1.0 + dVolumeMultiplier / dTotalVolume;
-    DEVICE_ASSERT(volMul > 1.0, "Added volume can't be negative!");
+    double volMul = dTotalVolumeOld / dTotalVolumeNew;
 #if (NUM_DIM == 3)
     volMul = cbrt(volMul);
 #else
@@ -1243,9 +1250,9 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
             j += 1;
         }
 
-        // if (i < numValues - dNumToBeDeleted) {
-        //    r[i] = r[i] * volMul;
-        //}
+        if (i < numValues - dNumToBeDeleted) {
+            r[i] = r[i] * volMul;
+        }
     }
 }
 } // namespace cubble

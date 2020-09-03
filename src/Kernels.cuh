@@ -11,12 +11,12 @@ extern __device__ double dTotalArea;
 extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
 extern __device__ double dTotalAreaPerRadius;
-extern __device__ double dTotalVolume;
+extern __device__ double dTotalVolumeOld;
+extern __device__ double dTotalVolumeNew;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
-extern __device__ double dVolumeMultiplier;
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
@@ -82,10 +82,10 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalOverlapArea = 0.0;
         dTotalOverlapAreaPerRadius = 0.0;
         dTotalAreaPerRadius = 0.0;
-        dTotalVolume = 0.0;
+        dTotalVolumeOld = 0.0;
+        dTotalVolumeNew = 0.0;
         dNumToBeDeleted = 0;
         dNumPairsNew = dNumPairs;
-        dVolumeMultiplier = 0.0;
     }
 }
 
@@ -341,15 +341,21 @@ __global__ void swapDataCountPairs(int numValues, double minRad, int *first,
         tbds[threadIdx.x] += tbds[threadIdx.x + 64];
         tbds[threadIdx.x] += tbds[threadIdx.x + 96];
 
+        __syncwarp();
+
         if (threadIdx.x < 8) {
             tbds[threadIdx.x] += tbds[threadIdx.x + 8];
             tbds[threadIdx.x] += tbds[threadIdx.x + 16];
             tbds[threadIdx.x] += tbds[threadIdx.x + 24];
 
+            __syncwarp();
+
             if (threadIdx.x < 2) {
                 tbds[threadIdx.x] += tbds[threadIdx.x + 2];
                 tbds[threadIdx.x] += tbds[threadIdx.x + 4];
                 tbds[threadIdx.x] += tbds[threadIdx.x + 6];
+
+                __syncwarp();
 
                 if (threadIdx.x < 1) {
                     tbds[threadIdx.x] += tbds[threadIdx.x + 1];
