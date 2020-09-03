@@ -1058,10 +1058,10 @@ void commonSetup(Params &params) {
                                  sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(
         dTotalAreaPerRadius, reinterpret_cast<void *>(&zero), sizeof(double)));
-    CUDA_CALL(cudaMemcpyToSymbol(dTotalVolume, reinterpret_cast<void *>(&zero),
-                                 sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(
-        dVolumeMultiplier, reinterpret_cast<void *>(&zero), sizeof(double)));
+        dTotalVolumeNew, reinterpret_cast<void *>(&zero), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(
+        dTotalVolumeOld, reinterpret_cast<void *>(&zero), sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(
         dErrorEncountered, reinterpret_cast<void *>(&falseB), sizeof(bool)));
     CUDA_CALL(cudaMemcpyToSymbol(dNumPairs, reinterpret_cast<void *>(&zeroI),
