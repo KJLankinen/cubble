@@ -1243,9 +1243,9 @@ __global__ void addVolumeFixPairs(int numValues, int *first, int *second,
             j += 1;
         }
 
-        if (i < numValues - dNumToBeDeleted) {
-            r[i] = r[i] * volMul;
-        }
+        // if (i < numValues - dNumToBeDeleted) {
+        //    r[i] = r[i] * volMul;
+        //}
     }
 }
 } // namespace cubble
