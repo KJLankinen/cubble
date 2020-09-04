@@ -878,6 +878,10 @@ double calculateVolumeOfBubbles(Params &params) {
 void deinit(Params &params) {
     CUDA_CALL(cudaDeviceSynchronize());
 
+    Constants *deviceConstants = nullptr;
+    CUDA_ASSERT(cudaGetSymbolAddress(
+        reinterpret_cast<void **>(&deviceConstants), dConstants));
+    CUDA_CALL(cudaFree(static_cast<void *>(deviceConstants)));
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceDoubleMemory)));
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceIntMemory)));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
@@ -1150,9 +1154,12 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.tfr - params.hostConstants.lbb;
     params.hostData.timeStep = inputJson["timeStepIn"];
 
+    // Allocate and copy constants to GPU
     Constants *deviceConstants = nullptr;
     CUDA_ASSERT(cudaGetSymbolAddress(
         reinterpret_cast<void **>(&deviceConstants), dConstants));
+    CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceConstants),
+                           sizeof(Constants)));
     CUDA_CALL(cudaMemcpy(static_cast<void *>(deviceConstants),
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
