@@ -305,17 +305,20 @@ void saveSnapshotToFile(Params &params) {
         doubleData.resize(params.hostData.dataStride *
                           (uint32_t)DDP::NUM_VALUES);
         for (uint32_t i = 0; i < (uint32_t)DDP::NUM_VALUES; ++i) {
-            CUDA_CALL(cudaMemcpy(&doubleData[i * params.hostData.dataStride],
-                                 params.ddps[i],
-                                 sizeof(double) * params.hostData.dataStride,
-                                 cudaMemcpyDeviceToHost));
+            CUDA_CALL(
+                cudaMemcpy(static_cast<void *>(
+                               &doubleData[i * params.hostData.dataStride]),
+                           static_cast<void *>(params.ddps[i]),
+                           sizeof(double) * params.hostData.dataStride,
+                           cudaMemcpyDeviceToHost));
         }
 
         std::vector<int> intData;
         intData.resize(params.hostData.dataStride);
-        CUDA_CALL(cudaMemcpy(intData.data(), params.dips[(uint32_t)DIP::INDEX],
-                             sizeof(intData[0]) * intData.size(),
-                             cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(
+            static_cast<void *>(intData.data()),
+            static_cast<void *>(params.dips[(uint32_t)DIP::INDEX]),
+            sizeof(intData[0]) * intData.size(), cudaMemcpyDeviceToHost));
 
         if (params.hostData.numSnapshots == 0) {
             for (uint64_t i = 0; i < (uint64_t)params.hostData.numBubbles;
@@ -1150,7 +1153,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     Constants *deviceConstants = nullptr;
     CUDA_ASSERT(cudaGetSymbolAddress(
         reinterpret_cast<void **>(&deviceConstants), dConstants));
-    CUDA_CALL(cudaMemcpy(deviceConstants, &params.hostConstants,
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(deviceConstants),
+                         static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
 
     // Reserve memory etc.
@@ -1195,7 +1199,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.lbb;
 
     // Copy the updated constants to GPU
-    CUDA_CALL(cudaMemcpy(deviceConstants, &params.hostConstants,
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(deviceConstants),
+                         static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
 
     transformPositions(params, false);
@@ -1255,15 +1260,15 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     // Set starting positions
     // Avoiding batched memset, because the pointers might not be in order
     const uint64_t numBytesToCopy = sizeof(double) * params.hostData.dataStride;
-    CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::X0],
-                         params.ddps[(uint32_t)DDP::X], numBytesToCopy,
-                         cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Y0],
-                         params.ddps[(uint32_t)DDP::Y], numBytesToCopy,
-                         cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpy(params.ddps[(uint32_t)DDP::Z0],
-                         params.ddps[(uint32_t)DDP::Z], numBytesToCopy,
-                         cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.ddps[(uint32_t)DDP::X0]),
+                         static_cast<void *>(params.ddps[(uint32_t)DDP::X]),
+                         numBytesToCopy, cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.ddps[(uint32_t)DDP::Y0]),
+                         static_cast<void *>(params.ddps[(uint32_t)DDP::Y]),
+                         numBytesToCopy, cudaMemcpyDeviceToDevice));
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.ddps[(uint32_t)DDP::Z0]),
+                         static_cast<void *>(params.ddps[(uint32_t)DDP::Z]),
+                         numBytesToCopy, cudaMemcpyDeviceToDevice));
 
     // Reset wrap counts to 0
     // Again avoiding batched memset, because the pointers might not be in order
