@@ -453,7 +453,6 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                                double *x, double *y, double *z,
                                int *numNeighbors) {
     const dvec interval = dConstants->interval;
-    const double skinRadius = dConstants->skinRadius;
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 =
@@ -516,11 +515,11 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
     }
 }
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
-                                   int *pair2, double *r, double *x, double *y,
-                                   double *z, double *vx, double *vy,
+__global__ void velocityPairKernel(int *pair1, int *pair2, double *r, double *x,
+                                   double *y, double *z, double *vx, double *vy,
                                    double *vz) {
     const dvec interval = dConstants->interval;
+    const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         int idx1 = pair1[i];
