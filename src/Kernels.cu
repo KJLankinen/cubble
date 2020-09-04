@@ -551,22 +551,22 @@ __global__ void velocityPairKernel(int *pair1, int *pair2, double *r, double *x,
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
                                    double *vz) {
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+    double distance1 = 0.0;
+    double distance2 = 0.0;
+    double distance = 0.0;
+    double xDrag = 1.0;
+    double yDrag = 1.0;
+    const double rad = r[i];
+    const double invRad = 1.0 / rad;
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
     const double wallDragStrength = dConstants->wallDragStrength;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
-         i += gridDim.x * blockDim.x) {
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-        double distance1 = 0.0;
-        double distance2 = 0.0;
-        double distance = 0.0;
-        double xDrag = 1.0;
-        double yDrag = 1.0;
-        const double rad = r[i];
-        const double invRad = 1.0 / rad;
 #endif
 
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += gridDim.x * blockDim.x) {
 #if (PBC_X == 0)
         distance1 = x[i] - lbb.x;
         distance2 = x[i] - tfr.x;
