@@ -1,6 +1,7 @@
 #include "Kernels.cuh"
 
 namespace cubble {
+__device__ Constants *dConstants;
 __device__ double dTotalArea;
 __device__ double dTotalOverlapArea;
 __device__ double dTotalOverlapAreaPerRadius;
@@ -68,22 +69,27 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
 }
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
-                                         dvec lbb, dvec tfr, double *x,
-                                         double *y, double *z) {
-    const dvec interval = tfr - lbb;
+                                         double *x, double *y, double *z) {
+    const double lx = dConstants->lbb.x;
+    const double ly = dConstants->lbb.y;
+    const double lz = dConstants->lbb.z;
+    const double ix = dConstants->interval.x;
+    const double iy = dConstants->interval.y;
+    const double iz = dConstants->interval.z;
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         if (normalize) {
-            x[i] = (x[i] - lbb.x) / interval.x;
-            y[i] = (y[i] - lbb.y) / interval.y;
+            x[i] = (x[i] - lx) / ix;
+            y[i] = (y[i] - ly) / iy;
 #if (NUM_DIM == 3)
-            z[i] = (z[i] - lbb.z) / interval.z;
+            z[i] = (z[i] - lz) / iz;
 #endif
         } else {
-            x[i] = interval.x * x[i] + lbb.x;
-            y[i] = interval.y * y[i] + lbb.y;
+            x[i] = ix * x[i] + lx;
+            y[i] = iy * y[i] + ly;
 #if (NUM_DIM == 3)
-            z[i] = interval.z * z[i] + lbb.z;
+            z[i] = iz * z[i] + lz;
 #endif
         }
     }
@@ -166,13 +172,18 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
     return get1DIdxFrom3DIdx(idxVec, dim);
 }
 
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
-                                 dvec tfr, ivec cellDim) {
-    const dvec interval = tfr - lbb;
-    const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
-    const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
+    const double lx = dConstants->lbb.x;
+    const double ly = dConstants->lbb.y;
+    const double lz = dConstants->lbb.z;
+    const double ix = dConstants->interval.x;
+    const double iy = dConstants->interval.y;
+    const double iz = dConstants->interval.z;
+
+    const int xid = floor(cellDim.x * (x - lx) / ix);
+    const int yid = floor(cellDim.y * (y - ly) / iy);
 #if (NUM_DIM == 3)
-    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+    const int zid = floor(cellDim.z * (z - lz) / iz);
 #else
     const int zid = 0;
 #endif
@@ -303,19 +314,18 @@ __device__ __host__ unsigned int compact1By2(unsigned int x) {
 }
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, dvec interval, double skinRadius,
-                            double *x, double *y, double *z,
+                            int *second, double *x, double *y, double *z,
                             int *numNeighbors) {
     const double r1 = r[idx1];
     const double r2 = r[idx2];
-    double maxDistance = r1 + r2 + skinRadius;
+    const double maxDistance = r1 + r2 + dConstants->skinRadius;
     dvec p1 = dvec(x[idx1], y[idx1], 0.0);
     dvec p2 = dvec(x[idx2], y[idx2], 0.0);
 #if (NUM_DIM == 3)
     p1.z = z[idx1];
     p2.z = z[idx2];
 #endif
-    if (wrappedDifference(p1, p2, interval).getSquaredLength() <
+    if (wrappedDifference(p1, p2, dConstants->interval).getSquaredLength() <
         maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
         int id = idx1 > idx2 ? idx1 : idx2;
@@ -330,8 +340,8 @@ __device__ void comparePair(int idx1, int idx2, double *r, int *first,
     }
 }
 
-__global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
-                           double *y, double *z, int *mx, int *my, int *mz) {
+__global__ void wrapKernel(int numValues, double *x, double *y, double *z,
+                           int *mx, int *my, int *mz) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         double *v;
@@ -340,6 +350,8 @@ __global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
         double low;
         double high;
         int mult;
+        const dvec lbb = dConstants->lbb;
+        const dvec tfr = dConstants->tfr;
 #if (PBC_X == 1)
         v = x;
         m = mx;
@@ -389,11 +401,13 @@ __global__ void calculateVolumes(double *r, double *volumes, int numValues) {
     }
 }
 
-__global__ void assignDataToBubbles(double *x, double *y, double *z,
-                                    double *r, double *w, int *indices,
-                                    ivec bubblesPerDim, dvec tfr, dvec lbb,
-                                    double avgRad, double minRad,
-                                    int numValues) {
+__global__ void assignDataToBubbles(double *x, double *y, double *z, double *r,
+                                    double *w, int *indices, ivec bubblesPerDim,
+                                    double avgRad, int numValues) {
+    const dvec interval = dConstants->interval;
+    const dvec lbb = dConstants->lbb;
+    const dvec tfr = dConstants->tfr;
+    const double minRad = dConstants->minRad;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         indices[i] = i;
@@ -408,7 +422,6 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
         pos.z =
             (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
 #endif
-        dvec interval = tfr - lbb;
         pos *= interval;
         randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
         pos += randomOffset;
@@ -434,8 +447,9 @@ __global__ void assignDataToBubbles(double *x, double *y, double *z,
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z,
                                      int *cellIndices, int *bubbleIndices,
-                                     dvec lbb, dvec tfr, ivec cellDim,
-                                     int numValues) {
+                                     ivec cellDim, int numValues) {
+    const dvec lbb = dConstants->lbb;
+    const dvec tfr = dConstants->tfr;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
@@ -444,10 +458,12 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
 }
 
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
-                               int numCells, int numMaxPairs, double skinRadius,
-                               int *offsets, int *sizes, int *first,
-                               int *second, double *r, dvec interval, double *x,
-                               double *y, double *z, int *numNeighbors) {
+                               int numCells, int numMaxPairs, int *offsets,
+                               int *sizes, int *first, int *second, double *r,
+                               double *x, double *y, double *z,
+                               int *numNeighbors) {
+    const dvec interval = dConstants->interval;
+    const double skinRadius = dConstants->skinRadius;
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
     const int cellIdx2 =
@@ -511,9 +527,10 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
 }
 
 __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
-                                   int *pair2, double *r, dvec interval,
-                                   double *x, double *y, double *z, double *vx,
-                                   double *vy, double *vz) {
+                                   int *pair2, double *r, double *x, double *y,
+                                   double *z, double *vx, double *vy,
+                                   double *vz) {
+    const dvec interval = dConstants->interval;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         int idx1 = pair1[i];
@@ -544,8 +561,11 @@ __global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
-                                   double *vz, dvec lbb, dvec tfr,
-                                   double fZeroPerMuZero, double dragCoeff) {
+                                   double *vz) {
+    const dvec lbb = dConstants->lbb;
+    const dvec tfr = dConstants->tfr;
+    const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
+    const double wallDragStrenght = dConstants->wallDragStrenght;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
@@ -569,7 +589,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             const double velocity =
                 direction * fZeroPerMuZero * (rad - distance) * invRad;
             vx[i] += velocity;
-            xDrag = 1.0 - dragCoeff;
+            xDrag = 1.0 - wallDragStrenght;
 
             // Drag of x wall to y & z
             vy[i] *= xDrag;
@@ -591,7 +611,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             // Retroactively apply possible drag from x wall to the velocity the
             // y wall causes
             vy[i] += velocity * xDrag;
-            yDrag = 1.0 - dragCoeff;
+            yDrag = 1.0 - wallDragStrenght;
 
             // Drag of y wall to x & z
             vx[i] *= yDrag;
@@ -615,8 +635,8 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             vz[i] += velocity * xDrag * yDrag;
 
             // Drag of z wall to x & y directions
-            vx[i] *= 1.0 - dragCoeff;
-            vy[i] *= 1.0 - dragCoeff;
+            vx[i] *= 1.0 - wallDragStrenght;
+            vy[i] *= 1.0 - wallDragStrenght;
         }
 #endif
     }
@@ -647,8 +667,10 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,
                                    double *nVelX, double *nVelY, double *nVelZ,
                                    double *posX, double *posY, double *posZ,
-                                   double *r, dvec flowVel, dvec flowTfr,
-                                   dvec flowLbb) {
+                                   double *r) {
+    const dvec flowVel = dConstants->flowVel;
+    const dvec flowTfr = dConstants->flowTfr;
+    const dvec flowLbb = dConstants->flowLbb;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         const double multiplier =
@@ -682,8 +704,9 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
 }
 
 __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
-                                      double *r, double *energy, dvec interval,
-                                      double *x, double *y, double *z) {
+                                      double *r, double *energy, double *x,
+                                      double *y, double *z) {
+    const dvec interval = dConstants->interval;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         const int idx1 = first[i];
@@ -705,9 +728,9 @@ __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
 }
 
 __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
-                                  dvec interval, double *r, double *drdt,
-                                  double *freeArea, double *x, double *y,
-                                  double *z) {
+                                  double *r, double *drdt, double *freeArea,
+                                  double *x, double *y, double *z) {
+    const dvec interval = dConstants->interval;
     __shared__ double totalArea[128];
     __shared__ double totalOverlapArea[128];
     __shared__ double totalAreaPerRadius[128];
@@ -858,9 +881,10 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
 }
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
-                                            double *freeArea, int numValues,
-                                            double kappa, double kParam,
-                                            double averageSurfaceAreaIn) {
+                                            double *freeArea, int numValues) {
+    const double kappa = dConstants->kappa;
+    const double kParam = dConstants->kParam;
+    const double averageSurfaceAreaIn = dConstants->averageSurfaceAreaIn;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
@@ -898,14 +922,14 @@ __global__ void predictKernel(int numValues, double timeStep,
 }
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double minRad,
-                              double *errors, double *reducedValues,
-                              int *toBeDeleted, double *xp, double *x,
-                              double *vx, double *vxp, double *yp, double *y,
-                              double *vy, double *vyp, double *zp, double *z,
-                              double *vz, double *vzp, double *rp, double *r,
-                              double *vr, double *vrp, double *x0, double *y0,
-                              double *z0, double *r0) {
+                              bool useGasExchange, double *errors,
+                              double *reducedValues, int *toBeDeleted,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp,
+                              double *x0, double *y0, double *z0, double *r0) {
+    const double minRad = dConstants->minRad;
     // Adams-Moulton integration
     int tid = threadIdx.x;
     // maximum error
@@ -1153,10 +1177,11 @@ __global__ void eulerKernel(int numValues, double timeStep, double *x,
 }
 
 __global__ void pathLengthDistanceKernel(
-    int numValues, dvec interval, double *pathLength, double *pathLengthPrev,
+    int numValues, double *pathLength, double *pathLengthPrev,
     double *squaredDistance, double *x, double *xPrev, double *x0,
     int *wrapCountX, double *y, double *yPrev, double *y0, int *wrapCountY,
     double *z, double *zPrev, double *z0, int *wrapCountZ) {
+    const dvec interval = dConstants->interval;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += blockDim.x * gridDim.x) {
         double diff = 0.0;

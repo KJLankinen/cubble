@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DataDefinitions.h"
 #include "Util.h"
 #include "Vec.h"
 #include <assert.h>
@@ -7,6 +8,7 @@
 #include <stdint.h>
 
 namespace cubble {
+extern __device__ Constants *dConstants;
 extern __device__ double dTotalArea;
 extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
@@ -142,12 +144,10 @@ __global__ void copyKernel(int numValues, ReorganizeType reorganizeType,
 __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
-                                         dvec lbb, dvec tfr, double *x,
-                                         double *y, double *z);
+                                         double *x, double *y, double *z);
 
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
-__device__ int getCellIdxFromPos(double x, double y, double z, dvec lbb,
-                                 dvec tfr, ivec cellDim);
+__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
@@ -165,40 +165,35 @@ __device__ __host__ unsigned int compact1By1(unsigned int x);
 __device__ __host__ unsigned int compact1By2(unsigned int x);
 
 __device__ void comparePair(int idx1, int idx2, double *r, int *first,
-                            int *second, dvec interval, double skinRadius,
-                            double *x, double *y, double *z, int *numNeighbors);
+                            int *second, double *x, double *y, double *z,
+                            int *numNeighbors);
 
-__global__ void wrapKernel(int numValues, dvec lbb, dvec tfr, double *x,
-                           double *y, double *z, int *mx, int *my, int *mz);
+__global__ void wrapKernel(int numValues, double *x, double *y, double *z,
+                           int *mx, int *my, int *mz);
 
 __global__ void calculateVolumes(double *r, double *volumes, int numValues);
 
-__global__ void assignDataToBubbles(double *x, double *y, double *z,
-                                    double *r, double *w, int *indices,
-                                    ivec bubblesPerDim, dvec tfr, dvec lbb,
-                                    double avgRad, double minRad,
-                                    int numValues);
+__global__ void assignDataToBubbles(double *x, double *y, double *z, double *r,
+                                    double *w, int *indices, ivec bubblesPerDim,
+                                    double avgRad, int numValues);
 
 __global__ void assignBubblesToCells(double *x, double *y, double *z,
                                      int *cellIndices, int *bubbleIndices,
-                                     dvec lbb, dvec tfr, ivec cellDim,
-                                     int numValues);
+                                     ivec cellDim, int numValues);
 
 __global__ void neighborSearch(int neighborCellNumber, int numValues,
-                               int numCells, int numMaxPairs, double skinRadius,
-                               int *offsets, int *sizes, int *first,
-                               int *second, double *r, dvec interval, double *x,
-                               double *y, double *z, int *numNeighbors);
+                               int numCells, int numMaxPairs, int *offsets,
+                               int *sizes, int *first, int *second, double *r,
+                               double *x, double *y, double *z,
+                               int *numNeighbors);
 
-__global__ void velocityPairKernel(double fZeroPerMuZero, int *pair1,
-                                   int *pair2, double *r, dvec interval,
-                                   double *x, double *y, double *z, double *vx,
-                                   double *vy, double *vz);
+__global__ void velocityPairKernel(int *pair1, int *pair2, double *r, double *x,
+                                   double *y, double *z, double *vx, double *vy,
+                                   double *vz);
 
 __global__ void velocityWallKernel(int numValues, double *r, double *x,
                                    double *y, double *z, double *vx, double *vy,
-                                   double *vz, dvec lbb, dvec tfr,
-                                   double fZeroPerMuZero, double dragCoeff);
+                                   double *vz);
 
 __global__ void neighborVelocityKernel(int *first, int *second, double *sumX,
                                        double *sumY, double *sumZ, double *vx,
@@ -208,22 +203,18 @@ __global__ void flowVelocityKernel(int numValues, int *numNeighbors,
                                    double *velX, double *velY, double *velZ,
                                    double *nVelX, double *nVelY, double *nVelZ,
                                    double *posX, double *posY, double *posZ,
-                                   double *r, dvec flowVel, dvec flowTfr,
-                                   dvec flowLbb);
+                                   double *r);
 
 __global__ void potentialEnergyKernel(int numValues, int *first, int *second,
-                                      double *r, double *energy, dvec interval,
-                                      double *x, double *y, double *z);
+                                      double *r, double *energy, double *x,
+                                      double *y, double *z);
 
 __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
-                                  dvec interval, double *r, double *drdt,
-                                  double *freeArea, double *x, double *y,
-                                  double *z);
+                                  double *r, double *drdt, double *freeArea,
+                                  double *x, double *y, double *z);
 
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
-                                            double *freeArea, int numValues,
-                                            double kappa, double kParam,
-                                            double averageSurfaceAreaIn);
+                                            double *freeArea, int numValues);
 
 __global__ void predictKernel(int numValues, double timeStep,
                               bool useGasExchange, double *xn, double *x,
@@ -233,14 +224,13 @@ __global__ void predictKernel(int numValues, double timeStep,
                               double *vr, double *vrp);
 
 __global__ void correctKernel(int numValues, double timeStep,
-                              bool useGasExchange, double minRad,
-                              double *errors, double *reducedValues,
-                              int *toBeDeleted, double *xp, double *x,
-                              double *vx, double *vxp, double *yp, double *y,
-                              double *vy, double *vyp, double *zp, double *z,
-                              double *vz, double *vzp, double *rp, double *r,
-                              double *vr, double *vrp, double *x0, double *y0,
-                              double *z0, double *r0);
+                              bool useGasExchange, double *errors,
+                              double *reducedValues, int *toBeDeleted,
+                              double *xp, double *x, double *vx, double *vxp,
+                              double *yp, double *y, double *vy, double *vyp,
+                              double *zp, double *z, double *vz, double *vzp,
+                              double *rp, double *r, double *vr, double *vrp,
+                              double *x0, double *y0, double *z0, double *r0);
 
 __global__ void endStepKernel(int numValues, double *errors, double *x0,
                               double *y0, double *z0, double *r0,
@@ -251,7 +241,7 @@ __global__ void eulerKernel(int numValues, double timeStep, double *x,
                             double *vz);
 
 __global__ void
-pathLengthDistanceKernel(int numValues, dvec interval, double *pathLength,
+pathLengthDistanceKernel(int numValues, double *pathLength,
                          double *pathLengthPrev, double *squaredDistance,
                          double *x, double *xPrev, double *x0, int *wrapCountX,
                          double *y, double *yPrev, double *y0, int *wrapCountY,
@@ -268,9 +258,8 @@ __device__ void swapValues(int from, int to, T *arr, Args... args) {
 }
 
 template <typename... Args>
-__global__ void swapDataCountPairs(int numValues, double minRad, int *first,
-                                   int *second, int *toBeDeleted, double *r,
-                                   Args... args) {
+__global__ void swapDataCountPairs(int numValues, int *first, int *second,
+                                   int *toBeDeleted, double *r, Args... args) {
     // Count of pairs to be deleted
     __shared__ int tbds[128];
     tbds[threadIdx.x] = 0;
@@ -302,8 +291,9 @@ __global__ void swapDataCountPairs(int numValues, double minRad, int *first,
                 // range.
                 j = 0;
                 int idx2 = numValues - 1;
-                while (idx2 >= nNew && (r[idx2] < minRad || j != fromBack)) {
-                    if (r[idx2] >= minRad) {
+                while (idx2 >= nNew &&
+                       (r[idx2] < dConstants->minRad || j != fromBack)) {
+                    if (r[idx2] >= dConstants->minRad) {
                         j += 1;
                     }
                     idx2 -= 1;
