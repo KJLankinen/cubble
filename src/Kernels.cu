@@ -70,26 +70,21 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
 
 __global__ void transformPositionsKernel(bool normalize, int numValues,
                                          double *x, double *y, double *z) {
-    const double lx = dConstants->lbb.x;
-    const double ly = dConstants->lbb.y;
-    const double lz = dConstants->lbb.z;
-    const double ix = dConstants->interval.x;
-    const double iy = dConstants->interval.y;
-    const double iz = dConstants->interval.z;
-
+    const dvec lbb = dConstants->lbb;
+    const dvec interval = dConstants->interval;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         if (normalize) {
-            x[i] = (x[i] - lx) / ix;
-            y[i] = (y[i] - ly) / iy;
+            x[i] = (x[i] - lbb.x) / interval.x;
+            y[i] = (y[i] - lbb.y) / interval.y;
 #if (NUM_DIM == 3)
-            z[i] = (z[i] - lz) / iz;
+            z[i] = (z[i] - lbb.z) / interval.z;
 #endif
         } else {
-            x[i] = ix * x[i] + lx;
-            y[i] = iy * y[i] + ly;
+            x[i] = interval.x * x[i] + lbb.x;
+            y[i] = interval.y * y[i] + lbb.y;
 #if (NUM_DIM == 3)
-            z[i] = iz * z[i] + lz;
+            z[i] = interval.z * z[i] + lbb.z;
 #endif
         }
     }
@@ -173,17 +168,12 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
 }
 
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
-    const double lx = dConstants->lbb.x;
-    const double ly = dConstants->lbb.y;
-    const double lz = dConstants->lbb.z;
-    const double ix = dConstants->interval.x;
-    const double iy = dConstants->interval.y;
-    const double iz = dConstants->interval.z;
-
-    const int xid = floor(cellDim.x * (x - lx) / ix);
-    const int yid = floor(cellDim.y * (y - ly) / iy);
+    const dvec lbb = dConstants->lbb;
+    const dvec interval = dConstants->interval;
+    const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
+    const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
 #if (NUM_DIM == 3)
-    const int zid = floor(cellDim.z * (z - lz) / iz);
+    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
 #else
     const int zid = 0;
 #endif

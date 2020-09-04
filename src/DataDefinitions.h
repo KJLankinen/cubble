@@ -1,3 +1,5 @@
+#pragma once
+
 #include "CubWrapper.h"
 #include "Util.h"
 #include "Vec.h"
