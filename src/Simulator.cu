@@ -878,10 +878,7 @@ double calculateVolumeOfBubbles(Params &params) {
 void deinit(Params &params) {
     CUDA_CALL(cudaDeviceSynchronize());
 
-    Constants *deviceConstants = nullptr;
-    CUDA_ASSERT(cudaGetSymbolAddress(
-        reinterpret_cast<void **>(&deviceConstants), dConstants));
-    CUDA_CALL(cudaFree(static_cast<void *>(deviceConstants)));
+    CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceDoubleMemory)));
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceIntMemory)));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
@@ -1155,14 +1152,15 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     params.hostData.timeStep = inputJson["timeStepIn"];
 
     // Allocate and copy constants to GPU
-    Constants *deviceConstants = nullptr;
-    CUDA_ASSERT(cudaGetSymbolAddress(
-        reinterpret_cast<void **>(&deviceConstants), dConstants));
-    CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&deviceConstants),
+    CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
                            sizeof(Constants)));
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(deviceConstants),
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
+    // Copy to global pointer
+    CUDA_CALL(cudaMemcpyToSymbol(dConstants,
+                                 static_cast<void *>(params.deviceConstants),
+                                 sizeof(Constants *)));
 
     // Reserve memory etc.
     commonSetup(params);
@@ -1206,7 +1204,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.lbb;
 
     // Copy the updated constants to GPU
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(deviceConstants),
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
 

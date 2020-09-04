@@ -124,6 +124,7 @@ struct HostData {
 
 struct Params {
     Constants hostConstants;
+    Constants *deviceConstants = nullptr;
     HostData hostData;
 
     CubWrapper cw;
