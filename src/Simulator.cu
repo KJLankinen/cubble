@@ -1159,7 +1159,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                          sizeof(Constants), cudaMemcpyHostToDevice));
     // Copy to global pointer
     CUDA_CALL(cudaMemcpyToSymbol(dConstants,
-                                 static_cast<void *>(params.deviceConstants),
+                                 static_cast<void *>(&params.deviceConstants),
                                  sizeof(Constants *)));
 
     // Reserve memory etc.
