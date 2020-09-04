@@ -442,7 +442,7 @@ __global__ void assignBubblesToCells(double *x, double *y, double *z,
     const dvec tfr = dConstants->tfr;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
-        cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], lbb, tfr, cellDim);
+        cellIndices[i] = getCellIdxFromPos(x[i], y[i], z[i], cellDim);
         bubbleIndices[i] = i;
     }
 }
@@ -486,8 +486,8 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, interval, skinRadius,
-                            x, y, z, numNeighbors);
+                comparePair(idx1, idx2, r, first, second, x, y, z,
+                            numNeighbors);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -507,8 +507,8 @@ __global__ void neighborSearch(int neighborCellNumber, int numValues,
                 DEVICE_ASSERT(idx2 < numValues, "Invalid bubble index!");
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
-                comparePair(idx1, idx2, r, first, second, interval, skinRadius,
-                            x, y, z, numNeighbors);
+                comparePair(idx1, idx2, r, first, second, x, y, z,
+                            numNeighbors);
                 DEVICE_ASSERT(numMaxPairs > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -555,7 +555,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
-    const double wallDragStrenght = dConstants->wallDragStrenght;
+    const double wallDragStrength = dConstants->wallDragStrength;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
@@ -579,7 +579,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             const double velocity =
                 direction * fZeroPerMuZero * (rad - distance) * invRad;
             vx[i] += velocity;
-            xDrag = 1.0 - wallDragStrenght;
+            xDrag = 1.0 - wallDragStrength;
 
             // Drag of x wall to y & z
             vy[i] *= xDrag;
@@ -601,7 +601,7 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             // Retroactively apply possible drag from x wall to the velocity the
             // y wall causes
             vy[i] += velocity * xDrag;
-            yDrag = 1.0 - wallDragStrenght;
+            yDrag = 1.0 - wallDragStrength;
 
             // Drag of y wall to x & z
             vx[i] *= yDrag;
@@ -625,8 +625,8 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             vz[i] += velocity * xDrag * yDrag;
 
             // Drag of z wall to x & y directions
-            vx[i] *= 1.0 - wallDragStrenght;
-            vy[i] *= 1.0 - wallDragStrenght;
+            vx[i] *= 1.0 - wallDragStrength;
+            vy[i] *= 1.0 - wallDragStrength;
         }
 #endif
     }
@@ -873,7 +873,7 @@ __global__ void gasExchangeKernel(int numValues, int *pair1, int *pair2,
 __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
                                             double *freeArea, int numValues) {
     const double kappa = dConstants->kappa;
-    const double kParam = dConstants->kParam;
+    const double kParameter = dConstants->kParameter;
     const double averageSurfaceAreaIn = dConstants->averageSurfaceAreaIn;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
@@ -887,7 +887,7 @@ __global__ void finalRadiusChangeRateKernel(double *drdt, double *r,
         const double vr = drdt[i] + kappa * averageSurfaceAreaIn * numValues /
                                         dTotalArea * (area - freeArea[i]) *
                                         (invRho - 1.0 / rad);
-        drdt[i] = kParam * vr / area;
+        drdt[i] = kParameter * vr / area;
     }
 }
 

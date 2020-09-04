@@ -1151,7 +1151,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     CUDA_ASSERT(cudaGetSymbolAddress(
         reinterpret_cast<void **>(&deviceConstants), dConstants));
     CUDA_CALL(cudaMemcpy(deviceConstants, &params.hostConstants,
-                         sizeof(Constants), CudaMemcpyHostToDevice));
+                         sizeof(Constants), cudaMemcpyHostToDevice));
 
     // Reserve memory etc.
     commonSetup(params);
@@ -1196,7 +1196,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     // Copy the updated constants to GPU
     CUDA_CALL(cudaMemcpy(deviceConstants, &params.hostConstants,
-                         sizeof(Constants), CudaMemcpyHostToDevice));
+                         sizeof(Constants), cudaMemcpyHostToDevice));
 
     transformPositions(params, false);
 
