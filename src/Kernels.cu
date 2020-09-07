@@ -557,16 +557,16 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
     double distance = 0.0;
     double xDrag = 1.0;
     double yDrag = 1.0;
-    const double rad = r[i];
-    const double invRad = 1.0 / rad;
+    const double drag = 1.0 - dConstants->wallDragStrength;
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
-    const double wallDragStrength = dConstants->wallDragStrength;
 #endif
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
+        const double rad = r[i];
+        const double invRad = 1.0 / rad;
 #if (PBC_X == 0)
         distance1 = x[i] - lbb.x;
         distance2 = x[i] - tfr.x;
@@ -578,11 +578,11 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             const double velocity =
                 direction * fZeroPerMuZero * (rad - distance) * invRad;
             vx[i] += velocity;
-            xDrag = 1.0 - wallDragStrength;
+            xDrag = drag;
 
             // Drag of x wall to y & z
-            vy[i] *= xDrag;
-            vz[i] *= xDrag;
+            vy[i] *= drag;
+            vz[i] *= drag;
         }
 #endif
 
@@ -600,11 +600,11 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             // Retroactively apply possible drag from x wall to the velocity the
             // y wall causes
             vy[i] += velocity * xDrag;
-            yDrag = 1.0 - wallDragStrength;
+            yDrag = drag;
 
             // Drag of y wall to x & z
-            vx[i] *= yDrag;
-            vz[i] *= yDrag;
+            vx[i] *= drag;
+            vz[i] *= drag;
         }
 #endif
 
@@ -624,8 +624,8 @@ __global__ void velocityWallKernel(int numValues, double *r, double *x,
             vz[i] += velocity * xDrag * yDrag;
 
             // Drag of z wall to x & y directions
-            vx[i] *= 1.0 - wallDragStrength;
-            vy[i] *= 1.0 - wallDragStrength;
+            vx[i] *= drag;
+            vy[i] *= drag;
         }
 #endif
     }
