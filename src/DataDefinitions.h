@@ -7,74 +7,178 @@
 #include <array>
 #include <vector>
 
+namespace {
+template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
+    *p = *prev;
+    *prev += stride;
+}
+} // namespace
+
 namespace cubble {
-// Device double pointer names
-enum class DDP {
-    X,
-    Y,
-    Z,
-    R,
+// Pointers to device memory holding the bubble data
+struct Bubbles {
+    double *x = nullptr;
+    double *y = nullptr;
+    double *z = nullptr;
+    double *r = nullptr;
 
-    XP,
-    YP,
-    ZP,
-    RP,
+    double *xp = nullptr;
+    double *yp = nullptr;
+    double *zp = nullptr;
+    double *rp = nullptr;
 
-    DXDT,
-    DYDT,
-    DZDT,
-    DRDT,
+    double *dxdt = nullptr;
+    double *dydt = nullptr;
+    double *dzdt = nullptr;
+    double *drdt = nullptr;
 
-    DXDTP,
-    DYDTP,
-    DZDTP,
-    DRDTP,
+    double *dxdtp = nullptr;
+    double *dydtp = nullptr;
+    double *dzdtp = nullptr;
+    double *drdtp = nullptr;
 
-    DXDTO,
-    DYDTO,
-    DZDTO,
-    DRDTO,
+    double *dxdto = nullptr;
+    double *dydto = nullptr;
+    double *dzdto = nullptr;
+    double *drdto = nullptr;
 
-    X0,
-    Y0,
-    Z0,
+    double *x0 = nullptr;
+    double *y0 = nullptr;
+    double *z0 = nullptr;
 
-    PATH,
-    DISTANCE,
-    ERROR,
-    TEMP_DATA,
+    double *path = nullptr;
+    double *distance = nullptr;
+    double *error = nullptr;
+    double *temp_doubles = nullptr;
+    double *temp_doubles2 = nullptr;
 
-    FLOW_VX,
-    FLOW_VY,
-    FLOW_VZ,
+    double *flow_vx = nullptr;
+    double *flow_vy = nullptr;
+    double *flow_vz = nullptr;
 
-    SAVED_X,
-    SAVED_Y,
-    SAVED_Z,
-    SAVED_R,
+    double *saved_x = nullptr;
+    double *saved_y = nullptr;
+    double *saved_z = nullptr;
+    double *saved_r = nullptr;
 
-    NUM_VALUES
+    int *temp_ints = nullptr;
+    int *wrap_count_x = nullptr;
+    int *wrap_count_y = nullptr;
+    int *wrap_count_z = nullptr;
+    int *index = nullptr;
+    int *num_neighbors = nullptr;
+
+    // Count is the total number of bubbles
+    int count = 0;
+    // Stride is the "original" length of a row of data.
+    // All the double data is saved in one big blob of memory
+    // and the pointers defined here are separated by
+    // "sizeof(double) * stride" bytes.
+    uint64_t stride = 0;
+
+    // How many pointers of each type do we have in this struct
+    const uint64_t numDP = 35;
+    const uint64_t numIP = 6;
+
+    uint64_t getMemReq() const {
+        return stride * (sizeof(double) * numDP + sizeof(int) * numIP);
+    }
+
+    void *setupPointers(void *start) {
+        // Point every named pointer to a separate stride of the continuous
+        // memory blob
+        double *prev = static_cast<double *>(start);
+        setIncr(&x, &prev, stride);
+        setIncr(&y, &prev, stride);
+        setIncr(&z, &prev, stride);
+        setIncr(&r, &prev, stride);
+        setIncr(&xp, &prev, stride);
+        setIncr(&yp, &prev, stride);
+        setIncr(&zp, &prev, stride);
+        setIncr(&rp, &prev, stride);
+        setIncr(&dxdt, &prev, stride);
+        setIncr(&dydt, &prev, stride);
+        setIncr(&dzdt, &prev, stride);
+        setIncr(&drdt, &prev, stride);
+        setIncr(&dxdtp, &prev, stride);
+        setIncr(&dydtp, &prev, stride);
+        setIncr(&dzdtp, &prev, stride);
+        setIncr(&drdtp, &prev, stride);
+        setIncr(&dxdto, &prev, stride);
+        setIncr(&dydto, &prev, stride);
+        setIncr(&dzdto, &prev, stride);
+        setIncr(&drdto, &prev, stride);
+        setIncr(&x0, &prev, stride);
+        setIncr(&y0, &prev, stride);
+        setIncr(&z0, &prev, stride);
+        setIncr(&path, &prev, stride);
+        setIncr(&distance, &prev, stride);
+        setIncr(&error, &prev, stride);
+        setIncr(&temp_doubles, &prev, stride);
+        setIncr(&temp_doubles2, &prev, stride);
+        setIncr(&flow_vx, &prev, stride);
+        setIncr(&flow_vy, &prev, stride);
+        setIncr(&flow_vz, &prev, stride);
+        setIncr(&saved_x, &prev, stride);
+        setIncr(&saved_y, &prev, stride);
+        setIncr(&saved_z, &prev, stride);
+        setIncr(&saved_r, &prev, stride);
+
+        int *prevI = static_cast<int *>(prev);
+        setIncr(&temp_ints, &prevI, stride);
+        setIncr(&wrap_count_x, &prevI, stride);
+        setIncr(&wrap_count_y, &prevI, stride);
+        setIncr(&wrap_count_z, &prevI, stride);
+        setIncr(&index, &prevI, stride);
+        setIncr(&num_neighbors, &prevI, stride);
+
+        assert(static_cast<char *>(start) +
+                   stride * (sizeof(double) * numDP + sizeof(int) * numIP) ==
+               static_cast<char *>(prevI));
+
+        return static_cast<void *>(prevI);
+    }
+
+    void associateHostPointers(void *start) {
+        // Create a mapping between dev and host pointers, given that
+        // the host memory starts at memStart
+        assert(false && "Not implemented!");
+    }
+
+    template <typename T> T *getHostPtr(T *devPtr) {
+        // Return a hostPtr corresponding to a given devPtr
+        assert(false && "Not implemented!");
+        return devPtr;
+    }
 };
+static_assert(sizeof(Bubbles) % 8 == 0);
 
-// Device int pointer names
-enum class DIP {
-    TEMP,
+// Pointers to device memory holding the bubble pair data
+struct Pairs {
+    int *i = nullptr;
+    int *j = nullptr;
+    int *i_copy = nullptr;
+    int *j_copy = nullptr;
 
-    WRAP_COUNT_X,
-    WRAP_COUNT_Y,
-    WRAP_COUNT_Z,
+    int count = 0;
+    uint64_t stride = 0;
 
-    INDEX,
-    NUM_NEIGHBORS,
+    uint64_t getMemReq() const { return sizeof(int) * stride * 4; }
 
-    PAIR1,
-    PAIR2,
+    void *setupPointers(void *start) {
+        int *prev = static_cast<int *>(start);
+        setIncr(&i, &prev, stride);
+        setIncr(&j, &prev, stride);
+        setIncr(&i_copy, &prev, stride);
+        setIncr(&j_copy, &prev, stride);
 
-    PAIR1COPY,
-    PAIR2COPY,
+        assert(static_cast<char *>(start) + stride * sizeof(int) * 4 ==
+               static_cast<char *>(prev));
 
-    NUM_VALUES
+        return static_cast<void *>(prev);
+    }
 };
+static_assert(sizeof(Pairs) % 8 == 0);
 
 // Pretty much read-only memory by both, host and device
 // after an initial setup
@@ -97,29 +201,25 @@ struct Constants {
 
 // Only accessed by host
 struct HostData {
-    uint64_t memReqD = 0;
-    uint64_t memReqI = 0;
     uint64_t numIntegrationSteps = 0;
     uint64_t numNeighborsSearched = 0;
     uint64_t numStepsInTimeStep = 0;
+
     uint64_t timeInteger = 0;
     double timeFraction = 0.0;
+    double timeScalingFactor = 0.0;
+    double timeStep = 0.0;
+
     double energy1 = 0.0;
     double energy2 = 0.0;
-    double timeScalingFactor = 0.0;
+
     double errorTolerance = 0.0;
     double snapshotFrequency = 0.0;
     double avgRad = 0.0;
-    double timeStep = 0.0;
     double maxBubbleRadius = 0.0;
-
-    int numBubbles = 0;
-    int numPairs = 0;
     int minNumBubbles = 0;
     uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
-    uint32_t dataStride = 0;
-    uint32_t pairStride = 0;
 };
 
 struct Params {
@@ -127,23 +227,20 @@ struct Params {
     Constants *deviceConstants = nullptr;
     HostData hostData;
 
-    CubWrapper cw;
+    Bubbles bubbles;
+    Pairs pairs;
 
+    CubWrapper cw;
     cudaStream_t velocityStream;
     cudaStream_t gasStream;
-
     cudaEvent_t event1;
 
     KernelSize pairKernelSize = KernelSize(dim3(1024, 1, 1), dim3(128, 1, 1));
     KernelSize defaultKernelSize;
 
-    // Device memory & arrays of pointers to those memory chunks.
-    int *deviceIntMemory = nullptr;
-    double *deviceDoubleMemory = nullptr;
+    void *memory = nullptr;
     int *pinnedInt = nullptr;
     double *pinnedDouble = nullptr;
-    std::array<double *, (uint64_t)DDP::NUM_VALUES> ddps;
-    std::array<int *, (uint64_t)DIP::NUM_VALUES> dips;
 
     std::vector<double> previousX;
     std::vector<double> previousY;
