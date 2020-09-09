@@ -124,7 +124,7 @@ struct Bubbles {
         setIncr(&saved_z, &prev, stride);
         setIncr(&saved_r, &prev, stride);
 
-        int *prevI = static_cast<int *>(prev);
+        int *prevI = reinterpret_cast<int *>(prev);
         setIncr(&temp_ints, &prevI, stride);
         setIncr(&wrap_count_x, &prevI, stride);
         setIncr(&wrap_count_y, &prevI, stride);
@@ -134,7 +134,7 @@ struct Bubbles {
 
         assert(static_cast<char *>(start) +
                    stride * (sizeof(double) * numDP + sizeof(int) * numIP) ==
-               static_cast<char *>(prevI));
+               reinterpret_cast<char *>(prevI));
 
         return static_cast<void *>(prevI);
     }
@@ -173,7 +173,7 @@ struct Pairs {
         setIncr(&j_copy, &prev, stride);
 
         assert(static_cast<char *>(start) + stride * sizeof(int) * 4 ==
-               static_cast<char *>(prev));
+               reinterpret_cast<char *>(prev));
 
         return static_cast<void *>(prev);
     }

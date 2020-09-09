@@ -35,6 +35,16 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 }
 #endif
 
+double calculateTotalEnergy(Params &params) {
+    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                  params.bubbles.count, params.bubbles.temp_doubles);
+    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
+                  params.bubbles, params.pairs);
+    return params.cw.reduce<double, double *, double *>(
+        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        params.bubbles.count);
+}
+
 void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
@@ -189,13 +199,13 @@ void updateCellsAndNeighbors(Params &params) {
                 &params.bubbles.temp_doubles);
     sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.error,
                 &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, params.dips, &params.bubbles.wrap_count_x,
-                &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, params.dips, &params.bubbles.wrap_count_y,
-                &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, params.dips, &params.bubbles.wrap_count_z,
-                &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, params.dips, &params.bubbles.index,
+    sortAndSwap(sortedBubbleIndices, bubbleIndices,
+                &params.bubbles.wrap_count_x, &params.bubbles.temp_ints);
+    sortAndSwap(sortedBubbleIndices, bubbleIndices,
+                &params.bubbles.wrap_count_y, &params.bubbles.temp_ints);
+    sortAndSwap(sortedBubbleIndices, bubbleIndices,
+                &params.bubbles.wrap_count_z, &params.bubbles.temp_ints);
+    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.index,
                 &params.bubbles.temp_ints);
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
@@ -363,16 +373,6 @@ void saveSnapshotToFile(Params &params) {
 
         ++params.hostData.numSnapshots;
     }
-}
-
-double calculateTotalEnergy(Params &params) {
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, params.bubbles.temp_doubles);
-    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
-        params.bubbles.count);
 }
 
 double stabilize(Params &params, int numStepsToRelax) {
@@ -1121,7 +1121,7 @@ void run(std::string &&inputFileName) {
         if (params.hostData.timeInteger >= nextPrintTimeInteger &&
             params.hostData.timeFraction >= nextPrintTimeFraction) {
             // Define lambda for calculating averages of some values
-            auto getAvg = [](double *p, Bubbles &bubbles) -> double {
+            auto getAvg = [&params](double *p, Bubbles &bubbles) -> double {
                 return params.cw.reduce<double, double *, double *>(
                            &cub::DeviceReduce::Sum, p, bubbles.count) /
                        bubbles.count;
@@ -1131,8 +1131,8 @@ void run(std::string &&inputFileName) {
             const double dE =
                 (params.hostData.energy2 - params.hostData.energy1) /
                 params.hostData.energy2;
-            const double relRad =
-                getAvg(params.bubbles.r, bubbles) / params.hostData.avgRad;
+            const double relRad = getAvg(params.bubbles.r, params.bubbles) /
+                                  params.hostData.avgRad;
 
             // Add values to data stream
             std::ofstream resultFile("results.dat", std::ios_base::app);

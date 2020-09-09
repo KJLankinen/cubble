@@ -412,7 +412,7 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
 #if (NUM_DIM == 3)
         area *= 2.0 * rad;
 #endif
-        w[i] = area / numValues;
+        w[i] = area / bubbles.count;
     }
 }
 
@@ -541,7 +541,6 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         const double rad = bubbles.rp[i];
-        const double invRad = 1.0 / rad;
 #if (PBC_X == 0)
         const double xi = bubbles.xp[i];
         distance1 = xi - lbb.x;
@@ -552,7 +551,7 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
             const double velocity =
-                direction * fZeroPerMuZero * (rad - distance) * invRad;
+                direction * fZeroPerMuZero * (1.0 - distance / rad);
             bubbles.dxdtp[i] += velocity;
             xDrag = drag;
 
@@ -572,7 +571,7 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
             const double velocity =
-                direction * fZeroPerMuZero * (rad - distance) * invRad;
+                direction * fZeroPerMuZero * (1.0 - distance / rad);
 
             // Retroactively apply possible drag from x wall to the velocity the
             // y wall causes
@@ -595,7 +594,7 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
             const double direction = distance < 0 ? -1.0 : 1.0;
             distance *= direction;
             const double velocity =
-                direction * fZeroPerMuZero * (rad - distance) * invRad;
+                direction * fZeroPerMuZero * (1.0 - distance / rad);
 
             // Retroactively apply possible drag from x & y walls to the
             // velocity the z wall causes
@@ -755,7 +754,7 @@ __global__ void gasExchangeKernel(Bubbles bubbles, Pairs pairs) {
         }
 
         if (i < bubbles.count) {
-            r1 = r[i];
+            r1 = bubbles.rp[i];
             double areaPerRad = 2.0 * CUBBLE_PI;
 #if (NUM_DIM == 3)
             areaPerRad *= 2.0 * r1;
@@ -1150,7 +1149,7 @@ __global__ void endStepKernel(int origBlockSize, Bubbles bubbles) {
                     __syncwarp();
 
                     if (tid == 0)
-                        errors[blockIdx.x] = me[tid];
+                        bubbles.temp_doubles2[blockIdx.x] = me[tid];
                 }
             }
         }
