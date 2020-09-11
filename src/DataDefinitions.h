@@ -6,7 +6,7 @@
 #include "cub/cub/cub.cuh"
 #include <algorithm>
 #include <array>
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -142,7 +142,7 @@ struct Bubbles {
     }
 
     void associateHostPointers(void *hostPtr,
-                               std::map<void *, void *> &ptrMap) {
+                               std::unordered_map<void *, void *> &ptrMap) {
         // Create void pointers to the allocated host memory
         // such that each pointer points to a continuous block
         // of 'stride' values. Store the doubles first, followed
@@ -215,13 +215,13 @@ struct Bubbles {
 
         // Associate each device pointer with a host pointer
         ptrMap.clear();
-        for (int i = 0; i < dptrs.len(); i++) {
+        for (int i = 0; i < dptrs.size(); i++) {
             ptrMap.insert(dptrs[i], hptrs[i]);
         }
     }
 
     template <typename T>
-    T *getHostPtr(T *devPtr, const std::map<void *, void *> &ptrMap) {
+    T *getHostPtr(T *devPtr, const std::unordered_map<void *, void *> &ptrMap) {
         return static_cast<T *>(ptrMap.at(static_cast<void *>(devPtr)));
     }
 };
@@ -316,7 +316,7 @@ struct Params {
     int *pinnedInt = nullptr;
     double *pinnedDouble = nullptr;
 
-    std::map<void *, void *> ptrMap;
+    std::unordered_map<void *, void *> ptrMap;
 
     std::vector<double> previousX;
     std::vector<double> previousY;
