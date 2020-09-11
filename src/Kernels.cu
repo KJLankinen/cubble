@@ -466,7 +466,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numCells,
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, bubbles, pairs);
-                DEVICE_ASSERT(pairs.count > dNumPairs,
+                DEVICE_ASSERT(pairs.stride > dNumPairs,
                               "Too many neighbor indices!");
             }
         } else // Compare all values of one cell to all values of other cell,
@@ -486,7 +486,7 @@ __global__ void neighborSearch(int neighborCellNumber, int numCells,
                 DEVICE_ASSERT(idx1 != idx2, "Invalid bubble index!");
 
                 comparePair(idx1, idx2, bubbles, pairs);
-                DEVICE_ASSERT(pairs.count > dNumPairs,
+                DEVICE_ASSERT(pairs.stride > dNumPairs,
                               "Too many neighbor indices!");
             }
         }
