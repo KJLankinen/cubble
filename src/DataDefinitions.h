@@ -138,12 +138,6 @@ struct Bubbles {
 
         return static_cast<void *>(prevI);
     }
-
-    template <typename T>
-    T *getHostPtr(T *devPtr, void *devMemStart, void *hostMemStart) {
-        return static_cast<T *>(hostMemStart) +
-               (devPtr - static_cast<T *>(devMemStart));
-    }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 

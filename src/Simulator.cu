@@ -262,19 +262,24 @@ void saveSnapshotToFile(Params &params) {
                                   cudaMemcpyDeviceToHost, 0));
 
         // Get host pointer for each device pointer
-        double *x = params.bubbles.getHostPtr(params.bubbles.x);
-        double *y = params.bubbles.getHostPtr(params.bubbles.y);
-        double *z = params.bubbles.getHostPtr(params.bubbles.z);
-        double *r = params.bubbles.getHostPtr(params.bubbles.r);
-        double *vx = params.bubbles.getHostPtr(params.bubbles.dxdt);
-        double *vy = params.bubbles.getHostPtr(params.bubbles.dydt);
-        double *vz = params.bubbles.getHostPtr(params.bubbles.dzdt);
-        double *vr = params.bubbles.getHostPtr(params.bubbles.drdt);
-        double *path = params.bubbles.getHostPtr(params.bubbles.path);
-        double *distance = params.bubbles.getHostPtr(params.bubbles.distance);
-        double *error = params.bubbles.getHostPtr(params.bubbles.error);
-        double *energy = params.bubbles.getHostPtr(params.bubbles.temp_doubles);
-        int *index = params.bubbles.getHostPtr(params.bubbles.index);
+        auto getHostPtr = [&params,
+                           &memStart](auto devPtr) -> decltype(devPtr) {
+            return static_cast<decltype(devPtr)>(memStart) +
+                   (devPtr - static_cast<decltype(devPtr)>(params.memory));
+        };
+        double *x = getHostPtr(params.bubbles.x);
+        double *y = getHostPtr(params.bubbles.y);
+        double *z = getHostPtr(params.bubbles.z);
+        double *r = getHostPtr(params.bubbles.r);
+        double *vx = getHostPtr(params.bubbles.dxdt);
+        double *vy = getHostPtr(params.bubbles.dydt);
+        double *vz = getHostPtr(params.bubbles.dzdt);
+        double *vr = getHostPtr(params.bubbles.drdt);
+        double *path = getHostPtr(params.bubbles.path);
+        double *distance = getHostPtr(params.bubbles.distance);
+        double *error = getHostPtr(params.bubbles.error);
+        double *energy = getHostPtr(params.bubbles.temp_doubles);
+        int *index = getHostPtr(params.bubbles.index);
 
         // Starting to access the data, so need to sync to make sure all the
         // data is there
