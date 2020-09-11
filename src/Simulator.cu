@@ -45,6 +45,24 @@ double calculateTotalEnergy(Params &params) {
         params.bubbles.count);
 }
 
+void transformPositions(Params &params, bool normalize) {
+    KERNEL_LAUNCH(transformPositionsKernel, params.pairKernelSize, 0, 0,
+                  normalize, params.bubbles);
+}
+
+double calculateVolumeOfBubbles(Params &params) {
+    KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
+                  params.bubbles);
+    return params.cw.reduce<double, double *, double *>(
+        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        params.bubbles.count);
+}
+
+double getSimulationBoxVolume(Params &params) {
+    dvec temp = params.hostConstants.interval;
+    return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
+}
+
 void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
@@ -52,27 +70,10 @@ void updateCellsAndNeighbors(Params &params) {
     KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, params.gasStream,
                   params.bubbles);
 
-    // Update saved values
-    uint64_t bytes = sizeof(double) * params.bubbles.stride;
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.saved_x),
-                              static_cast<void *>(params.bubbles.x), bytes,
-                              cudaMemcpyDeviceToDevice, params.gasStream));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.saved_y),
-                              static_cast<void *>(params.bubbles.y), bytes,
-                              cudaMemcpyDeviceToDevice, params.gasStream));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.saved_z),
-                              static_cast<void *>(params.bubbles.z), bytes,
-                              cudaMemcpyDeviceToDevice, params.gasStream));
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.saved_r),
-                              static_cast<void *>(params.bubbles.r), bytes,
-                              cudaMemcpyDeviceToDevice, params.gasStream));
-
-    bytes = sizeof(int) * params.pairs.stride * 4;
+    // Reset pairs arrays to zero
+    uint64_t bytes = sizeof(int) * params.pairs.stride * 4;
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0, bytes,
                               params.velocityStream));
-    bytes = sizeof(int) * params.bubbles.stride;
-    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.bubbles.num_neighbors),
-                              0, bytes, params.velocityStream));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
     ivec cellDim = (params.hostConstants.interval /
@@ -134,79 +135,63 @@ void updateCellsAndNeighbors(Params &params) {
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
                                  maxNumCells);
 
-    // TODO: Should be changed: sorting the indices everytime is much slower
-    // compared to just moving data from index to another.
-    // Sort the bubbles such that all bubbles in cell 0 will be first in memory,
-    // bubbles in cell 1 then and so on. This sorting has to be done to all
-    // the different variables the bubbles have.
-    // Note: it might ge possible to speed this up by setting every second
-    // sort to a different stream.
-    template <typename T>
-    auto sortAndSwap = [&params](int *sortBy, int *sortedInd, T **from,
-                                 T **to) {
-        params.cw.sortPairs<int, T>(
-            &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(sortBy),
-            sortedInd, const_cast<const T *>(*from), *to, params.bubbles.count);
-        T *swapper = *from;
-        *from = *to;
-        *to = swapper;
-    };
+    // This kernel reorganizes the data by swapping values from one array to
+    // another in a 'loopy' fashion. The pointers must be updated after the
+    // kernel.
+    KERNEL_LAUNCH(reorganizeByIndex, params.defaultKernelSize, 0, 0,
+                  params.bubbles, sortedBubbleIndices);
+    double *swapper = bubbles.xp;
+    bubbles.xp = bubbles.x;
+    bubbles.x = swapper;
 
-    // bubbleIndices is used here only as storage space, we don't care
-    // about the values in there after this, as they will be sorted to
-    // 0,1,2,3,...count order anyway
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.x,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.y,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.z,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.r,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dxdt,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dydt,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dzdt,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.drdt,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dxdto,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dydto,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.dzdto,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.drdto,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.x0,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.y0,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.z0,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.path,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.distance,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.saved_x,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.saved_y,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.saved_z,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.saved_r,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.error,
-                &params.bubbles.temp_doubles);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices,
-                &params.bubbles.wrap_count_x, &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices,
-                &params.bubbles.wrap_count_y, &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices,
-                &params.bubbles.wrap_count_z, &params.bubbles.temp_ints);
-    sortAndSwap(sortedBubbleIndices, bubbleIndices, &params.bubbles.index,
-                &params.bubbles.temp_ints);
+    swapper = bubbles.yp;
+    bubbles.yp = bubbles.y;
+    bubbles.y = swapper;
+
+    swapper = bubbles.zp;
+    bubbles.zp = bubbles.z;
+    bubbles.z = swapper;
+
+    swapper = bubbles.rp;
+    bubbles.rp = bubbles.r;
+    bubbles.r = swapper;
+
+    swapper = bubbles.dxdtp;
+    bubbles.dxdtp = bubbles.dxdt;
+    bubbles.dxdt = swapper;
+
+    swapper = bubbles.dydtp;
+    bubbles.dydtp = bubbles.dydt;
+    bubbles.dydt = swapper;
+
+    swapper = bubbles.dzdtp;
+    bubbles.dzdtp = bubbles.dzdt;
+    bubbles.dzdt = swapper;
+
+    swapper = bubbles.drdtp;
+    bubbles.drdtp = bubbles.drdt;
+    bubbles.drdt = swapper;
+
+    // Note that the order is reverse from the order in the kernel
+    swapper = bubbles.error;
+    bubbles.error = bubbles.distance;
+    bubbles.distance = bubbles.path;
+    bubbles.path = bubbles.z0;
+    bubbles.z0 = bubbles.y0;
+    bubbles.y0 = bubbles.x0;
+    bubbles.x0 = bubbles.drdto;
+    bubbles.drdto = bubbles.dzdto;
+    bubbles.dzdto = bubbles.dydto;
+    bubbles.dydto = bubbles.dxdto;
+    bubbles.dxdto = bubbles.flow_vx;
+    bubbles.flow_vx = swapper;
+
+    int *swapperI = bubbles.index;
+    bubbles.index = bubbles.wrap_count_z;
+    bubbles.wrap_count_z = bubbles.wrap_count_y;
+    bubbles.wrap_count_y = bubbles.wrap_count_x;
+    bubbles.wrap_count_x = bubbles.num_neighbors;
+    bubbles.num_neighbors = swapperI;
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
 
@@ -635,19 +620,6 @@ bool integrate(Params &params) {
     return continueSimulation;
 }
 
-void transformPositions(Params &params, bool normalize) {
-    KERNEL_LAUNCH(transformPositionsKernel, params.pairKernelSize, 0, 0,
-                  normalize, params.bubbles);
-}
-
-double calculateVolumeOfBubbles(Params &params) {
-    KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
-                  params.bubbles);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
-        params.bubbles.count);
-}
-
 void deinit(Params &params) {
     CUDA_CALL(cudaDeviceSynchronize());
 
@@ -660,11 +632,6 @@ void deinit(Params &params) {
 
     CUDA_CALL(cudaStreamDestroy(params.velocityStream));
     CUDA_CALL(cudaStreamDestroy(params.gasStream));
-}
-
-double getSimulationBoxVolume(Params &params) {
-    dvec temp = params.hostConstants.interval;
-    return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
 }
 
 void commonSetup(Params &params) {
@@ -1137,17 +1104,17 @@ void run(std::string &&inputFileName) {
             // Add values to data stream
             std::ofstream resultFile("results.dat", std::ios_base::app);
             if (resultFile.is_open()) {
-                const double vx = getAvg(params.bubbles.dxdt, bubbles);
-                const double vy = getAvg(params.bubbles.dydt, bubbles);
-                const double vz = getAvg(params.bubbles.dzdt, bubbles);
-                const double vr = getAvg(params.bubbles.drdt, bubbles);
+                const double vx = getAvg(params.bubbles.dxdt, params.bubbles);
+                const double vy = getAvg(params.bubbles.dydt, params.bubbles);
+                const double vz = getAvg(params.bubbles.dzdt, params.bubbles);
+                const double vr = getAvg(params.bubbles.drdt, params.bubbles);
 
                 resultFile << params.hostData.timesPrinted << " " << relRad
                            << " " << params.bubbles.count << " "
-                           << getAvg(params.bubbles.path, bubbles) << " "
-                           << getAvg(params.bubbles.distance, bubbles) << " "
-                           << params.hostData.energy2 << " " << dE << " " << vx
-                           << " " << vy << " " << vz << " "
+                           << getAvg(params.bubbles.path, params.bubbles) << " "
+                           << getAvg(params.bubbles.distance, params.bubbles)
+                           << " " << params.hostData.energy2 << " " << dE << " "
+                           << vx << " " << vy << " " << vz << " "
                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
                            << "\n";
             } else {

@@ -141,4 +141,5 @@ __global__ void eulerKernel(double timeStep, Bubbles bubbles);
 __global__ void pathLengthDistanceKernel(Bubbles bubbles);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs);
+__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 } // namespace cubble

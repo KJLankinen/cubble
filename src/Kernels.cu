@@ -536,7 +536,6 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
-#endif
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
@@ -606,6 +605,7 @@ __global__ void velocityWallKernel(Bubbles bubbles) {
         }
 #endif
     }
+#endif
 }
 
 __global__ void neighborVelocityKernel(Bubbles bubbles, Pairs pairs) {
@@ -1373,6 +1373,65 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
         if (i < bubbles.count - dNumToBeDeleted) {
             bubbles.r[i] = bubbles.r[i] * volMul;
         }
+    }
+}
+
+__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += gridDim.x * blockDim.x) {
+        int j = newIndex[i];
+        // Predicteds become currents and vice versa,
+        // saveds just store the currents until next search
+        bubbles.xp[i] = bubbles.x[j];
+        bubbles.yp[i] = bubbles.y[j];
+        bubbles.zp[i] = bubbles.z[j];
+        bubbles.rp[i] = bubbles.r[j];
+
+        bubbles.saved_x[i] = bubbles.x[j];
+        bubbles.saved_y[i] = bubbles.y[j];
+        bubbles.saved_z[i] = bubbles.z[j];
+        bubbles.saved_r[i] = bubbles.r[j];
+
+        bubbles.dxdtp[i] = bubbles.dxdt[j];
+        bubbles.dydtp[i] = bubbles.dydt[j];
+        bubbles.dzdtp[i] = bubbles.dzdt[j];
+        bubbles.drdtp[i] = bubbles.drdt[j];
+
+        // Swap the rest in a 'loop' such that
+        // flow_vx becomes dxdto becomes dydto
+        // becomes dzdto becomes drdto becomes x0 etc.
+        bubbles.flow_vx[i] = bubbles.dxdto[j];
+        int k = newIndex[j];
+        bubbles.dxdto[j] = bubbles.dydto[k];
+        j = newIndex[k];
+        bubbles.dydto[k] = bubbles.dzdto[j];
+        k = newIndex[j];
+        bubbles.dzdto[j] = bubbles.drdto[k];
+        j = newIndex[k];
+        bubbles.drdto[k] = bubbles.x0[j];
+        k = newIndex[j];
+        bubbles.x0[j] = bubbles.y0[k];
+        j = newIndex[k];
+        bubbles.y0[k] = bubbles.z0[j];
+        k = newIndex[j];
+        bubbles.z0[j] = bubbles.path[k];
+        j = newIndex[k];
+        bubbles.path[k] = bubbles.distance[j];
+        k = newIndex[j];
+        bubbles.distance[j] = bubbles.error[k];
+
+        // Same loopy change for ints
+        j = newIndex[i];
+        bubbles.num_neighbors[i] = bubbles.wrap_count_x[j];
+        k = newIndex[j];
+        bubbles.wrap_count_x[j] = bubbles.wrap_count_y[k];
+        j = newIndex[k];
+        bubbles.wrap_count_y[k] = bubbles.wrap_count_z[j];
+        k = newIndex[j];
+        bubbles.wrap_count_z[j] = bubbles.index[k];
+
+        // Additionally set the new num_neighbors to zero
+        bubbles.index[k] = 0;
     }
 }
 } // namespace cubble
