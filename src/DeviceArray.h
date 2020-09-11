@@ -67,8 +67,12 @@ template <typename T> class DeviceArray {
   private:
     static T *createDataPtr(uint64_t w, uint64_t h, uint64_t d) {
         T *t = nullptr;
-        if (w * h * d > 0)
-            CUDA_ASSERT(cudaMalloc((void **)&t, w * h * d * sizeof(T)));
+        uint64_t bytes = w * h * d * sizeof(T);
+        if (w * h * d > 0) {
+            std::cout << "Total memory reserved by DeviceArray: " << bytes
+                      << std::endl;
+            CUDA_ASSERT(cudaMalloc((void **)&t, bytes));
+        }
 
         return t;
     }
