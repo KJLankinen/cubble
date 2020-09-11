@@ -6,6 +6,7 @@
 #include "cub/cub/cub.cuh"
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -213,16 +214,20 @@ struct Bubbles {
         std::sort(dptrs.begin(), dptrs.begin() + numDP);
         std::sort(dptrs.begin() + numDP, dptrs.end());
 
-        // Associate each device pointer with a host pointer
+        // Associate each device pointer with a host pointer,
+        // store the pointers in the map as integers
         ptrMap.clear();
         for (int i = 0; i < dptrs.size(); i++) {
-            ptrMap.insert(dptrs[i], hptrs[i]);
+            ptrMap.insert(reinterpret_cast<intptr_t>(dptrs[i]),
+                          reinterpret_cast<intptr_t>(hptrs[i]));
         }
     }
 
     template <typename T>
-    T *getHostPtr(T *devPtr, const std::unordered_map<void *, void *> &ptrMap) {
-        return static_cast<T *>(ptrMap.at(static_cast<void *>(devPtr)));
+    T *getHostPtr(T *devPtr,
+                  const std::unordered_map<intptr_t, intptr_t> &ptrMap) {
+        return reinterpret_cast<T *>(
+            ptrMap.at(reinterpret_cast<intptr_t>(devPtr)));
     }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
@@ -315,8 +320,6 @@ struct Params {
     void *memory = nullptr;
     int *pinnedInt = nullptr;
     double *pinnedDouble = nullptr;
-
-    std::unordered_map<void *, void *> ptrMap;
 
     std::vector<double> previousX;
     std::vector<double> previousY;
