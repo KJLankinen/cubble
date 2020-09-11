@@ -4,10 +4,7 @@
 #include "Util.h"
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
-#include <algorithm>
 #include <array>
-#include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -142,92 +139,10 @@ struct Bubbles {
         return static_cast<void *>(prevI);
     }
 
-    void associateHostPointers(void *hostPtr,
-                               std::unordered_map<intptr_t, intptr_t> &ptrMap) {
-        // Create void pointers to the allocated host memory
-        // such that each pointer points to a continuous block
-        // of 'stride' values. Store the doubles first, followed
-        // immediately by the ints.
-        std::vector<void *> hptrs;
-        double *curr = static_cast<double *>(hostPtr);
-        for (int i = 0; i < numDP; i++) {
-            hptrs.push_back(hostPtr);
-            curr += stride;
-            hostPtr = static_cast<void *>(curr);
-        }
-
-        int *currI = static_cast<int *>(hostPtr);
-        for (int i = 0; i < numIP; i++) {
-            hptrs.push_back(hostPtr);
-            currI += stride;
-            hostPtr = static_cast<void *>(currI);
-        }
-
-        // Add all the device pointers defined in this struct
-        // to a vector that is then sorted.
-        std::vector<void *> dptrs;
-        // Double pointers
-        dptrs.push_back(static_cast<void *>(x));
-        dptrs.push_back(static_cast<void *>(y));
-        dptrs.push_back(static_cast<void *>(z));
-        dptrs.push_back(static_cast<void *>(r));
-        dptrs.push_back(static_cast<void *>(xp));
-        dptrs.push_back(static_cast<void *>(yp));
-        dptrs.push_back(static_cast<void *>(zp));
-        dptrs.push_back(static_cast<void *>(rp));
-        dptrs.push_back(static_cast<void *>(dxdt));
-        dptrs.push_back(static_cast<void *>(dydt));
-        dptrs.push_back(static_cast<void *>(dzdt));
-        dptrs.push_back(static_cast<void *>(drdt));
-        dptrs.push_back(static_cast<void *>(dxdtp));
-        dptrs.push_back(static_cast<void *>(dydtp));
-        dptrs.push_back(static_cast<void *>(dzdtp));
-        dptrs.push_back(static_cast<void *>(drdtp));
-        dptrs.push_back(static_cast<void *>(dxdto));
-        dptrs.push_back(static_cast<void *>(dydto));
-        dptrs.push_back(static_cast<void *>(dzdto));
-        dptrs.push_back(static_cast<void *>(drdto));
-        dptrs.push_back(static_cast<void *>(x0));
-        dptrs.push_back(static_cast<void *>(y0));
-        dptrs.push_back(static_cast<void *>(z0));
-        dptrs.push_back(static_cast<void *>(path));
-        dptrs.push_back(static_cast<void *>(distance));
-        dptrs.push_back(static_cast<void *>(error));
-        dptrs.push_back(static_cast<void *>(temp_doubles));
-        dptrs.push_back(static_cast<void *>(temp_doubles2));
-        dptrs.push_back(static_cast<void *>(flow_vx));
-        dptrs.push_back(static_cast<void *>(flow_vy));
-        dptrs.push_back(static_cast<void *>(flow_vz));
-        dptrs.push_back(static_cast<void *>(saved_x));
-        dptrs.push_back(static_cast<void *>(saved_y));
-        dptrs.push_back(static_cast<void *>(saved_z));
-        dptrs.push_back(static_cast<void *>(saved_r));
-        // Int pointers
-        dptrs.push_back(static_cast<void *>(temp_ints));
-        dptrs.push_back(static_cast<void *>(wrap_count_x));
-        dptrs.push_back(static_cast<void *>(wrap_count_y));
-        dptrs.push_back(static_cast<void *>(wrap_count_z));
-        dptrs.push_back(static_cast<void *>(index));
-        dptrs.push_back(static_cast<void *>(num_neighbors));
-
-        // Sort the doubles separate from the ints
-        std::sort(dptrs.begin(), dptrs.begin() + numDP);
-        std::sort(dptrs.begin() + numDP, dptrs.end());
-
-        // Associate each device pointer with a host pointer,
-        // store the pointers in the map as integers
-        ptrMap.clear();
-        for (int i = 0; i < dptrs.size(); i++) {
-            ptrMap.insert(reinterpret_cast<intptr_t>(dptrs[i]),
-                          reinterpret_cast<intptr_t>(hptrs[i]));
-        }
-    }
-
     template <typename T>
-    T *getHostPtr(T *devPtr,
-                  const std::unordered_map<intptr_t, intptr_t> &ptrMap) {
-        return reinterpret_cast<T *>(
-            ptrMap.at(reinterpret_cast<intptr_t>(devPtr)));
+    T *getHostPtr(T *devPtr, void *devMemStart, void *hostMemStart) {
+        return static_cast<T *>(hostMemStart) +
+               (devPtr - static_cast<T *>(devMemStart));
     }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
