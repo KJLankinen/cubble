@@ -143,7 +143,7 @@ struct Bubbles {
     }
 
     void associateHostPointers(void *hostPtr,
-                               std::unordered_map<void *, void *> &ptrMap) {
+                               std::unordered_map<intptr_t, intptr_t> &ptrMap) {
         // Create void pointers to the allocated host memory
         // such that each pointer points to a continuous block
         // of 'stride' values. Store the doubles first, followed
