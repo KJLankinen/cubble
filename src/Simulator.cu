@@ -139,59 +139,59 @@ void updateCellsAndNeighbors(Params &params) {
     // another in a 'loopy' fashion. The pointers must be updated after the
     // kernel.
     KERNEL_LAUNCH(reorganizeByIndex, params.defaultKernelSize, 0, 0,
-                  params.bubbles, sortedBubbleIndices);
-    double *swapper = bubbles.xp;
-    bubbles.xp = bubbles.x;
-    bubbles.x = swapper;
+                  params.bubbles, const_cast<const int *>(sortedBubbleIndices));
+    double *swapper = params.bubbles.xp;
+    params.bubbles.xp = params.bubbles.x;
+    params.bubbles.x = swapper;
 
-    swapper = bubbles.yp;
-    bubbles.yp = bubbles.y;
-    bubbles.y = swapper;
+    swapper = params.bubbles.yp;
+    params.bubbles.yp = params.bubbles.y;
+    params.bubbles.y = swapper;
 
-    swapper = bubbles.zp;
-    bubbles.zp = bubbles.z;
-    bubbles.z = swapper;
+    swapper = params.bubbles.zp;
+    params.bubbles.zp = params.bubbles.z;
+    params.bubbles.z = swapper;
 
-    swapper = bubbles.rp;
-    bubbles.rp = bubbles.r;
-    bubbles.r = swapper;
+    swapper = params.bubbles.rp;
+    params.bubbles.rp = params.bubbles.r;
+    params.bubbles.r = swapper;
 
-    swapper = bubbles.dxdtp;
-    bubbles.dxdtp = bubbles.dxdt;
-    bubbles.dxdt = swapper;
+    swapper = params.bubbles.dxdtp;
+    params.bubbles.dxdtp = params.bubbles.dxdt;
+    params.bubbles.dxdt = swapper;
 
-    swapper = bubbles.dydtp;
-    bubbles.dydtp = bubbles.dydt;
-    bubbles.dydt = swapper;
+    swapper = params.bubbles.dydtp;
+    params.bubbles.dydtp = params.bubbles.dydt;
+    params.bubbles.dydt = swapper;
 
-    swapper = bubbles.dzdtp;
-    bubbles.dzdtp = bubbles.dzdt;
-    bubbles.dzdt = swapper;
+    swapper = params.bubbles.dzdtp;
+    params.bubbles.dzdtp = params.bubbles.dzdt;
+    params.bubbles.dzdt = swapper;
 
-    swapper = bubbles.drdtp;
-    bubbles.drdtp = bubbles.drdt;
-    bubbles.drdt = swapper;
+    swapper = params.bubbles.drdtp;
+    params.bubbles.drdtp = params.bubbles.drdt;
+    params.bubbles.drdt = swapper;
 
     // Note that the order is reverse from the order in the kernel
-    swapper = bubbles.error;
-    bubbles.error = bubbles.distance;
-    bubbles.distance = bubbles.path;
-    bubbles.path = bubbles.z0;
-    bubbles.z0 = bubbles.y0;
-    bubbles.y0 = bubbles.x0;
-    bubbles.x0 = bubbles.drdto;
-    bubbles.drdto = bubbles.dzdto;
-    bubbles.dzdto = bubbles.dydto;
-    bubbles.dydto = bubbles.dxdto;
-    bubbles.dxdto = bubbles.flow_vx;
-    bubbles.flow_vx = swapper;
+    swapper = params.bubbles.error;
+    params.bubbles.error = params.bubbles.distance;
+    params.bubbles.distance = params.bubbles.path;
+    params.bubbles.path = params.bubbles.z0;
+    params.bubbles.z0 = params.bubbles.y0;
+    params.bubbles.y0 = params.bubbles.x0;
+    params.bubbles.x0 = params.bubbles.drdto;
+    params.bubbles.drdto = params.bubbles.dzdto;
+    params.bubbles.dzdto = params.bubbles.dydto;
+    params.bubbles.dydto = params.bubbles.dxdto;
+    params.bubbles.dxdto = params.bubbles.flow_vx;
+    params.bubbles.flow_vx = swapper;
 
-    int *swapperI = bubbles.index;
-    bubbles.index = bubbles.wrap_count_z;
-    bubbles.wrap_count_z = bubbles.wrap_count_y;
-    bubbles.wrap_count_y = bubbles.wrap_count_x;
-    bubbles.wrap_count_x = bubbles.num_neighbors;
-    bubbles.num_neighbors = swapperI;
+    int *swapperI = params.bubbles.index;
+    params.bubbles.index = params.bubbles.wrap_count_z;
+    params.bubbles.wrap_count_z = params.bubbles.wrap_count_y;
+    params.bubbles.wrap_count_y = params.bubbles.wrap_count_x;
+    params.bubbles.wrap_count_x = params.bubbles.num_neighbors;
+    params.bubbles.num_neighbors = swapperI;
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
 
