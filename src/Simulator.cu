@@ -262,21 +262,30 @@ void saveSnapshotToFile(Params &params) {
                                   cudaMemcpyDeviceToHost, 0));
 
         // Associate host pointers with corresponding device pointers
-        params.bubbles.associateHostPointers(memStart);
+        params.bubbles.associateHostPointers(memStart, params.ptrMap);
 
-        double *x = params.bubbles.getHostPtr(params.bubbles.x);
-        double *y = params.bubbles.getHostPtr(params.bubbles.y);
-        double *z = params.bubbles.getHostPtr(params.bubbles.z);
-        double *r = params.bubbles.getHostPtr(params.bubbles.r);
-        double *vx = params.bubbles.getHostPtr(params.bubbles.dxdt);
-        double *vy = params.bubbles.getHostPtr(params.bubbles.dydt);
-        double *vz = params.bubbles.getHostPtr(params.bubbles.dzdt);
-        double *vr = params.bubbles.getHostPtr(params.bubbles.drdt);
-        double *path = params.bubbles.getHostPtr(params.bubbles.path);
-        double *distance = params.bubbles.getHostPtr(params.bubbles.distance);
-        double *error = params.bubbles.getHostPtr(params.bubbles.error);
-        double *energy = params.bubbles.getHostPtr(params.bubbles.temp_doubles);
-        int *index = params.bubbles.getHostPtr(params.bubbles.index);
+        double *x = params.bubbles.getHostPtr(params.bubbles.x, params.ptrMap);
+        double *y = params.bubbles.getHostPtr(params.bubbles.y, params.ptrMap);
+        double *z = params.bubbles.getHostPtr(params.bubbles.z, params.ptrMap);
+        double *r = params.bubbles.getHostPtr(params.bubbles.r, params.ptrMap);
+        double *vx =
+            params.bubbles.getHostPtr(params.bubbles.dxdt, params.ptrMap);
+        double *vy =
+            params.bubbles.getHostPtr(params.bubbles.dydt, params.ptrMap);
+        double *vz =
+            params.bubbles.getHostPtr(params.bubbles.dzdt, params.ptrMap);
+        double *vr =
+            params.bubbles.getHostPtr(params.bubbles.drdt, params.ptrMap);
+        double *path =
+            params.bubbles.getHostPtr(params.bubbles.path, params.ptrMap);
+        double *distance =
+            params.bubbles.getHostPtr(params.bubbles.distance, params.ptrMap);
+        double *error =
+            params.bubbles.getHostPtr(params.bubbles.error, params.ptrMap);
+        double *energy = params.bubbles.getHostPtr(params.bubbles.temp_doubles,
+                                                   params.ptrMap);
+        int *index =
+            params.bubbles.getHostPtr(params.bubbles.index, params.ptrMap);
 
         // Starting to access the data, so need to sync to make sure all the
         // data is there
