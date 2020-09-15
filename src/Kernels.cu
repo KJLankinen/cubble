@@ -1378,15 +1378,9 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
         k = newIndex[j];
         bubbles.dzdto[j] = bubbles.drdto[k];
         j = newIndex[k];
-        bubbles.drdto[k] = bubbles.x0[j];
+        bubbles.drdto[k] = bubbles.path[j];
         k = newIndex[j];
-        bubbles.x0[j] = bubbles.y0[k];
-        j = newIndex[k];
-        bubbles.y0[k] = bubbles.z0[j];
-        k = newIndex[j];
-        bubbles.z0[j] = bubbles.path[k];
-        j = newIndex[k];
-        bubbles.path[k] = bubbles.error[j];
+        bubbles.path[j] = bubbles.error[k];
 
         // Same loopy change for ints
         j = newIndex[i];

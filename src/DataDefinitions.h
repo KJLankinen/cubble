@@ -42,10 +42,6 @@ struct Bubbles {
     double *dzdto = nullptr;
     double *drdto = nullptr;
 
-    double *x0 = nullptr;
-    double *y0 = nullptr;
-    double *z0 = nullptr;
-
     double *path = nullptr;
     double *error = nullptr;
     double *temp_doubles = nullptr;
@@ -76,7 +72,7 @@ struct Bubbles {
     uint64_t stride = 0;
 
     // How many pointers of each type do we have in this struct
-    const uint64_t numDP = 34;
+    const uint64_t numDP = 31;
     const uint64_t numIP = 6;
 
     uint64_t getMemReq() const {
@@ -107,9 +103,6 @@ struct Bubbles {
         setIncr(&dydto, &prev, stride);
         setIncr(&dzdto, &prev, stride);
         setIncr(&drdto, &prev, stride);
-        setIncr(&x0, &prev, stride);
-        setIncr(&y0, &prev, stride);
-        setIncr(&z0, &prev, stride);
         setIncr(&path, &prev, stride);
         setIncr(&error, &prev, stride);
         setIncr(&temp_doubles, &prev, stride);

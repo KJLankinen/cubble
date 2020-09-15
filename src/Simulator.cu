@@ -175,10 +175,7 @@ void updateCellsAndNeighbors(Params &params) {
     // Note that the order is reverse from the order in the kernel
     swapper = params.bubbles.error;
     params.bubbles.error = params.bubbles.path;
-    params.bubbles.path = params.bubbles.z0;
-    params.bubbles.z0 = params.bubbles.y0;
-    params.bubbles.y0 = params.bubbles.x0;
-    params.bubbles.x0 = params.bubbles.drdto;
+    params.bubbles.path = params.bubbles.drdto;
     params.bubbles.drdto = params.bubbles.dzdto;
     params.bubbles.dzdto = params.bubbles.dydto;
     params.bubbles.dydto = params.bubbles.dxdto;
@@ -1008,18 +1005,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         ++numSteps;
     }
 
-    // Set starting positions
+    // TODO: Set starting positions
     // Avoiding batched memset, because the pointers might not be in order
-    bytes = sizeof(double) * params.bubbles.stride;
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.x0),
-                         static_cast<void *>(params.bubbles.x), bytes,
-                         cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.y0),
-                         static_cast<void *>(params.bubbles.y), bytes,
-                         cudaMemcpyDeviceToDevice));
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.z0),
-                         static_cast<void *>(params.bubbles.z), bytes,
-                         cudaMemcpyDeviceToDevice));
 
     // Reset wrap counts to 0
     // Again avoiding batched memset, because the pointers might not be in order
