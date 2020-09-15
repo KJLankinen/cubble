@@ -201,7 +201,7 @@ void updateCellsAndNeighbors(Params &params) {
     }
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
-                                   params.addresses.dNumPairs, sizeof(int),
+                                   dNumPairs, sizeof(int),
                                    cudaMemcpyDeviceToHost));
 
 #ifndef NDEBUG
@@ -383,8 +383,7 @@ double stabilize(Params &params, int numStepsToRelax) {
 
             // endStepKernel reduced maximum error, copy it to host
             CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
-                                           params.addresses.dMaxError,
-                                           sizeof(double)));
+                                           dMaxError, sizeof(double)));
 
             if (error < params.hostData.errorTolerance &&
                 params.hostData.timeStep < 0.1)
@@ -397,8 +396,7 @@ double stabilize(Params &params, int numStepsToRelax) {
         // endStepKernel reduced maximum expansion, copy it to host
         double maxExpansion = 0.0;
         CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
-                                       params.addresses.dMaxExpansion,
-                                       sizeof(double)));
+                                       dMaxExpansion, sizeof(double)));
 
         // Update the current values with the calculated predictions
         double *swapper = params.bubbles.dxdto;
@@ -511,8 +509,7 @@ bool integrate(Params &params) {
                       (int)params.pairKernelSize.grid.x, params.bubbles);
 
         // endStepKernel reduced maximum error, copy it to host
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
-                                       params.addresses.dMaxError,
+        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error), dMaxError,
                                        sizeof(double)));
 
         if (error < params.hostData.errorTolerance &&
