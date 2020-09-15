@@ -69,8 +69,10 @@ template <typename T> class DeviceArray {
         T *t = nullptr;
         uint64_t bytes = w * h * d * sizeof(T);
         if (w * h * d > 0) {
+#ifndef NDEBUG
             std::cout << "Total memory reserved by DeviceArray: " << bytes
                       << std::endl;
+#endif
             CUDA_ASSERT(cudaMalloc((void **)&t, bytes));
         }
 
