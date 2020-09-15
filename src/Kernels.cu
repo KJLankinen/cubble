@@ -1218,10 +1218,9 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 swapValues(idx2, idx1, bubbles.x, bubbles.y, bubbles.z,
                            bubbles.r, bubbles.dxdt, bubbles.dydt, bubbles.dzdt,
                            bubbles.drdt, bubbles.dxdto, bubbles.dydto,
-                           bubbles.dzdto, bubbles.drdto, bubbles.x0, bubbles.y0,
-                           bubbles.z0, bubbles.saved_x, bubbles.saved_y,
-                           bubbles.saved_z, bubbles.saved_r, bubbles.path,
-                           bubbles.error, bubbles.wrap_count_x,
+                           bubbles.dzdto, bubbles.drdto, bubbles.saved_x,
+                           bubbles.saved_y, bubbles.saved_z, bubbles.saved_r,
+                           bubbles.path, bubbles.error, bubbles.wrap_count_x,
                            bubbles.wrap_count_y, bubbles.wrap_count_z,
                            bubbles.index, bubbles.num_neighbors);
             } else {

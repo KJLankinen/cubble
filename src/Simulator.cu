@@ -200,9 +200,9 @@ void updateCellsAndNeighbors(Params &params) {
                       params.pairs);
     }
 
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(&params.pairs.count),
-                         static_cast<void *>(dnp), sizeof(int),
-                         cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
+                                   params.addresses.dNumPairs, sizeof(int),
+                                   cudaMemcpyDeviceToHost));
 
 #ifndef NDEBUG
     std::cout << "Max num pairs: " << params.pairs.stride
