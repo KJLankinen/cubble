@@ -1307,7 +1307,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
 }
 
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
-    double volMul = 1.0 + (dTotalVolumeOld - dTotalVolumeNew) / dTotalVolumeNew;
+    double volMul = dTotalVolumeOld / dTotalVolumeNew;
 #if (NUM_DIM == 3)
     volMul = cbrt(volMul);
 #else
