@@ -929,11 +929,10 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.interval * params.hostConstants.flowLbb +
         params.hostConstants.lbb;
 
-    double mult = 0.25 * (double)inputJson["phiTarget"] *
+    double mult = (double)inputJson["phiTarget"] *
                   getSimulationBoxVolume(params) / CUBBLE_PI;
 #if (NUM_DIM == 3)
-    mult *= 3.0;
-    mult = std::cbrt(mult);
+    mult = std::cbrt(0.75 * mult);
 #else
     mult = std::sqrt(mult);
 #endif
