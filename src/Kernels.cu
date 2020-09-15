@@ -7,6 +7,9 @@ __device__ double dTotalOverlapArea;
 __device__ double dTotalOverlapAreaPerRadius;
 __device__ double dTotalAreaPerRadius;
 __device__ double dTotalVolumeNew;
+__device__ double dMaxError;
+__device__ double dMaxRadius;
+__device__ double dMaxExpansion;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ int dNumPairsNew;
@@ -1124,8 +1127,17 @@ __global__ void endStepKernel(int origBlockSize, Bubbles bubbles) {
 
                     __syncwarp();
 
-                    if (tid == 0)
-                        bubbles.temp_doubles2[blockIdx.x] = me[tid];
+                    if (tid == 0) {
+                        double *var = nullptr;
+                        if (blockIdx.x == 0)
+                            var = &dMaxError;
+                        if (blockIdx.x == 1)
+                            var = &dMaxRadius;
+                        if (blockIdx.x == 2)
+                            var = &dMaxExpansion;
+
+                        *var = me[tid];
+                    }
                 }
             }
         }
@@ -1144,37 +1156,18 @@ __global__ void eulerKernel(double timeStep, Bubbles bubbles) {
     }
 }
 
-__global__ void pathLengthDistanceKernel(Bubbles bubbles) {
-    const dvec interval = dConstants->interval;
-
+__global__ void incrementPath(Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
-        double diff = 0.0;
-        double pl = 0.0;
-        double fromStart = 0.0;
-        double dist = 0.0;
-
-        diff = bubbles.x[i] - bubbles.xp[i];
-        pl += diff * diff;
-        fromStart = bubbles.xp[i] - bubbles.x0[i] +
-                    bubbles.wrap_count_x[i] * interval.x;
-        dist += fromStart * fromStart;
-
+        double diff = bubbles.x[i] - bubbles.xp[i];
+        double pl = diff * diff;
         diff = bubbles.y[i] - bubbles.yp[i];
         pl += diff * diff;
-        fromStart = bubbles.yp[i] - bubbles.y0[i] +
-                    bubbles.wrap_count_y[i] * interval.y;
-        dist += fromStart * fromStart;
-
 #if (NUM_DIM == 3)
         diff = bubbles.z[i] - bubbles.zp[i];
         pl += diff * diff;
-        fromStart = bubbles.zp[i] - bubbles.z0[i] +
-                    bubbles.wrap_count_z[i] * interval.z;
-        dist += fromStart * fromStart;
 #endif
-        bubbles.temp_doubles[i] = bubbles.path[i] + sqrt(pl);
-        bubbles.distance[i] = dist;
+        bubbles.path[i] += sqrt(pl);
     }
 }
 
@@ -1222,15 +1215,15 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 bubbles.temp_ints[i + dNumToBeDeleted] = idx2;
 
                 // Swap all the arrays
-                swapValues(
-                    idx2, idx1, bubbles.x, bubbles.y, bubbles.z, bubbles.r,
-                    bubbles.dxdt, bubbles.dydt, bubbles.dzdt, bubbles.drdt,
-                    bubbles.dxdto, bubbles.dydto, bubbles.dzdto, bubbles.drdto,
-                    bubbles.x0, bubbles.y0, bubbles.z0, bubbles.saved_x,
-                    bubbles.saved_y, bubbles.saved_z, bubbles.saved_r,
-                    bubbles.path, bubbles.distance, bubbles.error,
-                    bubbles.wrap_count_x, bubbles.wrap_count_y,
-                    bubbles.wrap_count_z, bubbles.index, bubbles.num_neighbors);
+                swapValues(idx2, idx1, bubbles.x, bubbles.y, bubbles.z,
+                           bubbles.r, bubbles.dxdt, bubbles.dydt, bubbles.dzdt,
+                           bubbles.drdt, bubbles.dxdto, bubbles.dydto,
+                           bubbles.dzdto, bubbles.drdto, bubbles.x0, bubbles.y0,
+                           bubbles.z0, bubbles.saved_x, bubbles.saved_y,
+                           bubbles.saved_z, bubbles.saved_r, bubbles.path,
+                           bubbles.error, bubbles.wrap_count_x,
+                           bubbles.wrap_count_y, bubbles.wrap_count_z,
+                           bubbles.index, bubbles.num_neighbors);
             } else {
                 bubbles.temp_ints[i + dNumToBeDeleted] = idx1;
             }
@@ -1393,9 +1386,7 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
         k = newIndex[j];
         bubbles.z0[j] = bubbles.path[k];
         j = newIndex[k];
-        bubbles.path[k] = bubbles.distance[j];
-        k = newIndex[j];
-        bubbles.distance[j] = bubbles.error[k];
+        bubbles.path[k] = bubbles.error[j];
 
         // Same loopy change for ints
         j = newIndex[i];

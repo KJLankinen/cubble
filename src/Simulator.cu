@@ -174,8 +174,7 @@ void updateCellsAndNeighbors(Params &params) {
 
     // Note that the order is reverse from the order in the kernel
     swapper = params.bubbles.error;
-    params.bubbles.error = params.bubbles.distance;
-    params.bubbles.distance = params.bubbles.path;
+    params.bubbles.error = params.bubbles.path;
     params.bubbles.path = params.bubbles.z0;
     params.bubbles.z0 = params.bubbles.y0;
     params.bubbles.y0 = params.bubbles.x0;
@@ -195,10 +194,7 @@ void updateCellsAndNeighbors(Params &params) {
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
 
-    int *dnp = nullptr;
-    CUDA_ASSERT(
-        cudaGetSymbolAddress(reinterpret_cast<void **>(&dnp), dNumPairs));
-    CUDA_CALL(cudaMemset(dnp, 0, sizeof(int)));
+    CUDA_CALL(cudaMemset(params.addresses.dNumPairs, 0, sizeof(int)));
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
         cudaStream_t stream = (i % 2) ? params.stream2 : params.stream1;
@@ -275,7 +271,6 @@ void saveSnapshotToFile(Params &params) {
         double *vz = getHostPtr(params.bubbles.dzdt);
         double *vr = getHostPtr(params.bubbles.drdt);
         double *path = getHostPtr(params.bubbles.path);
-        double *distance = getHostPtr(params.bubbles.distance);
         double *error = getHostPtr(params.bubbles.error);
         double *energy = getHostPtr(params.bubbles.temp_doubles);
         int *index = getHostPtr(params.bubbles.index);
@@ -295,7 +290,7 @@ void saveSnapshotToFile(Params &params) {
             }
         }
 
-        file << "x,y,z,r,vx,vy,vz,vtot,vr,path,distance,energy,displacement,"
+        file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                 "error,index\n ";
         for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
             const int ind = index[i];
@@ -341,8 +336,6 @@ void saveSnapshotToFile(Params &params) {
             file << vr[i];
             file << ",";
             file << path[i];
-            file << ",";
-            file << distance[i];
             file << ",";
             file << energy[i];
             file << ",";
@@ -391,12 +384,10 @@ double stabilize(Params &params, int numStepsToRelax) {
             KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, 0,
                           (int)params.pairKernelSize.grid.x, params.bubbles);
 
-            // NB: this is synchronous copy
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(params.pinnedDouble),
-                                 params.bubbles.temp_doubles2,
-                                 3 * sizeof(double), cudaMemcpyDeviceToHost));
-
-            error = params.pinnedDouble[0];
+            // endStepKernel reduced maximum error, copy it to host
+            CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
+                                           params.addresses.dMaxError,
+                                           sizeof(double)));
 
             if (error < params.hostData.errorTolerance &&
                 params.hostData.timeStep < 0.1)
@@ -405,6 +396,12 @@ double stabilize(Params &params, int numStepsToRelax) {
                 params.hostData.timeStep *= 0.5;
 
         } while (error > params.hostData.errorTolerance);
+
+        // endStepKernel reduced maximum expansion, copy it to host
+        double maxExpansion = 0.0;
+        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
+                                       params.addresses.dMaxExpansion,
+                                       sizeof(double)));
 
         // Update the current values with the calculated predictions
         double *swapper = params.bubbles.dxdto;
@@ -436,7 +433,7 @@ double stabilize(Params &params, int numStepsToRelax) {
 
         elapsedTime += params.hostData.timeStep;
 
-        if (2 * params.pinnedDouble[2] >= params.hostConstants.skinRadius) {
+        if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             updateCellsAndNeighbors(params);
             // After updateCellsAndNeighbors r is correct,
             // but rp is trash. velocityPairKernel always uses
@@ -478,6 +475,9 @@ bool integrate(Params &params) {
 
     double error = 100000;
     uint32_t numLoopsDone = 0;
+    double *maxRadius = static_cast<double *>(params.pinnedMemory);
+    double *maxExpansion = maxRadius + 1;
+    int *numToDelete = reinterpret_cast<int *>(maxExpansion + 1);
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
@@ -506,28 +506,18 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(correctKernel, params.pairKernelSize, 0, 0,
                       params.hostData.timeStep, true, params.bubbles);
 
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
-                                  static_cast<void *>(params.numToBeDeleted),
-                                  sizeof(int), cudaMemcpyDeviceToHost,
-                                  params.stream1));
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(numToDelete), params.addresses.dNumToBeDeleted,
+            sizeof(int), 0, cudaMemcpyDeviceToHost, params.stream1));
 
         KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, params.stream2,
                       (int)params.pairKernelSize.grid.x, params.bubbles);
 
-        // Copy maximum error, maximum radius and maximum boundary expansion to
-        // pinned memory. See correctKernel and endStepKernel for details.
-        CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
-                                  params.bubbles.temp_doubles2,
-                                  3 * sizeof(double), cudaMemcpyDeviceToHost,
-                                  params.stream2));
-        CUDA_CALL(cudaEventRecord(params.event1, params.stream2));
+        // endStepKernel reduced maximum error, copy it to host
+        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
+                                       params.addresses.dMaxError,
+                                       sizeof(double)));
 
-        KERNEL_LAUNCH(pathLengthDistanceKernel, params.pairKernelSize, 0,
-                      params.stream1, params.bubbles);
-
-        // Wait for event
-        CUDA_CALL(cudaEventSynchronize(params.event1));
-        error = params.pinnedDouble[0];
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
             params.hostData.timeStep *= 1.9;
@@ -537,6 +527,23 @@ bool integrate(Params &params) {
         ++numLoopsDone;
         NVTX_RANGE_POP();
     } while (error > params.hostData.errorTolerance);
+
+    // Increment the path of each bubble
+    KERNEL_LAUNCH(incrementPath, params.pairKernelSize, 0, params.stream1,
+                  params.bubbles);
+    CUDA_CALL(cudaEventRecord(params.event2, params.stream1));
+
+    // endStepKernel reduced maximum radius and expansion, copy them to host
+    // Should be pinned
+    CUDA_CALL(cudaMemcpyFromSymbolAsync(
+        static_cast<void *>(maxExpansion), params.addresses.dMaxExpansion,
+        sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
+    CUDA_CALL(cudaMemcpyFromSymbolAsync(
+        static_cast<void *>(maxRadius), params.addresses.dMaxRadius,
+        sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
+
+    // Record event after both copies are done
+    CUDA_CALL(cudaEventRecord(params.event1, params.stream2));
 
     // Update values
     double *swapper = params.bubbles.dxdto;
@@ -575,10 +582,6 @@ bool integrate(Params &params) {
     params.bubbles.r = params.bubbles.rp;
     params.bubbles.rp = swapper;
 
-    swapper = params.bubbles.path;
-    params.bubbles.path = params.bubbles.temp_doubles;
-    params.bubbles.temp_doubles = swapper;
-
     ++params.hostData.numIntegrationSteps;
 
     // As the total simulation time can reach very large numbers as the
@@ -592,19 +595,20 @@ bool integrate(Params &params) {
     params.hostData.timeFraction =
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
-    params.hostData.maxBubbleRadius = params.pinnedDouble[1];
-
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See correctKernel for the
     // comparison & calculation.
-    if (params.pinnedInt[0] > 0) {
-        deleteSmallBubbles(params, params.pinnedInt[0]);
+    if (*numToDelete > 0) {
+        CUDA_CALL(cudaEventSynchronize(params.event2));
+        deleteSmallBubbles(params, *numToDelete);
     }
 
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
     // See correctKernel, comparePair for details.
-    if (params.pinnedDouble[2] >= 0.5 * params.hostConstants.skinRadius) {
+    CUDA_CALL(cudaEventSynchronize(params.event1));
+    params.hostData.maxBubbleRadius = *maxRadius;
+    if (*maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         updateCellsAndNeighbors(params);
     }
 
@@ -625,10 +629,10 @@ void deinit(Params &params) {
 
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
-    CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedInt)));
-    CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedDouble)));
+    CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedMemory)));
 
     CUDA_CALL(cudaEventDestroy(params.event1));
+    CUDA_CALL(cudaEventDestroy(params.event2));
 
     CUDA_CALL(cudaStreamDestroy(params.stream2));
     CUDA_CALL(cudaStreamDestroy(params.stream1));
@@ -638,10 +642,12 @@ void commonSetup(Params &params) {
     params.defaultKernelSize = KernelSize(128, params.bubbles.count);
     CUDA_ASSERT(cudaStreamCreate(&params.stream2));
     CUDA_ASSERT(cudaStreamCreate(&params.stream1));
-    printRelevantInfoOfCurrentDevice();
     CUDA_CALL(cudaEventCreate(&params.event1));
-    CUDA_CALL(cudaGetSymbolAddress(
-        reinterpret_cast<void **>(&params.numToBeDeleted), dNumToBeDeleted));
+    CUDA_CALL(cudaEventCreate(&params.event2));
+    printRelevantInfoOfCurrentDevice();
+
+    // Get device global addresses and store them in the struct
+    params.addresses.getAddresses();
 
     // Set device globals to zero
     double zero = 0.0;
@@ -664,10 +670,8 @@ void commonSetup(Params &params) {
     CUDA_CALL(cudaMemcpyToSymbol(dNumToBeDeleted, vz, sizeof(int)));
 
     std::cout << "Reserving device memory to hold data." << std::endl;
-    CUDA_CALL(cudaMallocHost(reinterpret_cast<void **>(&params.pinnedDouble),
-                             sizeof(double) * 3));
-    CUDA_CALL(cudaMallocHost(reinterpret_cast<void **>(&params.pinnedInt),
-                             sizeof(int)));
+    CUDA_CALL(
+        cudaMallocHost(&params.pinnedMemory, sizeof(int) + 2 * sizeof(double)));
 
     // It seems to hold that in 3 dimensions the total number of
     // bubble pairs is 10x and in two dimensions 4x number of bubbles.
@@ -745,8 +749,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
         resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.bubbles.count,
         params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
-        params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.distance,
-        params.bubbles.path);
+        params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
 
     std::cout << "Calculating some initial values as a part of setup."
               << std::endl;
@@ -1120,9 +1123,8 @@ void run(std::string &&inputFileName) {
                 resultFile << params.hostData.timesPrinted << " " << relRad
                            << " " << params.bubbles.count << " "
                            << getAvg(params.bubbles.path, params.bubbles) << " "
-                           << getAvg(params.bubbles.distance, params.bubbles)
-                           << " " << params.hostData.energy2 << " " << dE << " "
-                           << vx << " " << vy << " " << vz << " "
+                           << params.hostData.energy2 << " " << dE << " " << vx
+                           << " " << vy << " " << vz << " "
                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
                            << "\n";
             } else {

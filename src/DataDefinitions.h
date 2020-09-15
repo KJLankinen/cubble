@@ -47,7 +47,6 @@ struct Bubbles {
     double *z0 = nullptr;
 
     double *path = nullptr;
-    double *distance = nullptr;
     double *error = nullptr;
     double *temp_doubles = nullptr;
     double *temp_doubles2 = nullptr;
@@ -77,7 +76,7 @@ struct Bubbles {
     uint64_t stride = 0;
 
     // How many pointers of each type do we have in this struct
-    const uint64_t numDP = 35;
+    const uint64_t numDP = 34;
     const uint64_t numIP = 6;
 
     uint64_t getMemReq() const {
@@ -112,7 +111,6 @@ struct Bubbles {
         setIncr(&y0, &prev, stride);
         setIncr(&z0, &prev, stride);
         setIncr(&path, &prev, stride);
-        setIncr(&distance, &prev, stride);
         setIncr(&error, &prev, stride);
         setIncr(&temp_doubles, &prev, stride);
         setIncr(&temp_doubles2, &prev, stride);
@@ -211,10 +209,46 @@ struct HostData {
     uint32_t timesPrinted = 0;
 };
 
+// Store the addresses of device globals here for easy access
+struct DeviceGlobalAddresses {
+    void *dConstants = nullptr;
+    void *dTotalArea = nullptr;
+    void *dTotalOverlapArea = nullptr;
+    void *dTotalOverlapAreaPerRadius = nullptr;
+    void *dTotalAreaPerRadius = nullptr;
+    void *dTotalVolumeNew = nullptr;
+    void *dMaxError = nullptr;
+    void *dMaxRadius = nullptr;
+    void *dMaxExpansion = nullptr;
+    void *dErrorEncountered = nullptr;
+    void *dNumPairs = nullptr;
+    void *dNumPairsNew = nullptr;
+    void *dNumToBeDeleted = nullptr;
+
+    void getAddresses() {
+        CUDA_CALL(cudaGetSymbolAddress(&dConstants, dConstants));
+        CUDA_CALL(cudaGetSymbolAddress(&dTotalArea, dTotalArea));
+        CUDA_CALL(cudaGetSymbolAddress(&dTotalOverlapArea, dTotalOverlapArea));
+        CUDA_CALL(cudaGetSymbolAddress(&dTotalOverlapAreaPerRadius,
+                                       dTotalOverlapAreaPerRadius));
+        CUDA_CALL(
+            cudaGetSymbolAddress(&dTotalAreaPerRadius, dTotalAreaPerRadius));
+        CUDA_CALL(cudaGetSymbolAddress(&dTotalVolumeNew, dTotalVolumeNew));
+        CUDA_CALL(cudaGetSymbolAddress(&dMaxError, dMaxError));
+        CUDA_CALL(cudaGetSymbolAddress(&dMaxRadius, dMaxRadius));
+        CUDA_CALL(cudaGetSymbolAddress(&dMaxExpansion, dMaxExpansion));
+        CUDA_CALL(cudaGetSymbolAddress(&dErrorEncountered, dErrorEncountered));
+        CUDA_CALL(cudaGetSymbolAddress(&dNumPairs, dNumPairs));
+        CUDA_CALL(cudaGetSymbolAddress(&dNumPairsNew, dNumPairsNew));
+        CUDA_CALL(cudaGetSymbolAddress(&dNumToBeDeleted, dNumToBeDeleted));
+    }
+};
+
 struct Params {
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
     HostData hostData;
+    DeviceGlobalAddresses addresses;
 
     Bubbles bubbles;
     Pairs pairs;
@@ -223,19 +257,17 @@ struct Params {
     cudaStream_t stream1;
     cudaStream_t stream2;
     cudaEvent_t event1;
+    cudaEvent_t event2;
 
     KernelSize pairKernelSize = KernelSize(dim3(1024, 1, 1), dim3(128, 1, 1));
     KernelSize defaultKernelSize;
 
     void *memory = nullptr;
-    int *pinnedInt = nullptr;
-    double *pinnedDouble = nullptr;
+    void *pinnedMemory = nullptr;
 
     std::vector<double> previousX;
     std::vector<double> previousY;
     std::vector<double> previousZ;
-
-    int *numToBeDeleted = nullptr;
 };
 
 } // namespace cubble

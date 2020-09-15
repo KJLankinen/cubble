@@ -14,6 +14,9 @@ extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
 extern __device__ double dTotalAreaPerRadius;
 extern __device__ double dTotalVolumeNew;
+extern __device__ double dMaxError;
+extern __device__ double dMaxRadius;
+extern __device__ double dMaxExpansion;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
 extern __device__ int dNumPairsNew;
@@ -90,6 +93,9 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalOverlapAreaPerRadius = 0.0;
         dTotalAreaPerRadius = 0.0;
         dTotalVolumeNew = 0.0;
+        dMaxError = 0.0;
+        dMaxRadius = 0.0;
+        dMaxExpansion = 0.0;
         dNumToBeDeleted = 0;
         dNumPairsNew = dNumPairs;
     }
@@ -136,7 +142,7 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
                               Bubbles bubbles);
 __global__ void endStepKernel(int origBlockSize, Bubbles bubbles);
 __global__ void eulerKernel(double timeStep, Bubbles bubbles);
-__global__ void pathLengthDistanceKernel(Bubbles bubbles);
+__global__ void incrementPath(Bubbles bubbles);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
