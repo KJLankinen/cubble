@@ -13,7 +13,6 @@ extern __device__ double dTotalArea;
 extern __device__ double dTotalOverlapArea;
 extern __device__ double dTotalOverlapAreaPerRadius;
 extern __device__ double dTotalAreaPerRadius;
-extern __device__ double dTotalVolumeOld;
 extern __device__ double dTotalVolumeNew;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
@@ -90,7 +89,6 @@ __global__ void resetKernel(double value, int numValues, Args... args) {
         dTotalOverlapArea = 0.0;
         dTotalOverlapAreaPerRadius = 0.0;
         dTotalAreaPerRadius = 0.0;
-        dTotalVolumeOld = 0.0;
         dTotalVolumeNew = 0.0;
         dNumToBeDeleted = 0;
         dNumPairsNew = dNumPairs;

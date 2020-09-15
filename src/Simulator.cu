@@ -652,7 +652,6 @@ void commonSetup(Params &params) {
         cudaMemcpyToSymbol(dTotalOverlapAreaPerRadius, vz, sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(dTotalAreaPerRadius, vz, sizeof(double)));
     CUDA_CALL(cudaMemcpyToSymbol(dTotalVolumeNew, vz, sizeof(double)));
-    CUDA_CALL(cudaMemcpyToSymbol(dTotalVolumeOld, vz, sizeof(double)));
 
     bool falseB = false;
     vz = reinterpret_cast<void *>(&falseB);
@@ -929,6 +928,16 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     params.hostConstants.flowLbb =
         params.hostConstants.interval * params.hostConstants.flowLbb +
         params.hostConstants.lbb;
+
+    double mult = 0.25 * (double)inputJson["phiTarget"] *
+                  getSimulationBoxVolume(params) / CUBBLE_PI;
+#if (NUM_DIM == 3)
+    mult *= 3.0;
+    mult = std::cbrt(mult);
+#else
+    mult = std::sqrt(mult);
+#endif
+    params.hostConstants.bubbleVolumeMultiplier = mult;
 
     // Copy the updated constants to GPU
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),

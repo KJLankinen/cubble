@@ -6,7 +6,6 @@ __device__ double dTotalArea;
 __device__ double dTotalOverlapArea;
 __device__ double dTotalOverlapAreaPerRadius;
 __device__ double dTotalAreaPerRadius;
-__device__ double dTotalVolumeOld;
 __device__ double dTotalVolumeNew;
 __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
@@ -914,8 +913,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
     __shared__ double me[128];
     // maximum radius
     __shared__ double mr[128];
-    // volume of all bubbles, i.e. old total volume
-    __shared__ double tvo[128];
     // volume of remaining bubbles, i.e. new total volume
     __shared__ double tvn[128];
     // expansion, i.e. how far the boundary of a bubble has moved since
@@ -924,7 +921,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
     __shared__ double boundexp[128];
     me[tid] = 0.0;
     mr[tid] = 0.0;
-    tvo[tid] = 0.0;
     tvn[tid] = 0.0;
     boundexp[tid] = 0.0;
 
@@ -976,8 +972,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
 #if (NUM_DIM == 3)
             vol *= corrected;
 #endif
-            // Add all bubbles to old total volume
-            tvo[tid] += vol;
             // Add remaining bubbles to new total volume
             if (corrected > minRad) {
                 tvn[tid] += vol;
@@ -1022,11 +1016,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
         tvn[tid] += tvn[32 + tid];
         tvn[tid] += tvn[64 + tid];
         tvn[tid] += tvn[96 + tid];
-
-        tvo[tid] += tvo[32 + tid];
-        tvo[tid] += tvo[64 + tid];
-        tvo[tid] += tvo[96 + tid];
-
         __syncwarp();
 
         if (tid < 8) {
@@ -1051,11 +1040,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
             tvn[tid] += tvn[8 + tid];
             tvn[tid] += tvn[16 + tid];
             tvn[tid] += tvn[24 + tid];
-
-            tvo[tid] += tvo[8 + tid];
-            tvo[tid] += tvo[16 + tid];
-            tvo[tid] += tvo[24 + tid];
-
             __syncwarp();
 
             if (tid < 2) {
@@ -1080,11 +1064,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
                 tvn[tid] += tvn[2 + tid];
                 tvn[tid] += tvn[4 + tid];
                 tvn[tid] += tvn[6 + tid];
-
-                tvo[tid] += tvo[2 + tid];
-                tvo[tid] += tvo[4 + tid];
-                tvo[tid] += tvo[6 + tid];
-
                 __syncwarp();
 
                 if (tid == 0) {
@@ -1101,9 +1080,6 @@ __global__ void correctKernel(double timeStep, bool useGasExchange,
 
                     tvn[tid] += tvn[1];
                     atomicAdd(&dTotalVolumeNew, tvn[tid]);
-
-                    tvo[tid] += tvo[1];
-                    atomicAdd(&dTotalVolumeOld, tvo[tid]);
                 }
             }
         }
@@ -1307,13 +1283,13 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
 }
 
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
-    double volMul = exp(log(dTotalVolumeOld) - log(dTotalVolumeNew));
-    // double volMul = dTotalVolumeOld / dTotalVolumeNew;
+    double volMul = dTotalVolumeNew;
 #if (NUM_DIM == 3)
-    volMul = cbrt(volMul);
+    volMul = rcbrt(volMul);
 #else
-    volMul = sqrt(volMul);
+    volMul = rsqrt(volMul);
 #endif
+    volMul *= dConstants->bubbleVolumeMultiplier;
 
     for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairsNew;
          i += blockDim.x * gridDim.x) {

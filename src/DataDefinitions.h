@@ -185,6 +185,7 @@ struct Constants {
     double kappa = 0.0;
     double wallDragStrength = 0.0;
     double skinRadius = 0.0;
+    double bubbleVolumeMultiplier = 0.0;
 };
 
 // Only accessed by host
