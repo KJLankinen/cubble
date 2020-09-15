@@ -67,13 +67,13 @@ void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
 
-    KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, params.gasStream,
+    KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, params.stream1,
                   params.bubbles);
 
     // Reset pairs arrays to zero
     uint64_t bytes = sizeof(int) * params.pairs.stride * 4;
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0, bytes,
-                              params.velocityStream));
+                              params.stream2));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
     ivec cellDim = (params.hostConstants.interval /
@@ -115,7 +115,7 @@ void updateCellsAndNeighbors(Params &params) {
 
     // Assign each bubble to a particular cell, based on the bubbles
     // position. bubbleIndices and cellIndices will be filled by this
-    // kernel. Wait until the event from gasStream is recorded.
+    // kernel. Wait until the event from stream1 is recorded.
     KERNEL_LAUNCH(assignBubblesToCells, params.pairKernelSize, 0, 0,
                   cellIndices, bubbleIndices, cellDim, params.bubbles);
 
@@ -201,8 +201,7 @@ void updateCellsAndNeighbors(Params &params) {
     CUDA_CALL(cudaMemset(dnp, 0, sizeof(int)));
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
-        cudaStream_t stream =
-            (i % 2) ? params.velocityStream : params.gasStream;
+        cudaStream_t stream = (i % 2) ? params.stream2 : params.stream1;
         KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
                       maxNumCells, offsets, sizes, params.bubbles,
                       params.pairs);
@@ -455,22 +454,22 @@ double stabilize(Params &params, int numStepsToRelax) {
 }
 
 void velocityCalculation(Params &params) {
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0,
-                  params.velocityStream, params.bubbles, params.pairs);
+    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.stream2,
+                  params.bubbles, params.pairs);
 
 #if (USE_FLOW == 1)
     {
         KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
-                      params.velocityStream, params.bubbles, params.pairs);
+                      params.stream2, params.bubbles, params.pairs);
 
         KERNEL_LAUNCH(flowVelocityKernel, params.pairKernelSize, 0,
-                      params.velocityStream, params.bubbles);
+                      params.stream2, params.bubbles);
     }
 #endif
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    KERNEL_LAUNCH(velocityWallKernel, params.pairKernelSize, 0,
-                  params.velocityStream, params.bubbles);
+    KERNEL_LAUNCH(velocityWallKernel, params.pairKernelSize, 0, params.stream2,
+                  params.bubbles);
 #endif
 }
 
@@ -482,27 +481,26 @@ bool integrate(Params &params) {
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
-        KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0,
-                      params.velocityStream, 0.0, params.bubbles.count,
-                      params.bubbles.dxdtp, params.bubbles.dydtp,
-                      params.bubbles.dzdtp, params.bubbles.drdtp,
-                      params.bubbles.temp_doubles, params.bubbles.temp_doubles2,
-                      params.bubbles.flow_vx, params.bubbles.flow_vy,
-                      params.bubbles.flow_vz);
+        KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, params.stream2,
+                      0.0, params.bubbles.count, params.bubbles.dxdtp,
+                      params.bubbles.dydtp, params.bubbles.dzdtp,
+                      params.bubbles.drdtp, params.bubbles.temp_doubles,
+                      params.bubbles.temp_doubles2, params.bubbles.flow_vx,
+                      params.bubbles.flow_vy, params.bubbles.flow_vz);
 
-        KERNEL_LAUNCH(predictKernel, params.pairKernelSize, 0, params.gasStream,
+        KERNEL_LAUNCH(predictKernel, params.pairKernelSize, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
-        CUDA_CALL(cudaEventRecord(params.event1, params.gasStream));
+        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
         // Gas exchange can start immediately after predict, since they
         // are computed in the same stream
         KERNEL_LAUNCH(gasExchangeKernel, params.pairKernelSize, 0,
-                      params.gasStream, params.bubbles, params.pairs);
+                      params.stream1, params.bubbles, params.pairs);
         KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.pairKernelSize, 0,
-                      params.gasStream, params.bubbles);
+                      params.stream1, params.bubbles);
 
         // Wait for the event recorded after predict kernel
-        CUDA_CALL(cudaStreamWaitEvent(params.velocityStream, params.event1, 0));
+        CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
         velocityCalculation(params);
 
         KERNEL_LAUNCH(correctKernel, params.pairKernelSize, 0, 0,
@@ -511,22 +509,21 @@ bool integrate(Params &params) {
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedInt),
                                   static_cast<void *>(params.numToBeDeleted),
                                   sizeof(int), cudaMemcpyDeviceToHost,
-                                  params.gasStream));
+                                  params.stream1));
 
-        KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0,
-                      params.velocityStream, (int)params.pairKernelSize.grid.x,
-                      params.bubbles);
+        KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, params.stream2,
+                      (int)params.pairKernelSize.grid.x, params.bubbles);
 
         // Copy maximum error, maximum radius and maximum boundary expansion to
         // pinned memory. See correctKernel and endStepKernel for details.
         CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.pinnedDouble),
                                   params.bubbles.temp_doubles2,
                                   3 * sizeof(double), cudaMemcpyDeviceToHost,
-                                  params.velocityStream));
-        CUDA_CALL(cudaEventRecord(params.event1, params.velocityStream));
+                                  params.stream2));
+        CUDA_CALL(cudaEventRecord(params.event1, params.stream2));
 
         KERNEL_LAUNCH(pathLengthDistanceKernel, params.pairKernelSize, 0,
-                      params.gasStream, params.bubbles);
+                      params.stream1, params.bubbles);
 
         // Wait for event
         CUDA_CALL(cudaEventSynchronize(params.event1));
@@ -633,14 +630,14 @@ void deinit(Params &params) {
 
     CUDA_CALL(cudaEventDestroy(params.event1));
 
-    CUDA_CALL(cudaStreamDestroy(params.velocityStream));
-    CUDA_CALL(cudaStreamDestroy(params.gasStream));
+    CUDA_CALL(cudaStreamDestroy(params.stream2));
+    CUDA_CALL(cudaStreamDestroy(params.stream1));
 }
 
 void commonSetup(Params &params) {
     params.defaultKernelSize = KernelSize(128, params.bubbles.count);
-    CUDA_ASSERT(cudaStreamCreate(&params.velocityStream));
-    CUDA_ASSERT(cudaStreamCreate(&params.gasStream));
+    CUDA_ASSERT(cudaStreamCreate(&params.stream2));
+    CUDA_ASSERT(cudaStreamCreate(&params.stream1));
     printRelevantInfoOfCurrentDevice();
     CUDA_CALL(cudaEventCreate(&params.event1));
     CUDA_CALL(cudaGetSymbolAddress(

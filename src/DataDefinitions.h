@@ -219,8 +219,8 @@ struct Params {
     Pairs pairs;
 
     CubWrapper cw;
-    cudaStream_t velocityStream;
-    cudaStream_t gasStream;
+    cudaStream_t stream1;
+    cudaStream_t stream2;
     cudaEvent_t event1;
 
     KernelSize pairKernelSize = KernelSize(dim3(1024, 1, 1), dim3(128, 1, 1));
