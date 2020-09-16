@@ -19,44 +19,13 @@ namespace // anonymous
 {
 using namespace cubble;
 
-#if (USE_PROFILING == 1)
-void startProfiling(bool start) {
-    if (start) {
-        CUDA_CALL(cudaProfilerStart());
-    }
-}
-
-void stopProfiling(bool stop, bool &continueIntegration) {
-    if (stop) {
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaProfilerStop());
-        continueIntegration = false;
-    }
-}
-#endif
-
-double calculateTotalEnergy(Params &params) {
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, params.bubbles.temp_doubles);
-    KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
-                  params.pairs);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
-        params.bubbles.count);
-}
-
-double calculateVolumeOfBubbles(Params &params) {
-    KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
-                  params.bubbles);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
-        params.bubbles.count);
-}
-
-double getSimulationBoxVolume(Params &params) {
-    dvec temp = params.hostConstants.interval;
-    return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
-}
+// Forward declare
+void startProfiling(bool start);
+void stopProfiling(bool stop, bool &continueIntegration);
+double calculateTotalEnergy(Params &params);
+double calculateVolumeOfBubbles(Params &params);
+double getSimulationBoxVolume(Params &params);
+void saveSnapshotToFile(Params &params);
 
 void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
@@ -230,123 +199,6 @@ void deleteSmallBubbles(Params &params, int numToBeDeleted) {
     NVTX_RANGE_POP();
 }
 
-void saveSnapshotToFile(Params &params) {
-    // Should measure at some point how long it takes to save a snapshot
-    // since there are many optimization possibilities here.
-    calculateTotalEnergy(params);
-
-    std::stringstream ss;
-    ss << "snapshot.csv." << params.hostData.numSnapshots;
-    std::ofstream file(ss.str().c_str(), std::ios::out);
-    if (file.is_open()) {
-        // Copy entire bubble struct to host memory
-        uint64_t bytes = params.bubbles.getMemReq();
-        std::vector<char> rawMem;
-        rawMem.resize(bytes);
-        void *memStart = static_cast<void *>(rawMem.data());
-        // Async copy so host can sort pointers while copy is happening
-        CUDA_CALL(cudaMemcpyAsync(memStart, params.memory, bytes,
-                                  cudaMemcpyDeviceToHost, 0));
-
-        // Get host pointer for each device pointer
-        auto getHostPtr = [&params,
-                           &memStart](auto devPtr) -> decltype(devPtr) {
-            return static_cast<decltype(devPtr)>(memStart) +
-                   (devPtr - static_cast<decltype(devPtr)>(params.memory));
-        };
-        double *x = getHostPtr(params.bubbles.x);
-        double *y = getHostPtr(params.bubbles.y);
-        double *z = getHostPtr(params.bubbles.z);
-        double *r = getHostPtr(params.bubbles.r);
-        double *vx = getHostPtr(params.bubbles.dxdt);
-        double *vy = getHostPtr(params.bubbles.dydt);
-        double *vz = getHostPtr(params.bubbles.dzdt);
-        double *vr = getHostPtr(params.bubbles.drdt);
-        double *path = getHostPtr(params.bubbles.path);
-        double *error = getHostPtr(params.bubbles.error);
-        double *energy = getHostPtr(params.bubbles.temp_doubles);
-        int *index = getHostPtr(params.bubbles.index);
-
-        // Starting to access the data, so need to sync to make sure all the
-        // data is there
-        CUDA_CALL(cudaDeviceSynchronize());
-
-        if (params.hostData.numSnapshots == 0) {
-            // If this is the first snapshot, store current positions in the
-            // previous
-            for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
-                const int ind = index[i];
-                params.previousX[ind] = x[i];
-                params.previousY[ind] = y[i];
-                params.previousZ[ind] = z[i];
-            }
-        }
-
-        file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
-                "error,index\n ";
-        for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
-            const int ind = index[i];
-            const double xi = x[i];
-            const double yi = y[i];
-            const double zi = z[i];
-            const double vxi = vx[i];
-            const double vyi = vy[i];
-            const double vzi = vz[i];
-            const double px = params.previousX[ind];
-            const double py = params.previousY[ind];
-            const double pz = params.previousZ[ind];
-
-            double displX = abs(xi - px);
-            displX = displX > 0.5 * params.hostConstants.interval.x
-                         ? displX - params.hostConstants.interval.x
-                         : displX;
-            double displY = abs(yi - py);
-            displY = displY > 0.5 * params.hostConstants.interval.y
-                         ? displY - params.hostConstants.interval.y
-                         : displY;
-            double displZ = abs(zi - pz);
-            displZ = displZ > 0.5 * params.hostConstants.interval.z
-                         ? displZ - params.hostConstants.interval.z
-                         : displZ;
-
-            file << xi;
-            file << ",";
-            file << yi;
-            file << ",";
-            file << zi;
-            file << ",";
-            file << r[i];
-            file << ",";
-            file << vxi;
-            file << ",";
-            file << vyi;
-            file << ",";
-            file << vzi;
-            file << ",";
-            file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
-            file << ",";
-            file << vr[i];
-            file << ",";
-            file << path[i];
-            file << ",";
-            file << energy[i];
-            file << ",";
-            file << sqrt(displX * displX + displY * displY + displZ * displZ);
-            file << ",";
-            file << error[i];
-            file << ",";
-            file << ind;
-            file << "\n";
-
-            params.previousX[ind] = xi;
-            params.previousY[ind] = yi;
-            params.previousZ[ind] = zi;
-        }
-
-        ++params.hostData.numSnapshots;
-    }
-}
-
 double stabilize(Params &params, int numStepsToRelax) {
     // This function integrates only the positions of the bubbles.
     // Gas exchange is not used. This is used for equilibrating the foam.
@@ -439,26 +291,6 @@ double stabilize(Params &params, int numStepsToRelax) {
     return elapsedTime;
 }
 
-void velocityCalculation(Params &params) {
-    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
-                  params.bubbles, params.pairs);
-
-#if (USE_FLOW == 1)
-    {
-        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
-                      params.stream2, params.bubbles, params.pairs);
-
-        KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
-                      params.stream2, params.bubbles);
-    }
-#endif
-
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, params.stream2,
-                  params.bubbles);
-#endif
-}
-
 bool integrate(Params &params) {
     NVTX_RANGE_PUSH_A("Integration function");
 
@@ -489,9 +321,22 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(mediatedGasExchange, params.pairKernelSize, 0,
                       params.stream1, params.bubbles);
 
+        // Velocity calculations
         // Wait for the event recorded after predict kernel
         CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
-        velocityCalculation(params);
+        KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
+                      params.bubbles, params.pairs);
+#if (USE_FLOW == 1)
+        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
+                      params.stream2, params.bubbles, params.pairs);
+        KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
+                      params.stream2, params.bubbles);
+#endif
+
+#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
+        KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, params.stream2,
+                      params.bubbles);
+#endif
 
         KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
                       params.hostData.timeStep, true, params.bubbles);
@@ -620,6 +465,166 @@ bool integrate(Params &params) {
 
     NVTX_RANGE_POP();
     return continueSimulation;
+}
+} // namespace
+
+namespace // anonymous
+{
+using namespace cubble;
+#if (USE_PROFILING == 1)
+void startProfiling(bool start) {
+    if (start) {
+        CUDA_CALL(cudaProfilerStart());
+    }
+}
+
+void stopProfiling(bool stop, bool &continueIntegration) {
+    if (stop) {
+        CUDA_CALL(cudaDeviceSynchronize());
+        CUDA_CALL(cudaProfilerStop());
+        continueIntegration = false;
+    }
+}
+#endif
+
+double calculateTotalEnergy(Params &params) {
+    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
+                  params.bubbles.count, params.bubbles.temp_doubles);
+    KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
+                  params.pairs);
+    return params.cw.reduce<double, double *, double *>(
+        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        params.bubbles.count);
+}
+
+double calculateVolumeOfBubbles(Params &params) {
+    KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
+                  params.bubbles);
+    return params.cw.reduce<double, double *, double *>(
+        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        params.bubbles.count);
+}
+
+double getSimulationBoxVolume(Params &params) {
+    dvec temp = params.hostConstants.interval;
+    return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
+}
+
+void saveSnapshotToFile(Params &params) {
+    // Should measure at some point how long it takes to save a snapshot
+    // since there are many optimization possibilities here.
+    calculateTotalEnergy(params);
+
+    std::stringstream ss;
+    ss << "snapshot.csv." << params.hostData.numSnapshots;
+    std::ofstream file(ss.str().c_str(), std::ios::out);
+    if (file.is_open()) {
+        // Copy entire bubble struct to host memory
+        uint64_t bytes = params.bubbles.getMemReq();
+        std::vector<char> rawMem;
+        rawMem.resize(bytes);
+        void *memStart = static_cast<void *>(rawMem.data());
+        // Async copy so host can sort pointers while copy is happening
+        CUDA_CALL(cudaMemcpyAsync(memStart, params.memory, bytes,
+                                  cudaMemcpyDeviceToHost, 0));
+
+        // Get host pointer for each device pointer
+        auto getHostPtr = [&params,
+                           &memStart](auto devPtr) -> decltype(devPtr) {
+            return static_cast<decltype(devPtr)>(memStart) +
+                   (devPtr - static_cast<decltype(devPtr)>(params.memory));
+        };
+        double *x = getHostPtr(params.bubbles.x);
+        double *y = getHostPtr(params.bubbles.y);
+        double *z = getHostPtr(params.bubbles.z);
+        double *r = getHostPtr(params.bubbles.r);
+        double *vx = getHostPtr(params.bubbles.dxdt);
+        double *vy = getHostPtr(params.bubbles.dydt);
+        double *vz = getHostPtr(params.bubbles.dzdt);
+        double *vr = getHostPtr(params.bubbles.drdt);
+        double *path = getHostPtr(params.bubbles.path);
+        double *error = getHostPtr(params.bubbles.error);
+        double *energy = getHostPtr(params.bubbles.temp_doubles);
+        int *index = getHostPtr(params.bubbles.index);
+
+        // Starting to access the data, so need to sync to make sure all the
+        // data is there
+        CUDA_CALL(cudaDeviceSynchronize());
+
+        if (params.hostData.numSnapshots == 0) {
+            // If this is the first snapshot, store current positions in the
+            // previous
+            for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
+                const int ind = index[i];
+                params.previousX[ind] = x[i];
+                params.previousY[ind] = y[i];
+                params.previousZ[ind] = z[i];
+            }
+        }
+
+        file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
+                "error,index\n ";
+        for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
+            const int ind = index[i];
+            const double xi = x[i];
+            const double yi = y[i];
+            const double zi = z[i];
+            const double vxi = vx[i];
+            const double vyi = vy[i];
+            const double vzi = vz[i];
+            const double px = params.previousX[ind];
+            const double py = params.previousY[ind];
+            const double pz = params.previousZ[ind];
+
+            double displX = abs(xi - px);
+            displX = displX > 0.5 * params.hostConstants.interval.x
+                         ? displX - params.hostConstants.interval.x
+                         : displX;
+            double displY = abs(yi - py);
+            displY = displY > 0.5 * params.hostConstants.interval.y
+                         ? displY - params.hostConstants.interval.y
+                         : displY;
+            double displZ = abs(zi - pz);
+            displZ = displZ > 0.5 * params.hostConstants.interval.z
+                         ? displZ - params.hostConstants.interval.z
+                         : displZ;
+
+            file << xi;
+            file << ",";
+            file << yi;
+            file << ",";
+            file << zi;
+            file << ",";
+            file << r[i];
+            file << ",";
+            file << vxi;
+            file << ",";
+            file << vyi;
+            file << ",";
+            file << vzi;
+            file << ",";
+            file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
+            file << ",";
+            file << vr[i];
+            file << ",";
+            file << path[i];
+            file << ",";
+            file << energy[i];
+            file << ",";
+            file << sqrt(displX * displX + displY * displY + displZ * displZ);
+            file << ",";
+            file << error[i];
+            file << ",";
+            file << ind;
+            file << "\n";
+
+            params.previousX[ind] = xi;
+            params.previousY[ind] = yi;
+            params.previousZ[ind] = zi;
+        }
+
+        ++params.hostData.numSnapshots;
+    }
 }
 
 void deinit(Params &params) {
@@ -1026,7 +1031,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     params.hostData.numIntegrationSteps = 0;
 }
 
-} // namespace
+}; // namespace
 
 namespace cubble {
 void run(std::string &&inputFileName) {
