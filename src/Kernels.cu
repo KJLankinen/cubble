@@ -549,6 +549,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
 
     for (int i = tid + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
+        double delta = 0.0;
         auto correctPrediction = [&timeStep, &i, &delta](double *p, double *pp,
                                                          double *po, double *v,
                                                          double *vp) -> double {
@@ -561,7 +562,6 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
             return predicted < 0.0 ? -predicted : predicted;
         };
 
-        double delta = 0.0;
         double maxErr =
             correctPrediction(bubbles.x, bubbles.xp, bubbles.saved_x,
                               bubbles.dxdt, bubbles.dxdtp);
