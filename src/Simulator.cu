@@ -5,7 +5,6 @@
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
-#include <array>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
@@ -209,8 +208,8 @@ double stabilize(Params &params, int numStepsToRelax) {
 
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
-            KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                          params.bubbles.count, params.bubbles.dxdtp,
+            KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
+                          params.bubbles.count, true, params.bubbles.dxdtp,
                           params.bubbles.dydtp, params.bubbles.dzdtp);
 
             KERNEL_LAUNCH(predict, params.pairKernelSize, 0, 0,
@@ -301,14 +300,22 @@ bool integrate(Params &params) {
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
     const int numBlocks = params.pairKernelSize.grid.x;
 
+#if (USE_FLOW == 1)
+    // Average neighbor velocity is calculated from velocities of previous step
+    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream1, 0.0,
+                  params.bubbles.count, false, params.bubbles.flow_vx,
+                  params.bubbles.flow_vy, params.bubbles.flow_vz);
+    KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
+                  params.stream1, params.bubbles, params.pairs);
+#endif
+
     do {
         NVTX_RANGE_PUSH_A("Integration step");
-        KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, params.stream2,
-                      0.0, params.bubbles.count, params.bubbles.dxdtp,
+        KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream2,
+                      0.0, params.bubbles.count, true, params.bubbles.dxdtp,
                       params.bubbles.dydtp, params.bubbles.dzdtp,
                       params.bubbles.drdtp, params.bubbles.temp_doubles,
-                      params.bubbles.temp_doubles2, params.bubbles.flow_vx,
-                      params.bubbles.flow_vy, params.bubbles.flow_vz);
+                      params.bubbles.temp_doubles2);
 
         KERNEL_LAUNCH(predict, params.pairKernelSize, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
@@ -327,8 +334,6 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
                       params.bubbles, params.pairs);
 #if (USE_FLOW == 1)
-        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
-                      params.stream2, params.bubbles, params.pairs);
         KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
                       params.stream2, params.bubbles);
 #endif
@@ -488,8 +493,8 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 #endif
 
 double calculateTotalEnergy(Params &params) {
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, params.bubbles.temp_doubles);
+    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
+                  params.bubbles.count, false, params.bubbles.temp_doubles);
     KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
                   params.pairs);
     return params.cw.reduce<double, double *, double *>(
@@ -745,8 +750,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton predictor-corrector method
     KERNEL_LAUNCH(
-        resetKernel, params.defaultKernelSize, 0, 0, 0.0, params.bubbles.count,
-        params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
+        resetArrays, params.pairKernelSize, 0, 0, 0.0, params.bubbles.count,
+        false, params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
 
@@ -1021,8 +1026,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemset(params.bubbles.wrap_count_z, 0, bytes));
 
     // Reset errors since integration starts after this
-    KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, params.bubbles.error);
+    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
+                  params.bubbles.count, false, params.bubbles.error);
 
     params.hostData.energy1 = calculateTotalEnergy(params);
     params.hostData.timeInteger = 0;
@@ -1168,8 +1173,8 @@ void run(std::string &&inputFileName) {
         }
 
         if (resetErrors) {
-            KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
-                          params.bubbles.count, params.bubbles.error);
+            KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
+                          params.bubbles.count, false, params.bubbles.error);
             resetErrors = false;
         }
 

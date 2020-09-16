@@ -112,33 +112,27 @@ __device__ void swapValues(int from, int to, T *arr, Args... args) {
     swapValues(from, to, args...);
 }
 
+__device__ void resetDeviceGlobals();
 template <typename T>
-__device__ void resetArrayToValue(T value, int idx, T *array) {
+__device__ void setArrayToValue(T value, int idx, T *array) {
     array[idx] = value;
 }
 template <typename T, typename... Args>
-__device__ void resetArrayToValue(T value, int idx, T *array, Args... args) {
-    resetArrayToValue(value, idx, array);
-    resetArrayToValue(value, idx, args...);
+__device__ void setArrayToValue(T value, int idx, T *array, Args... args) {
+    setArrayToValue(value, idx, array);
+    setArrayToValue(value, idx, args...);
 }
 
 template <typename T, typename... Args>
-__global__ void resetKernel(T value, int numValues, Args... args) {
-    const int tid = getGlobalTid();
-    if (tid < numValues)
-        resetArrayToValue(value, tid, args...);
+__global__ void resetArrays(T value, int numValues, bool resetGlobals,
+                            Args... args) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+         i += gridDim.x * blockDim.x) {
+        setArrayToValue(value, i, args...);
+    }
 
-    if (tid == 0) {
-        dTotalArea = 0.0;
-        dTotalOverlapArea = 0.0;
-        dTotalOverlapAreaPerRadius = 0.0;
-        dTotalAreaPerRadius = 0.0;
-        dTotalVolumeNew = 0.0;
-        dMaxError = 0.0;
-        dMaxRadius = 0.0;
-        dMaxExpansion = 0.0;
-        dNumToBeDeleted = 0;
-        dNumPairsNew = dNumPairs;
+    if (resetGlobals && threadIdx.x + blockIdx.x == 0) {
+        resetDeviceGlobals();
     }
 }
 } // namespace cubble

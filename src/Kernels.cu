@@ -1227,4 +1227,17 @@ __device__ __host__ unsigned int compact1By2(unsigned int x) {
 
     return x;
 }
+
+__device__ void resetDeviceGlobals() {
+    dTotalArea = 0.0;
+    dTotalOverlapArea = 0.0;
+    dTotalOverlapAreaPerRadius = 0.0;
+    dTotalAreaPerRadius = 0.0;
+    dTotalVolumeNew = 0.0;
+    dMaxError = 0.0;
+    dMaxRadius = 0.0;
+    dMaxExpansion = 0.0;
+    dNumToBeDeleted = 0;
+    dNumPairsNew = dNumPairs;
+}
 } // namespace cubble
