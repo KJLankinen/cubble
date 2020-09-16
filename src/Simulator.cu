@@ -19,8 +19,10 @@ namespace // anonymous
 using namespace cubble;
 
 // Forward declare
+#if (USE_PROFILING == 1)
 void startProfiling(bool start);
 void stopProfiling(bool stop, bool &continueIntegration);
+#endif
 double calculateTotalEnergy(Params &params);
 double calculateVolumeOfBubbles(Params &params);
 double getSimulationBoxVolume(Params &params);
