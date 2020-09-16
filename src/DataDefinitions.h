@@ -182,6 +182,20 @@ struct Constants {
     bool xWall = false;
     bool yWall = false;
     bool zWall = false;
+
+    void print() {
+        std::cout << "lower back bottom: " << lbb
+                  << "\ntop front right: " << tfr << "\ninterval: " << interval
+                  << "\nflow lbb: " << flowLbb << "\nflow tfr: " << flowTfr
+                  << "\nflow vel: " << flowVel << "\nminimum radius: " << minRad
+                  << "\nf0/mu0: " << fZeroPerMuZero
+                  << "\nk parameter: " << kParameter << "\nkappa: " << kappa
+                  << "\nwall drag: " << wallDragStrength
+                  << "\nskin radius: " << skinRadius
+                  << "\n#dim: " << dimensionality << "\nx has wall: " << xWall
+                  << "\ny has wall: " << yWall << "\nz has wall: " << zWall
+                  << std::endl;
+    }
 };
 
 // Only accessed by host
@@ -207,6 +221,14 @@ struct HostData {
     uint32_t timesPrinted = 0;
 
     bool addFlow = false;
+
+    void print() {
+        std::cout << "error tolerance : " << errorTolerance
+                  << "\nsnapshot frequency : " << snapshotFrequency
+                  << "\naverage radius : " << avgRad
+                  << "\nminimum number of bubbles : " << minNumBubbles
+                  << "\nimpose flow: " << addFlow << std::endl;
+    }
 };
 
 struct Params {

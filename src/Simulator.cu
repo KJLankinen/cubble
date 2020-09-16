@@ -828,7 +828,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
 }
 
 void initializeFromJson(const char *inputFileName, Params &params) {
-    std::cout << "\n=====\nSetup\n====="
+    std::cout << "\n=====\nSetup\n=====\n"
               << "Reading inputs from file \"" << inputFileName << "\""
               << std::endl;
 
@@ -868,6 +868,10 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.dimensionality = inputJson["dimensionality"];
     } else
         throw std::runtime_error("Couldn't open input file!");
+
+    std::cout << "Simulation starting parameters:\n";
+    params.hostConstants.print();
+    params.hostData.print();
 
     // First calculate the size of the box and the starting number of bubbles
     dvec relDim = inputJson["boxRelDim"];
