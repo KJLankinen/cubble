@@ -17,8 +17,7 @@ class CubWrapper {
     template <typename T, typename InputIterT, typename OutputIterT>
     T reduce(cudaError_t (*func)(void *, uint64_t &, InputIterT, OutputIterT,
                                  int, cudaStream_t, bool),
-             InputIterT deviceInputData, int numValues, cudaStream_t stream = 0,
-             bool debug = false) {
+             InputIterT deviceInputData, int numValues, bool debug = false) {
         assert(deviceInputData != nullptr);
 
         if (sizeof(T) > outData.getSizeInBytes())
@@ -29,18 +28,19 @@ class CubWrapper {
 
         uint64_t tempStorageBytes = 0;
         (*func)(NULL, tempStorageBytes, deviceInputData, deviceOutputData,
-                numValues, stream, debug);
+                numValues, 0, debug);
 
         if (tempStorageBytes > tempStorage.getSizeInBytes())
             tempStorage = DeviceArray<char>(tempStorageBytes, 1);
 
         void *tempStoragePtr = static_cast<void *>(tempStorage.get());
         (*func)(tempStoragePtr, tempStorageBytes, deviceInputData,
-                deviceOutputData, numValues, stream, debug);
+                deviceOutputData, numValues, 0, debug);
 
         T hostOutputData;
-        cudaMemcpyAsync(&hostOutputData, deviceOutputData, sizeof(T),
-                        cudaMemcpyDeviceToHost, stream);
+        cudaMemcpy(static_cast<void *>(&hostOutputData),
+                   static_cast<void *>(deviceOutputData), sizeof(T),
+                   cudaMemcpyDeviceToHost);
 
 #ifndef NDEBUG
         CUDA_ASSERT(cudaDeviceSynchronize());

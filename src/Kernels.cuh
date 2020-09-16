@@ -24,31 +24,28 @@ extern __device__ int dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
-__global__ void assignBubblesToCells(int *cellIndices, int *bubbleIndices,
-                                     ivec cellDim, Bubbles bubbles);
+__global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
+                               ivec cellDim, Bubbles bubbles);
 __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles, Pairs &pairs);
 __global__ void neighborSearch(int neighborCellNumber, int numCells,
                                int *offsets, int *sizes, Bubbles bubbles,
                                Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
-__global__ void velocityPairKernel(Bubbles bubbles, Pairs pairs);
-__global__ void velocityWallKernel(Bubbles bubbles);
-__global__ void neighborVelocityKernel(Bubbles bubbles, Pairs pairs);
-__global__ void flowVelocityKernel(Bubbles bubbles);
-__global__ void potentialEnergyKernel(Bubbles bubbles, Pairs pairs);
-__global__ void gasExchangeKernel(Bubbles bubbles, Pairs pairs);
-__global__ void finalRadiusChangeRateKernel(Bubbles bubbles);
-__global__ void predictKernel(double timeStep, bool useGasExchange,
-                              Bubbles bubbles);
-__global__ void correctKernel(double timeStep, bool useGasExchange,
-                              Bubbles bubbles);
-__global__ void endStepKernel(int origBlockSize, Bubbles bubbles);
+__global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
+__global__ void wallVelocity(Bubbles bubbles);
+__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs);
+__global__ void imposedFlowVelocity(Bubbles bubbles);
+__global__ void potentialEnergy(Bubbles bubbles, Pairs pairs);
+__global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs);
+__global__ void mediatedGasExchange(Bubbles bubbles);
+__global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles);
+__global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles);
 __global__ void incrementPath(Bubbles bubbles);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs);
-__global__ void eulerKernel(double timeStep, Bubbles bubbles);
-__global__ void transformPositionsKernel(bool normalize, Bubbles bubbles);
-__global__ void wrapKernel(Bubbles bubbles);
+__global__ void euler(double timeStep, Bubbles bubbles);
+__global__ void transformPositions(bool normalize, Bubbles bubbles);
+__global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
 __global__ void calculateVolumes(Bubbles bubbles);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);

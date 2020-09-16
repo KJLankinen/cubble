@@ -38,16 +38,11 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 double calculateTotalEnergy(Params &params) {
     KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, 0, 0.0,
                   params.bubbles.count, params.bubbles.temp_doubles);
-    KERNEL_LAUNCH(potentialEnergyKernel, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
+    KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
+                  params.pairs);
     return params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
         params.bubbles.count);
-}
-
-void transformPositions(Params &params, bool normalize) {
-    KERNEL_LAUNCH(transformPositionsKernel, params.pairKernelSize, 0, 0,
-                  normalize, params.bubbles);
 }
 
 double calculateVolumeOfBubbles(Params &params) {
@@ -67,8 +62,8 @@ void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
 
-    KERNEL_LAUNCH(wrapKernel, params.pairKernelSize, 0, params.stream1,
-                  params.bubbles);
+    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params.pairKernelSize, 0,
+                  params.stream1, params.bubbles);
 
     // Reset pairs arrays to zero
     uint64_t bytes = sizeof(int) * params.pairs.stride * 4;
@@ -116,8 +111,8 @@ void updateCellsAndNeighbors(Params &params) {
     // Assign each bubble to a particular cell, based on the bubbles
     // position. bubbleIndices and cellIndices will be filled by this
     // kernel. Wait until the event from stream1 is recorded.
-    KERNEL_LAUNCH(assignBubblesToCells, params.pairKernelSize, 0, 0,
-                  cellIndices, bubbleIndices, cellDim, params.bubbles);
+    KERNEL_LAUNCH(bubblesToCells, params.pairKernelSize, 0, 0, cellIndices,
+                  bubbleIndices, cellDim, params.bubbles);
 
     // Sort both the cell and bubble indices by the cellIndices array into
     // ascending order.
@@ -358,6 +353,7 @@ double stabilize(Params &params, int numStepsToRelax) {
     double elapsedTime = 0.0;
     double error = 100000;
     params.hostData.energy1 = calculateTotalEnergy(params);
+    const int numBlocks = params.pairKernelSize.grid.x;
 
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
@@ -365,25 +361,23 @@ double stabilize(Params &params, int numStepsToRelax) {
                           params.bubbles.count, params.bubbles.dxdtp,
                           params.bubbles.dydtp, params.bubbles.dzdtp);
 
-            KERNEL_LAUNCH(predictKernel, params.pairKernelSize, 0, 0,
+            KERNEL_LAUNCH(predict, params.pairKernelSize, 0, 0,
                           params.hostData.timeStep, false, params.bubbles);
 
-            KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0,
+            KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0,
                           params.bubbles, params.pairs);
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-            KERNEL_LAUNCH(velocityWallKernel, params.pairKernelSize, 0, 0,
+            KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, 0,
                           params.bubbles);
 #endif
-            KERNEL_LAUNCH(correctKernel, params.pairKernelSize, 0, 0,
+            KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
                           params.hostData.timeStep, false, params.bubbles);
 
-            KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, 0,
-                          (int)params.pairKernelSize.grid.x, params.bubbles);
-
-            // endStepKernel reduced maximum error, copy it to host
-            CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
-                                           dMaxError, sizeof(double)));
+            // Reduce error
+            error = params.cw.reduce<double, double *, double *>(
+                &cub::DeviceReduce::Max, params.bubbles.temp_doubles2,
+                numBlocks);
 
             if (error < params.hostData.errorTolerance &&
                 params.hostData.timeStep < 0.1)
@@ -392,11 +386,6 @@ double stabilize(Params &params, int numStepsToRelax) {
                 params.hostData.timeStep *= 0.5;
 
         } while (error > params.hostData.errorTolerance);
-
-        // endStepKernel reduced maximum expansion, copy it to host
-        double maxExpansion = 0.0;
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
-                                       dMaxExpansion, sizeof(double)));
 
         // Update the current values with the calculated predictions
         double *swapper = params.bubbles.dxdto;
@@ -428,10 +417,15 @@ double stabilize(Params &params, int numStepsToRelax) {
 
         elapsedTime += params.hostData.timeStep;
 
+        // Reduce block maximum expansions to a global maximum
+        double maxExpansion = params.cw.reduce<double, double *, double *>(
+            &cub::DeviceReduce::Max,
+            params.bubbles.temp_doubles2 + 2 * numBlocks, numBlocks);
+
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             updateCellsAndNeighbors(params);
             // After updateCellsAndNeighbors r is correct,
-            // but rp is trash. velocityPairKernel always uses
+            // but rp is trash. pairVelocity always uses
             // predicted values, so copy r to rp
             uint64_t bytes = params.bubbles.stride * sizeof(double);
             CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
@@ -446,21 +440,21 @@ double stabilize(Params &params, int numStepsToRelax) {
 }
 
 void velocityCalculation(Params &params) {
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, params.stream2,
+    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
                   params.bubbles, params.pairs);
 
 #if (USE_FLOW == 1)
     {
-        KERNEL_LAUNCH(neighborVelocityKernel, params.pairKernelSize, 0,
+        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
                       params.stream2, params.bubbles, params.pairs);
 
-        KERNEL_LAUNCH(flowVelocityKernel, params.pairKernelSize, 0,
+        KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
                       params.stream2, params.bubbles);
     }
 #endif
 
 #if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    KERNEL_LAUNCH(velocityWallKernel, params.pairKernelSize, 0, params.stream2,
+    KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, params.stream2,
                   params.bubbles);
 #endif
 }
@@ -473,6 +467,7 @@ bool integrate(Params &params) {
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
+    const int numBlocks = params.pairKernelSize.grid.x;
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
@@ -483,34 +478,27 @@ bool integrate(Params &params) {
                       params.bubbles.temp_doubles2, params.bubbles.flow_vx,
                       params.bubbles.flow_vy, params.bubbles.flow_vz);
 
-        KERNEL_LAUNCH(predictKernel, params.pairKernelSize, 0, params.stream1,
+        KERNEL_LAUNCH(predict, params.pairKernelSize, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
         CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
         // Gas exchange can start immediately after predict, since they
         // are computed in the same stream
-        KERNEL_LAUNCH(gasExchangeKernel, params.pairKernelSize, 0,
+        KERNEL_LAUNCH(pairwiseGasExchange, params.pairKernelSize, 0,
                       params.stream1, params.bubbles, params.pairs);
-        KERNEL_LAUNCH(finalRadiusChangeRateKernel, params.pairKernelSize, 0,
+        KERNEL_LAUNCH(mediatedGasExchange, params.pairKernelSize, 0,
                       params.stream1, params.bubbles);
 
         // Wait for the event recorded after predict kernel
         CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
         velocityCalculation(params);
 
-        KERNEL_LAUNCH(correctKernel, params.pairKernelSize, 0, 0,
+        KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
                       params.hostData.timeStep, true, params.bubbles);
 
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
-            0, cudaMemcpyDeviceToHost, params.stream1));
-
-        KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, params.stream2,
-                      (int)params.pairKernelSize.grid.x, params.bubbles);
-
-        // endStepKernel reduced maximum error, copy it to host
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error), dMaxError,
-                                       sizeof(double)));
+        // Reduce error
+        error = params.cw.reduce<double, double *, double *>(
+            &cub::DeviceReduce::Max, params.bubbles.temp_doubles2, numBlocks);
 
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
@@ -522,22 +510,38 @@ bool integrate(Params &params) {
         NVTX_RANGE_POP();
     } while (error > params.hostData.errorTolerance);
 
+    CUDA_CALL(cudaMemcpyFromSymbolAsync(
+        static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int), 0,
+        cudaMemcpyDeviceToHost, params.stream1));
+
     // Increment the path of each bubble
     KERNEL_LAUNCH(incrementPath, params.pairKernelSize, 0, params.stream1,
                   params.bubbles);
-    CUDA_CALL(cudaEventRecord(params.event2, params.stream1));
+    CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
-    // endStepKernel reduced maximum radius and expansion, copy them to host
-    // Should be pinned
-    CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
-        cudaMemcpyDeviceToHost, params.stream2));
+    // In correct kernel each block reduced a maximum value of the encountered
+    // radii and expansions. Reduce those per block maximums to a global
+    // maximum.
+    void *pDMaxRadius = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
+    params.cw.reduceNoCopy<double, double *, double *>(
+        &cub::DeviceReduce::Max, params.bubbles.temp_doubles2 + numBlocks,
+        static_cast<double *>(pDMaxRadius), numBlocks, params.stream2);
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
         cudaMemcpyDeviceToHost, params.stream2));
 
-    // Record event after both copies are done
-    CUDA_CALL(cudaEventRecord(params.event1, params.stream2));
+    void *pDMaxExpansion = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
+    params.cw.reduceNoCopy<double, double *, double *>(
+        &cub::DeviceReduce::Max, params.bubbles.temp_doubles2 + 2 * numBlocks,
+        static_cast<double *>(pDMaxExpansion), numBlocks, params.stream2);
+    CUDA_CALL(cudaMemcpyFromSymbolAsync(
+        static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
+        cudaMemcpyDeviceToHost, params.stream2));
+
+    // Record event after both reductions & copies are done
+    CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
 
     // Update values
     double *swapper = params.bubbles.dxdto;
@@ -590,17 +594,17 @@ bool integrate(Params &params) {
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
     // Delete, if there are nonzero amount of bubbles with a radius
-    // smaller than the minimum radius. See correctKernel for the
+    // smaller than the minimum radius. See correct kernel for the
     // comparison & calculation.
     if (*hNumToBeDeleted > 0) {
-        CUDA_CALL(cudaEventSynchronize(params.event2));
+        CUDA_CALL(cudaEventSynchronize(params.event1));
         deleteSmallBubbles(params, *hNumToBeDeleted);
     }
 
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
-    // See correctKernel, comparePair for details.
-    CUDA_CALL(cudaEventSynchronize(params.event1));
+    // See correct kernel, comparePair for details.
+    CUDA_CALL(cudaEventSynchronize(params.event2));
     params.hostData.maxBubbleRadius = *hMaxRadius;
     if (*hMaxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         updateCellsAndNeighbors(params);
@@ -723,13 +727,12 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
                   bubblesPerDim, avgRad, params.bubbles);
 
     params.hostConstants.averageSurfaceAreaIn =
-        params.cw.reduce<double, double *, double *>(&cub::DeviceReduce::Sum,
-                                                     params.bubbles.rp,
-                                                     params.bubbles.count, 0);
+        params.cw.reduce<double, double *, double *>(
+            &cub::DeviceReduce::Sum, params.bubbles.rp, params.bubbles.count);
 
     params.hostData.maxBubbleRadius =
         params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Max, params.bubbles.r, params.bubbles.count, 0);
+            &cub::DeviceReduce::Max, params.bubbles.r, params.bubbles.count);
 
     std::cout << "Updating neighbor lists." << std::endl;
     updateCellsAndNeighbors(params);
@@ -746,7 +749,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
               << std::endl;
 
     // After updateCellsAndNeighbors x, y, z, r are correct,
-    // but all predicted are trash. velocityPairKernel always uses
+    // but all predicted are trash. pairVelocity always uses
     // predicted values, so copy currents to predicteds
     uint64_t bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
@@ -762,13 +765,13 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDeviceToDevice, 0));
 
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
+    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0, params.bubbles,
+                  params.pairs);
 
-    KERNEL_LAUNCH(eulerKernel, params.pairKernelSize, 0, 0,
-                  params.hostData.timeStep, params.bubbles);
+    KERNEL_LAUNCH(euler, params.pairKernelSize, 0, 0, params.hostData.timeStep,
+                  params.bubbles);
 
-    // velocityPairKernel calculates to predicteds by accumulating values
+    // pairVelocity calculates to predicteds by accumulating values
     // using atomicAdd. They would have to be reset to zero after every
     // integration, but olds were set to zero above, so we can just swap.
     double *swapper = params.bubbles.dxdto;
@@ -783,8 +786,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(velocityPairKernel, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
+    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0, params.bubbles,
+                  params.pairs);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
@@ -900,7 +903,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
               << ", target: " << inputJson["phiTarget"]
               << "\nScaling the simulation box." << std::endl;
 
-    transformPositions(params, true);
+    KERNEL_LAUNCH(transformPositions, params.pairKernelSize, 0, 0, true,
+                  params.bubbles);
 
     relDim = inputJson["boxRelDim"];
     double t =
@@ -937,10 +941,12 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
 
-    transformPositions(params, false);
+    KERNEL_LAUNCH(transformPositions, params.pairKernelSize, 0, 0, false,
+                  params.bubbles);
+
     updateCellsAndNeighbors(params);
     // After updateCellsAndNeighbors r is correct,
-    // but rp is trash. velocityPairKernel always uses
+    // but rp is trash. pairVelocity always uses
     // predicted values, so copy r to rp
     uint64_t bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
