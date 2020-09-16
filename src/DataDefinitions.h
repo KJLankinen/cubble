@@ -202,46 +202,10 @@ struct HostData {
     uint32_t timesPrinted = 0;
 };
 
-// Store the addresses of device globals here for easy access
-struct DeviceGlobalAddresses {
-    void *dConstants = nullptr;
-    void *dTotalArea = nullptr;
-    void *dTotalOverlapArea = nullptr;
-    void *dTotalOverlapAreaPerRadius = nullptr;
-    void *dTotalAreaPerRadius = nullptr;
-    void *dTotalVolumeNew = nullptr;
-    void *dMaxError = nullptr;
-    void *dMaxRadius = nullptr;
-    void *dMaxExpansion = nullptr;
-    void *dErrorEncountered = nullptr;
-    void *dNumPairs = nullptr;
-    void *dNumPairsNew = nullptr;
-    void *dNumToBeDeleted = nullptr;
-
-    void getAddresses() {
-        CUDA_CALL(cudaGetSymbolAddress(&dConstants, dConstants));
-        CUDA_CALL(cudaGetSymbolAddress(&dTotalArea, dTotalArea));
-        CUDA_CALL(cudaGetSymbolAddress(&dTotalOverlapArea, dTotalOverlapArea));
-        CUDA_CALL(cudaGetSymbolAddress(&dTotalOverlapAreaPerRadius,
-                                       dTotalOverlapAreaPerRadius));
-        CUDA_CALL(
-            cudaGetSymbolAddress(&dTotalAreaPerRadius, dTotalAreaPerRadius));
-        CUDA_CALL(cudaGetSymbolAddress(&dTotalVolumeNew, dTotalVolumeNew));
-        CUDA_CALL(cudaGetSymbolAddress(&dMaxError, dMaxError));
-        CUDA_CALL(cudaGetSymbolAddress(&dMaxRadius, dMaxRadius));
-        CUDA_CALL(cudaGetSymbolAddress(&dMaxExpansion, dMaxExpansion));
-        CUDA_CALL(cudaGetSymbolAddress(&dErrorEncountered, dErrorEncountered));
-        CUDA_CALL(cudaGetSymbolAddress(&dNumPairs, dNumPairs));
-        CUDA_CALL(cudaGetSymbolAddress(&dNumPairsNew, dNumPairsNew));
-        CUDA_CALL(cudaGetSymbolAddress(&dNumToBeDeleted, dNumToBeDeleted));
-    }
-};
-
 struct Params {
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
     HostData hostData;
-    DeviceGlobalAddresses addresses;
 
     Bubbles bubbles;
     Pairs pairs;

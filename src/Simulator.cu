@@ -191,7 +191,10 @@ void updateCellsAndNeighbors(Params &params) {
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
 
-    CUDA_CALL(cudaMemset(params.addresses.dNumPairs, 0, sizeof(int)));
+    int *hNumPairs = nullptr;
+    CUDA_CALL(
+        cudaGetSymbolAddress(reinterpre_cast<void **>(&hNumPairs), dNumPairs));
+    CUDA_CALL(cudaMemset(hNumPairs, 0, sizeof(int)));
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
         cudaStream_t stream = (i % 2) ? params.stream2 : params.stream1;
@@ -201,7 +204,7 @@ void updateCellsAndNeighbors(Params &params) {
     }
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
-                                   dNumPairs, sizeof(int),
+                                   hNumPairs, sizeof(int),
                                    cudaMemcpyDeviceToHost));
 
 #ifndef NDEBUG
@@ -470,9 +473,16 @@ bool integrate(Params &params) {
 
     double error = 100000;
     uint32_t numLoopsDone = 0;
-    double *maxRadius = static_cast<double *>(params.pinnedMemory);
-    double *maxExpansion = maxRadius + 1;
-    int *numToDelete = reinterpret_cast<int *>(maxExpansion + 1);
+    double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
+    double *hMaxExpansion = hMaxRadius + 1;
+    int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
+
+    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hNumToBeDeleted),
+                                   dNumToBeDeleted));
+    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hMaxRadius),
+                                   dMaxRadius));
+    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hMaxExpansion),
+                                   dMaxExpansion));
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
@@ -502,8 +512,9 @@ bool integrate(Params &params) {
                       params.hostData.timeStep, true, params.bubbles);
 
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(numToDelete), params.addresses.dNumToBeDeleted,
-            sizeof(int), 0, cudaMemcpyDeviceToHost, params.stream1));
+            static_cast<void *>(hNumToBeDeleted),
+            params.addresses.dNumToBeDeleted, sizeof(int), 0,
+            cudaMemcpyDeviceToHost, params.stream1));
 
         KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, params.stream2,
                       (int)params.pairKernelSize.grid.x, params.bubbles);
@@ -530,10 +541,10 @@ bool integrate(Params &params) {
     // endStepKernel reduced maximum radius and expansion, copy them to host
     // Should be pinned
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(maxExpansion), params.addresses.dMaxExpansion,
+        static_cast<void *>(hMaxExpansion), params.addresses.dMaxExpansion,
         sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(maxRadius), params.addresses.dMaxRadius,
+        static_cast<void *>(hMaxRadius), params.addresses.dMaxRadius,
         sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
 
     // Record event after both copies are done
@@ -592,17 +603,17 @@ bool integrate(Params &params) {
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See correctKernel for the
     // comparison & calculation.
-    if (*numToDelete > 0) {
+    if (*hNumToBeDeleted > 0) {
         CUDA_CALL(cudaEventSynchronize(params.event2));
-        deleteSmallBubbles(params, *numToDelete);
+        deleteSmallBubbles(params, *hNumToBeDeleted);
     }
 
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
     // See correctKernel, comparePair for details.
     CUDA_CALL(cudaEventSynchronize(params.event1));
-    params.hostData.maxBubbleRadius = *maxRadius;
-    if (*maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
+    params.hostData.maxBubbleRadius = *hMaxRadius;
+    if (*hMaxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         updateCellsAndNeighbors(params);
     }
 
