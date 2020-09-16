@@ -958,13 +958,13 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
     const dvec d1 = p1 - p2;
     dvec d2 = d1;
     dvec temp = interval - d1.getAbsolute();
-    if (dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
+    if (!dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }
-    if (dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
+    if (!dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
         d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
     }
-    if (dConstants->zWall && temp.z * temp.z < d1.z * d1.z) {
+    if (!dConstants->zWall && temp.z * temp.z < d1.z * d1.z) {
         d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
     }
 
@@ -1021,21 +1021,21 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
         break;
     }
 
-    if (dConstants->xWall) {
+    if (!dConstants->xWall) {
         idxVec.x += dim.x;
         idxVec.x %= dim.x;
     } else if (idxVec.x < 0 || idxVec.x >= dim.x) {
         return -1;
     }
 
-    if (dConstants->yWall) {
+    if (!dConstants->yWall) {
         idxVec.y += dim.y;
         idxVec.y %= dim.y;
     } else if (idxVec.y < 0 || idxVec.y >= dim.y) {
         return -1;
     }
 
-    if (dConstants->zWall) {
+    if (!dConstants->zWall) {
         idxVec.z += dim.z;
         idxVec.z %= dim.z;
     } else if (idxVec.z < 0 || idxVec.z >= dim.z) {

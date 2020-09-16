@@ -869,10 +869,6 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     } else
         throw std::runtime_error("Couldn't open input file!");
 
-    std::cout << "Simulation starting parameters:\n";
-    params.hostConstants.print();
-    params.hostData.print();
-
     // First calculate the size of the box and the starting number of bubbles
     dvec relDim = inputJson["boxRelDim"];
     assert(relDim.x > 0);
@@ -921,6 +917,12 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     commonSetup(params);
     generateStartingData(params, bubblesPerDim, inputJson["stdDevRad"],
                          inputJson["rngSeed"]);
+
+    std::cout << "Simulation starting parameters:\n";
+    params.hostConstants.print();
+    params.hostData.print();
+    params.bubbles.print();
+    params.pairs.print();
 
     std::cout << "Letting bubbles settle after they've been created and before "
                  "scaling or stabilization."

@@ -129,6 +129,11 @@ struct Bubbles {
 
         return static_cast<void *>(prevI);
     }
+
+    void print() {
+        std::cout << "number of bubbles: " << count << "\nstride: " << stride
+                  << std::endl;
+    }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 
@@ -155,6 +160,11 @@ struct Pairs {
                reinterpret_cast<char *>(prev));
 
         return static_cast<void *>(prev);
+    }
+
+    void print() {
+        std::cout << "number of pairs: " << count << "\nstride: " << stride
+                  << std::endl;
     }
 };
 static_assert(sizeof(Pairs) % 8 == 0);
