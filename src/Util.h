@@ -43,13 +43,6 @@
 #define CUBBLE_I_PI 1.0 / CUBBLE_PI
 
 namespace cubble {
-const double CUBBLE_EPSILON = 1.0e-10;
-#if NUM_DIM == 3
-const int CUBBLE_NUM_NEIGHBORS = 13;
-#else
-const int CUBBLE_NUM_NEIGHBORS = 4;
-#endif
-
 struct KernelSize {
     dim3 grid = dim3(1, 1, 1);
     dim3 block = dim3(1, 1, 1);

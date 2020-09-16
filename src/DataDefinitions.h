@@ -159,8 +159,7 @@ struct Pairs {
 };
 static_assert(sizeof(Pairs) % 8 == 0);
 
-// Pretty much read-only memory by both, host and device
-// after an initial setup
+// These values never change after init
 struct Constants {
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
@@ -177,6 +176,12 @@ struct Constants {
     double wallDragStrength = 0.0;
     double skinRadius = 0.0;
     double bubbleVolumeMultiplier = 0.0;
+
+    int dimensionality = 0;
+
+    bool xWall = false;
+    bool yWall = false;
+    bool zWall = false;
 };
 
 // Only accessed by host
@@ -200,6 +205,8 @@ struct HostData {
     int minNumBubbles = 0;
     uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
+
+    bool addFlow = false;
 };
 
 struct Params {

@@ -17,12 +17,24 @@
   "wallDragStrengthExpl" : "How strong the drag from the wall is. Should be between 0.0 and 1.0",
   "wallDragStrength" : 0.1,
 
+  "xWallExpl" : "Is the x coordinate periodic or does it have a wall.",
+  "xWall" : false,
+
+  "yWallExpl" : "Is the y coordinate periodic or does it have a wall.",
+  "yWall" : false,
+
+  "zWallExpl" : "Is the z coordinate periodic or does it have a wall.",
+  "zWall" : false,
+
   "boxRelDimExpl": "The relative dimension of the box.",
   "boxRelDim": {
     "x": 1.0,
     "y": 1.0,
     "z": 1.0
   },
+
+  "addFlowExpl" : "Impose flow in the simulation or not",
+  "addFlow" : false,
 
   "flowLbbExpl": "(Relative) Lower-back-bottom of flow area.",
   "flowLbb": {

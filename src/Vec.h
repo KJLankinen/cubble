@@ -240,9 +240,7 @@ template <typename T> class vec {
     __host__ __device__ friend void operator/=(vec<T> &t, const vec<T> &&o) {
         t.x /= o.x;
         t.y /= o.y;
-#if (NUM_DIM == 3)
         t.z /= o.z;
-#endif
     }
 
     __host__ __device__ friend void operator/=(vec<T> &t, T s) {

@@ -21,18 +21,6 @@ int main(int argc, char **argv) {
     }
 
     try {
-        std::cout
-            << "-------------------------------------------------------------"
-               "-----------\n"
-            << "The current program simulates the bubbles in " << NUM_DIM
-            << " dimensions.\n"
-            << "If you want to change the dimensionality of the program, "
-               "change the number of dimensions 'NUM_DIM'"
-            << "\nin Makefile and rebuild the program.\n"
-            << "-------------------------------------------------------------"
-               "-----------\n"
-            << std::endl;
-
         cubble::run(std::string(argv[1]));
     } catch (const std::exception &e) {
         pExc = std::current_exception();

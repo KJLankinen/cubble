@@ -36,10 +36,10 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
     dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
     dvec p2 = dvec(bubbles.x[idx2], bubbles.y[idx2], 0.0);
-#if (NUM_DIM == 3)
-    p1.z = bubbles.z[idx1];
-    p2.z = bubbles.z[idx2];
-#endif
+    if (dConstants->dimensionality == 3) {
+        p1.z = bubbles.z[idx1];
+        p2.z = bubbles.z[idx2];
+    }
     if (wrappedDifference(p1, p2, dConstants->interval).getSquaredLength() <
         maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
@@ -181,10 +181,10 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
         dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
         dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-#if (NUM_DIM == 3)
-        p1.z = bubbles.zp[idx1];
-        p2.z = bubbles.zp[idx2];
-#endif
+        if (dConstants->dimensionality == 3) {
+            p1.z = bubbles.zp[idx1];
+            p2.z = bubbles.zp[idx2];
+        }
         dvec distances = wrappedDifference(p1, p2, interval);
         const double distance = distances.getSquaredLength();
         if (radii * radii >= distance) {
@@ -194,21 +194,15 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
             atomicAdd(&bubbles.dydtp[idx1], distances.y);
             atomicAdd(&bubbles.dydtp[idx2], -distances.y);
-#if (NUM_DIM == 3)
-            atomicAdd(&bubbles.dzdtp[idx1], distances.z);
-            atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
-#endif
+            if (dConstants->dimensionality == 3) {
+                atomicAdd(&bubbles.dzdtp[idx1], distances.z);
+                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
+            }
         }
     }
 }
 
 __global__ void wallVelocity(Bubbles bubbles) {
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-    double distance1 = 0.0;
-    double distance2 = 0.0;
-    double distance = 0.0;
-    double xDrag = 1.0;
-    double yDrag = 1.0;
     const double drag = 1.0 - dConstants->wallDragStrength;
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
@@ -217,72 +211,48 @@ __global__ void wallVelocity(Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         const double rad = bubbles.rp[i];
-#if (PBC_X == 0)
-        const double xi = bubbles.xp[i];
-        distance1 = xi - lbb.x;
-        distance2 = xi - tfr.x;
-        distance = distance1 * distance1 < distance2 * distance2 ? distance1
-                                                                 : distance2;
-        if (rad * rad >= distance * distance) {
-            const double direction = distance < 0 ? -1.0 : 1.0;
-            distance *= direction;
-            const double velocity =
-                direction * fZeroPerMuZero * (1.0 - distance / rad);
+        double xDrag = 1.0;
+        double yDrag = 1.0;
+        double velocity = 0.0;
+
+        auto touchesWall = [&i, &rad, &fZeroPerMuZero, &velocity](
+                               double x, double low, double high) -> bool {
+            double d1 = x - low;
+            double d2 = x - high;
+            d1 = d1 * d1 > d2 * d2 ? d1 : d2;
+            if (rad * rad >= d1 * d1) {
+                d2 = d1 < 0.0 ? -1.0 : 1.0;
+                d1 *= d2;
+                velocity = d2 * fZeroPerMuZero * (1.0 - d1 / rad);
+                return true;
+            }
+
+            return false;
+        };
+
+        velocity = 0.0;
+        if (dConstants->xWall && touchesWall(bubbles.xp[i], lbb.x, tfr.x)) {
             bubbles.dxdtp[i] += velocity;
+            bubbles.dydtp[i] *= drag;
+            bubbles.dzdtp[i] *= drag;
             xDrag = drag;
-
-            // Drag of x wall to y & z
-            bubbles.dydtp[i] *= drag;
-            bubbles.dzdtp[i] *= drag;
         }
-#endif
 
-#if (PBC_Y == 0)
-        const double yi = bubbles.yp[i];
-        distance1 = yi - lbb.y;
-        distance2 = yi - tfr.y;
-        distance = distance1 * distance1 < distance2 * distance2 ? distance1
-                                                                 : distance2;
-        if (rad * rad >= distance * distance) {
-            const double direction = distance < 0 ? -1.0 : 1.0;
-            distance *= direction;
-            const double velocity =
-                direction * fZeroPerMuZero * (1.0 - distance / rad);
-
-            // Retroactively apply possible drag from x wall to the velocity the
-            // y wall causes
+        velocity = 0.0;
+        if (dConstants->yWall && touchesWall(bubbles.yp[i], lbb.y, tfr.y)) {
+            bubbles.dxdtp[i] *= drag;
             bubbles.dydtp[i] += velocity * xDrag;
-            yDrag = drag;
-
-            // Drag of y wall to x & z
-            bubbles.dxdtp[i] *= drag;
             bubbles.dzdtp[i] *= drag;
+            yDrag = drag;
         }
-#endif
 
-#if (PBC_Z == 0)
-        const double zi = bubbles.zp[i];
-        distance1 = zi - lbb.z;
-        distance2 = zi - tfr.z;
-        distance = distance1 * distance1 < distance2 * distance2 ? distance1
-                                                                 : distance2;
-        if (rad * rad >= distance * distance) {
-            const double direction = distance < 0 ? -1.0 : 1.0;
-            distance *= direction;
-            const double velocity =
-                direction * fZeroPerMuZero * (1.0 - distance / rad);
-
-            // Retroactively apply possible drag from x & y walls to the
-            // velocity the z wall causes
-            bubbles.dzdtp[i] += velocity * xDrag * yDrag;
-
-            // Drag of z wall to x & y directions
+        velocity = 0.0;
+        if (dConstants->zWall && touchesWall(bubbles.zp[i], lbb.z, tfr.z)) {
             bubbles.dxdtp[i] *= drag;
             bubbles.dydtp[i] *= drag;
+            bubbles.dzdtp[i] += velocity * xDrag * yDrag;
         }
-#endif
     }
-#endif
 }
 
 __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
@@ -297,10 +267,10 @@ __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
         atomicAdd(&bubbles.flow_vy[idx1], bubbles.dydto[idx2]);
         atomicAdd(&bubbles.flow_vy[idx2], bubbles.dydto[idx1]);
 
-#if (NUM_DIM == 3)
-        atomicAdd(&bubbles.flow_vz[idx1], bubbles.dzdto[idx2]);
-        atomicAdd(&bubbles.flow_vz[idx2], bubbles.dzdto[idx1]);
-#endif
+        if (dConstants->dimensionality == 3) {
+            atomicAdd(&bubbles.flow_vz[idx1], bubbles.dzdto[idx2]);
+            atomicAdd(&bubbles.flow_vz[idx2], bubbles.dzdto[idx1]);
+        }
     }
 }
 
@@ -326,15 +296,15 @@ __global__ void imposedFlowVelocity(Bubbles bubbles) {
                         ((flowLbb.y - yi) * (flowLbb.y - yi) <= riSq) ||
                         ((flowTfr.y - yi) * (flowTfr.y - yi) <= riSq));
 
-#if (NUM_DIM == 3)
-        const double zi = bubbles.zp[i];
-        inside *= (int)((zi < flowTfr.z && zi > flowLbb.z) ||
-                        ((flowLbb.z - zi) * (flowLbb.z - zi) <= riSq) ||
-                        ((flowTfr.z - zi) * (flowTfr.z - zi) <= riSq));
+        if (dConstants->dimensionality == 3) {
+            const double zi = bubbles.zp[i];
+            inside *= (int)((zi < flowTfr.z && zi > flowLbb.z) ||
+                            ((flowLbb.z - zi) * (flowLbb.z - zi) <= riSq) ||
+                            ((flowTfr.z - zi) * (flowTfr.z - zi) <= riSq));
 
-        bubbles.dzdtp[i] +=
-            !inside * multiplier * bubbles.flow_vz[i] + flowVel.z * inside;
-#endif
+            bubbles.dzdtp[i] +=
+                !inside * multiplier * bubbles.flow_vz[i] + flowVel.z * inside;
+        }
 
         // Either add the average velocity of neighbors or the imposed flow,
         // if the bubble is inside the flow area
@@ -354,10 +324,10 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs) {
         const int idx2 = pairs.j[i];
         dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
         dvec p2 = dvec(bubbles.x[idx2], bubbles.y[idx2], 0.0);
-#if (NUM_DIM == 3)
-        p1.z = bubbles.z[idx1];
-        p2.z = bubbles.z[idx2];
-#endif
+        if (dConstants->dimensionality == 3) {
+            p1.z = bubbles.z[idx1];
+            p2.z = bubbles.z[idx2];
+        }
         double e = bubbles.r[idx1] + bubbles.r[idx2] -
                    wrappedDifference(p1, p2, interval).getLength();
         if (e > 0) {
@@ -395,10 +365,10 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
 
         dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
         dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-#if (NUM_DIM == 3)
-        p1.z = bubbles.zp[idx1];
-        p2.z = bubbles.zp[idx2];
-#endif
+        if (dConstants->dimensionality == 3) {
+            p1.z = bubbles.zp[idx1];
+            p2.z = bubbles.zp[idx2];
+        }
         double magnitude =
             wrappedDifference(p1, p2, interval).getSquaredLength();
         if (magnitude < radii * radii) {
@@ -412,11 +382,11 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
                 overlapArea = r2sq - overlapArea;
                 overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
             }
-#if (NUM_DIM == 3)
-            overlapArea *= CUBBLE_PI;
-#else
-            overlapArea = 2.0 * sqrt(overlapArea);
-#endif
+            if (dConstants->dimensionality == 3) {
+                overlapArea *= CUBBLE_PI;
+            } else {
+                overlapArea = 2.0 * sqrt(overlapArea);
+            }
             atomicAdd(&bubbles.temp_doubles[idx1], overlapArea);
             atomicAdd(&bubbles.temp_doubles[idx2], overlapArea);
 
@@ -435,9 +405,9 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
         if (i < bubbles.count) {
             r1 = bubbles.rp[i];
             double areaPerRad = 2.0 * CUBBLE_PI;
-#if (NUM_DIM == 3)
-            areaPerRad *= 2.0 * r1;
-#endif
+            if (dConstants->dimensionality == 3) {
+                areaPerRad *= 2.0 * r1;
+            }
             ta[tid] += areaPerRad * r1;
             tapr[tid] += areaPerRad;
         }
@@ -494,9 +464,9 @@ __global__ void mediatedGasExchange(Bubbles bubbles) {
                         (dTotalArea - dTotalOverlapArea);
         const double rad = bubbles.rp[i];
         double area = 2.0 * CUBBLE_PI * rad;
-#if (NUM_DIM == 3)
-        area *= 2.0 * rad;
-#endif
+        if (dConstants->dimensionality == 3) {
+            area *= 2.0 * rad;
+        }
         const double vr = bubbles.drdtp[i] +
                           kappa * averageSurfaceAreaIn * bubbles.count /
                               dTotalArea * (area - bubbles.temp_doubles[i]) *
@@ -515,11 +485,11 @@ __global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles) {
         bubbles.yp[i] =
             bubbles.y[i] +
             0.5 * timeStep * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
-#if (NUM_DIM == 3)
-        bubbles.zp[i] =
-            bubbles.z[i] +
-            0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
-#endif
+        if (dConstants->dimensionality == 3) {
+            bubbles.zp[i] =
+                bubbles.z[i] +
+                0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
+        }
         if (useGasExchange) {
             bubbles.rp[i] =
                 bubbles.r[i] +
@@ -570,12 +540,13 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
                       correctPrediction(bubbles.y, bubbles.yp, bubbles.saved_y,
                                         bubbles.dydt, bubbles.dydtp));
         dist += delta * delta;
-#if (NUM_DIM == 3)
-        maxErr = fmax(maxErr,
-                      correctPrediction(bubbles.z, bubbles.zp, bubbles.saved_z,
-                                        bubbles.dzdt, bubbles.dzdtp));
-        dist += delta * delta;
-#endif
+        if (dConstants->dimensionality == 3) {
+            maxErr =
+                fmax(maxErr,
+                     correctPrediction(bubbles.z, bubbles.zp, bubbles.saved_z,
+                                       bubbles.dzdt, bubbles.dzdtp));
+            dist += delta * delta;
+        }
         dist = sqrt(dist);
 
         if (useGasExchange) {
@@ -588,9 +559,9 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
             // inside the lambda
             double rad = bubbles.rp[i];
             double vol = rad * rad;
-#if (NUM_DIM == 3)
-            vol *= rad;
-#endif
+            if (dConstants->dimensionality == 3) {
+                vol *= rad;
+            }
             // Add remaining bubbles to new total volume
             if (rad > minRad) {
                 tvn[tid] += vol;
@@ -660,10 +631,10 @@ __global__ void incrementPath(Bubbles bubbles) {
         double pl = diff * diff;
         diff = bubbles.y[i] - bubbles.yp[i];
         pl += diff * diff;
-#if (NUM_DIM == 3)
-        diff = bubbles.z[i] - bubbles.zp[i];
-        pl += diff * diff;
-#endif
+        if (dConstants->dimensionality == 3) {
+            diff = bubbles.z[i] - bubbles.zp[i];
+            pl += diff * diff;
+        }
         bubbles.path[i] += sqrt(pl);
     }
 }
@@ -671,12 +642,13 @@ __global__ void incrementPath(Bubbles bubbles) {
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
     // Count of pairs to be deleted
     __shared__ int tbds[128];
-    tbds[threadIdx.x] = 0;
+    int tid = threadIdx.x;
+    tbds[tid] = 0;
 
     // The first 32 threads of the first block swap the data
-    if (blockIdx.x == 0 && threadIdx.x < 32) {
+    if (blockIdx.x == 0 && tid < 32) {
         const int nNew = bubbles.count - dNumToBeDeleted;
-        for (int i = threadIdx.x; i < dNumToBeDeleted; i += 32) {
+        for (int i = tid; i < dNumToBeDeleted; i += 32) {
             // If the to-be-deleted index is inside the remaining indices,
             // it will be swapped with one from the back that won't be
             // removed but which is outside the new range (i.e. would be
@@ -733,7 +705,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
         while (j < dNumToBeDeleted) {
             const int tbd = bubbles.temp_ints[j];
             if (pairs.i[i] == tbd || pairs.j[i] == tbd) {
-                tbds[threadIdx.x] += 1;
+                tbds[tid] += 1;
             }
             j += 1;
         }
@@ -741,29 +713,24 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
 
     __syncthreads();
 
-    if (threadIdx.x < 32) {
-        tbds[threadIdx.x] += tbds[threadIdx.x + 32];
-        tbds[threadIdx.x] += tbds[threadIdx.x + 64];
-        tbds[threadIdx.x] += tbds[threadIdx.x + 96];
+    auto reduceSum = [&tid](double *arr, int base) {
+        arr[tid] += arr[tid + base] + arr[tid + 2 * base] + arr[tid + 3 * base];
+    };
 
+    if (tid < 32) {
+        reduceSum(tbds, 32);
         __syncwarp();
 
-        if (threadIdx.x < 8) {
-            tbds[threadIdx.x] += tbds[threadIdx.x + 8];
-            tbds[threadIdx.x] += tbds[threadIdx.x + 16];
-            tbds[threadIdx.x] += tbds[threadIdx.x + 24];
-
+        if (tid < 8) {
+            reduceSum(tbds, 8);
             __syncwarp();
 
-            if (threadIdx.x < 2) {
-                tbds[threadIdx.x] += tbds[threadIdx.x + 2];
-                tbds[threadIdx.x] += tbds[threadIdx.x + 4];
-                tbds[threadIdx.x] += tbds[threadIdx.x + 6];
-
+            if (tid < 2) {
+                reduceSum(tbds, 2);
                 __syncwarp();
 
-                if (threadIdx.x < 1) {
-                    tbds[threadIdx.x] += tbds[threadIdx.x + 1];
+                if (tid < 1) {
+                    tbds[tid] += tbds[tid + 1];
                     atomicAdd(&dNumPairsNew, -tbds[0]);
                 }
             }
@@ -773,11 +740,11 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
 
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
     double volMul = dTotalVolumeNew;
-#if (NUM_DIM == 3)
-    volMul = rcbrt(volMul);
-#else
-    volMul = rsqrt(volMul);
-#endif
+    if (dConstants->dimensionality == 3) {
+        volMul = rcbrt(volMul);
+    } else {
+        volMul = rsqrt(volMul);
+    }
     volMul *= dConstants->bubbleVolumeMultiplier;
 
     for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairsNew;
@@ -848,9 +815,9 @@ __global__ void euler(double timeStep, Bubbles bubbles) {
          i += blockDim.x * gridDim.x) {
         bubbles.xp[i] += bubbles.dxdtp[i] * timeStep;
         bubbles.yp[i] += bubbles.dydtp[i] * timeStep;
-#if (NUM_DIM == 3)
-        bubbles.zp[i] += bubbles.dzdtp[i] * timeStep;
-#endif
+        if (dConstants->dimensionality == 3) {
+            bubbles.zp[i] += bubbles.dzdtp[i] * timeStep;
+        }
     }
 }
 
@@ -863,44 +830,39 @@ __global__ void transformPositions(bool normalize, Bubbles bubbles) {
         if (normalize) {
             bubbles.x[i] = (bubbles.x[i] - lbb.x) / interval.x;
             bubbles.y[i] = (bubbles.y[i] - lbb.y) / interval.y;
-#if (NUM_DIM == 3)
-            bubbles.z[i] = (bubbles.z[i] - lbb.z) / interval.z;
-#endif
+            if (dConstants->dimensionality == 3) {
+                bubbles.z[i] = (bubbles.z[i] - lbb.z) / interval.z;
+            }
         } else {
             bubbles.x[i] = interval.x * bubbles.x[i] + lbb.x;
             bubbles.y[i] = interval.y * bubbles.y[i] + lbb.y;
-#if (NUM_DIM == 3)
-            bubbles.z[i] = interval.z * bubbles.z[i] + lbb.z;
-#endif
+            if (dConstants->dimensionality == 3) {
+                bubbles.z[i] = interval.z * bubbles.z[i] + lbb.z;
+            }
         }
     }
 }
 
 __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
-    auto wrap = [](double *p, int *wc, double x, double low, double high,
-                   int i) {
-        int mult = x < low ? 1 : (x > high ? -1 : 0);
-        p[i] = x + (high - low) * (double)mult;
-        wc[i] -= mult;
-    };
-
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-#if (PBC_X == 1)
-        wrap(bubbles.x, bubbles.wrap_count_x, bubbles.x[i], lbb.x, tfr.x, i);
-#endif
-#if (PBC_Y == 1)
-        wrap(bubbles.y, bubbles.wrap_count_y, bubbles.y[i], lbb.y, tfr.y, i);
-#endif
-#if (PBC_Z == 1)
-        wrap(bubbles.z, bubbles.wrap_count_z, bubbles.z[i], lbb.z, tfr.z, i);
-#endif
+        auto wrap = [&i](double *p, int *wc, double x, double low,
+                         double high) {
+            int mult = x < low ? 1 : (x > high ? -1 : 0);
+            p[i] = x + (high - low) * (double)mult;
+            wc[i] -= mult;
+        };
+
+        if (!dConstants->xWall)
+            wrap(bubbles.x, bubbles.wrap_count_x, bubbles.x[i], lbb.x, tfr.x);
+        if (!dConstants->yWall)
+            wrap(bubbles.y, bubbles.wrap_count_y, bubbles.y[i], lbb.y, tfr.y);
+        if (!dConstants->zWall)
+            wrap(bubbles.z, bubbles.wrap_count_z, bubbles.z[i], lbb.z, tfr.z);
     }
-#endif
 }
 
 __global__ void calculateVolumes(Bubbles bubbles) {
@@ -908,9 +870,9 @@ __global__ void calculateVolumes(Bubbles bubbles) {
          i += gridDim.x * blockDim.x) {
         const double radius = bubbles.r[i];
         double volume = radius * radius * CUBBLE_PI;
-#if (NUM_DIM == 3)
-        volume *= radius * 1.33333333333333333333333333;
-#endif
+        if (dConstants->dimensionality == 3) {
+            volume *= radius * 1.33333333333333333333333333;
+        }
 
         bubbles.temp_doubles[i] = volume;
     }
@@ -933,11 +895,11 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
             ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
 
         dvec randomOffset(bubbles.x[i], bubbles.y[i], 0);
-#if (NUM_DIM == 3)
-        randomOffset.z = bubbles.z[i];
-        pos.z =
-            (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
-#endif
+        if (dConstants->dimensionality == 3) {
+            randomOffset.z = bubbles.z[i];
+            pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) /
+                    (double)bubblesPerDim.z;
+        }
         pos *= interval;
         randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
         pos += randomOffset;
@@ -957,9 +919,9 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                            : pos.z + interval.z;
 
         double area = 2.0 * CUBBLE_PI * rad;
-#if (NUM_DIM == 3)
-        area *= 2.0 * rad;
-#endif
+        if (dConstants->dimensionality == 3) {
+            area *= 2.0 * rad;
+        }
         w[i] = area / bubbles.count;
     }
 }
@@ -996,21 +958,15 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
     const dvec d1 = p1 - p2;
     dvec d2 = d1;
     dvec temp = interval - d1.getAbsolute();
-#if (PBC_X == 1)
-    if (temp.x * temp.x < d1.x * d1.x) {
+    if (dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }
-#endif
-#if (PBC_Y == 1)
-    if (temp.y * temp.y < d1.y * d1.y) {
+    if (dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
         d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
     }
-#endif
-#if (PBC_Z == 1)
-    if (temp.z * temp.z < d1.z * d1.z) {
+    if (dConstants->zWall && temp.z * temp.z < d1.z * d1.z) {
         d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
     }
-#endif
 
     return d2;
 }
@@ -1065,29 +1021,26 @@ __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
         break;
     }
 
-#if (PBC_X == 1)
-    idxVec.x += dim.x;
-    idxVec.x %= dim.x;
-#else
-    if (idxVec.x < 0 || idxVec.x >= dim.x)
+    if (dConstants->xWall) {
+        idxVec.x += dim.x;
+        idxVec.x %= dim.x;
+    } else if (idxVec.x < 0 || idxVec.x >= dim.x) {
         return -1;
-#endif
+    }
 
-#if (PBC_Y == 1)
-    idxVec.y += dim.y;
-    idxVec.y %= dim.y;
-#else
-    if (idxVec.y < 0 || idxVec.y >= dim.y)
+    if (dConstants->yWall) {
+        idxVec.y += dim.y;
+        idxVec.y %= dim.y;
+    } else if (idxVec.y < 0 || idxVec.y >= dim.y) {
         return -1;
-#endif
+    }
 
-#if (PBC_Z == 1)
-    idxVec.z += dim.z;
-    idxVec.z %= dim.z;
-#else
-    if (idxVec.z < 0 || idxVec.z >= dim.z)
+    if (dConstants->zWall) {
+        idxVec.z += dim.z;
+        idxVec.z %= dim.z;
+    } else if (idxVec.z < 0 || idxVec.z >= dim.z) {
         return -1;
-#endif
+    }
 
     return get1DIdxFrom3DIdx(idxVec, dim);
 }
@@ -1097,11 +1050,10 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     const dvec interval = dConstants->interval;
     const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
     const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-#if (NUM_DIM == 3)
-    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
-#else
-    const int zid = 0;
-#endif
+    if (dConstants->dimensionality == 3)
+        const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+    else
+        const int zid = 0;
 
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
@@ -1112,12 +1064,11 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
     // idxVec.x;
 
     // Morton encoding
-#if (NUM_DIM == 3)
-    return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
-                         (unsigned int)idxVec.z);
-#else
-    return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
-#endif
+    if (dConstants->dimensionality == 3)
+        return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
+                             (unsigned int)idxVec.z);
+    else
+        return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
 }
 
 __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
@@ -1126,18 +1077,18 @@ __device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
     /*
        idxVec.x = idx % cellDim.x;
        idxVec.y = (idx / cellDim.x) % cellDim.y;
-#if (NUM_DIM == 3)
+if (dConstants->dimensionality == 3) {
 idxVec.z = idx / (cellDim.x * cellDim.y);
-#endif
+}
      */
-#if (NUM_DIM == 3)
-    idxVec.x = decodeMorton3x((unsigned int)idx);
-    idxVec.y = decodeMorton3y((unsigned int)idx);
-    idxVec.z = decodeMorton3z((unsigned int)idx);
-#else
-    idxVec.x = decodeMorton2x((unsigned int)idx);
-    idxVec.y = decodeMorton2y((unsigned int)idx);
-#endif
+    if (dConstants->dimensionality == 3) {
+        idxVec.x = decodeMorton3x((unsigned int)idx);
+        idxVec.y = decodeMorton3y((unsigned int)idx);
+        idxVec.z = decodeMorton3z((unsigned int)idx);
+    } else {
+        idxVec.x = decodeMorton2x((unsigned int)idx);
+        idxVec.y = decodeMorton2y((unsigned int)idx);
+    }
 
     return idxVec;
 }

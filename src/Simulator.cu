@@ -57,7 +57,7 @@ void updateCellsAndNeighbors(Params &params) {
     while (maxNumCells < maxGridSize)
         maxNumCells = maxNumCells << 1;
 
-    if (NUM_DIM == 3)
+    if (params.hostConstants.dimensionality == 3)
         maxNumCells = maxNumCells * maxNumCells * maxNumCells;
     else
         maxNumCells = maxNumCells * maxNumCells;
@@ -159,8 +159,12 @@ void updateCellsAndNeighbors(Params &params) {
     CUDA_CALL(
         cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
 
-    for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
-        cudaStream_t stream = (i % 2) ? params.stream2 : params.stream1;
+    int numNeighborCells = 4;
+    if (params.hostConstants.dimensionality == 3) {
+        numNeighborCells = 13;
+    }
+    for (int i = 0; i < numNeighborCells + 1; ++i) {
+        cudaStream_t stream = (i % 2) ? params.stream1 : params.stream2;
         KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
                       maxNumCells, offsets, sizes, params.bubbles,
                       params.pairs);
@@ -220,10 +224,12 @@ double stabilize(Params &params, int numStepsToRelax) {
             KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0,
                           params.bubbles, params.pairs);
 
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-            KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, 0,
-                          params.bubbles);
-#endif
+            if (params.hostConstants.xWall || params.hostConstants.yWall ||
+                params.hostConstants.zWall) {
+                KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, 0,
+                              params.bubbles);
+            }
+
             KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
                           params.hostData.timeStep, false, params.bubbles);
 
@@ -302,14 +308,15 @@ bool integrate(Params &params) {
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
     const int numBlocks = params.pairKernelSize.grid.x;
 
-#if (USE_FLOW == 1)
-    // Average neighbor velocity is calculated from velocities of previous step
-    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream1, 0.0,
-                  params.bubbles.count, false, params.bubbles.flow_vx,
-                  params.bubbles.flow_vy, params.bubbles.flow_vz);
-    KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
-                  params.stream1, params.bubbles, params.pairs);
-#endif
+    if (params.hostData.addFlow) {
+        // Average neighbor velocity is calculated from velocities of previous
+        // step
+        KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream1,
+                      0.0, params.bubbles.count, false, params.bubbles.flow_vx,
+                      params.bubbles.flow_vy, params.bubbles.flow_vz);
+        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
+                      params.stream1, params.bubbles, params.pairs);
+    }
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
@@ -335,15 +342,17 @@ bool integrate(Params &params) {
         CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
         KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
                       params.bubbles, params.pairs);
-#if (USE_FLOW == 1)
-        KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
-                      params.stream2, params.bubbles);
-#endif
 
-#if (PBC_X == 0 || PBC_Y == 0 || PBC_Z == 0)
-        KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, params.stream2,
-                      params.bubbles);
-#endif
+        if (params.hostData.addFlow) {
+            KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
+                          params.stream2, params.bubbles);
+        }
+
+        if (params.hostConstants.xWall || params.hostConstants.yWall ||
+            params.hostConstants.zWall) {
+            KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0,
+                          params.stream2, params.bubbles);
+        }
 
         KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
                       params.hostData.timeStep, true, params.bubbles);
@@ -465,7 +474,7 @@ bool integrate(Params &params) {
     bool continueSimulation =
         params.bubbles.count > params.hostData.minNumBubbles;
     continueSimulation &=
-        (NUM_DIM == 3)
+        (params.hostConstants.dimensionality == 3)
             ? params.hostData.maxBubbleRadius <
                   0.5 * params.hostConstants.interval.getMinComponent()
             : true;
@@ -514,7 +523,8 @@ double calculateVolumeOfBubbles(Params &params) {
 
 double getSimulationBoxVolume(Params &params) {
     dvec temp = params.hostConstants.interval;
-    return (NUM_DIM == 3) ? temp.x * temp.y * temp.z : temp.x * temp.y;
+    return (params.hostConstants.dimensionality == 3) ? temp.x * temp.y * temp.z
+                                                      : temp.x * temp.y;
 }
 
 void saveSnapshotToFile(Params &params) {
@@ -684,7 +694,8 @@ void commonSetup(Params &params) {
     // bubble pairs is 10x and in two dimensions 4x number of bubbles.
     // Note that these numbers depend on the "skin radius", i.e.
     // from how far are the neighbors looked for.
-    const uint32_t avgNumNeighbors = (NUM_DIM == 3) ? 10 : 4;
+    const uint32_t avgNumNeighbors =
+        (params.hostConstants.dimensionality == 3) ? 10 : 4;
 
     // Calculate the length of 'rows'. Will be divisible by 32, as that's the
     // warp size.
@@ -722,7 +733,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(generator, rngSeed));
-    if (NUM_DIM == 3)
+    if (params.hostConstants.dimensionality == 3)
         CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.z,
                                                 params.bubbles.count));
     CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.x,
@@ -850,6 +861,11 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.wallDragStrength = inputJson["wallDragStrength"];
         params.hostData.snapshotFrequency = inputJson["snapshotFrequency"];
         params.hostData.minNumBubbles = inputJson["minNumBubbles"];
+        params.hostData.addFlow = inputJson["addFlow"];
+        params.hostConstants.xWall = inputJson["xWall"];
+        params.hostConstants.yWall = inputJson["yWall"];
+        params.hostConstants.zWall = inputJson["zWall"];
+        params.hostConstants.dimensionality = inputJson["dimensionality"];
     } else
         throw std::runtime_error("Couldn't open input file!");
 
@@ -864,7 +880,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     float x = (float)inputJson["numBubblesIn"] * d * d / relDim.y;
     ivec bubblesPerDim = ivec(0, 0, 0);
 
-    if (NUM_DIM == 3) {
+    if (params.hostConstants.dimensionality == 3) {
         x = x * d / relDim.z;
         x = std::cbrt(x);
         relDim = relDim * x;
@@ -921,7 +937,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     relDim = inputJson["boxRelDim"];
     double t =
         bubbleVolume / ((float)inputJson["phiTarget"] * relDim.x * relDim.y);
-    if (NUM_DIM == 3) {
+    if (params.hostConstants.dimensionality == 3) {
         t /= relDim.z;
         t = std::cbrt(t);
     } else {
@@ -941,11 +957,11 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     double mult = (double)inputJson["phiTarget"] *
                   getSimulationBoxVolume(params) / CUBBLE_PI;
-#if (NUM_DIM == 3)
-    mult = std::cbrt(0.75 * mult);
-#else
-    mult = std::sqrt(mult);
-#endif
+    if (params.hostConstants.dimensionality == 3) {
+        mult = std::cbrt(0.75 * mult);
+    } else {
+        mult = std::sqrt(mult);
+    }
     params.hostConstants.bubbleVolumeMultiplier = mult;
 
     // Copy the updated constants to GPU
