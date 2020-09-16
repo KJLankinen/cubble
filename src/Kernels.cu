@@ -1058,7 +1058,7 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
 
-__device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
+__device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
     // Linear encoding
     // return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x +
     // idxVec.x;
@@ -1071,7 +1071,7 @@ __device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
         return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
 }
 
-__device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
+__device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
     ivec idxVec(0, 0, 0);
     // Linear decoding
     /*
@@ -1093,36 +1093,36 @@ idxVec.z = idx / (cellDim.x * cellDim.y);
     return idxVec;
 }
 
-__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y) {
+__device__ unsigned int encodeMorton2(unsigned int x, unsigned int y) {
     return (part1By1(y) << 1) + part1By1(x);
 }
 
-__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
-                                               unsigned int z) {
+__device__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
+                                      unsigned int z) {
     return (part1By2(z) << 2) + (part1By2(y) << 1) + part1By2(x);
 }
 
-__device__ __host__ unsigned int decodeMorton2x(unsigned int code) {
+__device__ unsigned int decodeMorton2x(unsigned int code) {
     return compact1By1(code >> 0);
 }
 
-__device__ __host__ unsigned int decodeMorton2y(unsigned int code) {
+__device__ unsigned int decodeMorton2y(unsigned int code) {
     return compact1By1(code >> 1);
 }
 
-__device__ __host__ unsigned int decodeMorton3x(unsigned int code) {
+__device__ unsigned int decodeMorton3x(unsigned int code) {
     return compact1By2(code >> 0);
 }
 
-__device__ __host__ unsigned int decodeMorton3y(unsigned int code) {
+__device__ unsigned int decodeMorton3y(unsigned int code) {
     return compact1By2(code >> 1);
 }
 
-__device__ __host__ unsigned int decodeMorton3z(unsigned int code) {
+__device__ unsigned int decodeMorton3z(unsigned int code) {
     return compact1By2(code >> 2);
 }
 
-__device__ __host__ unsigned int part1By1(unsigned int x) {
+__device__ unsigned int part1By1(unsigned int x) {
     // Mask the lowest 16 bits
     x &= 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
     x = (x ^ (x << 8)) &
@@ -1137,7 +1137,7 @@ __device__ __host__ unsigned int part1By1(unsigned int x) {
     return x;
 }
 
-__device__ __host__ unsigned int part1By2(unsigned int x) {
+__device__ unsigned int part1By2(unsigned int x) {
     // Mask lowest 10 bits
     x &= 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
     x = (x ^ (x << 16)) &
@@ -1152,7 +1152,7 @@ __device__ __host__ unsigned int part1By2(unsigned int x) {
     return x;
 }
 
-__device__ __host__ unsigned int compact1By1(unsigned int x) {
+__device__ unsigned int compact1By1(unsigned int x) {
     x &= 0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
     x = (x ^ (x >> 1)) &
         0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
@@ -1165,7 +1165,7 @@ __device__ __host__ unsigned int compact1By1(unsigned int x) {
     return x;
 }
 
-__device__ __host__ unsigned int compact1By2(unsigned int x) {
+__device__ unsigned int compact1By2(unsigned int x) {
     x &= 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
     x = (x ^ (x >> 2)) &
         0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10

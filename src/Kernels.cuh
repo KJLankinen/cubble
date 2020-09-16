@@ -55,20 +55,20 @@ __device__ int getGlobalTid();
 __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
 __device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
-__device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
-__device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
-__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y);
-__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
-                                               unsigned int z);
-__device__ __host__ unsigned int decodeMorton2x(unsigned int code);
-__device__ __host__ unsigned int decodeMorton2y(unsigned int code);
-__device__ __host__ unsigned int decodeMorton3x(unsigned int code);
-__device__ __host__ unsigned int decodeMorton3y(unsigned int code);
-__device__ __host__ unsigned int decodeMorton3z(unsigned int code);
-__device__ __host__ unsigned int part1By1(unsigned int x);
-__device__ __host__ unsigned int part1By2(unsigned int x);
-__device__ __host__ unsigned int compact1By1(unsigned int x);
-__device__ __host__ unsigned int compact1By2(unsigned int x);
+__device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
+__device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
+__device__ unsigned int encodeMorton2(unsigned int x, unsigned int y);
+__device__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
+                                      unsigned int z);
+__device__ unsigned int decodeMorton2x(unsigned int code);
+__device__ unsigned int decodeMorton2y(unsigned int code);
+__device__ unsigned int decodeMorton3x(unsigned int code);
+__device__ unsigned int decodeMorton3y(unsigned int code);
+__device__ unsigned int decodeMorton3z(unsigned int code);
+__device__ unsigned int part1By1(unsigned int x);
+__device__ unsigned int part1By2(unsigned int x);
+__device__ unsigned int compact1By1(unsigned int x);
+__device__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
