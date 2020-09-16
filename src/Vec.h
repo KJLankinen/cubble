@@ -278,13 +278,11 @@ template <typename T> class vec {
     // == == == == == == == == == == == == == == == == == == == == == ==
     __host__ __device__ friend bool operator==(const vec<T> &t,
                                                const vec<T> &o) {
+        const T epsilon = (T)(1.0 / 1e6);
         bool equal = true;
-        equal &=
-            t.x - (T)CUBBLE_EPSILON <= o.x && t.x + (T)CUBBLE_EPSILON >= o.x;
-        equal &=
-            t.y - (T)CUBBLE_EPSILON <= o.y && t.y + (T)CUBBLE_EPSILON >= o.y;
-        equal &=
-            t.z - (T)CUBBLE_EPSILON <= o.z && t.z + (T)CUBBLE_EPSILON >= o.z;
+        equal &= t.x - epsilon <= o.x && t.x + epsilon >= o.x;
+        equal &= t.y - epsilon <= o.y && t.y + epsilon >= o.y;
+        equal &= t.z - epsilon <= o.z && t.z + epsilon >= o.z;
 
         return equal;
     }

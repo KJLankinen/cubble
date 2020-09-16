@@ -415,7 +415,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
 
     __syncthreads();
 
-    auto reduceSum = [&tid](double *arr, int base) {
+    auto reduceSum = [&tid](auto *arr, int base) {
         arr[tid] += arr[tid + base] + arr[tid + 2 * base] + arr[tid + 3 * base];
     };
 
@@ -580,7 +580,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
 
     __syncthreads();
 
-    auto reduceMax = [&tid](double *arr, int base) {
+    auto reduceMax = [&tid](auto *arr, int base) {
         arr[tid] =
             fmax(fmax(fmax(arr[tid], arr[tid + base]), arr[tid + 2 * base]),
                  arr[tid + 3 * base]);
@@ -713,7 +713,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
 
     __syncthreads();
 
-    auto reduceSum = [&tid](double *arr, int base) {
+    auto reduceSum = [&tid](auto *arr, int base) {
         arr[tid] += arr[tid + base] + arr[tid + 2 * base] + arr[tid + 3 * base];
     };
 
@@ -1050,10 +1050,10 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     const dvec interval = dConstants->interval;
     const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
     const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-    if (dConstants->dimensionality == 3)
-        const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
-    else
-        const int zid = 0;
+    int zid = 0;
+    if (dConstants->dimensionality == 3) {
+        zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+    }
 
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
