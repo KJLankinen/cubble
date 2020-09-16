@@ -190,11 +190,9 @@ void updateCellsAndNeighbors(Params &params) {
     params.bubbles.num_neighbors = swapperI;
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
-
-    int *hNumPairs = nullptr;
+    int zero = 0;
     CUDA_CALL(
-        cudaGetSymbolAddress(reinterpre_cast<void **>(&hNumPairs), dNumPairs));
-    CUDA_CALL(cudaMemset(hNumPairs, 0, sizeof(int)));
+        cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
 
     for (int i = 0; i < CUBBLE_NUM_NEIGHBORS + 1; ++i) {
         cudaStream_t stream = (i % 2) ? params.stream2 : params.stream1;
@@ -204,8 +202,7 @@ void updateCellsAndNeighbors(Params &params) {
     }
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
-                                   hNumPairs, sizeof(int),
-                                   cudaMemcpyDeviceToHost));
+                                   dNumPairs, sizeof(int)));
 
 #ifndef NDEBUG
     std::cout << "Max num pairs: " << params.pairs.stride
@@ -477,13 +474,6 @@ bool integrate(Params &params) {
     double *hMaxExpansion = hMaxRadius + 1;
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
 
-    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hNumToBeDeleted),
-                                   dNumToBeDeleted));
-    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hMaxRadius),
-                                   dMaxRadius));
-    CUDA_CALL(cudaGetSymbolAddress(reinterpret_cast<void **>(&hMaxExpansion),
-                                   dMaxExpansion));
-
     do {
         NVTX_RANGE_PUSH_A("Integration step");
         KERNEL_LAUNCH(resetKernel, params.defaultKernelSize, 0, params.stream2,
@@ -512,9 +502,8 @@ bool integrate(Params &params) {
                       params.hostData.timeStep, true, params.bubbles);
 
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hNumToBeDeleted),
-            params.addresses.dNumToBeDeleted, sizeof(int), 0,
-            cudaMemcpyDeviceToHost, params.stream1));
+            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
+            0, cudaMemcpyDeviceToHost, params.stream1));
 
         KERNEL_LAUNCH(endStepKernel, params.pairKernelSize, 0, params.stream2,
                       (int)params.pairKernelSize.grid.x, params.bubbles);
@@ -541,11 +530,11 @@ bool integrate(Params &params) {
     // endStepKernel reduced maximum radius and expansion, copy them to host
     // Should be pinned
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hMaxExpansion), params.addresses.dMaxExpansion,
-        sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
+        static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
+        cudaMemcpyDeviceToHost, params.stream2));
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hMaxRadius), params.addresses.dMaxRadius,
-        sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream2));
+        static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
+        cudaMemcpyDeviceToHost, params.stream2));
 
     // Record event after both copies are done
     CUDA_CALL(cudaEventRecord(params.event1, params.stream2));
@@ -650,9 +639,6 @@ void commonSetup(Params &params) {
     CUDA_CALL(cudaEventCreate(&params.event1));
     CUDA_CALL(cudaEventCreate(&params.event2));
     printRelevantInfoOfCurrentDevice();
-
-    // Get device global addresses and store them in the struct
-    params.addresses.getAddresses();
 
     // Set device globals to zero
     double zero = 0.0;
