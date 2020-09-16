@@ -14,295 +14,20 @@ __device__ bool dErrorEncountered;
 __device__ int dNumPairs;
 __device__ int dNumPairsNew;
 __device__ int dNumToBeDeleted;
+}; // namespace cubble
 
-__device__ void logError(bool condition, const char *statement,
-                         const char *errMsg) {
-    if (condition == false) {
-        printf("----------------------------------------------------"
-               "\nError encountered"
-               "\n(%s) -> %s"
-               "\n@thread[%d, %d, %d], @block[%d, %d, %d]"
-               "\n----------------------------------------------------\n",
-               statement, errMsg, threadIdx.x, threadIdx.y, threadIdx.z,
-               blockIdx.x, blockIdx.y, blockIdx.z);
-
-        dErrorEncountered = true;
-    }
-}
-
-__device__ int getGlobalTid() {
-    // Simple helper function for calculating a 1D coordinate
-    // from 1, 2 or 3 dimensional coordinates.
-    int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
-    int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x) +
-                       blockIdx.y * gridDim.x + blockIdx.x;
-    int threadsBefore =
-        blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
-    int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
-
-    return tid;
-}
-
-__device__ void resetDoubleArrayToValue(double value, int idx, double *array) {
-    array[idx] = value;
-}
-
-__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
-    const dvec d1 = p1 - p2;
-    dvec d2 = d1;
-    dvec temp = interval - d1.getAbsolute();
-#if (PBC_X == 1)
-    if (temp.x * temp.x < d1.x * d1.x) {
-        d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
-    }
-#endif
-#if (PBC_Y == 1)
-    if (temp.y * temp.y < d1.y * d1.y) {
-        d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
-    }
-#endif
-#if (PBC_Z == 1)
-    if (temp.z * temp.z < d1.z * d1.z) {
-        d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
-    }
-#endif
-
-    return d2;
-}
-
-__global__ void transformPositionsKernel(bool normalize, Bubbles bubbles) {
+namespace cubble {
+__global__ void assignBubblesToCells(int *cellIndices, int *bubbleIndices,
+                                     ivec cellDim, Bubbles bubbles) {
     const dvec lbb = dConstants->lbb;
-    const dvec interval = dConstants->interval;
+    const dvec tfr = dConstants->tfr;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        if (normalize) {
-            bubbles.x[i] = (bubbles.x[i] - lbb.x) / interval.x;
-            bubbles.y[i] = (bubbles.y[i] - lbb.y) / interval.y;
-#if (NUM_DIM == 3)
-            bubbles.z[i] = (bubbles.z[i] - lbb.z) / interval.z;
-#endif
-        } else {
-            bubbles.x[i] = interval.x * bubbles.x[i] + lbb.x;
-            bubbles.y[i] = interval.y * bubbles.y[i] + lbb.y;
-#if (NUM_DIM == 3)
-            bubbles.z[i] = interval.z * bubbles.z[i] + lbb.z;
-#endif
-        }
+        cellIndices[i] = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
+                                           bubbles.z[i], cellDim);
+        bubbleIndices[i] = i;
     }
-}
-
-__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
-    ivec idxVec = cellIdx;
-    switch (neighborNum) {
-    case 0:
-        // self
-        break;
-    case 1:
-        idxVec += ivec(-1, 1, 0);
-        break;
-    case 2:
-        idxVec += ivec(-1, 0, 0);
-        break;
-    case 3:
-        idxVec += ivec(-1, -1, 0);
-        break;
-    case 4:
-        idxVec += ivec(0, -1, 0);
-        break;
-    case 5:
-        idxVec += ivec(-1, 1, -1);
-        break;
-    case 6:
-        idxVec += ivec(-1, 0, -1);
-        break;
-    case 7:
-        idxVec += ivec(-1, -1, -1);
-        break;
-    case 8:
-        idxVec += ivec(0, 1, -1);
-        break;
-    case 9:
-        idxVec += ivec(0, 0, -1);
-        break;
-    case 10:
-        idxVec += ivec(0, -1, -1);
-        break;
-    case 11:
-        idxVec += ivec(1, 1, -1);
-        break;
-    case 12:
-        idxVec += ivec(1, 0, -1);
-        break;
-    case 13:
-        idxVec += ivec(1, -1, -1);
-        break;
-    default:
-        printf("Should never end up here!\n");
-        break;
-    }
-
-#if (PBC_X == 1)
-    idxVec.x += dim.x;
-    idxVec.x %= dim.x;
-#else
-    if (idxVec.x < 0 || idxVec.x >= dim.x)
-        return -1;
-#endif
-
-#if (PBC_Y == 1)
-    idxVec.y += dim.y;
-    idxVec.y %= dim.y;
-#else
-    if (idxVec.y < 0 || idxVec.y >= dim.y)
-        return -1;
-#endif
-
-#if (PBC_Z == 1)
-    idxVec.z += dim.z;
-    idxVec.z %= dim.z;
-#else
-    if (idxVec.z < 0 || idxVec.z >= dim.z)
-        return -1;
-#endif
-
-    return get1DIdxFrom3DIdx(idxVec, dim);
-}
-
-__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
-    const dvec lbb = dConstants->lbb;
-    const dvec interval = dConstants->interval;
-    const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
-    const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-#if (NUM_DIM == 3)
-    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
-#else
-    const int zid = 0;
-#endif
-
-    return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
-}
-
-__device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
-    // Linear encoding
-    // return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x +
-    // idxVec.x;
-
-    // Morton encoding
-#if (NUM_DIM == 3)
-    return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
-                         (unsigned int)idxVec.z);
-#else
-    return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
-#endif
-}
-
-__device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
-    ivec idxVec(0, 0, 0);
-    // Linear decoding
-    /*
-       idxVec.x = idx % cellDim.x;
-       idxVec.y = (idx / cellDim.x) % cellDim.y;
-#if (NUM_DIM == 3)
-idxVec.z = idx / (cellDim.x * cellDim.y);
-#endif
-     */
-#if (NUM_DIM == 3)
-    idxVec.x = decodeMorton3x((unsigned int)idx);
-    idxVec.y = decodeMorton3y((unsigned int)idx);
-    idxVec.z = decodeMorton3z((unsigned int)idx);
-#else
-    idxVec.x = decodeMorton2x((unsigned int)idx);
-    idxVec.y = decodeMorton2y((unsigned int)idx);
-#endif
-
-    return idxVec;
-}
-
-__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y) {
-    return (part1By1(y) << 1) + part1By1(x);
-}
-
-__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
-                                               unsigned int z) {
-    return (part1By2(z) << 2) + (part1By2(y) << 1) + part1By2(x);
-}
-
-__device__ __host__ unsigned int decodeMorton2x(unsigned int code) {
-    return compact1By1(code >> 0);
-}
-
-__device__ __host__ unsigned int decodeMorton2y(unsigned int code) {
-    return compact1By1(code >> 1);
-}
-
-__device__ __host__ unsigned int decodeMorton3x(unsigned int code) {
-    return compact1By2(code >> 0);
-}
-
-__device__ __host__ unsigned int decodeMorton3y(unsigned int code) {
-    return compact1By2(code >> 1);
-}
-
-__device__ __host__ unsigned int decodeMorton3z(unsigned int code) {
-    return compact1By2(code >> 2);
-}
-
-__device__ __host__ unsigned int part1By1(unsigned int x) {
-    // Mask the lowest 16 bits
-    x &= 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
-    x = (x ^ (x << 8)) &
-        0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
-    x = (x ^ (x << 4)) &
-        0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
-    x = (x ^ (x << 2)) &
-        0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
-    x = (x ^ (x << 1)) &
-        0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
-
-    return x;
-}
-
-__device__ __host__ unsigned int part1By2(unsigned int x) {
-    // Mask lowest 10 bits
-    x &= 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
-    x = (x ^ (x << 16)) &
-        0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
-    x = (x ^ (x << 8)) &
-        0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
-    x = (x ^ (x << 4)) &
-        0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
-    x = (x ^ (x << 2)) &
-        0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
-
-    return x;
-}
-
-__device__ __host__ unsigned int compact1By1(unsigned int x) {
-    x &= 0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
-    x = (x ^ (x >> 1)) &
-        0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
-    x = (x ^ (x >> 2)) &
-        0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
-    x = (x ^ (x >> 4)) &
-        0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
-    x = (x ^ (x >> 8)) &
-        0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
-    return x;
-}
-
-__device__ __host__ unsigned int compact1By2(unsigned int x) {
-    x &= 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
-    x = (x ^ (x >> 2)) &
-        0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
-    x = (x ^ (x >> 4)) &
-        0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
-    x = (x ^ (x >> 8)) &
-        0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
-    x = (x ^ (x >> 16)) &
-        0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
-
-    return x;
 }
 
 __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
@@ -327,107 +52,6 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
         id = atomicAdd(&dNumPairs, 1);
         pairs.i_copy[id] = idx1;
         pairs.j_copy[id] = idx2;
-    }
-}
-
-__global__ void wrapKernel(Bubbles bubbles) {
-    auto wrap = [](double *p, int *wc, double x, double low, double high,
-                   int i) {
-        int mult = x < low ? 1 : (x > high ? -1 : 0);
-        p[i] = x + (high - low) * (double)mult;
-        wc[i] -= mult;
-    };
-
-#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
-    const dvec lbb = dConstants->lbb;
-    const dvec tfr = dConstants->tfr;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-#if (PBC_X == 1)
-        wrap(bubbles.x, bubbles.wrap_count_x, bubbles.x[i], lbb.x, tfr.x, i);
-#endif
-#if (PBC_Y == 1)
-        wrap(bubbles.y, bubbles.wrap_count_y, bubbles.y[i], lbb.y, tfr.y, i);
-#endif
-#if (PBC_Z == 1)
-        wrap(bubbles.z, bubbles.wrap_count_z, bubbles.z[i], lbb.z, tfr.z, i);
-#endif
-    }
-#endif
-}
-
-__global__ void calculateVolumes(Bubbles bubbles) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        const double radius = bubbles.r[i];
-        double volume = radius * radius * CUBBLE_PI;
-#if (NUM_DIM == 3)
-        volume *= radius * 1.33333333333333333333333333;
-#endif
-
-        bubbles.temp_doubles[i] = volume;
-    }
-}
-
-__global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
-                                    Bubbles bubbles) {
-    const dvec interval = dConstants->interval;
-    const dvec lbb = dConstants->lbb;
-    const dvec tfr = dConstants->tfr;
-    const double minRad = dConstants->minRad;
-    double *w = bubbles.rp;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        bubbles.index[i] = i;
-        dvec pos(0, 0, 0);
-        pos.x = (i % bubblesPerDim.x) / (double)bubblesPerDim.x;
-        pos.y =
-            ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
-
-        dvec randomOffset(bubbles.x[i], bubbles.y[i], 0);
-#if (NUM_DIM == 3)
-        randomOffset.z = bubbles.z[i];
-        pos.z =
-            (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
-#endif
-        pos *= interval;
-        randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
-        pos += randomOffset;
-
-        double rad = bubbles.r[i];
-        rad = abs(rad);
-        rad = rad > minRad ? rad : rad + minRad;
-        bubbles.r[i] = rad;
-        bubbles.x[i] = pos.x > lbb.x
-                           ? (pos.x < tfr.x ? pos.x : pos.x - interval.x)
-                           : pos.x + interval.x;
-        bubbles.y[i] = pos.y > lbb.y
-                           ? (pos.y < tfr.y ? pos.y : pos.y - interval.y)
-                           : pos.y + interval.y;
-        bubbles.z[i] = pos.z > lbb.z
-                           ? (pos.z < tfr.z ? pos.z : pos.z - interval.z)
-                           : pos.z + interval.z;
-
-        double area = 2.0 * CUBBLE_PI * rad;
-#if (NUM_DIM == 3)
-        area *= 2.0 * rad;
-#endif
-        w[i] = area / bubbles.count;
-    }
-}
-
-__global__ void assignBubblesToCells(int *cellIndices, int *bubbleIndices,
-                                     ivec cellDim, Bubbles bubbles) {
-    const dvec lbb = dConstants->lbb;
-    const dvec tfr = dConstants->tfr;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        cellIndices[i] = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
-                                           bubbles.z[i], cellDim);
-        bubbleIndices[i] = i;
     }
 }
 
@@ -492,6 +116,57 @@ __global__ void neighborSearch(int neighborCellNumber, int numCells,
                               "Too many neighbor indices!");
             }
         }
+    }
+}
+
+__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += gridDim.x * blockDim.x) {
+        int j = newIndex[i];
+        // Predicteds become currents and vice versa,
+        // saveds just store the currents until next search
+        bubbles.xp[i] = bubbles.x[j];
+        bubbles.yp[i] = bubbles.y[j];
+        bubbles.zp[i] = bubbles.z[j];
+        bubbles.rp[i] = bubbles.r[j];
+
+        bubbles.saved_x[i] = bubbles.x[j];
+        bubbles.saved_y[i] = bubbles.y[j];
+        bubbles.saved_z[i] = bubbles.z[j];
+        bubbles.saved_r[i] = bubbles.r[j];
+
+        bubbles.dxdtp[i] = bubbles.dxdt[j];
+        bubbles.dydtp[i] = bubbles.dydt[j];
+        bubbles.dzdtp[i] = bubbles.dzdt[j];
+        bubbles.drdtp[i] = bubbles.drdt[j];
+
+        // Swap the rest in a 'loop' such that
+        // flow_vx becomes dxdto becomes dydto
+        // becomes dzdto becomes drdto becomes x0 etc.
+        bubbles.flow_vx[i] = bubbles.dxdto[j];
+        int k = newIndex[j];
+        bubbles.dxdto[j] = bubbles.dydto[k];
+        j = newIndex[k];
+        bubbles.dydto[k] = bubbles.dzdto[j];
+        k = newIndex[j];
+        bubbles.dzdto[j] = bubbles.drdto[k];
+        j = newIndex[k];
+        bubbles.drdto[k] = bubbles.path[j];
+        k = newIndex[j];
+        bubbles.path[j] = bubbles.error[k];
+
+        // Same loopy change for ints
+        j = newIndex[i];
+        bubbles.num_neighbors[i] = bubbles.wrap_count_x[j];
+        k = newIndex[j];
+        bubbles.wrap_count_x[j] = bubbles.wrap_count_y[k];
+        j = newIndex[k];
+        bubbles.wrap_count_y[k] = bubbles.wrap_count_z[j];
+        k = newIndex[j];
+        bubbles.wrap_count_z[j] = bubbles.index[k];
+
+        // Additionally set the new num_neighbors to zero
+        bubbles.index[k] = 0;
     }
 }
 
@@ -1144,18 +819,6 @@ __global__ void endStepKernel(int origBlockSize, Bubbles bubbles) {
     }
 }
 
-__global__ void eulerKernel(double timeStep, Bubbles bubbles) {
-    // Euler integration
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += blockDim.x * gridDim.x) {
-        bubbles.xp[i] += bubbles.dxdtp[i] * timeStep;
-        bubbles.yp[i] += bubbles.dydtp[i] * timeStep;
-#if (NUM_DIM == 3)
-        bubbles.zp[i] += bubbles.dzdtp[i] * timeStep;
-#endif
-    }
-}
-
 __global__ void incrementPath(Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
@@ -1345,54 +1008,389 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
     }
 }
 
-__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
+__global__ void eulerKernel(double timeStep, Bubbles bubbles) {
+    // Euler integration
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += blockDim.x * gridDim.x) {
+        bubbles.xp[i] += bubbles.dxdtp[i] * timeStep;
+        bubbles.yp[i] += bubbles.dydtp[i] * timeStep;
+#if (NUM_DIM == 3)
+        bubbles.zp[i] += bubbles.dzdtp[i] * timeStep;
+#endif
+    }
+}
+
+__global__ void transformPositionsKernel(bool normalize, Bubbles bubbles) {
+    const dvec lbb = dConstants->lbb;
+    const dvec interval = dConstants->interval;
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        int j = newIndex[i];
-        // Predicteds become currents and vice versa,
-        // saveds just store the currents until next search
-        bubbles.xp[i] = bubbles.x[j];
-        bubbles.yp[i] = bubbles.y[j];
-        bubbles.zp[i] = bubbles.z[j];
-        bubbles.rp[i] = bubbles.r[j];
-
-        bubbles.saved_x[i] = bubbles.x[j];
-        bubbles.saved_y[i] = bubbles.y[j];
-        bubbles.saved_z[i] = bubbles.z[j];
-        bubbles.saved_r[i] = bubbles.r[j];
-
-        bubbles.dxdtp[i] = bubbles.dxdt[j];
-        bubbles.dydtp[i] = bubbles.dydt[j];
-        bubbles.dzdtp[i] = bubbles.dzdt[j];
-        bubbles.drdtp[i] = bubbles.drdt[j];
-
-        // Swap the rest in a 'loop' such that
-        // flow_vx becomes dxdto becomes dydto
-        // becomes dzdto becomes drdto becomes x0 etc.
-        bubbles.flow_vx[i] = bubbles.dxdto[j];
-        int k = newIndex[j];
-        bubbles.dxdto[j] = bubbles.dydto[k];
-        j = newIndex[k];
-        bubbles.dydto[k] = bubbles.dzdto[j];
-        k = newIndex[j];
-        bubbles.dzdto[j] = bubbles.drdto[k];
-        j = newIndex[k];
-        bubbles.drdto[k] = bubbles.path[j];
-        k = newIndex[j];
-        bubbles.path[j] = bubbles.error[k];
-
-        // Same loopy change for ints
-        j = newIndex[i];
-        bubbles.num_neighbors[i] = bubbles.wrap_count_x[j];
-        k = newIndex[j];
-        bubbles.wrap_count_x[j] = bubbles.wrap_count_y[k];
-        j = newIndex[k];
-        bubbles.wrap_count_y[k] = bubbles.wrap_count_z[j];
-        k = newIndex[j];
-        bubbles.wrap_count_z[j] = bubbles.index[k];
-
-        // Additionally set the new num_neighbors to zero
-        bubbles.index[k] = 0;
+        if (normalize) {
+            bubbles.x[i] = (bubbles.x[i] - lbb.x) / interval.x;
+            bubbles.y[i] = (bubbles.y[i] - lbb.y) / interval.y;
+#if (NUM_DIM == 3)
+            bubbles.z[i] = (bubbles.z[i] - lbb.z) / interval.z;
+#endif
+        } else {
+            bubbles.x[i] = interval.x * bubbles.x[i] + lbb.x;
+            bubbles.y[i] = interval.y * bubbles.y[i] + lbb.y;
+#if (NUM_DIM == 3)
+            bubbles.z[i] = interval.z * bubbles.z[i] + lbb.z;
+#endif
+        }
     }
+}
+
+__global__ void wrapKernel(Bubbles bubbles) {
+    auto wrap = [](double *p, int *wc, double x, double low, double high,
+                   int i) {
+        int mult = x < low ? 1 : (x > high ? -1 : 0);
+        p[i] = x + (high - low) * (double)mult;
+        wc[i] -= mult;
+    };
+
+#if (PBC_X == 1 || PBC_Y == 1 || PBC_Z == 1)
+    const dvec lbb = dConstants->lbb;
+    const dvec tfr = dConstants->tfr;
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += gridDim.x * blockDim.x) {
+#if (PBC_X == 1)
+        wrap(bubbles.x, bubbles.wrap_count_x, bubbles.x[i], lbb.x, tfr.x, i);
+#endif
+#if (PBC_Y == 1)
+        wrap(bubbles.y, bubbles.wrap_count_y, bubbles.y[i], lbb.y, tfr.y, i);
+#endif
+#if (PBC_Z == 1)
+        wrap(bubbles.z, bubbles.wrap_count_z, bubbles.z[i], lbb.z, tfr.z, i);
+#endif
+    }
+#endif
+}
+
+__global__ void calculateVolumes(Bubbles bubbles) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += gridDim.x * blockDim.x) {
+        const double radius = bubbles.r[i];
+        double volume = radius * radius * CUBBLE_PI;
+#if (NUM_DIM == 3)
+        volume *= radius * 1.33333333333333333333333333;
+#endif
+
+        bubbles.temp_doubles[i] = volume;
+    }
+}
+
+__global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
+                                    Bubbles bubbles) {
+    const dvec interval = dConstants->interval;
+    const dvec lbb = dConstants->lbb;
+    const dvec tfr = dConstants->tfr;
+    const double minRad = dConstants->minRad;
+    double *w = bubbles.rp;
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += gridDim.x * blockDim.x) {
+        bubbles.index[i] = i;
+        dvec pos(0, 0, 0);
+        pos.x = (i % bubblesPerDim.x) / (double)bubblesPerDim.x;
+        pos.y =
+            ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
+
+        dvec randomOffset(bubbles.x[i], bubbles.y[i], 0);
+#if (NUM_DIM == 3)
+        randomOffset.z = bubbles.z[i];
+        pos.z =
+            (i / (bubblesPerDim.x * bubblesPerDim.y)) / (double)bubblesPerDim.z;
+#endif
+        pos *= interval;
+        randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
+        pos += randomOffset;
+
+        double rad = bubbles.r[i];
+        rad = abs(rad);
+        rad = rad > minRad ? rad : rad + minRad;
+        bubbles.r[i] = rad;
+        bubbles.x[i] = pos.x > lbb.x
+                           ? (pos.x < tfr.x ? pos.x : pos.x - interval.x)
+                           : pos.x + interval.x;
+        bubbles.y[i] = pos.y > lbb.y
+                           ? (pos.y < tfr.y ? pos.y : pos.y - interval.y)
+                           : pos.y + interval.y;
+        bubbles.z[i] = pos.z > lbb.z
+                           ? (pos.z < tfr.z ? pos.z : pos.z - interval.z)
+                           : pos.z + interval.z;
+
+        double area = 2.0 * CUBBLE_PI * rad;
+#if (NUM_DIM == 3)
+        area *= 2.0 * rad;
+#endif
+        w[i] = area / bubbles.count;
+    }
+}
+
+__device__ void logError(bool condition, const char *statement,
+                         const char *errMsg) {
+    if (condition == false) {
+        printf("----------------------------------------------------"
+               "\nError encountered"
+               "\n(%s) -> %s"
+               "\n@thread[%d, %d, %d], @block[%d, %d, %d]"
+               "\n----------------------------------------------------\n",
+               statement, errMsg, threadIdx.x, threadIdx.y, threadIdx.z,
+               blockIdx.x, blockIdx.y, blockIdx.z);
+
+        dErrorEncountered = true;
+    }
+}
+
+__device__ int getGlobalTid() {
+    // Simple helper function for calculating a 1D coordinate
+    // from 1, 2 or 3 dimensional coordinates.
+    int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
+    int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x) +
+                       blockIdx.y * gridDim.x + blockIdx.x;
+    int threadsBefore =
+        blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
+    int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
+
+    return tid;
+}
+
+__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
+    const dvec d1 = p1 - p2;
+    dvec d2 = d1;
+    dvec temp = interval - d1.getAbsolute();
+#if (PBC_X == 1)
+    if (temp.x * temp.x < d1.x * d1.x) {
+        d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
+    }
+#endif
+#if (PBC_Y == 1)
+    if (temp.y * temp.y < d1.y * d1.y) {
+        d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
+    }
+#endif
+#if (PBC_Z == 1)
+    if (temp.z * temp.z < d1.z * d1.z) {
+        d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
+    }
+#endif
+
+    return d2;
+}
+
+__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
+    ivec idxVec = cellIdx;
+    switch (neighborNum) {
+    case 0:
+        // self
+        break;
+    case 1:
+        idxVec += ivec(-1, 1, 0);
+        break;
+    case 2:
+        idxVec += ivec(-1, 0, 0);
+        break;
+    case 3:
+        idxVec += ivec(-1, -1, 0);
+        break;
+    case 4:
+        idxVec += ivec(0, -1, 0);
+        break;
+    case 5:
+        idxVec += ivec(-1, 1, -1);
+        break;
+    case 6:
+        idxVec += ivec(-1, 0, -1);
+        break;
+    case 7:
+        idxVec += ivec(-1, -1, -1);
+        break;
+    case 8:
+        idxVec += ivec(0, 1, -1);
+        break;
+    case 9:
+        idxVec += ivec(0, 0, -1);
+        break;
+    case 10:
+        idxVec += ivec(0, -1, -1);
+        break;
+    case 11:
+        idxVec += ivec(1, 1, -1);
+        break;
+    case 12:
+        idxVec += ivec(1, 0, -1);
+        break;
+    case 13:
+        idxVec += ivec(1, -1, -1);
+        break;
+    default:
+        printf("Should never end up here!\n");
+        break;
+    }
+
+#if (PBC_X == 1)
+    idxVec.x += dim.x;
+    idxVec.x %= dim.x;
+#else
+    if (idxVec.x < 0 || idxVec.x >= dim.x)
+        return -1;
+#endif
+
+#if (PBC_Y == 1)
+    idxVec.y += dim.y;
+    idxVec.y %= dim.y;
+#else
+    if (idxVec.y < 0 || idxVec.y >= dim.y)
+        return -1;
+#endif
+
+#if (PBC_Z == 1)
+    idxVec.z += dim.z;
+    idxVec.z %= dim.z;
+#else
+    if (idxVec.z < 0 || idxVec.z >= dim.z)
+        return -1;
+#endif
+
+    return get1DIdxFrom3DIdx(idxVec, dim);
+}
+
+__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
+    const dvec lbb = dConstants->lbb;
+    const dvec interval = dConstants->interval;
+    const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
+    const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+#if (NUM_DIM == 3)
+    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+#else
+    const int zid = 0;
+#endif
+
+    return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
+}
+
+__device__ __host__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
+    // Linear encoding
+    // return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x +
+    // idxVec.x;
+
+    // Morton encoding
+#if (NUM_DIM == 3)
+    return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
+                         (unsigned int)idxVec.z);
+#else
+    return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
+#endif
+}
+
+__device__ __host__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
+    ivec idxVec(0, 0, 0);
+    // Linear decoding
+    /*
+       idxVec.x = idx % cellDim.x;
+       idxVec.y = (idx / cellDim.x) % cellDim.y;
+#if (NUM_DIM == 3)
+idxVec.z = idx / (cellDim.x * cellDim.y);
+#endif
+     */
+#if (NUM_DIM == 3)
+    idxVec.x = decodeMorton3x((unsigned int)idx);
+    idxVec.y = decodeMorton3y((unsigned int)idx);
+    idxVec.z = decodeMorton3z((unsigned int)idx);
+#else
+    idxVec.x = decodeMorton2x((unsigned int)idx);
+    idxVec.y = decodeMorton2y((unsigned int)idx);
+#endif
+
+    return idxVec;
+}
+
+__device__ __host__ unsigned int encodeMorton2(unsigned int x, unsigned int y) {
+    return (part1By1(y) << 1) + part1By1(x);
+}
+
+__device__ __host__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
+                                               unsigned int z) {
+    return (part1By2(z) << 2) + (part1By2(y) << 1) + part1By2(x);
+}
+
+__device__ __host__ unsigned int decodeMorton2x(unsigned int code) {
+    return compact1By1(code >> 0);
+}
+
+__device__ __host__ unsigned int decodeMorton2y(unsigned int code) {
+    return compact1By1(code >> 1);
+}
+
+__device__ __host__ unsigned int decodeMorton3x(unsigned int code) {
+    return compact1By2(code >> 0);
+}
+
+__device__ __host__ unsigned int decodeMorton3y(unsigned int code) {
+    return compact1By2(code >> 1);
+}
+
+__device__ __host__ unsigned int decodeMorton3z(unsigned int code) {
+    return compact1By2(code >> 2);
+}
+
+__device__ __host__ unsigned int part1By1(unsigned int x) {
+    // Mask the lowest 16 bits
+    x &= 0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
+    x = (x ^ (x << 8)) &
+        0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
+    x = (x ^ (x << 4)) &
+        0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
+    x = (x ^ (x << 2)) &
+        0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
+    x = (x ^ (x << 1)) &
+        0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
+
+    return x;
+}
+
+__device__ __host__ unsigned int part1By2(unsigned int x) {
+    // Mask lowest 10 bits
+    x &= 0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
+    x = (x ^ (x << 16)) &
+        0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+    x = (x ^ (x << 8)) &
+        0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+    x = (x ^ (x << 4)) &
+        0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+    x = (x ^ (x << 2)) &
+        0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+
+    return x;
+}
+
+__device__ __host__ unsigned int compact1By1(unsigned int x) {
+    x &= 0x55555555; // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
+    x = (x ^ (x >> 1)) &
+        0x33333333; // x = --fe --dc --ba --98 --76 --54 --32 --10
+    x = (x ^ (x >> 2)) &
+        0x0f0f0f0f; // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
+    x = (x ^ (x >> 4)) &
+        0x00ff00ff; // x = ---- ---- fedc ba98 ---- ---- 7654 3210
+    x = (x ^ (x >> 8)) &
+        0x0000ffff; // x = ---- ---- ---- ---- fedc ba98 7654 3210
+    return x;
+}
+
+__device__ __host__ unsigned int compact1By2(unsigned int x) {
+    x &= 0x09249249; // x = ---- 9--8 --7- -6-- 5--4 --3- -2-- 1--0
+    x = (x ^ (x >> 2)) &
+        0x030c30c3; // x = ---- --98 ---- 76-- --54 ---- 32-- --10
+    x = (x ^ (x >> 4)) &
+        0x0300f00f; // x = ---- --98 ---- ---- 7654 ---- ---- 3210
+    x = (x ^ (x >> 8)) &
+        0xff0000ff; // x = ---- --98 ---- ---- ---- ---- 7654 3210
+    x = (x ^ (x >> 16)) &
+        0x000003ff; // x = ---- ---- ---- ---- ---- --98 7654 3210
+
+    return x;
 }
 } // namespace cubble
