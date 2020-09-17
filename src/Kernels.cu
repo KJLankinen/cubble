@@ -47,11 +47,11 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        atomicAdd(&bubbles.num_neighbors[idx1], 1);
-        atomicAdd(&bubbles.num_neighbors[idx2], 1);
+        atomicAdd(&bubbles.numNeighbors[idx1], 1);
+        atomicAdd(&bubbles.numNeighbors[idx2], 1);
         id = atomicAdd(&dNumPairs, 1);
-        pairs.i_copy[id] = idx1;
-        pairs.j_copy[id] = idx2;
+        pairs.iCopy[id] = idx1;
+        pairs.jCopy[id] = idx2;
     }
 }
 
@@ -130,10 +130,10 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
         bubbles.zp[i] = bubbles.z[j];
         bubbles.rp[i] = bubbles.r[j];
 
-        bubbles.saved_x[i] = bubbles.x[j];
-        bubbles.saved_y[i] = bubbles.y[j];
-        bubbles.saved_z[i] = bubbles.z[j];
-        bubbles.saved_r[i] = bubbles.r[j];
+        bubbles.savedX[i] = bubbles.x[j];
+        bubbles.savedY[i] = bubbles.y[j];
+        bubbles.savedZ[i] = bubbles.z[j];
+        bubbles.savedR[i] = bubbles.r[j];
 
         bubbles.dxdtp[i] = bubbles.dxdt[j];
         bubbles.dydtp[i] = bubbles.dydt[j];
@@ -143,7 +143,7 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
         // Swap the rest in a 'loop' such that
         // flow_vx becomes dxdto becomes dydto
         // becomes dzdto becomes drdto becomes x0 etc.
-        bubbles.flow_vx[i] = bubbles.dxdto[j];
+        bubbles.flowVx[i] = bubbles.dxdto[j];
         int k = newIndex[j];
         bubbles.dxdto[j] = bubbles.dydto[k];
         j = newIndex[k];
@@ -157,13 +157,13 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
 
         // Same loopy change for ints
         j = newIndex[i];
-        bubbles.num_neighbors[i] = bubbles.wrap_count_x[j];
+        bubbles.numNeighbors[i] = bubbles.wrapCountX[j];
         k = newIndex[j];
-        bubbles.wrap_count_x[j] = bubbles.wrap_count_y[k];
+        bubbles.wrapCountX[j] = bubbles.wrapCountY[k];
         j = newIndex[k];
-        bubbles.wrap_count_y[k] = bubbles.wrap_count_z[j];
+        bubbles.wrapCountY[k] = bubbles.wrapCountZ[j];
         k = newIndex[j];
-        bubbles.wrap_count_z[j] = bubbles.index[k];
+        bubbles.wrapCountZ[j] = bubbles.index[k];
 
         // Additionally set the new num_neighbors to zero
         bubbles.index[k] = 0;
@@ -261,15 +261,15 @@ __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
 
-        atomicAdd(&bubbles.flow_vx[idx1], bubbles.dxdto[idx2]);
-        atomicAdd(&bubbles.flow_vx[idx2], bubbles.dxdto[idx1]);
+        atomicAdd(&bubbles.flowVx[idx1], bubbles.dxdto[idx2]);
+        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
 
-        atomicAdd(&bubbles.flow_vy[idx1], bubbles.dydto[idx2]);
-        atomicAdd(&bubbles.flow_vy[idx2], bubbles.dydto[idx1]);
+        atomicAdd(&bubbles.flowVy[idx1], bubbles.dydto[idx2]);
+        atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
 
         if (dConstants->dimensionality == 3) {
-            atomicAdd(&bubbles.flow_vz[idx1], bubbles.dzdto[idx2]);
-            atomicAdd(&bubbles.flow_vz[idx2], bubbles.dzdto[idx1]);
+            atomicAdd(&bubbles.flowVz[idx1], bubbles.dzdto[idx2]);
+            atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
         }
     }
 }
@@ -281,7 +281,7 @@ __global__ void imposedFlowVelocity(Bubbles bubbles) {
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        double multiplier = bubbles.num_neighbors[i];
+        double multiplier = bubbles.numNeighbors[i];
         multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
         const double xi = bubbles.xp[i];
         const double yi = bubbles.yp[i];
@@ -303,15 +303,15 @@ __global__ void imposedFlowVelocity(Bubbles bubbles) {
                             ((flowTfr.z - zi) * (flowTfr.z - zi) <= riSq));
 
             bubbles.dzdtp[i] +=
-                !inside * multiplier * bubbles.flow_vz[i] + flowVel.z * inside;
+                !inside * multiplier * bubbles.flowVz[i] + flowVel.z * inside;
         }
 
         // Either add the average velocity of neighbors or the imposed flow,
         // if the bubble is inside the flow area
         bubbles.dxdtp[i] +=
-            !inside * multiplier * bubbles.flow_vx[i] + flowVel.x * inside;
+            !inside * multiplier * bubbles.flowVx[i] + flowVel.x * inside;
         bubbles.dydtp[i] +=
-            !inside * multiplier * bubbles.flow_vy[i] + flowVel.y * inside;
+            !inside * multiplier * bubbles.flowVy[i] + flowVel.y * inside;
     }
 }
 
@@ -332,8 +332,8 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs) {
                    wrappedDifference(p1, p2, interval).getLength();
         if (e > 0) {
             e *= e;
-            atomicAdd(&bubbles.temp_doubles[idx1], e);
-            atomicAdd(&bubbles.temp_doubles[idx2], e);
+            atomicAdd(&bubbles.tempDoubles[idx1], e);
+            atomicAdd(&bubbles.tempDoubles[idx2], e);
         }
     }
 }
@@ -387,8 +387,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
             } else {
                 overlapArea = 2.0 * sqrt(overlapArea);
             }
-            atomicAdd(&bubbles.temp_doubles[idx1], overlapArea);
-            atomicAdd(&bubbles.temp_doubles[idx2], overlapArea);
+            atomicAdd(&bubbles.tempDoubles[idx1], overlapArea);
+            atomicAdd(&bubbles.tempDoubles[idx2], overlapArea);
 
             r1 = 1.0 / r1;
             r2 = 1.0 / r2;
@@ -469,7 +469,7 @@ __global__ void mediatedGasExchange(Bubbles bubbles) {
         }
         const double vr = bubbles.drdtp[i] +
                           kappa * averageSurfaceAreaIn * bubbles.count /
-                              dTotalArea * (area - bubbles.temp_doubles[i]) *
+                              dTotalArea * (area - bubbles.tempDoubles[i]) *
                               (invRho - 1.0 / rad);
         bubbles.drdtp[i] = kParameter * vr / area;
     }
@@ -532,28 +532,25 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
             return predicted < 0.0 ? -predicted : predicted;
         };
 
-        double maxErr =
-            correctPrediction(bubbles.x, bubbles.xp, bubbles.saved_x,
-                              bubbles.dxdt, bubbles.dxdtp);
+        double maxErr = correctPrediction(bubbles.x, bubbles.xp, bubbles.savedX,
+                                          bubbles.dxdt, bubbles.dxdtp);
         double dist = delta * delta;
         maxErr = fmax(maxErr,
-                      correctPrediction(bubbles.y, bubbles.yp, bubbles.saved_y,
+                      correctPrediction(bubbles.y, bubbles.yp, bubbles.savedY,
                                         bubbles.dydt, bubbles.dydtp));
         dist += delta * delta;
         if (dConstants->dimensionality == 3) {
-            maxErr =
-                fmax(maxErr,
-                     correctPrediction(bubbles.z, bubbles.zp, bubbles.saved_z,
-                                       bubbles.dzdt, bubbles.dzdtp));
+            maxErr = fmax(
+                maxErr, correctPrediction(bubbles.z, bubbles.zp, bubbles.savedZ,
+                                          bubbles.dzdt, bubbles.dzdtp));
             dist += delta * delta;
         }
         dist = sqrt(dist);
 
         if (useGasExchange) {
-            maxErr =
-                fmax(maxErr,
-                     correctPrediction(bubbles.r, bubbles.rp, bubbles.saved_r,
-                                       bubbles.drdt, bubbles.drdtp));
+            maxErr = fmax(
+                maxErr, correctPrediction(bubbles.r, bubbles.rp, bubbles.savedR,
+                                          bubbles.drdt, bubbles.drdtp));
             dist += delta;
             // Predicted value has been overwritten by the corrected value
             // inside the lambda
@@ -566,7 +563,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
             if (rad > minRad) {
                 tvn[tid] += vol;
             } else {
-                bubbles.temp_ints[atomicAdd(&dNumToBeDeleted, 1)] = i;
+                bubbles.tempInts[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = fmax(mr[tid], rad);
         }
@@ -612,10 +609,10 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
                 __syncwarp();
 
                 if (tid == 0) {
-                    bubbles.temp_doubles2[blockIdx.x] = fmax(me[tid], me[1]);
-                    bubbles.temp_doubles2[blockIdx.x + gridDim.x] =
+                    bubbles.tempDoubles2[blockIdx.x] = fmax(me[tid], me[1]);
+                    bubbles.tempDoubles2[blockIdx.x + gridDim.x] =
                         fmax(mr[tid], mr[1]);
-                    bubbles.temp_doubles2[blockIdx.x + 2 * gridDim.x] =
+                    bubbles.tempDoubles2[blockIdx.x + 2 * gridDim.x] =
                         fmax(be[tid], be[1]);
                     atomicAdd(&dTotalVolumeNew, tvn[tid] + tvn[1]);
                 }
@@ -653,7 +650,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
             // it will be swapped with one from the back that won't be
             // removed but which is outside the new range (i.e. would be
             // erroneously removed).
-            const int idx1 = bubbles.temp_ints[i];
+            const int idx1 = bubbles.tempInts[i];
             if (idx1 < nNew) {
                 // Count how many values before this ith value are swapped
                 // from the back. In other words, count how many good values
@@ -661,7 +658,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 int fromBack = i;
                 int j = 0;
                 while (j < i) {
-                    if (bubbles.temp_ints[j] >= nNew) {
+                    if (bubbles.tempInts[j] >= nNew) {
                         fromBack -= 1;
                     }
                     j += 1;
@@ -681,19 +678,19 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 }
 
                 // Append the old indices for later use
-                bubbles.temp_ints[i + dNumToBeDeleted] = idx2;
+                bubbles.tempInts[i + dNumToBeDeleted] = idx2;
 
                 // Swap all the arrays
                 swapValues(idx2, idx1, bubbles.x, bubbles.y, bubbles.z,
                            bubbles.r, bubbles.dxdt, bubbles.dydt, bubbles.dzdt,
                            bubbles.drdt, bubbles.dxdto, bubbles.dydto,
-                           bubbles.dzdto, bubbles.drdto, bubbles.saved_x,
-                           bubbles.saved_y, bubbles.saved_z, bubbles.saved_r,
-                           bubbles.path, bubbles.error, bubbles.wrap_count_x,
-                           bubbles.wrap_count_y, bubbles.wrap_count_z,
-                           bubbles.index, bubbles.num_neighbors);
+                           bubbles.dzdto, bubbles.drdto, bubbles.savedX,
+                           bubbles.savedY, bubbles.savedZ, bubbles.savedR,
+                           bubbles.path, bubbles.error, bubbles.wrapCountX,
+                           bubbles.wrapCountY, bubbles.wrapCountZ,
+                           bubbles.index, bubbles.numNeighbors);
             } else {
-                bubbles.temp_ints[i + dNumToBeDeleted] = idx1;
+                bubbles.tempInts[i + dNumToBeDeleted] = idx1;
             }
         }
     }
@@ -703,7 +700,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
          i += blockDim.x * gridDim.x) {
         int j = 0;
         while (j < dNumToBeDeleted) {
-            const int tbd = bubbles.temp_ints[j];
+            const int tbd = bubbles.tempInts[j];
             if (pairs.i[i] == tbd || pairs.j[i] == tbd) {
                 tbds[tid] += 1;
             }
@@ -756,7 +753,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
         int idx2 = pairs.j[i];
         int j = 0;
         while (j < dNumToBeDeleted) {
-            int tbd = bubbles.temp_ints[j];
+            int tbd = bubbles.tempInts[j];
             if (idx1 == tbd || idx2 == tbd) {
                 // Start from the back of pair list and go backwards until
                 // neither of the pairs is in the to-be-deleted list.
@@ -769,7 +766,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
                     const int swap2 = pairs.j[swapIdx];
                     int k = 0;
                     while (k < dNumToBeDeleted) {
-                        tbd = bubbles.temp_ints[k];
+                        tbd = bubbles.tempInts[k];
                         if (swap1 == tbd || swap2 == tbd) {
                             pairFound = false;
                             break;
@@ -793,11 +790,11 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
         j = 0;
         while (j < dNumToBeDeleted) {
             // The old, swapped indices were stored after the deleted indices
-            int swapped = bubbles.temp_ints[dNumToBeDeleted + j];
+            int swapped = bubbles.tempInts[dNumToBeDeleted + j];
             if (idx1 == swapped) {
-                pairs.i[i] = bubbles.temp_ints[j];
+                pairs.i[i] = bubbles.tempInts[j];
             } else if (idx2 == swapped) {
-                pairs.j[i] = bubbles.temp_ints[j];
+                pairs.j[i] = bubbles.tempInts[j];
             }
 
             j += 1;
@@ -857,11 +854,11 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
         };
 
         if (!dConstants->xWall)
-            wrap(bubbles.x, bubbles.wrap_count_x, bubbles.x[i], lbb.x, tfr.x);
+            wrap(bubbles.x, bubbles.wrapCountX, bubbles.x[i], lbb.x, tfr.x);
         if (!dConstants->yWall)
-            wrap(bubbles.y, bubbles.wrap_count_y, bubbles.y[i], lbb.y, tfr.y);
+            wrap(bubbles.y, bubbles.wrapCountY, bubbles.y[i], lbb.y, tfr.y);
         if (!dConstants->zWall)
-            wrap(bubbles.z, bubbles.wrap_count_z, bubbles.z[i], lbb.z, tfr.z);
+            wrap(bubbles.z, bubbles.wrapCountZ, bubbles.z[i], lbb.z, tfr.z);
     }
 }
 
@@ -874,7 +871,7 @@ __global__ void calculateVolumes(Bubbles bubbles) {
             volume *= radius * 1.33333333333333333333333333;
         }
 
-        bubbles.temp_doubles[i] = volume;
+        bubbles.tempDoubles[i] = volume;
     }
 }
 

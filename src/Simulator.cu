@@ -73,10 +73,10 @@ void updateCellsAndNeighbors(Params &params) {
 
     int *offsets = params.pairs.i;
     int *sizes = params.pairs.i + maxNumCells;
-    int *cellIndices = params.pairs.i_copy;
-    int *bubbleIndices = params.pairs.i_copy + 1 * params.bubbles.stride;
-    int *sortedCellIndices = params.pairs.i_copy + 2 * params.bubbles.stride;
-    int *sortedBubbleIndices = params.pairs.i_copy + 3 * params.bubbles.stride;
+    int *cellIndices = params.pairs.iCopy;
+    int *bubbleIndices = params.pairs.iCopy + 1 * params.bubbles.stride;
+    int *sortedCellIndices = params.pairs.iCopy + 2 * params.bubbles.stride;
+    int *sortedBubbleIndices = params.pairs.iCopy + 3 * params.bubbles.stride;
 
     // Assign each bubble to a particular cell, based on the bubbles
     // position. bubbleIndices and cellIndices will be filled by this
@@ -144,15 +144,15 @@ void updateCellsAndNeighbors(Params &params) {
     params.bubbles.drdto = params.bubbles.dzdto;
     params.bubbles.dzdto = params.bubbles.dydto;
     params.bubbles.dydto = params.bubbles.dxdto;
-    params.bubbles.dxdto = params.bubbles.flow_vx;
-    params.bubbles.flow_vx = swapper;
+    params.bubbles.dxdto = params.bubbles.flowVx;
+    params.bubbles.flowVx = swapper;
 
     int *swapperI = params.bubbles.index;
-    params.bubbles.index = params.bubbles.wrap_count_z;
-    params.bubbles.wrap_count_z = params.bubbles.wrap_count_y;
-    params.bubbles.wrap_count_y = params.bubbles.wrap_count_x;
-    params.bubbles.wrap_count_x = params.bubbles.num_neighbors;
-    params.bubbles.num_neighbors = swapperI;
+    params.bubbles.index = params.bubbles.wrapCountZ;
+    params.bubbles.wrapCountZ = params.bubbles.wrapCountY;
+    params.bubbles.wrapCountY = params.bubbles.wrapCountX;
+    params.bubbles.wrapCountX = params.bubbles.numNeighbors;
+    params.bubbles.numNeighbors = swapperI;
 
     KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
     int zero = 0;
@@ -179,9 +179,9 @@ void updateCellsAndNeighbors(Params &params) {
 #endif
 
     params.cw.sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-                                  const_cast<const int *>(params.pairs.i_copy),
+                                  const_cast<const int *>(params.pairs.iCopy),
                                   params.pairs.i,
-                                  const_cast<const int *>(params.pairs.j_copy),
+                                  const_cast<const int *>(params.pairs.jCopy),
                                   params.pairs.j, params.pairs.count);
     NVTX_RANGE_POP();
 }
@@ -235,7 +235,7 @@ double stabilize(Params &params, int numStepsToRelax) {
 
             // Reduce error
             error = params.cw.reduce<double, double *, double *>(
-                &cub::DeviceReduce::Max, params.bubbles.temp_doubles2,
+                &cub::DeviceReduce::Max, params.bubbles.tempDoubles2,
                 numBlocks);
 
             if (error < params.hostData.errorTolerance &&
@@ -279,7 +279,7 @@ double stabilize(Params &params, int numStepsToRelax) {
         // Reduce block maximum expansions to a global maximum
         double maxExpansion = params.cw.reduce<double, double *, double *>(
             &cub::DeviceReduce::Max,
-            params.bubbles.temp_doubles2 + 2 * numBlocks, numBlocks);
+            params.bubbles.tempDoubles2 + 2 * numBlocks, numBlocks);
 
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             updateCellsAndNeighbors(params);
@@ -312,8 +312,8 @@ bool integrate(Params &params) {
         // Average neighbor velocity is calculated from velocities of previous
         // step
         KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream1,
-                      0.0, params.bubbles.count, false, params.bubbles.flow_vx,
-                      params.bubbles.flow_vy, params.bubbles.flow_vz);
+                      0.0, params.bubbles.count, false, params.bubbles.flowVx,
+                      params.bubbles.flowVy, params.bubbles.flowVz);
         KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
                       params.stream1, params.bubbles, params.pairs);
     }
@@ -323,8 +323,8 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream2,
                       0.0, params.bubbles.count, true, params.bubbles.dxdtp,
                       params.bubbles.dydtp, params.bubbles.dzdtp,
-                      params.bubbles.drdtp, params.bubbles.temp_doubles,
-                      params.bubbles.temp_doubles2);
+                      params.bubbles.drdtp, params.bubbles.tempDoubles,
+                      params.bubbles.tempDoubles2);
 
         KERNEL_LAUNCH(predict, params.pairKernelSize, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
@@ -359,7 +359,7 @@ bool integrate(Params &params) {
 
         // Reduce error
         error = params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Max, params.bubbles.temp_doubles2, numBlocks);
+            &cub::DeviceReduce::Max, params.bubbles.tempDoubles2, numBlocks);
 
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
@@ -386,7 +386,7 @@ bool integrate(Params &params) {
     void *pDMaxRadius = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
     params.cw.reduceNoCopy<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.bubbles.temp_doubles2 + numBlocks,
+        &cub::DeviceReduce::Max, params.bubbles.tempDoubles2 + numBlocks,
         static_cast<double *>(pDMaxRadius), numBlocks, params.stream2);
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
@@ -395,7 +395,7 @@ bool integrate(Params &params) {
     void *pDMaxExpansion = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
     params.cw.reduceNoCopy<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.bubbles.temp_doubles2 + 2 * numBlocks,
+        &cub::DeviceReduce::Max, params.bubbles.tempDoubles2 + 2 * numBlocks,
         static_cast<double *>(pDMaxExpansion), numBlocks, params.stream2);
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
@@ -505,11 +505,11 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 
 double calculateTotalEnergy(Params &params) {
     KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, false, params.bubbles.temp_doubles);
+                  params.bubbles.count, false, params.bubbles.tempDoubles);
     KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
                   params.pairs);
     return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        &cub::DeviceReduce::Sum, params.bubbles.tempDoubles,
         params.bubbles.count);
 }
 
@@ -517,7 +517,7 @@ double calculateVolumeOfBubbles(Params &params) {
     KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
                   params.bubbles);
     return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.bubbles.temp_doubles,
+        &cub::DeviceReduce::Sum, params.bubbles.tempDoubles,
         params.bubbles.count);
 }
 
@@ -561,7 +561,7 @@ void saveSnapshotToFile(Params &params) {
         double *vr = getHostPtr(params.bubbles.drdt);
         double *path = getHostPtr(params.bubbles.path);
         double *error = getHostPtr(params.bubbles.error);
-        double *energy = getHostPtr(params.bubbles.temp_doubles);
+        double *energy = getHostPtr(params.bubbles.tempDoubles);
         int *index = getHostPtr(params.bubbles.index);
 
         // Starting to access the data, so need to sync to make sure all the
@@ -1045,9 +1045,9 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     // Reset wrap counts to 0
     // Again avoiding batched memset, because the pointers might not be in order
     bytes = sizeof(int) * params.bubbles.stride;
-    CUDA_CALL(cudaMemset(params.bubbles.wrap_count_x, 0, bytes));
-    CUDA_CALL(cudaMemset(params.bubbles.wrap_count_y, 0, bytes));
-    CUDA_CALL(cudaMemset(params.bubbles.wrap_count_z, 0, bytes));
+    CUDA_CALL(cudaMemset(params.bubbles.wrapCountX, 0, bytes));
+    CUDA_CALL(cudaMemset(params.bubbles.wrapCountY, 0, bytes));
+    CUDA_CALL(cudaMemset(params.bubbles.wrapCountZ, 0, bytes));
 
     // Reset errors since integration starts after this
     KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,

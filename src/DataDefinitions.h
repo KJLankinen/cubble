@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
+template <typename T> void setIncr(T **p, T **prev, uint64T stride) {
     *p = *prev;
     *prev += stride;
 }
@@ -44,24 +44,24 @@ struct Bubbles {
 
     double *path = nullptr;
     double *error = nullptr;
-    double *temp_doubles = nullptr;
-    double *temp_doubles2 = nullptr;
+    double *tempDoubles = nullptr;
+    double *tempDoubles2 = nullptr;
 
-    double *flow_vx = nullptr;
-    double *flow_vy = nullptr;
-    double *flow_vz = nullptr;
+    double *flowVx = nullptr;
+    double *flowVy = nullptr;
+    double *flowVz = nullptr;
 
-    double *saved_x = nullptr;
-    double *saved_y = nullptr;
-    double *saved_z = nullptr;
-    double *saved_r = nullptr;
+    double *savedX = nullptr;
+    double *savedY = nullptr;
+    double *savedZ = nullptr;
+    double *savedR = nullptr;
 
-    int *temp_ints = nullptr;
-    int *wrap_count_x = nullptr;
-    int *wrap_count_y = nullptr;
-    int *wrap_count_z = nullptr;
+    int *tempInts = nullptr;
+    int *wrapCountX = nullptr;
+    int *wrapCountY = nullptr;
+    int *wrapCountZ = nullptr;
     int *index = nullptr;
-    int *num_neighbors = nullptr;
+    int *numNeighbors = nullptr;
 
     // Count is the total number of bubbles
     int count = 0;
@@ -105,23 +105,23 @@ struct Bubbles {
         setIncr(&drdto, &prev, stride);
         setIncr(&path, &prev, stride);
         setIncr(&error, &prev, stride);
-        setIncr(&temp_doubles, &prev, stride);
-        setIncr(&temp_doubles2, &prev, stride);
-        setIncr(&flow_vx, &prev, stride);
-        setIncr(&flow_vy, &prev, stride);
-        setIncr(&flow_vz, &prev, stride);
-        setIncr(&saved_x, &prev, stride);
-        setIncr(&saved_y, &prev, stride);
-        setIncr(&saved_z, &prev, stride);
-        setIncr(&saved_r, &prev, stride);
+        setIncr(&tempDoubles, &prev, stride);
+        setIncr(&tempDoubles2, &prev, stride);
+        setIncr(&flowVx, &prev, stride);
+        setIncr(&flowVy, &prev, stride);
+        setIncr(&flowVz, &prev, stride);
+        setIncr(&savedX, &prev, stride);
+        setIncr(&savedY, &prev, stride);
+        setIncr(&savedZ, &prev, stride);
+        setIncr(&savedR, &prev, stride);
 
         int *prevI = reinterpret_cast<int *>(prev);
-        setIncr(&temp_ints, &prevI, stride);
-        setIncr(&wrap_count_x, &prevI, stride);
-        setIncr(&wrap_count_y, &prevI, stride);
-        setIncr(&wrap_count_z, &prevI, stride);
+        setIncr(&tempInts, &prevI, stride);
+        setIncr(&wrapCountX, &prevI, stride);
+        setIncr(&wrapCountY, &prevI, stride);
+        setIncr(&wrapCountZ, &prevI, stride);
         setIncr(&index, &prevI, stride);
-        setIncr(&num_neighbors, &prevI, stride);
+        setIncr(&numNeighbors, &prevI, stride);
 
         assert(static_cast<char *>(start) +
                    stride * (sizeof(double) * numDP + sizeof(int) * numIP) ==
@@ -141,8 +141,8 @@ static_assert(sizeof(Bubbles) % 8 == 0);
 struct Pairs {
     int *i = nullptr;
     int *j = nullptr;
-    int *i_copy = nullptr;
-    int *j_copy = nullptr;
+    int *iCopy = nullptr;
+    int *jCopy = nullptr;
 
     int count = 0;
     uint64_t stride = 0;
@@ -153,8 +153,8 @@ struct Pairs {
         int *prev = static_cast<int *>(start);
         setIncr(&i, &prev, stride);
         setIncr(&j, &prev, stride);
-        setIncr(&i_copy, &prev, stride);
-        setIncr(&j_copy, &prev, stride);
+        setIncr(&iCopy, &prev, stride);
+        setIncr(&jCopy, &prev, stride);
 
         assert(static_cast<char *>(start) + stride * sizeof(int) * 4 ==
                reinterpret_cast<char *>(prev));
