@@ -32,8 +32,8 @@ void updateCellsAndNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
 
-    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params.pairKernelSize, 0,
-                  params.stream1, params.bubbles);
+    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, params.stream1,
+                  params.bubbles);
 
     // Reset pairs arrays to zero
     uint64_t bytes = sizeof(int) * params.pairs.stride * 4;
@@ -46,33 +46,10 @@ void updateCellsAndNeighbors(Params &params) {
                           params.hostConstants.skinRadius)))
                        .floor();
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
-    dim3 gridSize = dim3(cellDim.x, cellDim.y, cellDim.z);
-
-    // Determine the maximum number of Morton numbers for the simulation box
-    const int maxGridSize =
-        gridSize.x > gridSize.y
-            ? (gridSize.x > gridSize.z ? gridSize.x : gridSize.z)
-            : (gridSize.y > gridSize.z ? gridSize.y : gridSize.z);
-    int maxNumCells = 1;
-    while (maxNumCells < maxGridSize)
-        maxNumCells = maxNumCells << 1;
-
-    if (params.hostConstants.dimensionality == 3)
-        maxNumCells = maxNumCells * maxNumCells * maxNumCells;
-    else
-        maxNumCells = maxNumCells * maxNumCells;
-
-#ifndef NDEBUG
-    std::cout << "Max num cells: " << maxNumCells << ", grid size: ("
-              << gridSize.x << ", " << gridSize.y << ", " << gridSize.z
-              << "), avg num bubbles per cell: "
-              << params.bubbles.count / (gridSize.x * gridSize.y * gridSize.z)
-              << std::endl;
-#endif
-    assert(maxNumCells < params.pairs.stride);
+    const int numCells = cellDim.x * cellDim.y * cellDim.z;
 
     int *offsets = params.pairs.i;
-    int *sizes = params.pairs.i + maxNumCells;
+    int *sizes = params.pairs.i + numCells;
     int *cellIndices = params.pairs.iCopy;
     int *bubbleIndices = params.pairs.iCopy + 1 * params.bubbles.stride;
     int *sortedCellIndices = params.pairs.iCopy + 2 * params.bubbles.stride;
@@ -81,8 +58,8 @@ void updateCellsAndNeighbors(Params &params) {
     // Assign each bubble to a particular cell, based on the bubbles
     // position. bubbleIndices and cellIndices will be filled by this
     // kernel. Wait until the event from stream1 is recorded.
-    KERNEL_LAUNCH(bubblesToCells, params.pairKernelSize, 0, 0, cellIndices,
-                  bubbleIndices, cellDim, params.bubbles);
+    KERNEL_LAUNCH(bubblesToCells, params, 0, 0, cellIndices, bubbleIndices,
+                  cellDim, params.bubbles);
 
     // Sort both the cell and bubble indices by the cellIndices array into
     // ascending order.
@@ -93,18 +70,18 @@ void updateCellsAndNeighbors(Params &params) {
 
     // Count the number of bubbles in each cell and store those values in sizes
     params.cw.histogram<int *, int, int, int>(
-        &cub::DeviceHistogram::HistogramEven, cellIndices, sizes,
-        maxNumCells + 1, 0, maxNumCells, params.bubbles.count);
+        &cub::DeviceHistogram::HistogramEven, cellIndices, sizes, numCells + 1,
+        0, numCells, params.bubbles.count);
 
     // Count the number of bubbles in the cells before this cell, for each cell
     params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
-                                 maxNumCells);
+                                 numCells);
 
     // This kernel reorganizes the data by swapping values from one array to
     // another in a 'loopy' fashion. The pointers must be updated after the
     // kernel.
-    KERNEL_LAUNCH(reorganizeByIndex, params.defaultKernelSize, 0, 0,
-                  params.bubbles, const_cast<const int *>(sortedBubbleIndices));
+    KERNEL_LAUNCH(reorganizeByIndex, params, 0, 0, params.bubbles,
+                  const_cast<const int *>(sortedBubbleIndices));
     double *swapper = params.bubbles.xp;
     params.bubbles.xp = params.bubbles.x;
     params.bubbles.x = swapper;
@@ -154,21 +131,17 @@ void updateCellsAndNeighbors(Params &params) {
     params.bubbles.wrapCountX = params.bubbles.numNeighbors;
     params.bubbles.numNeighbors = swapperI;
 
-    KernelSize kernelSizeNeighbor = KernelSize(gridSize, dim3(128, 1, 1));
     int zero = 0;
     CUDA_CALL(
         cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
 
-    int numNeighborCells = 4;
+    int numCellsToSearch = 5;
     if (params.hostConstants.dimensionality == 3) {
-        numNeighborCells = 13;
+        numCellsToSearch = 14;
     }
-    for (int i = 0; i < numNeighborCells + 1; ++i) {
-        cudaStream_t stream = (i % 2) ? params.stream1 : params.stream2;
-        KERNEL_LAUNCH(neighborSearch, kernelSizeNeighbor, 0, stream, i,
-                      maxNumCells, offsets, sizes, params.bubbles,
-                      params.pairs);
-    }
+
+    KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, numCellsToSearch,
+                  cellDim, offsets, sizes, params.bubbles, params.pairs);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
                                    dNumPairs, sizeof(int)));
@@ -189,17 +162,16 @@ void updateCellsAndNeighbors(Params &params) {
 void deleteSmallBubbles(Params &params, int numToBeDeleted) {
     NVTX_RANGE_PUSH_A("BubbleRemoval");
 
-    KERNEL_LAUNCH(swapDataCountPairs, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
+    KERNEL_LAUNCH(swapDataCountPairs, params, 0, 0, params.bubbles,
+                  params.pairs);
 
-    KERNEL_LAUNCH(addVolumeFixPairs, params.pairKernelSize, 0, 0,
-                  params.bubbles, params.pairs);
+    KERNEL_LAUNCH(addVolumeFixPairs, params, 0, 0, params.bubbles,
+                  params.pairs);
 
     params.bubbles.count -= numToBeDeleted;
-    params.defaultKernelSize = KernelSize(128, params.bubbles.count);
     const int numBlocks =
         std::min(1024, (int)std::ceil(params.bubbles.count / 128.0));
-    params.pairKernelSize = KernelSize(dim3(numBlocks, 1, 1), dim3(128, 1, 1));
+    params.blockGrid = dim3(numBlocks, 1, 1);
 
     NVTX_RANGE_POP();
 }
@@ -210,28 +182,27 @@ double stabilize(Params &params, int numStepsToRelax) {
     double elapsedTime = 0.0;
     double error = 100000;
     params.hostData.energy1 = calculateTotalEnergy(params);
-    const int numBlocks = params.pairKernelSize.grid.x;
+    const int numBlocks = params.grid.x;
 
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
-            KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
-                          params.bubbles.count, true, params.bubbles.dxdtp,
-                          params.bubbles.dydtp, params.bubbles.dzdtp);
+            KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
+                          true, params.bubbles.dxdtp, params.bubbles.dydtp,
+                          params.bubbles.dzdtp);
 
-            KERNEL_LAUNCH(predict, params.pairKernelSize, 0, 0,
-                          params.hostData.timeStep, false, params.bubbles);
+            KERNEL_LAUNCH(predict, params, 0, 0, params.hostData.timeStep,
+                          false, params.bubbles);
 
-            KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0,
-                          params.bubbles, params.pairs);
+            KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles,
+                          params.pairs);
 
             if (params.hostConstants.xWall || params.hostConstants.yWall ||
                 params.hostConstants.zWall) {
-                KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0, 0,
-                              params.bubbles);
+                KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
             }
 
-            KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
-                          params.hostData.timeStep, false, params.bubbles);
+            KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep,
+                          false, params.bubbles);
 
             // Reduce error
             error = params.cw.reduce<double, double *, double *>(
@@ -306,56 +277,56 @@ bool integrate(Params &params) {
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
-    const int numBlocks = params.pairKernelSize.grid.x;
+    const int numBlocks = params.grid.x;
 
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
         // step
-        KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream1,
-                      0.0, params.bubbles.count, false, params.bubbles.flowVx,
+        KERNEL_LAUNCH(resetArrays, params, 0, params.stream1, 0.0,
+                      params.bubbles.count, false, params.bubbles.flowVx,
                       params.bubbles.flowVy, params.bubbles.flowVz);
-        KERNEL_LAUNCH(averageNeighborVelocity, params.pairKernelSize, 0,
-                      params.stream1, params.bubbles, params.pairs);
+        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, params.stream1,
+                      params.bubbles, params.pairs);
     }
 
     do {
         NVTX_RANGE_PUSH_A("Integration step");
-        KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, params.stream2,
-                      0.0, params.bubbles.count, true, params.bubbles.dxdtp,
+        KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
+                      params.bubbles.count, true, params.bubbles.dxdtp,
                       params.bubbles.dydtp, params.bubbles.dzdtp,
                       params.bubbles.drdtp, params.bubbles.tempDoubles,
                       params.bubbles.tempDoubles2);
 
-        KERNEL_LAUNCH(predict, params.pairKernelSize, 0, params.stream1,
+        KERNEL_LAUNCH(predict, params, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
         CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
         // Gas exchange can start immediately after predict, since they
         // are computed in the same stream
-        KERNEL_LAUNCH(pairwiseGasExchange, params.pairKernelSize, 0,
-                      params.stream1, params.bubbles, params.pairs);
-        KERNEL_LAUNCH(mediatedGasExchange, params.pairKernelSize, 0,
-                      params.stream1, params.bubbles);
+        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.pairs);
+        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
+                      params.bubbles);
 
         // Velocity calculations
         // Wait for the event recorded after predict kernel
         CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
-        KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, params.stream2,
-                      params.bubbles, params.pairs);
+        KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2, params.bubbles,
+                      params.pairs);
 
         if (params.hostData.addFlow) {
-            KERNEL_LAUNCH(imposedFlowVelocity, params.pairKernelSize, 0,
-                          params.stream2, params.bubbles);
+            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
+                          params.bubbles);
         }
 
         if (params.hostConstants.xWall || params.hostConstants.yWall ||
             params.hostConstants.zWall) {
-            KERNEL_LAUNCH(wallVelocity, params.pairKernelSize, 0,
-                          params.stream2, params.bubbles);
+            KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
+                          params.bubbles);
         }
 
-        KERNEL_LAUNCH(correct, params.pairKernelSize, 0, 0,
-                      params.hostData.timeStep, true, params.bubbles);
+        KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep, true,
+                      params.bubbles);
 
         // Reduce error
         error = params.cw.reduce<double, double *, double *>(
@@ -376,8 +347,7 @@ bool integrate(Params &params) {
         cudaMemcpyDeviceToHost, params.stream1));
 
     // Increment the path of each bubble
-    KERNEL_LAUNCH(incrementPath, params.pairKernelSize, 0, params.stream1,
-                  params.bubbles);
+    KERNEL_LAUNCH(incrementPath, params, 0, params.stream1, params.bubbles);
     CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
     // In correct kernel each block reduced a maximum value of the encountered
@@ -504,18 +474,16 @@ void stopProfiling(bool stop, bool &continueIntegration) {
 #endif
 
 double calculateTotalEnergy(Params &params) {
-    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, false, params.bubbles.tempDoubles);
-    KERNEL_LAUNCH(potentialEnergy, params.pairKernelSize, 0, 0, params.bubbles,
-                  params.pairs);
+    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+                  params.bubbles.tempDoubles);
+    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs);
     return params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.bubbles.tempDoubles,
         params.bubbles.count);
 }
 
 double calculateVolumeOfBubbles(Params &params) {
-    KERNEL_LAUNCH(calculateVolumes, params.pairKernelSize, 0, 0,
-                  params.bubbles);
+    KERNEL_LAUNCH(calculateVolumes, params, 0, 0, params.bubbles);
     return params.cw.reduce<double, double *, double *>(
         &cub::DeviceReduce::Sum, params.bubbles.tempDoubles,
         params.bubbles.count);
@@ -660,7 +628,6 @@ void deinit(Params &params) {
 }
 
 void commonSetup(Params &params) {
-    params.defaultKernelSize = KernelSize(128, params.bubbles.count);
     CUDA_ASSERT(cudaStreamCreate(&params.stream2));
     CUDA_ASSERT(cudaStreamCreate(&params.stream1));
     CUDA_CALL(cudaEventCreate(&params.event1));
@@ -747,8 +714,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
         generator, params.bubbles.r, params.bubbles.count, avgRad, stdDevRad));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(assignDataToBubbles, params.pairKernelSize, 0, 0,
-                  bubblesPerDim, avgRad, params.bubbles);
+    KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0, bubblesPerDim, avgRad,
+                  params.bubbles);
 
     params.hostConstants.averageSurfaceAreaIn =
         params.cw.reduce<double, double *, double *>(
@@ -764,8 +731,8 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     // Calculate some initial values which are needed
     // for the two-step Adams-Bashforth-Moulton predictor-corrector method
     KERNEL_LAUNCH(
-        resetArrays, params.pairKernelSize, 0, 0, 0.0, params.bubbles.count,
-        false, params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
+        resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+        params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
 
@@ -789,10 +756,9 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDeviceToDevice, 0));
 
-    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0, params.bubbles,
-                  params.pairs);
+    KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles, params.pairs);
 
-    KERNEL_LAUNCH(euler, params.pairKernelSize, 0, 0, params.hostData.timeStep,
+    KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
     // pairVelocity calculates to predicteds by accumulating values
@@ -810,8 +776,7 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(pairVelocity, params.pairKernelSize, 0, 0, params.bubbles,
-                  params.pairs);
+    KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles, params.pairs);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
@@ -943,8 +908,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
               << ", target: " << phi << "\nScaling the simulation box."
               << std::endl;
 
-    KERNEL_LAUNCH(transformPositions, params.pairKernelSize, 0, 0, true,
-                  params.bubbles);
+    KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
 
     relDim = box["relativeDimensions"];
     double t = bubbleVolume / (phi * relDim.x * relDim.y);
@@ -979,8 +943,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyHostToDevice));
 
-    KERNEL_LAUNCH(transformPositions, params.pairKernelSize, 0, 0, false,
-                  params.bubbles);
+    KERNEL_LAUNCH(transformPositions, params, 0, 0, false, params.bubbles);
 
     updateCellsAndNeighbors(params);
     // After updateCellsAndNeighbors r is correct,
@@ -1053,8 +1016,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountZ, 0, bytes));
 
     // Reset errors since integration starts after this
-    KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
-                  params.bubbles.count, false, params.bubbles.error);
+    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+                  params.bubbles.error);
 
     params.hostData.energy1 = calculateTotalEnergy(params);
     params.hostData.timeInteger = 0;
@@ -1213,8 +1176,8 @@ void run(std::string &&inputFileName) {
         }
 
         if (resetErrors) {
-            KERNEL_LAUNCH(resetArrays, params.pairKernelSize, 0, 0, 0.0,
-                          params.bubbles.count, false, params.bubbles.error);
+            KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
+                          false, params.bubbles.error);
             resetErrors = false;
         }
 

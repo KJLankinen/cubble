@@ -55,14 +55,79 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
     }
 }
 
-__global__ void neighborSearch(int neighborCellNumber, int numCells,
-                               int *offsets, int *sizes, Bubbles bubbles,
-                               Pairs pairs) {
-    const dvec interval = dConstants->interval;
+__global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
+                               const int *offsets, const int *sizes,
+                               Bubbles bubbles, Pairs pairs) {
+    DEVICE_ASSERT(blockDim.x >= 32, "Use at least 32 threads.");
+    // Loop over each cell in the simulation box
+    for (int i = blockIdx.x; i < numCells; i += gridDim.x) {
+        const int s1 = sizes[i];
+        if (0 == s1) {
+            continue;
+        }
+        // Loop over each neighbor-cell-to-consider
+        for (int j = threadIdx.x / 32; j < numNeighborCells;
+             j += blockDim.x / 32) {
+            const int ci = getNeighborCellIndex(i, cellDim, j);
+            if (ci < 0) {
+                continue;
+            }
+            const int s2 = sizes[ci];
+            if (0 == s2) {
+                continue;
+            }
+
+            const int o1 = offsets[i];
+            const int o2 = offsets[ci];
+            int numPairs = s1 * s2;
+            if (ci == i) {
+                // Comparing the cell to itself
+                numPairs = (s1 * (s1 - 1)) / 2;
+            }
+
+            // Loop over each possible pair of bubbles in the cells
+            for (int k = threadIdx.x % 32; k < numPairs; k += 32) {
+                int b1 = 0;
+                int b2 = 0;
+
+                // If we're comparing a cell to itself, only compare the
+                // "upper triangle" of values. Otherwise, compare all bubbles
+                // of one cell to all bubbles of the other cell.
+                // Insert the formula below to e.g. iPython to see what it
+                // gives.
+                if (ci == i) {
+                    b1 =
+                        s1 - 2 -
+                        (int)floor(
+                            sqrt(-8.0 * k + 4 * s1 * (s1 - 1) - 7) * 0.5 - 0.5);
+                    b2 = o1 + k + b1 + 1 - s1 * (s1 - 1) / 2 +
+                         (s1 - b1) * ((s1 - b1) - 1) / 2;
+                    b1 += o1;
+                } else {
+                    b1 = o1 + k / s2;
+                    b2 = o2 + k % s2;
+                }
+
+                DEVICE_ASSERT(b1 < bubbles.count, "Invalid bubble index!");
+                DEVICE_ASSERT(b2 < bubbles.count, "Invalid bubble index!");
+                DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
+
+                comparePair(b1, b2, bubbles, pairs);
+                DEVICE_ASSERT(pairs.stride > dNumPairs,
+                              "Too many neighbor indices!");
+            }
+        }
+    }
+}
+
+__global__ void neighborSearchOld(int neighborCellNumber, int numCells,
+                                  int *offsets, int *sizes, Bubbles bubbles,
+                                  Pairs pairs) {
     const ivec idxVec(blockIdx.x, blockIdx.y, blockIdx.z);
     const ivec dimVec(gridDim.x, gridDim.y, gridDim.z);
-    const int cellIdx2 =
-        getNeighborCellIndex(idxVec, dimVec, neighborCellNumber);
+    const int cellIdx2 = 1;
+    // const int cellIdx2 = getNeighborCellIndex(idxVec, dimVec,
+    // neighborCellNumber);
 
     if (cellIdx2 >= 0) {
         const int cellIdx1 = get1DIdxFrom3DIdx(idxVec, dimVec);
@@ -969,8 +1034,8 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
     return d2;
 }
 
-__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum) {
-    ivec idxVec = cellIdx;
+__device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum) {
+    ivec idxVec = get3DIdxFrom1DIdx(cellIdx, dim);
     switch (neighborNum) {
     case 0:
         // self
@@ -1055,36 +1120,35 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
 
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
     // Linear encoding
-    // return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x +
-    // idxVec.x;
+    return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
 
     // Morton encoding
-    if (dConstants->dimensionality == 3) {
-        return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
-                             (unsigned int)idxVec.z);
-    } else {
-        return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
-    }
+    // if (dConstants->dimensionality == 3) {
+    //    return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
+    //                         (unsigned int)idxVec.z);
+    //} else {
+    //    return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
+    //}
 }
 
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
     ivec idxVec(0, 0, 0);
     // Linear decoding
-    /*
-       idxVec.x = idx % cellDim.x;
-       idxVec.y = (idx / cellDim.x) % cellDim.y;
-if (dConstants->dimensionality == 3) {
-idxVec.z = idx / (cellDim.x * cellDim.y);
-}
-     */
+    idxVec.x = idx % cellDim.x;
+    idxVec.y = (idx / cellDim.x) % cellDim.y;
     if (dConstants->dimensionality == 3) {
-        idxVec.x = decodeMorton3x((unsigned int)idx);
-        idxVec.y = decodeMorton3y((unsigned int)idx);
-        idxVec.z = decodeMorton3z((unsigned int)idx);
-    } else {
-        idxVec.x = decodeMorton2x((unsigned int)idx);
-        idxVec.y = decodeMorton2y((unsigned int)idx);
+        idxVec.z = idx / (cellDim.x * cellDim.y);
     }
+
+    // Morton decoding
+    // if (dConstants->dimensionality == 3) {
+    //    idxVec.x = decodeMorton3x((unsigned int)idx);
+    //    idxVec.y = decodeMorton3y((unsigned int)idx);
+    //    idxVec.z = decodeMorton3z((unsigned int)idx);
+    //} else {
+    //    idxVec.x = decodeMorton2x((unsigned int)idx);
+    //    idxVec.y = decodeMorton2y((unsigned int)idx);
+    //}
 
     return idxVec;
 }

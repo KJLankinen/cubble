@@ -43,35 +43,6 @@
 #define CUBBLE_I_PI 1.0 / CUBBLE_PI
 
 namespace cubble {
-struct KernelSize {
-    dim3 grid = dim3(1, 1, 1);
-    dim3 block = dim3(1, 1, 1);
-
-    KernelSize() {}
-
-    KernelSize(dim3 grid, dim3 block) : grid(grid), block(block) {}
-
-    KernelSize(uint32_t numThreadsPerBlock, uint32_t numTotalThreads) {
-        update(numThreadsPerBlock, numTotalThreads);
-    }
-
-    void update(uint32_t numThreadsPerBlock, uint32_t numTotalThreads) {
-        block = dim3(numThreadsPerBlock, 1, 1);
-        grid = dim3(
-            (uint32_t)std::ceil(numTotalThreads / (float)numThreadsPerBlock), 1,
-            1);
-    }
-};
-
-enum class ReorganizeType {
-    COPY_FROM_INDEX,
-    COPY_TO_INDEX,
-    CONDITIONAL_FROM_INDEX,
-    CONDITIONAL_TO_INDEX,
-
-    NUM_VALUES
-};
-
 inline void handleException(const std::exception_ptr pExc) {
     using json = nlohmann::json;
     try {

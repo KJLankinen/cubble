@@ -257,8 +257,8 @@ struct Params {
     cudaEvent_t event1;
     cudaEvent_t event2;
 
-    KernelSize pairKernelSize = KernelSize(dim3(1024, 1, 1), dim3(128, 1, 1));
-    KernelSize defaultKernelSize;
+    dim3 blockGrid = dim3(1024, 1, 1);
+    dim3 threadBlock = dim3(128, 1, 1);
 
     void *memory = nullptr;
     void *pinnedMemory = nullptr;

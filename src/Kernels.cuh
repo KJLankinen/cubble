@@ -27,9 +27,12 @@ namespace cubble {
 __global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
                                ivec cellDim, Bubbles bubbles);
 __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles, Pairs &pairs);
-__global__ void neighborSearch(int neighborCellNumber, int numCells,
-                               int *offsets, int *sizes, Bubbles bubbles,
-                               Pairs pairs);
+__global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
+                               const int *offsets, const int *sizes,
+                               Bubbles bubbles, Pairs pairs);
+__global__ void neighborSearchOld(int neighborCellNumber, int numCells,
+                                  int *offsets, int *sizes, Bubbles bubbles,
+                                  Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
@@ -53,7 +56,7 @@ __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();
 __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
-__device__ int getNeighborCellIndex(ivec cellIdx, ivec dim, int neighborNum);
+__device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
@@ -72,16 +75,17 @@ __device__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
-                void (*f)(Arguments...), KernelSize kernelSize,
+                void (*f)(Arguments...), const Params &params,
                 uint32_t sharedMemBytes, cudaStream_t stream,
                 Arguments... args) {
 #ifndef NDEBUG
     assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
-    assertBlockSizeBelowLimit(kernelNameStr, file, line, kernelSize.block);
-    assertGridSizeBelowLimit(kernelNameStr, file, line, kernelSize.grid);
+    assertBlockSizeBelowLimit(kernelNameStr, file, line, params.threadBlock);
+    assertGridSizeBelowLimit(kernelNameStr, file, line, params.blockGrid);
 #endif
 
-    f<<<kernelSize.grid, kernelSize.block, sharedMemBytes, stream>>>(args...);
+    f<<<params.blockGrid, params.threadBlock, sharedMemBytes, stream>>>(
+        args...);
 
 #ifndef NDEBUG
     CUDA_ASSERT(cudaDeviceSynchronize());
