@@ -851,6 +851,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     params.hostData.avgRad = bubbles["radius"]["mean"];
     params.hostData.minNumBubbles = bubbles["numEnd"];
+    params.hostConstants.skinRadius *= params.hostData.avgRad;
 
     const double mu = constants["mu"]["value"];
     const double phi = constants["phi"]["value"];

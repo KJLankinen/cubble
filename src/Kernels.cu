@@ -219,7 +219,7 @@ __global__ void wallVelocity(Bubbles bubbles) {
                                double x, double low, double high) -> bool {
             double d1 = x - low;
             double d2 = x - high;
-            d1 = d1 * d1 > d2 * d2 ? d1 : d2;
+            d1 = d1 * d1 < d2 * d2 ? d1 : d2;
             if (rad * rad >= d1 * d1) {
                 d2 = d1 < 0.0 ? -1.0 : 1.0;
                 d1 *= d2;
@@ -1048,10 +1048,7 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     const dvec interval = dConstants->interval;
     const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
     const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-    int zid = 0;
-    if (dConstants->dimensionality == 3) {
-        zid = floor(cellDim.z * (z - lbb.z) / interval.z);
-    }
+    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
 
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
@@ -1062,11 +1059,12 @@ __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
     // idxVec.x;
 
     // Morton encoding
-    if (dConstants->dimensionality == 3)
+    if (dConstants->dimensionality == 3) {
         return encodeMorton3((unsigned int)idxVec.x, (unsigned int)idxVec.y,
                              (unsigned int)idxVec.z);
-    else
+    } else {
         return encodeMorton2((unsigned int)idxVec.x, (unsigned int)idxVec.y);
+    }
 }
 
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
