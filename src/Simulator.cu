@@ -1120,8 +1120,17 @@ void run(std::string &&inputFileName) {
 
         // Print stuff to stdout at the earliest possible moment
         // when simulation time is larger than scaled time
-        if (params.hostData.timeInteger >= nextPrintTimeInteger &&
-            params.hostData.timeFraction >= nextPrintTimeFraction) {
+        const bool print =
+            params.hostData.timeInteger > nextPrintTimeInteger ||
+            (params.hostData.timeInteger =
+                 nextPrintTimeInteger &&
+                 params.hostData.timeFraction >= nextPrintTimeFraction);
+        if (print) {
+            // Scale the tracked timesteps
+            minTimestep *= params.hostData.timeScalingFactor;
+            maxTimestep *= params.hostData.timeScalingFactor;
+            avgTimestep *= params.hostData.timeScalingFactor;
+
             // Define lambda for calculating averages of some values
             auto getAvg = [&params](double *p, Bubbles &bubbles) -> double {
                 return params.cw.reduce<double, double *, double *>(
@@ -1188,15 +1197,21 @@ void run(std::string &&inputFileName) {
         // Save snapshot
         if (params.hostData.snapshotFrequency > 0.0) {
             const double nextSnapshotTime = params.hostData.numSnapshots /
-                                            params.hostData.snapshotFrequency /
-                                            params.hostData.timeScalingFactor;
+                                            (params.hostData.snapshotFrequency *
+                                             params.hostData.timeScalingFactor);
             const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
             const double nextSnapshotTimeFraction =
                 nextSnapshotTime - nextSnapshotTimeInteger;
 
-            if (params.hostData.timeInteger >= nextSnapshotTimeInteger &&
-                params.hostData.timeFraction >= nextSnapshotTimeFraction)
+            const bool saveSnapshot =
+                params.hostData.timeInteger > nextSnapshotTimeInteger ||
+                (params.hostData.timeInteger =
+                     nextSnapshotTimeInteger &&
+                     params.hostData.timeFraction >= nextSnapshotTimeFraction);
+
+            if (saveSnapshot) {
                 saveSnapshotToFile(params);
+            }
         }
 
         if (resetErrors) {
@@ -1208,8 +1223,9 @@ void run(std::string &&inputFileName) {
         ++params.hostData.numStepsInTimeStep;
     }
 
-    if (params.hostData.snapshotFrequency > 0.0)
+    if (params.hostData.snapshotFrequency > 0.0) {
         saveSnapshotToFile(params);
+    }
 
     deinit(params);
 }
