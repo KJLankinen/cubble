@@ -30,9 +30,6 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles, Pairs &pairs);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                const int *offsets, const int *sizes,
                                Bubbles bubbles, Pairs pairs);
-__global__ void neighborSearchOld(int neighborCellNumber, int numCells,
-                                  int *offsets, int *sizes, Bubbles bubbles,
-                                  Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
