@@ -1122,9 +1122,8 @@ void run(std::string &&inputFileName) {
         // when simulation time is larger than scaled time
         const bool print =
             params.hostData.timeInteger > nextPrintTimeInteger ||
-            (params.hostData.timeInteger =
-                 nextPrintTimeInteger &&
-                 params.hostData.timeFraction >= nextPrintTimeFraction);
+            (params.hostData.timeInteger == nextPrintTimeInteger &&
+             params.hostData.timeFraction >= nextPrintTimeFraction);
         if (print) {
             // Scale the tracked timesteps
             minTimestep *= params.hostData.timeScalingFactor;
@@ -1205,9 +1204,8 @@ void run(std::string &&inputFileName) {
 
             const bool saveSnapshot =
                 params.hostData.timeInteger > nextSnapshotTimeInteger ||
-                (params.hostData.timeInteger =
-                     nextSnapshotTimeInteger &&
-                     params.hostData.timeFraction >= nextSnapshotTimeFraction);
+                (params.hostData.timeInteger == nextSnapshotTimeInteger &&
+                 params.hostData.timeFraction >= nextSnapshotTimeFraction);
 
             if (saveSnapshot) {
                 saveSnapshotToFile(params);
