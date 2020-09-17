@@ -266,6 +266,15 @@ struct Params {
     std::vector<double> previousX;
     std::vector<double> previousY;
     std::vector<double> previousZ;
+
+    void print() {
+        hostData.print();
+        hostConstants.print();
+        std::cout << "grid (" << blockGrid.x << ", " << blockGrid.y << ", "
+                  << blockGrid.z << ")"
+                  << "block (" << threadBlock.x << ", " << threadBlock.y << ", "
+                  << threadBlock.z << ")" << std::endl;
+    }
 };
 
 } // namespace cubble

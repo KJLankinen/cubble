@@ -1,5 +1,6 @@
 #pragma once
 
+#include "DataDefinitions.h"
 #include "nlohmann/json.hpp"
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -24,7 +25,7 @@
 #define CUDA_CALL(call)                                                        \
     cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
 #define CUDA_ASSERT(call)                                                      \
-    cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
+    cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__, params)
 #define CURAND_CALL(call)                                                      \
     cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
 #define KERNEL_LAUNCH(kernel, ...)                                             \
@@ -82,8 +83,9 @@ inline bool cudaCallAndLog(cudaError_t result, const char *callStr,
 }
 
 inline void cudaCallAndThrow(cudaError_t result, const char *callStr,
-                             const char *file, int line) {
+                             const char *file, int line, Params &params) {
     if (result != cudaSuccess) {
+        params.print();
         std::stringstream ss;
         getFormattedCudaErrorString(result, callStr, file, line, ss);
         throw std::runtime_error(ss.str());
