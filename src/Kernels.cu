@@ -100,8 +100,8 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                         s1 - 2 -
                         (int)floor(
                             sqrt(-8.0 * k + 4 * s1 * (s1 - 1) - 7) * 0.5 - 0.5);
-                    b2 = o1 + k + b1 + 1 - 0.5 * s1 * (s1 - 1) +
-                         0.5 * (s1 - b1) * (s1 - b1 - 1);
+                    b2 = o1 + k + b1 + 1 - s1 * (s1 - 1) / 2 +
+                         (s1 - b1) * ((s1 - b1) - 1) / 2;
                     b1 += o1;
                 } else {
                     b1 = o1 + k / s2;
