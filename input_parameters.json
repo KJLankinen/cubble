@@ -1,70 +1,130 @@
 {
-  "dimensionalityExpl" : "2D or 3D simulation?",
-  "dimensionality" : 2,
-  "phiTargetExpl": "The target volume fraction.",
-  "phiTarget": 0.9,
-  "kappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
-  "kappa": 0.1,
-  "numBubblesInExpl": "Total number of bubbles to simulate.",
-  "numBubblesIn": 1e5,
-  "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "minNumBubbles": 1000,
-  "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
-  "kParameter": 0.001,
-  "wallDragStrengthExpl" : "How strong the drag from the wall is. Should be between 0.0 and 1.0",
-  "wallDragStrength" : 0.1,
-  "xWallExpl" : "Is the x coordinate periodic or does it have a wall.",
-  "xWall" : false,
-  "yWallExpl" : "Is the y coordinate periodic or does it have a wall.",
-  "yWall" : false,
-  "zWallExpl" : "Is the z coordinate periodic or does it have a wall.",
-  "zWall" : false,
-  "boxRelDimExpl": "The relative dimension of the box.",
-  "boxRelDim": {
-    "x": 1.0,
-    "y": 1.0,
-    "z": 1.0
+  "bubbles": {
+    "comments": [
+      "How many bubbles of what size to simulate and when to stop.",
+      "The end number is an end condition for the simulation.",
+      "The simulation will stop once the number of bubbles left",
+      "in the simulation drops below the given value."
+    ],
+    "numStart": 1e5,
+    "numEnd": 1e3,
+    "radius": {
+      "comment": "Mean and standard deviation of radius of bubbles at start.",
+      "mean": 1.0,
+      "std": 0.21
+    }
   },
-  "addFlowExpl" : "Impose flow in the simulation or not",
-  "addFlow" : false,
-  "flowLbbExpl": "(Relative) Lower-back-bottom of flow area.",
-  "flowLbb": {
-    "x": 0.0,
-    "y": 0.475,
-    "z": 0.0
+  "box": {
+    "comments": [
+      "What is the size, periodicity and dimensionality of the simulation box.",
+      "Relative dimensions defines the shape of the simulation box,",
+      "while the amount and average radius of bubbles define the actual size."
+    ],
+    "dimensionality" : 2,
+    "relativeDimensions": {
+      "x": 1.0,
+      "y": 1.0,
+      "z": 1.0
+    },
+    "wall": {
+      "comments": [
+        "Which axes have walls (as opposed to periodic boundaries)",
+        "and what is the drag coefficient, if a bubble is in contact",
+        "with a wall."
+      ],
+      "drag": 0.1,
+      "x": false,
+      "y": false,
+      "z": false
+    }
   },
-  "flowTfrExpl": "(Relative) Top-front-right of flow area.",
-  "flowTfr": {
-    "x": 1.0,
-    "y": 0.525,
-    "z": 0.0
+  "flow": {
+    "comments": [
+      "Should flow be imposed or not. If true, a flow with the given velocity",
+      "is imposed on the bubbles inside the given box. The coordinates of the",
+      "flow box are relative to the simulation box, i.e. 0.5 means the center",
+      "of the simulation box."
+    ],
+    "impose": false,
+    "velocity": {
+      "x": 0.01,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "lbb": {
+      "comment": "Lower, back, bottom coordinates of the flow area.",
+      "x": 0.0,
+      "y": 0.475,
+      "z": 0.0
+    },
+    "tfr": {
+      "comment": "Top, front, right coordinates of the flow area.",
+      "x": 1.0,
+      "y": 0.525,
+      "z": 0.0
+    }
   },
-  "flowVelExpl": "Flow velocity inside flow area.",
-  "flowVel": {
-    "x": 0.01,
-    "y": 0.0,
-    "z": 0.0
+  "constants": {
+    "comment": "Physical constants used by the simulation",
+    "phi": {
+      "comment": "The target gas fraction of the foam",
+      "value": 0.9
+    },
+    "mu": {
+      "comment": "Viscosity of the fluid",
+      "value": 1.0
+    },
+    "sigma": {
+      "comment": "Surface tension of the fluid",
+      "value": 1.0
+    },
+    "kappa": {
+      "comments": [
+        "Strenght of liquid intermediated diffusion, relative to the",
+        "diffusion through thin films."
+      ],
+      "value": 0.1
+    },
+    "K": {
+      "comments": [
+        "A bundle of constants related to gas exchange.",
+        "Should be small relative to the mean of the input radius of bubbles.",
+        "See the paper by Robert Lemlich for details:",
+        "Prediction of changes in bubble size distribution due to",
+        "interbubble gas diffusion in foam.",
+        "Industrial & Engineering Chemistry Fundamentals 17.2 (1978): 89-93."
+      ],
+      "value": 0.001
+    }
   },
-  "muZeroExpl": "The viscosity of the fluid",
-  "muZero": 1.0,
-  "sigmaZeroExpl": "The surface tension (spring constant) of the fluid.",
-  "sigmaZero": 1.0,
-  "avgRadExpl": "The average radius of the bubbles.",
-  "avgRad": 1.0,
-  "stdDevRadExpl": "The standard deviation of the bubble radii.",
-  "stdDevRad": 0.21,
-  "errorToleranceExpl": "The error tolerance level for the integration.",
-  "errorTolerance": 1e-5,
-  "timeStepInExpl": "The initial time step with which to increment the simulation time.",
-  "timeStepIn": 1e-3,
-  "rngSeedExpl": "The seed for the RNG.",
-  "rngSeed": 4,
-  "numStepsToRelaxExpl": "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
-  "numStepsToRelax": 1e4,
-  "maxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "maxDeltaEnergy": 5e-6,
-  "snapshotFrequencyExpl" : "How often are snapshots saved. Bigger number can be used to get smoother animations, 0.0 means no snapshots.",
-  "snapshotFrequency" : 0.0,
-  "skinRadiusExpl" : "How far away are neighboring bubbles searched from. Relative to input average radius.",
-  "skinRadius" : 1.0
+  "errorTolerance": {
+    "comment": "The error tolerance level for the integration.",
+    "value": 1e-5
+  },
+  "rngSeed": {
+    "comment": "The seed for the RNG.",
+    "value": 4
+  },
+  "stabilization": {
+    "comments": [
+      "Number of integration steps per stabilization round.",
+      "Maximum allowed change in energy between stabilization rounds.",
+      "Stabilization continues until the energy between stabilization rounds",
+      "changes less than this treshold."
+    ],
+    "steps": 1e4,
+    "maxDeltaEnergy": 5e-6
+  },
+  "snapShot":{
+    "comments": [
+      "Name of the file where snapshots of the bubbles in the simulation",
+      "will be stored to. Full filenames will have .csv.N appended after",
+      "the given name. Frequency of 0 means no snapshots are saved,",
+      "whereas 8.5 means 8.5 snapshots are saved per (scaled)",
+      "simulation time step, i.e. a snapshot will be saved every",
+      "1/8.5th time step."
+    ],
+    "filename": "bubbles",
+    "frequency": 0.0
+  }
 }

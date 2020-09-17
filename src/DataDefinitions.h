@@ -5,6 +5,7 @@
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
 #include <array>
+#include <string>
 #include <vector>
 
 namespace {
@@ -184,7 +185,7 @@ struct Constants {
     double kParameter = 0.0;
     double kappa = 0.0;
     double wallDragStrength = 0.0;
-    double skinRadius = 0.0;
+    double skinRadius = 1.0;
     double bubbleVolumeMultiplier = 0.0;
 
     int dimensionality = 0;
@@ -210,6 +211,7 @@ struct Constants {
 
 // Only accessed by host
 struct HostData {
+    std::string snapshotFilename;
     uint64_t numIntegrationSteps = 0;
     uint64_t numNeighborsSearched = 0;
     uint64_t numStepsInTimeStep = 0;
@@ -217,7 +219,7 @@ struct HostData {
     uint64_t timeInteger = 0;
     double timeFraction = 0.0;
     double timeScalingFactor = 0.0;
-    double timeStep = 0.0;
+    double timeStep = 0.0001;
 
     double energy1 = 0.0;
     double energy2 = 0.0;

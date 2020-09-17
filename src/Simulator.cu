@@ -533,7 +533,8 @@ void saveSnapshotToFile(Params &params) {
     calculateTotalEnergy(params);
 
     std::stringstream ss;
-    ss << "snapshot.csv." << params.hostData.numSnapshots;
+    ss << params.hostData.snapshotFilename << ".csv."
+       << params.hostData.numSnapshots;
     std::ofstream file(ss.str().c_str(), std::ios::out);
     if (file.is_open()) {
         // Copy entire bubble struct to host memory
@@ -836,48 +837,53 @@ void initializeFromJson(const char *inputFileName, Params &params) {
     std::fstream file(inputFileName, std::ios::in);
     if (file.is_open()) {
         file >> inputJson;
-
-        const double mu = inputJson["muZero"];
-        assert(mu > 0);
-        assert(inputJson["wallDragStrength"] >= 0.0 &&
-               inputJson["wallDragStrength"] <= 1.0);
-
-        params.hostData.avgRad = inputJson["avgRad"];
-        params.hostConstants.minRad = 0.1 * params.hostData.avgRad;
-        params.hostConstants.fZeroPerMuZero =
-            (float)inputJson["sigmaZero"] * params.hostData.avgRad / mu;
-        params.hostConstants.flowLbb = inputJson["flowLbb"];
-        params.hostConstants.flowTfr = inputJson["flowTfr"];
-        params.hostConstants.flowVel = inputJson["flowVel"];
-        params.hostConstants.flowVel *= params.hostConstants.fZeroPerMuZero;
-        params.hostConstants.kParameter = inputJson["kParameter"];
-        params.hostConstants.kappa = inputJson["kappa"];
-        params.hostConstants.skinRadius =
-            (float)inputJson["skinRadius"] * params.hostData.avgRad;
-        params.hostData.timeScalingFactor =
-            params.hostConstants.kParameter /
-            (params.hostData.avgRad * params.hostData.avgRad);
-        params.hostData.errorTolerance = inputJson["errorTolerance"];
-        params.hostConstants.wallDragStrength = inputJson["wallDragStrength"];
-        params.hostData.snapshotFrequency = inputJson["snapshotFrequency"];
-        params.hostData.minNumBubbles = inputJson["minNumBubbles"];
-        params.hostData.addFlow = inputJson["addFlow"];
-        params.hostConstants.xWall = inputJson["xWall"];
-        params.hostConstants.yWall = inputJson["yWall"];
-        params.hostConstants.zWall = inputJson["zWall"];
-        params.hostConstants.dimensionality = inputJson["dimensionality"];
-    } else
+    } else {
         throw std::runtime_error("Couldn't open input file!");
+    }
+
+    auto constants = inputJson["constants"];
+    auto bubbles = inputJson["bubbles"];
+    auto box = inputJson["box"];
+    auto wall = box["wall"];
+    auto flow = inputJson["flow"];
+
+    const int stabilizationSteps = inputJson["stabilization"]["steps"];
+
+    params.hostData.avgRad = bubbles["radius"]["mean"];
+    params.hostData.minNumBubbles = bubbles["numEnd"];
+
+    const double mu = constants["mu"]["value"];
+    const double phi = constants["phi"]["value"];
+    params.hostConstants.minRad = 0.1 * params.hostData.avgRad;
+    params.hostConstants.fZeroPerMuZero =
+        (float)constants["sigma"]["value"] * params.hostData.avgRad / mu;
+    params.hostConstants.kParameter = constants["K"]["value"];
+    params.hostConstants.kappa = constants["kappa"]["value"];
+    params.hostData.timeScalingFactor =
+        params.hostConstants.kParameter /
+        (params.hostData.avgRad * params.hostData.avgRad);
+
+    params.hostData.addFlow = flow["impose"];
+    params.hostConstants.flowLbb = flow["lbb"];
+    params.hostConstants.flowTfr = flow["tfr"];
+    params.hostConstants.flowVel = flow["velocity"];
+    params.hostConstants.flowVel *= params.hostConstants.fZeroPerMuZero;
+
+    params.hostData.errorTolerance = inputJson["errorTolerance"]["value"];
+    params.hostData.snapshotFrequency = inputJson["snapShot"]["frequency"];
+    params.hostData.snapshotFilename = inputJson["snapShot"]["filename"];
+
+    params.hostConstants.wallDragStrength = wall["drag"];
+    params.hostConstants.xWall = wall["x"];
+    params.hostConstants.yWall = wall["y"];
+    params.hostConstants.zWall = wall["z"];
+    params.hostConstants.dimensionality = box["dimensionality"];
 
     // First calculate the size of the box and the starting number of bubbles
-    dvec relDim = inputJson["boxRelDim"];
-    assert(relDim.x > 0);
-    assert(relDim.y > 0);
-    assert(relDim.z > 0);
-
+    dvec relDim = box["relativeDimensions"];
     relDim = relDim / relDim.x;
     const float d = 2 * params.hostData.avgRad;
-    float x = (float)inputJson["numBubblesIn"] * d * d / relDim.y;
+    float x = (float)bubbles["numStart"] * d * d / relDim.y;
     ivec bubblesPerDim = ivec(0, 0, 0);
 
     if (params.hostConstants.dimensionality == 3) {
@@ -900,7 +906,6 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         d * bubblesPerDim.asType<double>() + params.hostConstants.lbb;
     params.hostConstants.interval =
         params.hostConstants.tfr - params.hostConstants.lbb;
-    params.hostData.timeStep = inputJson["timeStepIn"];
 
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
@@ -915,8 +920,8 @@ void initializeFromJson(const char *inputFileName, Params &params) {
 
     // Reserve memory etc.
     commonSetup(params);
-    generateStartingData(params, bubblesPerDim, inputJson["stdDevRad"],
-                         inputJson["rngSeed"]);
+    generateStartingData(params, bubblesPerDim, bubbles["radius"]["std"],
+                         inputJson["rngSeed"]["value"]);
 
     std::cout << "Simulation starting parameters:\n";
     params.hostConstants.print();
@@ -929,20 +934,19 @@ void initializeFromJson(const char *inputFileName, Params &params) {
               << std::endl;
 
     for (uint32_t i = 0; i < 3; ++i)
-        stabilize(params, inputJson["numStepsToRelax"]);
+        stabilize(params, stabilizationSteps);
 
     const double bubbleVolume = calculateVolumeOfBubbles(params);
     std::cout << "Volume ratios: current: "
               << bubbleVolume / getSimulationBoxVolume(params)
-              << ", target: " << inputJson["phiTarget"]
-              << "\nScaling the simulation box." << std::endl;
+              << ", target: " << phi << "\nScaling the simulation box."
+              << std::endl;
 
     KERNEL_LAUNCH(transformPositions, params.pairKernelSize, 0, 0, true,
                   params.bubbles);
 
-    relDim = inputJson["boxRelDim"];
-    double t =
-        bubbleVolume / ((float)inputJson["phiTarget"] * relDim.x * relDim.y);
+    relDim = box["relativeDimensions"];
+    double t = bubbleVolume / (phi * relDim.x * relDim.y);
     if (params.hostConstants.dimensionality == 3) {
         t /= relDim.z;
         t = std::cbrt(t);
@@ -961,8 +965,7 @@ void initializeFromJson(const char *inputFileName, Params &params) {
         params.hostConstants.interval * params.hostConstants.flowLbb +
         params.hostConstants.lbb;
 
-    double mult = (double)inputJson["phiTarget"] *
-                  getSimulationBoxVolume(params) / CUBBLE_PI;
+    double mult = phi * getSimulationBoxVolume(params) / CUBBLE_PI;
     if (params.hostConstants.dimensionality == 3) {
         mult = std::cbrt(0.75 * mult);
     } else {
@@ -988,11 +991,11 @@ void initializeFromJson(const char *inputFileName, Params &params) {
                               cudaMemcpyDeviceToDevice, 0));
 
     for (uint32_t i = 0; i < 3; ++i)
-        stabilize(params, inputJson["numStepsToRelax"]);
+        stabilize(params, stabilizationSteps);
 
     std::cout << "Volume ratios: current: "
               << bubbleVolume / getSimulationBoxVolume(params)
-              << ", target: " << inputJson["phiTarget"]
+              << ", target: " << phi
               << "\n\n=============\nStabilization\n=============" << std::endl;
 
     int numSteps = 0;
@@ -1004,31 +1007,30 @@ void initializeFromJson(const char *inputFileName, Params &params) {
               << "#searches" << std::endl;
 
     while (true) {
-        double time = stabilize(params, inputJson["numStepsToRelax"]);
+        double time = stabilize(params, stabilizationSteps);
         double deltaEnergy =
             std::abs(1.0 - params.hostData.energy1 / params.hostData.energy2) /
             time;
 
-        if (deltaEnergy < inputJson["maxDeltaEnergy"]) {
+        if (deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"]) {
             std::cout << "Final delta energy " << deltaEnergy << " after "
-                      << (numSteps + 1) * (int)inputJson["numStepsToRelax"]
-                      << " steps."
+                      << (numSteps + 1) * stabilizationSteps << " steps."
                       << "\nEnergy before: " << params.hostData.energy1
                       << ", energy after: " << params.hostData.energy2
                       << ", time: " << time * params.hostData.timeScalingFactor
                       << std::endl;
             break;
         } else if (numSteps > failsafe) {
-            std::cout << "Over " << failsafe * (int)inputJson["numStepsToRelax"]
+            std::cout << "Over " << failsafe * stabilizationSteps
                       << " steps taken and required delta energy not reached."
                       << " Check parameters." << std::endl;
             break;
         } else {
             std::cout << std::setw(10) << std::left
-                      << (numSteps + 1) * (int)inputJson["numStepsToRelax"]
-                      << std::setw(12) << std::left << std::setprecision(5)
-                      << std::scientific << deltaEnergy << std::setw(15)
-                      << std::left << std::setprecision(5) << std::fixed
+                      << (numSteps + 1) * stabilizationSteps << std::setw(12)
+                      << std::left << std::setprecision(5) << std::scientific
+                      << deltaEnergy << std::setw(15) << std::left
+                      << std::setprecision(5) << std::fixed
                       << params.hostData.energy1 << std::setw(15) << std::left
                       << std::setprecision(5) << std::fixed
                       << params.hostData.energy2 << std::setw(5) << std::left
