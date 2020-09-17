@@ -141,8 +141,7 @@ void updateCellsAndNeighbors(Params &params) {
     }
 
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, numCellsToSearch,
-                  cellDim, const_cast<const int *>(offsets),
-                  const_cast<const int *>(sizes), params.bubbles, params.pairs);
+                  cellDim, offsets, sizes, params.bubbles, params.pairs);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
                                    dNumPairs, sizeof(int)));

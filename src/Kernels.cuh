@@ -28,8 +28,8 @@ __global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
                                ivec cellDim, Bubbles bubbles);
 __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles, Pairs &pairs);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
-                               const int *offsets, const int *sizes,
-                               Bubbles bubbles, Pairs pairs);
+                               int *offsets, int *sizes, Bubbles bubbles,
+                               Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
@@ -57,18 +57,6 @@ __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
-__device__ unsigned int encodeMorton2(unsigned int x, unsigned int y);
-__device__ unsigned int encodeMorton3(unsigned int x, unsigned int y,
-                                      unsigned int z);
-__device__ unsigned int decodeMorton2x(unsigned int code);
-__device__ unsigned int decodeMorton2y(unsigned int code);
-__device__ unsigned int decodeMorton3x(unsigned int code);
-__device__ unsigned int decodeMorton3y(unsigned int code);
-__device__ unsigned int decodeMorton3z(unsigned int code);
-__device__ unsigned int part1By1(unsigned int x);
-__device__ unsigned int part1By2(unsigned int x);
-__device__ unsigned int compact1By1(unsigned int x);
-__device__ unsigned int compact1By2(unsigned int x);
 
 template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
