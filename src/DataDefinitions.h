@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-template <typename T> void setIncr(T **p, T **prev, uint64T stride) {
+template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
     *p = *prev;
     *prev += stride;
 }

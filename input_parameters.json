@@ -6,9 +6,9 @@
   "kappaExpl": "Relative strength of liquid-intermediated diffusion versus diffusion through thin films.",
   "kappa": 0.1,
   "numBubblesInExpl": "Total number of bubbles to simulate.",
-  "numBubblesIn": 1e4,
+  "numBubblesIn": 1e5,
   "minNumBubblesExpl": "The simulation runs as long as there are at least this many bubbles.",
-  "minNumBubbles": 300,
+  "minNumBubbles": 1000,
   "kParameterExpl": "A bundle of constants related to gas exchange. Should be small relative to AvgRad.",
   "kParameter": 0.001,
   "wallDragStrengthExpl" : "How strong the drag from the wall is. Should be between 0.0 and 1.0",
@@ -62,9 +62,9 @@
   "numStepsToRelaxExpl": "How many steps to take per 'relaxation round' when equilibrating the bubble bath.",
   "numStepsToRelax": 1e4,
   "maxDeltaEnergyExpl": "Maximum allowed energy change when relaxing the bubble bath.",
-  "maxDeltaEnergy": 1e-5,
+  "maxDeltaEnergy": 5e-6,
   "snapshotFrequencyExpl" : "How often are snapshots saved. Bigger number can be used to get smoother animations, 0.0 means no snapshots.",
-  "snapshotFrequency" : 1.0,
+  "snapshotFrequency" : 0.0,
   "skinRadiusExpl" : "How far away are neighboring bubbles searched from. Relative to input average radius.",
   "skinRadius" : 1.0
 }
