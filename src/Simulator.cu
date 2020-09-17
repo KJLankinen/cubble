@@ -182,7 +182,7 @@ double stabilize(Params &params, int numStepsToRelax) {
     double elapsedTime = 0.0;
     double error = 100000;
     params.hostData.energy1 = calculateTotalEnergy(params);
-    const int numBlocks = params.grid.x;
+    const int numBlocks = params.blockGrid.x;
 
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
@@ -277,7 +277,7 @@ bool integrate(Params &params) {
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
-    const int numBlocks = params.grid.x;
+    const int numBlocks = params.blockGrid.x;
 
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
