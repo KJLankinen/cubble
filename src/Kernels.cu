@@ -961,7 +961,8 @@ __device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
     if (!dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
         d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
     }
-    if (!dConstants->zWall && temp.z * temp.z < d1.z * d1.z) {
+    if (dConstants->dimensionality == 3 && !dConstants->zWall &&
+        temp.z * temp.z < d1.z * d1.z) {
         d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
     }
 
