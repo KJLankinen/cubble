@@ -427,8 +427,8 @@ bool integrate(Params &params) {
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See correct kernel for the
     // comparison & calculation.
+    CUDA_CALL(cudaEventSynchronize(params.event1));
     if (*hNumToBeDeleted > 0) {
-        CUDA_CALL(cudaEventSynchronize(params.event1));
         deleteSmallBubbles(params, *hNumToBeDeleted);
     }
 
