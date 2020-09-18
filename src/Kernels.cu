@@ -19,9 +19,6 @@ __device__ int dNumToBeDeleted;
 namespace cubble {
 __global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
                                ivec cellDim, Bubbles bubbles) {
-    const dvec lbb = dConstants->lbb;
-    const dvec tfr = dConstants->tfr;
-
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         cellIndices[i] = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
@@ -357,6 +354,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
          i += gridDim.x * blockDim.x) {
         int idx1 = pairs.i[i];
         int idx2 = pairs.j[i];
+
+        DEVICE_ASSERT(idx1 != idx2, "Bubble is a pair with itself");
 
         double r1 = bubbles.rp[idx1];
         double r2 = bubbles.rp[idx2];
@@ -1049,7 +1048,10 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     const dvec interval = dConstants->interval;
     const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
     const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-    const int zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+    int zid = 0;
+    if (dConstants->dimensionality == 3) {
+        zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+    }
 
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
