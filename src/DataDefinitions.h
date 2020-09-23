@@ -45,8 +45,6 @@ struct Bubbles {
 
     double *path = nullptr;
     double *error = nullptr;
-    double *tempDoubles = nullptr;
-    double *tempDoubles2 = nullptr;
 
     double *flowVx = nullptr;
     double *flowVy = nullptr;
@@ -57,7 +55,6 @@ struct Bubbles {
     double *savedZ = nullptr;
     double *savedR = nullptr;
 
-    int *tempInts = nullptr;
     int *wrapCountX = nullptr;
     int *wrapCountY = nullptr;
     int *wrapCountZ = nullptr;
@@ -73,8 +70,8 @@ struct Bubbles {
     uint64_t stride = 0;
 
     // How many pointers of each type do we have in this struct
-    const uint64_t numDP = 31;
-    const uint64_t numIP = 6;
+    const uint64_t numDP = 29;
+    const uint64_t numIP = 5;
 
     uint64_t getMemReq() const {
         return stride * (sizeof(double) * numDP + sizeof(int) * numIP);
@@ -106,8 +103,6 @@ struct Bubbles {
         setIncr(&drdto, &prev, stride);
         setIncr(&path, &prev, stride);
         setIncr(&error, &prev, stride);
-        setIncr(&tempDoubles, &prev, stride);
-        setIncr(&tempDoubles2, &prev, stride);
         setIncr(&flowVx, &prev, stride);
         setIncr(&flowVy, &prev, stride);
         setIncr(&flowVz, &prev, stride);
@@ -117,7 +112,6 @@ struct Bubbles {
         setIncr(&savedR, &prev, stride);
 
         int *prevI = reinterpret_cast<int *>(prev);
-        setIncr(&tempInts, &prevI, stride);
         setIncr(&wrapCountX, &prevI, stride);
         setIncr(&wrapCountY, &prevI, stride);
         setIncr(&wrapCountZ, &prevI, stride);
@@ -142,20 +136,16 @@ static_assert(sizeof(Bubbles) % 8 == 0);
 struct Pairs {
     int *i = nullptr;
     int *j = nullptr;
-    int *iCopy = nullptr;
-    int *jCopy = nullptr;
 
     int count = 0;
     uint64_t stride = 0;
 
-    uint64_t getMemReq() const { return sizeof(int) * stride * 4; }
+    uint64_t getMemReq() const { return sizeof(int) * stride * 2; }
 
     void *setupPointers(void *start) {
         int *prev = static_cast<int *>(start);
         setIncr(&i, &prev, stride);
         setIncr(&j, &prev, stride);
-        setIncr(&iCopy, &prev, stride);
-        setIncr(&jCopy, &prev, stride);
 
         assert(static_cast<char *>(start) + stride * sizeof(int) * 4 ==
                reinterpret_cast<char *>(prev));
@@ -263,9 +253,23 @@ struct Params {
     void *memory = nullptr;
     void *pinnedMemory = nullptr;
 
+    double *tempD1 = nullptr;
+    double *tempD2 = nullptr;
+    int *tempI = nullptr;
+    int *tempPair1 = nullptr;
+    int *tempPair2 = nullptr;
+
     std::vector<double> previousX;
     std::vector<double> previousY;
     std::vector<double> previousZ;
+
+    void setTempPointers(void *ptr) {
+        tempD1 = static_cast<double *>(ptr);
+        tempD2 = tempD1 + bubbles.stride;
+        tempI = reinterpret_cast<int *>(tempD2 + bubbles.stride);
+        tempPair1 = static_cast<int *>(ptr);
+        tempPair2 = tempPair1 + pairs.stride;
+    }
 };
 
 } // namespace cubble

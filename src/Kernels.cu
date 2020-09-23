@@ -36,8 +36,8 @@ __global__ void indexByCell(int *cellIndices, int *cellOffsets,
     }
 }
 
-__device__ void comparePair(int idx1, int idx2, int *histogram,
-                            Bubbles &bubbles, Pairs &pairs) {
+__device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
+                            int *pairJ, Bubbles &bubbles, Pairs &pairs) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
     dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
@@ -56,14 +56,15 @@ __device__ void comparePair(int idx1, int idx2, int *histogram,
         // Temporarily count histogram of bubbles to pairs i
         atomicAdd(&histogram[idx1], 1);
         id = atomicAdd(&dNumPairs, 1);
-        pairs.iCopy[id] = idx1;
-        pairs.jCopy[id] = idx2;
+        pairI[id] = idx1;
+        pairJ[id] = idx2;
     }
 }
 
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
-                               Bubbles bubbles, Pairs pairs) {
+                               int *pairI, int *pairJ, Bubbles bubbles,
+                               Pairs pairs) {
     DEVICE_ASSERT(blockDim.x >= 32, "Use at least 32 threads.");
     // Loop over each cell in the simulation box
     for (int i = blockIdx.x; i < numCells; i += gridDim.x) {
@@ -118,7 +119,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                 DEVICE_ASSERT(b2 < bubbles.count, "Invalid bubble index!");
                 DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
 
-                comparePair(b1, b2, histogram, bubbles, pairs);
+                comparePair(b1, b2, histogram, pairI, pairJ, bubbles, pairs);
                 DEVICE_ASSERT(pairs.stride > dNumPairs,
                               "Too many neighbor indices!");
             }
@@ -126,12 +127,13 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
     }
 }
 
-__global__ void sortPairs(Bubbles bubbles, Pairs pairs) {
+__global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
+                          int *pairJ) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        const int id = atomicSub(&bubbles.numNeighbors[pairs.iCopy[i]], 1) - 1;
-        pairs.i[id] = pairs.iCopy[i];
-        pairs.j[id] = pairs.jCopy[i];
+        const int id = atomicSub(&bubbles.numNeighbors[pairI[i]], 1) - 1;
+        pairs.i[id] = pairI[i];
+        pairs.j[id] = pairJ[i];
     }
 }
 
@@ -331,7 +333,7 @@ __global__ void imposedFlowVelocity(Bubbles bubbles) {
     }
 }
 
-__global__ void potentialEnergy(Bubbles bubbles, Pairs pairs) {
+__global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
     const dvec interval = dConstants->interval;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
@@ -348,13 +350,14 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs) {
                    wrappedDifference(p1, p2, interval).getLength();
         if (e > 0) {
             e *= e;
-            atomicAdd(&bubbles.tempDoubles[idx1], e);
-            atomicAdd(&bubbles.tempDoubles[idx2], e);
+            atomicAdd(&energy[idx1], e);
+            atomicAdd(&energy[idx2], e);
         }
     }
 }
 
-__global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
+__global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
+                                    double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
     __shared__ double ta[128];    // Total area
@@ -405,8 +408,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
             } else {
                 overlapArea = 2.0 * sqrt(overlapArea);
             }
-            atomicAdd(&bubbles.tempDoubles[idx1], overlapArea);
-            atomicAdd(&bubbles.tempDoubles[idx2], overlapArea);
+            atomicAdd(&overlap[idx1], overlapArea);
+            atomicAdd(&overlap[idx2], overlapArea);
 
             r1 = 1.0 / r1;
             r2 = 1.0 / r2;
@@ -469,7 +472,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs) {
     }
 }
 
-__global__ void mediatedGasExchange(Bubbles bubbles) {
+__global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
     // Gas exchange mediated by the liquid surrounding the bubbles,
     // a.k.a. global gas exchange
     const double kappa = dConstants->kappa;
@@ -485,10 +488,10 @@ __global__ void mediatedGasExchange(Bubbles bubbles) {
         if (dConstants->dimensionality == 3) {
             area *= 2.0 * rad;
         }
-        const double vr = bubbles.drdtp[i] +
-                          kappa * averageSurfaceAreaIn * bubbles.count /
-                              dTotalArea * (area - bubbles.tempDoubles[i]) *
-                              (invRho - 1.0 / rad);
+        const double vr = bubbles.drdtp[i] + kappa * averageSurfaceAreaIn *
+                                                 bubbles.count / dTotalArea *
+                                                 (area - overlap[i]) *
+                                                 (invRho - 1.0 / rad);
         bubbles.drdtp[i] = kParameter * vr / area;
     }
 }
@@ -516,7 +519,8 @@ __global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles) {
     }
 }
 
-__global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
+__global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
+                        double *maximums, int *toBeDeleted) {
     // Adams-Moulton integration
     const double minRad = dConstants->minRad;
     int tid = threadIdx.x;
@@ -581,7 +585,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
             if (rad > minRad) {
                 tvn[tid] += vol;
             } else {
-                bubbles.tempInts[atomicAdd(&dNumToBeDeleted, 1)] = i;
+                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = fmax(mr[tid], rad);
         }
@@ -627,11 +631,9 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles) {
                 __syncwarp();
 
                 if (tid == 0) {
-                    bubbles.tempDoubles2[blockIdx.x] = fmax(me[tid], me[1]);
-                    bubbles.tempDoubles2[blockIdx.x + gridDim.x] =
-                        fmax(mr[tid], mr[1]);
-                    bubbles.tempDoubles2[blockIdx.x + 2 * gridDim.x] =
-                        fmax(be[tid], be[1]);
+                    maximums[blockIdx.x] = fmax(me[tid], me[1]);
+                    maximums[blockIdx.x + gridDim.x] = fmax(mr[tid], mr[1]);
+                    maximums[blockIdx.x + 2 * gridDim.x] = fmax(be[tid], be[1]);
                     atomicAdd(&dTotalVolumeNew, tvn[tid] + tvn[1]);
                 }
             }
@@ -654,7 +656,8 @@ __global__ void incrementPath(Bubbles bubbles) {
     }
 }
 
-__global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
+__global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
+                                   int *toBeDeleted) {
     // Count of pairs to be deleted
     __shared__ int tbds[128];
     int tid = threadIdx.x;
@@ -668,7 +671,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
             // it will be swapped with one from the back that won't be
             // removed but which is outside the new range (i.e. would be
             // erroneously removed).
-            const int idx1 = bubbles.tempInts[i];
+            const int idx1 = toBeDeleted[i];
             if (idx1 < nNew) {
                 // Count how many values before this ith value are swapped
                 // from the back. In other words, count how many good values
@@ -676,7 +679,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 int fromBack = i;
                 int j = 0;
                 while (j < i) {
-                    if (bubbles.tempInts[j] >= nNew) {
+                    if (toBeDeleted[j] >= nNew) {
                         fromBack -= 1;
                     }
                     j += 1;
@@ -696,7 +699,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                 }
 
                 // Append the old indices for later use
-                bubbles.tempInts[i + dNumToBeDeleted] = idx2;
+                toBeDeleted[i + dNumToBeDeleted] = idx2;
 
                 // Swap all the arrays
                 swapValues(idx2, idx1, bubbles.x, bubbles.y, bubbles.z,
@@ -708,7 +711,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
                            bubbles.wrapCountY, bubbles.wrapCountZ,
                            bubbles.index, bubbles.numNeighbors);
             } else {
-                bubbles.tempInts[i + dNumToBeDeleted] = idx1;
+                toBeDeleted[i + dNumToBeDeleted] = idx1;
             }
         }
     }
@@ -718,7 +721,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
          i += blockDim.x * gridDim.x) {
         int j = 0;
         while (j < dNumToBeDeleted) {
-            const int tbd = bubbles.tempInts[j];
+            const int tbd = toBeDeleted[j];
             if (pairs.i[i] == tbd || pairs.j[i] == tbd) {
                 tbds[tid] += 1;
             }
@@ -753,7 +756,8 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs) {
     }
 }
 
-__global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
+__global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
+                                  int *toBeDeleted) {
     double volMul = dTotalVolumeNew;
     if (dConstants->dimensionality == 3) {
         volMul = rcbrt(volMul);
@@ -771,7 +775,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
         int idx2 = pairs.j[i];
         int j = 0;
         while (j < dNumToBeDeleted) {
-            int tbd = bubbles.tempInts[j];
+            int tbd = toBeDeleted[j];
             if (idx1 == tbd || idx2 == tbd) {
                 // Start from the back of pair list and go backwards until
                 // neither of the pairs is in the to-be-deleted list.
@@ -784,7 +788,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
                     const int swap2 = pairs.j[swapIdx];
                     int k = 0;
                     while (k < dNumToBeDeleted) {
-                        tbd = bubbles.tempInts[k];
+                        tbd = toBeDeleted[k];
                         if (swap1 == tbd || swap2 == tbd) {
                             pairFound = false;
                             break;
@@ -808,11 +812,11 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs) {
         j = 0;
         while (j < dNumToBeDeleted) {
             // The old, swapped indices were stored after the deleted indices
-            int swapped = bubbles.tempInts[dNumToBeDeleted + j];
+            int swapped = toBeDeleted[dNumToBeDeleted + j];
             if (idx1 == swapped) {
-                pairs.i[i] = bubbles.tempInts[j];
+                pairs.i[i] = toBeDeleted[j];
             } else if (idx2 == swapped) {
-                pairs.j[i] = bubbles.tempInts[j];
+                pairs.j[i] = toBeDeleted[j];
             }
 
             j += 1;
@@ -880,7 +884,7 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
     }
 }
 
-__global__ void calculateVolumes(Bubbles bubbles) {
+__global__ void calculateVolumes(Bubbles bubbles, double *volumes) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         const double radius = bubbles.r[i];
@@ -889,7 +893,7 @@ __global__ void calculateVolumes(Bubbles bubbles) {
             volume *= radius * 1.33333333333333333333333333;
         }
 
-        bubbles.tempDoubles[i] = volume;
+        volumes[i] = volume;
     }
 }
 
