@@ -24,12 +24,15 @@ extern __device__ int dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
-__global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
-                               ivec cellDim, Bubbles bubbles);
+__global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
+                               Bubbles bubbles);
+__global__ void indexByCell(int *cellIndices, int *cellOffsets,
+                            int *bubbleIndices, int count);
 __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles, Pairs &pairs);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, Bubbles bubbles,
                                Pairs pairs);
+__global__ void sortPairs(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
@@ -49,6 +52,7 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
 __global__ void calculateVolumes(Bubbles bubbles);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
+__global__ void addArrays(int count, const int *a, const int *b, int *c);
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();

@@ -48,40 +48,31 @@ void updateCellsAndNeighbors(Params &params) {
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
     const int numCells = cellDim.x * cellDim.y * cellDim.z;
 
-    int *offsets = params.pairs.i;
-    int *sizes = params.pairs.i + numCells;
+    int *cellOffsets = params.pairs.i;
+    int *cellSizes = params.pairs.i + numCells;
     int *cellIndices = params.pairs.iCopy;
     int *bubbleIndices = params.pairs.iCopy + 1 * params.bubbles.stride;
-    int *sortedCellIndices = params.pairs.iCopy + 2 * params.bubbles.stride;
-    int *sortedBubbleIndices = params.pairs.iCopy + 3 * params.bubbles.stride;
 
     // Assign each bubble to a particular cell, based on the bubbles
-    // position. bubbleIndices and cellIndices will be filled by this
-    // kernel. Wait until the event from stream1 is recorded.
-    KERNEL_LAUNCH(bubblesToCells, params, 0, 0, cellIndices, bubbleIndices,
-                  cellDim, params.bubbles);
+    // position and count the total number of bubbles for each cell.
+    KERNEL_LAUNCH(cellByPosition, params, 0, 0, cellIndices, cellSizes, cellDim,
+                  params.bubbles);
 
-    // Sort both the cell and bubble indices by the cellIndices array into
-    // ascending order.
-    params.cw.sortPairs<int, int>(
-        &cub::DeviceRadixSort::SortPairs, const_cast<const int *>(cellIndices),
-        sortedCellIndices, const_cast<const int *>(bubbleIndices),
-        sortedBubbleIndices, params.bubbles.count);
+    // Calculate the sum of bubbles in earlier cells and the current cell.
+    // In other words, an inclusive sum of cell sizes.
+    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, cellSizes,
+                                 cellOffsets, numCells);
 
-    // Count the number of bubbles in each cell and store those values in sizes
-    params.cw.histogram<int *, int, int, int>(
-        &cub::DeviceHistogram::HistogramEven, cellIndices, sizes, numCells + 1,
-        0, numCells, params.bubbles.count);
-
-    // Count the number of bubbles in the cells before this cell, for each cell
-    params.cw.scan<int *, int *>(&cub::DeviceScan::ExclusiveSum, sizes, offsets,
-                                 numCells);
+    // Assign an index to each bubble such that bubbles of first cell are stored
+    // first in memory, bubbles of second cell are stored second, and so on.
+    KERNEL_LAUNCH(indexByCell, params, 0, 0, cellIndices, cellOffsets,
+                  bubbleIndices, params.bubbles.count);
 
     // This kernel reorganizes the data by swapping values from one array to
     // another in a 'loopy' fashion. The pointers must be updated after the
     // kernel.
     KERNEL_LAUNCH(reorganizeByIndex, params, 0, 0, params.bubbles,
-                  const_cast<const int *>(sortedBubbleIndices));
+                  const_cast<const int *>(bubbleIndices));
     double *swapper = params.bubbles.xp;
     params.bubbles.xp = params.bubbles.x;
     params.bubbles.x = swapper;
@@ -141,7 +132,8 @@ void updateCellsAndNeighbors(Params &params) {
     }
 
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, numCellsToSearch,
-                  cellDim, offsets, sizes, params.bubbles, params.pairs);
+                  cellDim, cellOffsets, cellSizes, params.bubbles,
+                  params.pairs);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
                                    dNumPairs, sizeof(int)));
@@ -151,11 +143,28 @@ void updateCellsAndNeighbors(Params &params) {
               << ", actual num pairs: " << params.pairs.count << std::endl;
 #endif
 
-    params.cw.sortPairs<int, int>(&cub::DeviceRadixSort::SortPairs,
-                                  const_cast<const int *>(params.pairs.iCopy),
-                                  params.pairs.i,
-                                  const_cast<const int *>(params.pairs.jCopy),
-                                  params.pairs.j, params.pairs.count);
+    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, params.pairs.i,
+                                 params.bubbles.numNeighbors,
+                                 params.bubbles.count);
+
+    KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs);
+
+    // Count the number of neighbors for each bubble, i.e. the number of times
+    // a bubble appears in a pair. We can reuse the temporary buffers from
+    // earlier.
+    int *hist1 = bubbleIndices;
+    int *hist2 = cellIndices;
+    params.cw.histogram<int *, int, int, int>(
+        &cub::DeviceHistogram::HistogramEven, params.pairs.i, hist1,
+        params.bubbles.count + 1, 0, params.bubbles.count, params.pairs.count);
+    params.cw.histogram<int *, int, int, int>(
+        &cub::DeviceHistogram::HistogramEven, params.pairs.j, hist2,
+        params.bubbles.count + 1, 0, params.bubbles.count, params.pairs.count);
+
+    KERNEL_LAUNCH(addArrays, params, 0, 0, params.bubbles.count,
+                  const_cast<const int *>(hist1),
+                  const_cast<const int *>(hist2), params.bubbles.numNeighbors);
+
     NVTX_RANGE_POP();
 }
 

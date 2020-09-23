@@ -17,13 +17,22 @@ __device__ int dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
-__global__ void bubblesToCells(int *cellIndices, int *bubbleIndices,
-                               ivec cellDim, Bubbles bubbles) {
+__global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
+                               Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        cellIndices[i] = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
-                                           bubbles.z[i], cellDim);
-        bubbleIndices[i] = i;
+        const int ci = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
+                                         bubbles.z[i], cellDim);
+        cellIndices[i] = ci;
+        atomicAdd(&cellSizes[ci], 1);
+    }
+}
+
+__global__ void indexByCell(int *cellIndices, int *cellOffsets,
+                            int *bubbleIndices, int count) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+         i += gridDim.x * blockDim.x) {
+        bubbleIndices[atomicSub(&cellOffsets[cellIndices[i]], 1) - 1] = i;
     }
 }
 
@@ -44,8 +53,8 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        atomicAdd(&bubbles.numNeighbors[idx1], 1);
-        atomicAdd(&bubbles.numNeighbors[idx2], 1);
+        // Temporarily count histogram of bubbles to pairs i
+        atomicAdd(&pairs.i[idx1], 1);
         id = atomicAdd(&dNumPairs, 1);
         pairs.iCopy[id] = idx1;
         pairs.jCopy[id] = idx2;
@@ -114,6 +123,15 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                               "Too many neighbor indices!");
             }
         }
+    }
+}
+
+__global__ void sortPairs(Bubbles bubbles, Pairs pairs) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int id = atomicSub(bubbles.numNeighbors[pairs.iCopy[i]], 1) - 1;
+        pairs.i[id] = pairs.iCopy[i];
+        pairs.j[id] = pairs.jCopy[i];
     }
 }
 
@@ -920,6 +938,14 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
             area *= 2.0 * rad;
         }
         w[i] = area / bubbles.count;
+    }
+}
+
+__global__ void addArrays(int count, const int *__restrict__ a,
+                          const int *__restrict__ b, int *__restrict__ c) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+         i += gridDim.x * blockDim.x) {
+        c[i] = a[i] + b[i];
     }
 }
 
