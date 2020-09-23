@@ -213,8 +213,7 @@ double stabilize(Params &params, int numStepsToRelax) {
                        params.tempD2, static_cast<double *>(cubOutput),
                        numBlocks, (cudaStream_t)0, false);
             CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
-                                           dMaxRadius, sizeof(double),
-                                           cudaMemcpyDeviceToHost));
+                                           dMaxRadius, sizeof(double)));
 
             if (error < params.hostData.errorTolerance &&
                 params.hostData.timeStep < 0.1)
@@ -261,8 +260,7 @@ double stabilize(Params &params, int numStepsToRelax) {
                    static_cast<double *>(cubOutput), numBlocks, (cudaStream_t)0,
                    false);
         CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
-                                       dMaxRadius, sizeof(double),
-                                       cudaMemcpyDeviceToHost));
+                                       dMaxRadius, sizeof(double)));
 
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             updateCellsAndNeighbors(params);
@@ -350,7 +348,7 @@ bool integrate(Params &params) {
                    static_cast<double *>(cubOutput), numBlocks, (cudaStream_t)0,
                    false);
         CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error), dMaxRadius,
-                                       sizeof(double), cudaMemcpyDeviceToHost));
+                                       sizeof(double)));
 
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
@@ -508,7 +506,7 @@ double calculateTotalEnergy(Params &params) {
                params.tempD1, static_cast<double *>(cubOutput),
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
-                                   sizeof(double), cudaMemcpyDeviceToHost));
+                                   sizeof(double)));
 
     return total;
 }
@@ -525,7 +523,7 @@ double calculateVolumeOfBubbles(Params &params) {
                params.tempD1, static_cast<double *>(cubOutput),
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
-                                   sizeof(double), cudaMemcpyDeviceToHost));
+                                   sizeof(double)));
 
     return total;
 }
@@ -766,15 +764,13 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.rp, static_cast<double *>(cubOutput),
                params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
-                                   cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
     CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.r, static_cast<double *>(cubOutput),
                params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
-                                   cudaMemcpyDeviceToHost));
+    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     std::cout << "Updating neighbor lists." << std::endl;
     updateCellsAndNeighbors(params);
@@ -1155,8 +1151,7 @@ void run(std::string &&inputFileName) {
                            static_cast<double *>(cubOutput),
                            params.bubbles.count, (cudaStream_t)0, false);
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
-                                               dMaxRadius, sizeof(double),
-                                               cudaMemcpyDeviceToHost));
+                                               dMaxRadius, sizeof(double)));
 
                 return total / bubbles.count;
             };
