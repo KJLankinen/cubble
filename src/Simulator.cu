@@ -131,8 +131,10 @@ void updateCellsAndNeighbors(Params &params) {
         numCellsToSearch = 14;
     }
 
+    // Use second pair as temporary memory
+    int *histogram = params.pairs.j;
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, numCellsToSearch,
-                  cellDim, cellOffsets, cellSizes, params.bubbles,
+                  cellDim, cellOffsets, cellSizes, histogram, params.bubbles,
                   params.pairs);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
@@ -143,7 +145,7 @@ void updateCellsAndNeighbors(Params &params) {
               << ", actual num pairs: " << params.pairs.count << std::endl;
 #endif
 
-    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, params.pairs.i,
+    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, histogram,
                                  params.bubbles.numNeighbors,
                                  params.bubbles.count);
 

@@ -36,8 +36,8 @@ __global__ void indexByCell(int *cellIndices, int *cellOffsets,
     }
 }
 
-__device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
-                            Pairs &pairs) {
+__device__ void comparePair(int idx1, int idx2, int *histogram,
+                            Bubbles &bubbles, Pairs &pairs) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
     dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
@@ -54,7 +54,7 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
         idx2 = id;
 
         // Temporarily count histogram of bubbles to pairs i
-        atomicAdd(&pairs.i[idx1], 1);
+        atomicAdd(&histogram[idx1], 1);
         id = atomicAdd(&dNumPairs, 1);
         pairs.iCopy[id] = idx1;
         pairs.jCopy[id] = idx2;
@@ -62,8 +62,8 @@ __device__ void comparePair(int idx1, int idx2, Bubbles &bubbles,
 }
 
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
-                               int *offsets, int *sizes, Bubbles bubbles,
-                               Pairs pairs) {
+                               int *offsets, int *sizes, int *histogram,
+                               Bubbles bubbles, Pairs pairs) {
     DEVICE_ASSERT(blockDim.x >= 32, "Use at least 32 threads.");
     // Loop over each cell in the simulation box
     for (int i = blockIdx.x; i < numCells; i += gridDim.x) {
@@ -118,7 +118,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                 DEVICE_ASSERT(b2 < bubbles.count, "Invalid bubble index!");
                 DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
 
-                comparePair(b1, b2, bubbles, pairs);
+                comparePair(b1, b2, histogram, bubbles, pairs);
                 DEVICE_ASSERT(pairs.stride > dNumPairs,
                               "Too many neighbor indices!");
             }
