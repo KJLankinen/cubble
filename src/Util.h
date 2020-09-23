@@ -29,6 +29,7 @@
     cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
 #define KERNEL_LAUNCH(kernel, ...)                                             \
     cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
+#define CUB_LAUNCH(...) cubble::cubLaunch(__FILE__, __LINE__, __VA_ARGS__)
 
 // Macro for device assert.
 #ifndef NDEBUG

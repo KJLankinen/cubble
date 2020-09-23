@@ -1,4 +1,3 @@
-#include "CubWrapper.h"
 #include "DataDefinitions.h"
 #include "Kernels.cuh"
 #include "Util.h"
@@ -52,6 +51,8 @@ void updateCellsAndNeighbors(Params &params) {
     int *cellIndices = cellSizes + numCells;
     int *bubbleIndices = cellIndices + params.bubbles.stride;
     int *histogram = bubbleIndices + params.bubbles.stride;
+    void *cubPtr = static_cast<void *>(params.pairs.j);
+    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
 
     // Assign each bubble to a particular cell, based on the bubbles
     // position and count the total number of bubbles for each cell.
@@ -60,8 +61,8 @@ void updateCellsAndNeighbors(Params &params) {
 
     // Calculate the sum of bubbles in earlier cells and the current cell.
     // In other words, an inclusive sum of cell sizes.
-    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, cellSizes,
-                                 cellOffsets, numCells);
+    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, cellSizes,
+               cellOffsets, numCells, 0, false);
 
     // Assign an index to each bubble such that bubbles of first cell are stored
     // first in memory, bubbles of second cell are stored second, and so on.
@@ -143,9 +144,8 @@ void updateCellsAndNeighbors(Params &params) {
               << ", actual num pairs: " << params.pairs.count << std::endl;
 #endif
 
-    params.cw.scan<int *, int *>(&cub::DeviceScan::InclusiveSum, histogram,
-                                 params.bubbles.numNeighbors,
-                                 params.bubbles.count);
+    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, histogram,
+               params.bubbles.numNeighbors, params.bubbles.count, 0, false);
 
     KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempPair1, params.tempPair2);
@@ -154,12 +154,14 @@ void updateCellsAndNeighbors(Params &params) {
     // a bubble appears in a pair.
     int *hist1 = params.tempPair1;
     int *hist2 = hist1 + params.bubbles.count;
-    params.cw.histogram<int *, int, int, int>(
-        &cub::DeviceHistogram::HistogramEven, params.pairs.i, hist1,
-        params.bubbles.count + 1, 0, params.bubbles.count, params.pairs.count);
-    params.cw.histogram<int *, int, int, int>(
-        &cub::DeviceHistogram::HistogramEven, params.pairs.j, hist2,
-        params.bubbles.count + 1, 0, params.bubbles.count, params.pairs.count);
+    cubPtr = params.tempPair2;
+    CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
+               params.pairs.i, hist1, params.bubbles.count + 1, 0,
+               params.bubbles.count, params.pairs.count);
+
+    CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
+               params.pairs.j, hist2, params.bubbles.count + 1, 0,
+               params.bubbles.count, params.pairs.count);
 
     KERNEL_LAUNCH(addArrays, params, 0, 0, params.bubbles.count,
                   const_cast<const int *>(hist1),
@@ -192,6 +194,10 @@ double stabilize(Params &params, int numStepsToRelax) {
     double error = 100000;
     params.hostData.energy1 = calculateTotalEnergy(params);
     const int numBlocks = params.blockGrid.x;
+    void *cubPtr = params.tempPair2;
+    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+    void *cubOutput = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
 
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
@@ -214,8 +220,12 @@ double stabilize(Params &params, int numStepsToRelax) {
                           false, params.bubbles, params.tempD2, params.tempI);
 
             // Reduce error
-            error = params.cw.reduce<double, double *, double *>(
-                &cub::DeviceReduce::Max, params.tempD2, numBlocks);
+            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                       params.tempD2, static_cast<double *>(cubOutput),
+                       numBlocks, 0, false);
+            CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
+                                           dMaxRadius, sizeof(double),
+                                           cudaMemcpyDeviceToHost));
 
             if (error < params.hostData.errorTolerance &&
                 params.hostData.timeStep < 0.1)
@@ -256,8 +266,13 @@ double stabilize(Params &params, int numStepsToRelax) {
         elapsedTime += params.hostData.timeStep;
 
         // Reduce block maximum expansions to a global maximum
-        double maxExpansion = params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Max, params.tempD2 + 2 * numBlocks, numBlocks);
+        double maxExpansion = 0.0;
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                   params.tempD2 + 2 * numBlocks,
+                   static_cast<double *>(cubOutput), numBlocks, 0, false);
+        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
+                                       dMaxRadius, sizeof(double),
+                                       cudaMemcpyDeviceToHost));
 
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             updateCellsAndNeighbors(params);
@@ -281,10 +296,16 @@ bool integrate(Params &params) {
 
     double error = 100000;
     uint32_t numLoopsDone = 0;
+    const int numBlocks = params.blockGrid.x;
+
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
     int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
-    const int numBlocks = params.blockGrid.x;
+
+    void *cubPtr = params.tempPair2;
+    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+    void *cubOutput = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
 
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
@@ -335,8 +356,10 @@ bool integrate(Params &params) {
                       params.bubbles, params.tempD2, params.tempI);
 
         // Reduce error
-        error = params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Max, params.tempD2, numBlocks);
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem, params.tempD2,
+                   static_cast<double *>(cubOutput), numBlocks, 0, false);
+        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error), dMaxRadius,
+                                       sizeof(double), cudaMemcpyDeviceToHost));
 
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
@@ -361,18 +384,19 @@ bool integrate(Params &params) {
     // maximum.
     void *pDMaxRadius = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
-    params.cw.reduceNoCopy<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.tempD2 + numBlocks,
-        static_cast<double *>(pDMaxRadius), numBlocks, params.stream2);
+    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+               params.tempD2 + numBlocks, static_cast<double *>(pDMaxRadius),
+               numBlocks, params.stream2, false);
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
         cudaMemcpyDeviceToHost, params.stream2));
 
     void *pDMaxExpansion = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
-    params.cw.reduceNoCopy<double, double *, double *>(
-        &cub::DeviceReduce::Max, params.tempD2 + 2 * numBlocks,
-        static_cast<double *>(pDMaxExpansion), numBlocks, params.stream2);
+    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+               params.tempD2 + 2 * numBlocks,
+               static_cast<double *>(pDMaxExpansion), numBlocks, params.stream2,
+               false);
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
         cudaMemcpyDeviceToHost, params.stream2));
@@ -484,15 +508,33 @@ double calculateTotalEnergy(Params &params) {
                   params.tempD1);
     KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
                   params.tempD1);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.tempD1, params.bubbles.count);
+
+    double total = 0.0;
+    void *cubOutput = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+               params.pairs.getMemReq() / 2, params.tempD1,
+               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
+                                   sizeof(double), cudaMemcpyDeviceToHost));
+
+    return total;
 }
 
 double calculateVolumeOfBubbles(Params &params) {
     KERNEL_LAUNCH(calculateVolumes, params, 0, 0, params.bubbles,
                   params.tempD1);
-    return params.cw.reduce<double, double *, double *>(
-        &cub::DeviceReduce::Sum, params.tempD1, params.bubbles.count);
+
+    double total = 0.0;
+    void *cubOutput = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+               params.pairs.getMemReq() / 2, params.tempD1,
+               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
+                                   sizeof(double), cudaMemcpyDeviceToHost));
+
+    return total;
 }
 
 double getSimulationBoxVolume(Params &params) {
@@ -724,13 +766,21 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0, bubblesPerDim, avgRad,
                   params.bubbles);
 
-    params.hostConstants.averageSurfaceAreaIn =
-        params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Sum, params.bubbles.rp, params.bubbles.count);
+    void *cubOutput = nullptr;
+    void *out = static_cast<void *>(&params.hostConstants.averageSurfaceAreaIn);
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+               params.pairs.getMemReq() / 2, params.bubbles.rp,
+               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
+                                   cudaMemcpyDeviceToHost));
 
-    params.hostData.maxBubbleRadius =
-        params.cw.reduce<double, double *, double *>(
-            &cub::DeviceReduce::Max, params.bubbles.r, params.bubbles.count);
+    out = static_cast<void *>(&params.hostData.maxBubbleRadius);
+    CUB_LAUNCH(&cub::DeviceReduce::Max, params.tempPairs2,
+               params.pairs.getMemReq() / 2, params.bubbles.r,
+               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
+                                   cudaMemcpyDeviceToHost));
 
     std::cout << "Updating neighbor lists." << std::endl;
     updateCellsAndNeighbors(params);
@@ -1102,9 +1152,18 @@ void run(std::string &&inputFileName) {
 
             // Define lambda for calculating averages of some values
             auto getAvg = [&params](double *p, Bubbles &bubbles) -> double {
-                return params.cw.reduce<double, double *, double *>(
-                           &cub::DeviceReduce::Sum, p, bubbles.count) /
-                       bubbles.count;
+                void *cubOutput = nullptr;
+                double total = 0.0;
+                CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+                CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+                           params.pairs.getMemReq() / 2, p,
+                           static_cast<double *>(cubOutput),
+                           params.bubble.count, 0, false);
+                CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
+                                               dMaxRadius, sizeof(double),
+                                               cudaMemcpyDeviceToHost));
+
+                return total / bubbles.count;
             };
 
             params.hostData.energy2 = calculateTotalEnergy(params);

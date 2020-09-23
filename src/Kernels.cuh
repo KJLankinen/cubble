@@ -69,6 +69,21 @@ __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
 template <typename... Arguments>
+void cubLaunch(const char *file, int line,
+               cudaError_t (*func)(void *, size_t &, Arguments...),
+               void *tempMem, uint64_t maxMem, Arguments... args) {
+    uint64_t tempMemReq = 0;
+    (*func)(NULL, tempMemReq, args...);
+    if (tempMemReq > maxMem) {
+        std::stringstream ss;
+        ss << "Not enough temporary memory for cub function call @" << file
+           << ":" << line << ".\n";
+        throw std::runtime_error(ss.str());
+    }
+    (*func)(tempMem, args...);
+}
+
+template <typename... Arguments>
 void cudaLaunch(const char *kernelNameStr, const char *file, int line,
                 void (*f)(Arguments...), const Params &params,
                 uint32_t sharedMemBytes, cudaStream_t stream,

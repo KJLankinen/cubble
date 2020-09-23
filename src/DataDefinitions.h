@@ -1,6 +1,5 @@
 #pragma once
 
-#include "CubWrapper.h"
 #include "Util.h"
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
@@ -241,7 +240,6 @@ struct Params {
     Bubbles bubbles;
     Pairs pairs;
 
-    CubWrapper cw;
     cudaStream_t stream1;
     cudaStream_t stream2;
     cudaEvent_t event1;
