@@ -129,7 +129,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        const int id = atomicSub(bubbles.numNeighbors[pairs.iCopy[i]], 1) - 1;
+        const int id = atomicSub(&bubbles.numNeighbors[pairs.iCopy[i]], 1) - 1;
         pairs.i[id] = pairs.iCopy[i];
         pairs.j[id] = pairs.jCopy[i];
     }
