@@ -147,7 +147,7 @@ struct Pairs {
         setIncr(&i, &prev, stride);
         setIncr(&j, &prev, stride);
 
-        assert(static_cast<char *>(start) + stride * sizeof(int) * 4 ==
+        assert(static_cast<char *>(start) + stride * sizeof(int) * 2 ==
                reinterpret_cast<char *>(prev));
 
         return static_cast<void *>(prev);

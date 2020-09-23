@@ -686,6 +686,7 @@ void commonSetup(Params &params) {
     // Each named pointer is setup by these functions to point to
     // a different stride inside the continuous memory blob
     void *pairStart = params.bubbles.setupPointers(params.memory);
+    pairStart = params.pairs.setupPointers(pairStart);
     params.setTempPointers(pairStart);
 
     params.previousX.resize(params.bubbles.stride);
