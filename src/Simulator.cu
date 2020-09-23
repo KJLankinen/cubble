@@ -36,9 +36,8 @@ void updateCellsAndNeighbors(Params &params) {
                   params.bubbles);
 
     // Reset pairs arrays to zero
-    uint64_t bytes = sizeof(int) * params.pairs.stride * 4;
-    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0, bytes,
-                              params.stream2));
+    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0,
+                              params.pairs.getMemReq(), params.stream2));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
     ivec cellDim = (params.hostConstants.interval /
