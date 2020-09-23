@@ -77,7 +77,8 @@ void cubLaunch(const char *file, int line,
     if (tempMemReq > maxMem) {
         std::stringstream ss;
         ss << "Not enough temporary memory for cub function call @" << file
-           << ":" << line << ".\n";
+           << ":" << line << ".\nRequested " << tempMemReq
+           << " bytes, maximum is " << maxMem << " bytes.";
         throw std::runtime_error(ss.str());
     }
     (*func)(tempMem, tempMemReq, args...);
