@@ -52,7 +52,7 @@ void updateCellsAndNeighbors(Params &params) {
     int *bubbleIndices = cellIndices + params.bubbles.stride;
     int *histogram = bubbleIndices + params.bubbles.stride;
     void *cubPtr = static_cast<void *>(params.pairs.j);
-    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+    uint64_t maxCubMem = params.pairs.getMemReq() / 2;
 
     // Assign each bubble to a particular cell, based on the bubbles
     // position and count the total number of bubbles for each cell.
@@ -509,13 +509,13 @@ double calculateTotalEnergy(Params &params) {
     KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
                   params.tempD1);
 
+    void *cubPtr = static_cast<void *>(params.tempPair2);
     double total = 0.0;
     void *cubOutput = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
-               params.pairs.getMemReq() / 2, params.tempD1,
-               static_cast<double *>(cubOutput), params.bubbles..count, 0,
-               false);
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
+               params.tempD1, static_cast<double *>(cubOutput),
+               params.bubbles.count, 0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double), cudaMemcpyDeviceToHost));
 
@@ -526,13 +526,13 @@ double calculateVolumeOfBubbles(Params &params) {
     KERNEL_LAUNCH(calculateVolumes, params, 0, 0, params.bubbles,
                   params.tempD1);
 
+    void *cubPtr = static_cast<void *>(params.tempPair2);
     double total = 0.0;
     void *cubOutput = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
-               params.pairs.getMemReq() / 2, params.tempD1,
-               static_cast<double *>(cubOutput), params.bubbles..count, 0,
-               false);
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
+               params.tempD1, static_cast<double *>(cubOutput),
+               params.bubbles.count, 0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double), cudaMemcpyDeviceToHost));
 
@@ -768,21 +768,20 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0, bubblesPerDim, avgRad,
                   params.bubbles);
 
+    void *cubPtr = static_cast<void *>(params.tempPair2);
     void *cubOutput = nullptr;
     void *out = static_cast<void *>(&params.hostConstants.averageSurfaceAreaIn);
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
-               params.pairs.getMemReq() / 2, params.bubbles.rp,
-               static_cast<double *>(cubOutput), params.bubbles..count, 0,
-               false);
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
+               params.bubbles.rp, static_cast<double *>(cubOutput),
+               params.bubbles.count, 0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
                                    cudaMemcpyDeviceToHost));
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
-    CUB_LAUNCH(&cub::DeviceReduce::Max, params.tempPair2,
-               params.pairs.getMemReq() / 2, params.bubbles.r,
-               static_cast<double *>(cubOutput), params.bubbles..count, 0,
-               false);
+    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, params.pairs.getMemReq() / 2,
+               params.bubbles.r, static_cast<double *>(cubOutput),
+               params.bubbles.count, 0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
                                    cudaMemcpyDeviceToHost));
 
@@ -1156,13 +1155,14 @@ void run(std::string &&inputFileName) {
 
             // Define lambda for calculating averages of some values
             auto getAvg = [&params](double *p, Bubbles &bubbles) -> double {
+                void *cubPtr = static_cast<void *>(params.tempPair2);
                 void *cubOutput = nullptr;
                 double total = 0.0;
                 CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-                CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
+                CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr,
                            params.pairs.getMemReq() / 2, p,
                            static_cast<double *>(cubOutput),
-                           params.bubbles..count, 0, false);
+                           params.bubbles.count, 0, false);
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
                                                dMaxRadius, sizeof(double),
                                                cudaMemcpyDeviceToHost));
