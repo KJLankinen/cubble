@@ -151,8 +151,8 @@ void updateCellsAndNeighbors(Params &params) {
     KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempPair1, params.tempPair2);
 
-    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-                  params.bubbles.numNeighbors);
+    CUDA_CALL(cudaMemset(static_cast<void *>(params.bubbles.numNeighbors), 0,
+                         params.bubbles.count * sizeof(int)));
     KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
                   params.pairs);
 
