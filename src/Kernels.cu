@@ -53,7 +53,6 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        // Temporarily count histogram of bubbles to pairs i
         atomicAdd(&histogram[idx1], 1);
         id = atomicAdd(&dNumPairs, 1);
         pairI[id] = idx1;
@@ -134,6 +133,14 @@ __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
         const int id = atomicSub(&bubbles.numNeighbors[pairI[i]], 1) - 1;
         pairs.i[id] = pairI[i];
         pairs.j[id] = pairJ[i];
+    }
+}
+
+__global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        atomicAdd(&bubbles.numNeighbors[pairs.i[i]], 1);
+        atomicAdd(&bubbles.numNeighbors[pairs.j[i]], 1);
     }
 }
 
@@ -942,14 +949,6 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
             area *= 2.0 * rad;
         }
         w[i] = area / bubbles.count;
-    }
-}
-
-__global__ void addArrays(int count, const int *__restrict__ a,
-                          const int *__restrict__ b, int *__restrict__ c) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
-         i += gridDim.x * blockDim.x) {
-        c[i] = a[i] + b[i];
     }
 }
 

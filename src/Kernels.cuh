@@ -35,6 +35,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *pairI, int *pairJ, Bubbles bubbles,
                                Pairs pairs);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
+__global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
@@ -58,7 +59,6 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
 __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
-__global__ void addArrays(int count, const int *a, const int *b, int *c);
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();

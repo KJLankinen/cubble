@@ -151,24 +151,10 @@ void updateCellsAndNeighbors(Params &params) {
     KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempPair1, params.tempPair2);
 
-    // Count the number of neighbors for each bubble, i.e. the number of times
-    // a bubble appears in a pair.
-    int *hist1 = params.tempPair1;
-    int *hist2 = hist1 + params.bubbles.count;
-    cubPtr = params.tempPair2;
-    CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
-               params.pairs.i, hist1, params.bubbles.count + 1, 0,
-               params.bubbles.count, params.pairs.count, (cudaStream_t)0,
-               false);
-
-    CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
-               params.pairs.j, hist2, params.bubbles.count + 1, 0,
-               params.bubbles.count, params.pairs.count, (cudaStream_t)0,
-               false);
-
-    KERNEL_LAUNCH(addArrays, params, 0, 0, params.bubbles.count,
-                  const_cast<const int *>(hist1),
-                  const_cast<const int *>(hist2), params.bubbles.numNeighbors);
+    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+                  params.bubbles.numNeighbors);
+    KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
+                  params.pairs);
 
     NVTX_RANGE_POP();
 }
