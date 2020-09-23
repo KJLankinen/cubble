@@ -80,7 +80,7 @@ void cubLaunch(const char *file, int line,
            << ":" << line << ".\n";
         throw std::runtime_error(ss.str());
     }
-    (*func)(tempMem, args...);
+    (*func)(tempMem, tempMemReq, args...);
 }
 
 template <typename... Arguments>

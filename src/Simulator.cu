@@ -512,9 +512,10 @@ double calculateTotalEnergy(Params &params) {
     double total = 0.0;
     void *cubOutput = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
                params.pairs.getMemReq() / 2, params.tempD1,
-               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+               static_cast<double *>(cubOutput), params.bubbles..count, 0,
+               false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double), cudaMemcpyDeviceToHost));
 
@@ -528,9 +529,10 @@ double calculateVolumeOfBubbles(Params &params) {
     double total = 0.0;
     void *cubOutput = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
                params.pairs.getMemReq() / 2, params.tempD1,
-               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+               static_cast<double *>(cubOutput), params.bubbles..count, 0,
+               false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double), cudaMemcpyDeviceToHost));
 
@@ -769,16 +771,18 @@ void generateStartingData(Params &params, ivec bubblesPerDim, double stdDevRad,
     void *cubOutput = nullptr;
     void *out = static_cast<void *>(&params.hostConstants.averageSurfaceAreaIn);
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
                params.pairs.getMemReq() / 2, params.bubbles.rp,
-               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+               static_cast<double *>(cubOutput), params.bubbles..count, 0,
+               false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
                                    cudaMemcpyDeviceToHost));
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
-    CUB_LAUNCH(&cub::DeviceReduce::Max, params.tempPairs2,
+    CUB_LAUNCH(&cub::DeviceReduce::Max, params.tempPair2,
                params.pairs.getMemReq() / 2, params.bubbles.r,
-               static_cast<double *>(cubOutput), params.bubble.count, 0, false);
+               static_cast<double *>(cubOutput), params.bubbles..count, 0,
+               false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double),
                                    cudaMemcpyDeviceToHost));
 
@@ -1155,10 +1159,10 @@ void run(std::string &&inputFileName) {
                 void *cubOutput = nullptr;
                 double total = 0.0;
                 CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-                CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPairs2,
+                CUB_LAUNCH(&cub::DeviceReduce::Sum, params.tempPair2,
                            params.pairs.getMemReq() / 2, p,
                            static_cast<double *>(cubOutput),
-                           params.bubble.count, 0, false);
+                           params.bubbles..count, 0, false);
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
                                                dMaxRadius, sizeof(double),
                                                cudaMemcpyDeviceToHost));
