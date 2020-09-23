@@ -157,11 +157,11 @@ void updateCellsAndNeighbors(Params &params) {
     int *hist2 = hist1 + params.bubbles.count;
     cubPtr = params.tempPair2;
     CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
-               params.pairs.i, hist1, params.bubbles.count + 1, (cudaStream_t)0,
+               params.pairs.i, hist1, params.bubbles.count + 1, 0,
                params.bubbles.count, params.pairs.count);
 
     CUB_LAUNCH(&cub::DeviceHistogram::HistogramEven, cubPtr, maxCubMem,
-               params.pairs.j, hist2, params.bubbles.count + 1, (cudaStream_t)0,
+               params.pairs.j, hist2, params.bubbles.count + 1, 0,
                params.bubbles.count, params.pairs.count);
 
     KERNEL_LAUNCH(addArrays, params, 0, 0, params.bubbles.count,
