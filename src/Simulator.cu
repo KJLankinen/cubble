@@ -212,7 +212,7 @@ double stabilize(Params &params, int numStepsToRelax) {
             }
 
             KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep,
-                          false, params.bubbles, params.tempD2);
+                          false, params.bubbles, params.tempD2, params.tempI);
 
             // Reduce error
             error = params.cw.reduce<double, double *, double *>(
