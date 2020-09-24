@@ -978,7 +978,7 @@ void init(const char *inputFileName, Params &params) {
             printf("%-9.5e ", deltaEnergy);
             printf("%-9.5e ", params.hostData.energy1);
             printf("%-9.5e ", params.hostData.energy2);
-            printf("%9d\n", params.hostData.numNeighborsSearched);
+            printf("%-9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }
 
@@ -1035,7 +1035,7 @@ void run(std::string &&inputFileName) {
     printf("%-8s ", "phi");
     printf("%-6s ", "R");
     printf("%9s ", "#b   ");
-    printf("%10s ", "#pairs  ");
+    printf("%10s ", "#pairs");
     printf("%-6s ", "#steps");
     printf("%-9s ", "#searches");
     printf("%-11s ", "min ts");
@@ -1134,7 +1134,7 @@ void run(std::string &&inputFileName) {
             printf("%9d ", params.bubbles.count);
             printf("%10d ", params.pairs.count);
             printf("%6d ", params.hostData.numStepsInTimeStep);
-            printf("%9d ", params.hostData.numNeighborsSearched);
+            printf("%-9d ", params.hostData.numNeighborsSearched);
             printf("%-9.5e ", minTimestep);
             printf("%-9.5e ", maxTimestep);
             printf("%-9.5e \n",
