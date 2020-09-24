@@ -595,6 +595,10 @@ void saveSnapshot(Params &params) {
             file << ",";
             file << vzi;
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
             file << ",";
             file << vr[i];
@@ -603,12 +607,23 @@ void saveSnapshot(Params &params) {
             file << ",";
             file << energy[i];
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << sqrt(displX * displX + displY * displY + displZ * displZ);
             file << ",";
             file << error[i];
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << ind;
             file << "\n";
+
+            // Temporary
+            file.flush();
 
             params.previousX[ind] = xi;
             params.previousY[ind] = yi;
