@@ -953,7 +953,7 @@ void init(const char *inputFileName, Params &params) {
     int numSteps = 0;
     const int failsafe = 500;
 
-    printf("%-11s %-11s %-11s %-11s %-11s\n", "#steps", "dE", "e1", "e2",
+    printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
            "#searches");
     while (true) {
         double time = stabilize(params, stabilizationSteps) *
@@ -974,11 +974,11 @@ void init(const char *inputFileName, Params &params) {
                    "Constraints might be too strict.\n");
             break;
         } else {
-            printf("%-9d ", (numSteps + 1) * stabilizationSteps);
+            printf("%-7d ", (numSteps + 1) * stabilizationSteps);
             printf("%-9.5e ", deltaEnergy);
             printf("%-9.5e ", params.hostData.energy1);
             printf("%-9.5e ", params.hostData.energy2);
-            printf("%-9d\n", params.hostData.numNeighborsSearched);
+            printf("%9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }
 
@@ -1129,8 +1129,8 @@ void run(std::string &&inputFileName) {
             const double phi = totalVolume(params) / boxVolume(params);
 
             printf("%-5d ", params.hostData.timesPrinted);
-            printf("%-#9.6g ", phi);
-            printf("%-#9.4g ", relRad);
+            printf("%-#8.6g ", phi);
+            printf("%-#6.4g ", relRad);
             printf("%9d ", params.bubbles.count);
             printf("%10d ", params.pairs.count);
             printf("%6d ", params.hostData.numStepsInTimeStep);
