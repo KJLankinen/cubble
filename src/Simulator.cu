@@ -761,7 +761,7 @@ void init(const char *inputFileName, Params &params) {
 
     // If we're going to be saving snapshots, allocate enough memory to hold all
     // the device data.
-    if (0.0 < params.snapshotFrequency) {
+    if (0.0 < params.hostData.snapshotFrequency) {
         params.hostMemory.resize(bytes);
     }
 
