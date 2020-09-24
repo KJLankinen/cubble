@@ -16,16 +16,7 @@
 namespace // anonymous
 {
 using namespace cubble;
-
-// Forward declare
-#if (USE_PROFILING == 1)
-void startProfiling(bool start);
-void stopProfiling(bool stop, bool &continueIntegration);
-#endif
 double totalEnergy(Params &params);
-double totalVolume(Params &params);
-double boxVolume(Params &params);
-void saveSnapshot(Params &params);
 
 void searchNeighbors(Params &params) {
     NVTX_RANGE_PUSH_A("Neighbors");
@@ -950,6 +941,7 @@ void init(const char *inputFileName, Params &params) {
         stabilize(params, stabilizationSteps);
 
     printf("\n=============\nStabilization\n=============\n");
+    params.hostData.numNeighborsSearched = 0;
     int numSteps = 0;
     const int failsafe = 500;
 
