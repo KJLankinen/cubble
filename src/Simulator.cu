@@ -830,7 +830,7 @@ void init(const char *inputFileName, Params &params) {
     // After searchNeighbors x, y, z, r are correct,
     // but all predicted are trash. pairVelocity always uses
     // predicted values, so copy currents to predicteds
-    uint64_t bytes = params.bubbles.stride * sizeof(double);
+    bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
                               static_cast<void *>(params.bubbles.x), bytes,
                               cudaMemcpyDeviceToDevice, 0));
@@ -1169,12 +1169,12 @@ void run(std::string &&inputFileName) {
             const double nextSnapshotTimeFraction =
                 nextSnapshotTime - nextSnapshotTimeInteger;
 
-            const bool saveSnapshot =
+            const bool isSnapshotTime =
                 params.hostData.timeInteger > nextSnapshotTimeInteger ||
                 (params.hostData.timeInteger == nextSnapshotTimeInteger &&
                  params.hostData.timeFraction >= nextSnapshotTimeFraction);
 
-            if (saveSnapshot) {
+            if (isSnapshotTime) {
                 saveSnapshot(params);
             }
         }
