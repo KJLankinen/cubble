@@ -50,14 +50,13 @@ inline void handleException(const std::exception_ptr pExc) {
         if (pExc)
             std::rethrow_exception(pExc);
     } catch (const json::exception &e) {
-        std::cout << "Encountered a json parse error."
-                  << "\nMake sure the .json file is correct and filenames are "
-                     "correct.\n"
-                  << e.what() << std::endl;
+        printf("Encountered a json parse error.\nMake sure the .json file is "
+               "correct and filenames are correct.\n%s",
+               e.what());
     } catch (const std::exception &e) {
-        std::cout << "\n----------Unhandled exception----------\n"
-                  << e.what() << "\n---------------------------------------\n"
-                  << std::endl;
+        printf("\n----------Unhandled exception----------\n%s"
+               "\n---------------------------------------\n",
+               e.what());
         throw e;
     }
 }
@@ -207,31 +206,26 @@ inline void printRelevantInfoOfCurrentDevice() {
     CUDA_ASSERT(cudaGetDevice(&device));
     CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
 
-    std::cout
-        << "\n----------Properties of current device----------"
-        << "\n\n\tGeneral"
-        << "\n\t-------"
-        << "\n\tName: " << prop.name << "\n\tCompute capability: " << prop.major
-        << "." << prop.minor << "\n\n\tMemory"
-        << "\n\t------"
-        << "\n\tTotal global memory (bytes): " << prop.totalGlobalMem
-        << "\n\tShared memory per block (bytes): " << prop.sharedMemPerBlock
-        << "\n\tTotal constant memory (bytes): " << prop.totalConstMem
-        << "\n\tMaximum number of registers per block: " << prop.regsPerBlock
-        << "\n\n\tWarp, threads, blocks, grid"
-        << "\n\t---------------------------"
-        << "\n\tWarp size: " << prop.warpSize
-        << "\n\tMaximum number of threads per block: "
-        << prop.maxThreadsPerBlock << "\n\tMaximum block size: ("
-        << prop.maxThreadsDim[0] << ", " << prop.maxThreadsDim[1] << ", "
-        << prop.maxThreadsDim[2] << ")"
-        << "\n\tMaximum grid size: (" << prop.maxGridSize[0] << ", "
-        << prop.maxGridSize[1] << ", " << prop.maxGridSize[2] << ")"
-        << "\n\tMultiprocessor count: " << prop.multiProcessorCount << "\n"
-        << "\nIf you want more info, see " << __FILE__ << ":" << __LINE__
-        << "\nand 'Device Management' section of the CUDA Runtime API docs."
-        << "\n------------------------------------------------"
-        << "\n"
-        << std::endl;
+    printf("\n---------------Properties of current device----------------\n");
+    printf("\n\tGeneral\n\t-------");
+    printf("\n\tName: %s", prop.name);
+    printf("\n\tCompute capability: %d.%d", prop.major, prop.minor);
+    printf("\n\n\tMemory\n\t------");
+    printf("\n\tGlobal: %d B", prop.totalGlobalMem);
+    printf("\n\tShared per block: %d B", prop.sharedMemPerBlock);
+    printf("\n\tConstant: %d B", prop.totalConstMem);
+    printf("\n\tRegisters per block: %d", prop.regsPerBlock);
+    printf("\n\n\tWarp, threads, blocks, grid\n\t---------------------------");
+    printf("\n\tWarp size: " << prop.warpSize);
+    printf("\n\tThreads per block: %d", prop.maxThreadsPerBlock);
+    printf("\n\tBlock size: (%d, %d, %d)", prop.maxThreadsDim[0],
+           prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
+    printf("\n\tGrid size: (%d, %d, %d)", prop.maxGridSize[0],
+           prop.maxGridSize[1], prop.maxGridSize[2]);
+    printf("\n\tMultiprocessor count: %d\n", prop.multiProcessorCount);
+    printf("\nIf you want more info, see %s:%d and"
+           "\n'Device Management' section of the CUDA Runtime API docs."
+           "\n---------------------------------------------------------\n",
+           __FILE__, __LINE__);
 }
 } // namespace cubble

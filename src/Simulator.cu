@@ -643,7 +643,7 @@ void end(Params &params) {
 }
 
 void init(const char *inputFileName, Params &params) {
-    printf("=====\nInitialization\n=====\n");
+    printf("==============\nInitialization\n==============\n");
     printf("Reading inputs from %s\n", inputFileName);
     nlohmann::json inputJson;
     std::fstream file(inputFileName, std::ios::in);
@@ -734,11 +734,12 @@ void init(const char *inputFileName, Params &params) {
         (params.hostConstants.dimensionality == 3) ? 11 : 4;
     params.pairs.stride = avgNumNeighbors * params.bubbles.stride;
 
-    printf("Simulation starting parameters:\n");
+    printf(":\n---------------Starting parameters---------------\n");
     params.hostConstants.print();
     params.hostData.print();
     params.bubbles.print();
     params.pairs.print();
+    printf("-------------------------------------------------\n");
 
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
@@ -885,7 +886,7 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    printf("\nStabilizing a few rounds after creation\n");
+    printf("Stabilizing a few rounds after creation\n");
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
@@ -944,19 +945,15 @@ void init(const char *inputFileName, Params &params) {
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDeviceToDevice, 0));
 
-    printf("\nStabilizing a few rounds after scaling\n");
+    printf("Stabilizing a few rounds after scaling\n");
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
-    printf("\n\n=============\nStabilization\n=============");
+    printf("\n=============\nStabilization\n=============\n");
     int numSteps = 0;
     const int failsafe = 500;
 
-    std::cout << std::setw(10) << std::left << "#steps" << std::setw(12)
-              << std::left << "dE" << std::setw(15) << std::left << "e1"
-              << std::setw(15) << std::left << "e2" << std::setw(5) << std::left
-              << "#searches" << std::endl;
-
+    printf("%9s %9s %9s %9s %9s\n", "#steps", "dE", "e1", "e2", "#searches");
     while (true) {
         double time = stabilize(params, stabilizationSteps);
         double deltaEnergy =
@@ -964,28 +961,23 @@ void init(const char *inputFileName, Params &params) {
             time;
 
         if (deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"]) {
-            std::cout << "Final delta energy " << deltaEnergy << " after "
-                      << (numSteps + 1) * stabilizationSteps << " steps."
-                      << "\nEnergy before: " << params.hostData.energy1
-                      << ", energy after: " << params.hostData.energy2
-                      << ", time: " << time * params.hostData.timeScalingFactor
-                      << std::endl;
+            printf("Final energies:");
+            printf("\n\tbefore: %#9.9g", params.hostData.energy1);
+            printf("\n\tafter: %#9.9g", params.hostData.energy2);
+            printf("\n\tdelta: %#9.9g", deltaEnergy);
+            printf("\n\ttime: %#9.9g\n",
+                   time * params.hostData.timeScalingFactor);
             break;
         } else if (numSteps > failsafe) {
-            std::cout << "Over " << failsafe * stabilizationSteps
-                      << " steps taken and required delta energy not reached."
-                      << " Check parameters." << std::endl;
+            printf("Over %d steps taken and required delta energy not reached. "
+                   "Constraints might be too strict.\n");
             break;
         } else {
-            std::cout << std::setw(10) << std::left
-                      << (numSteps + 1) * stabilizationSteps << std::setw(12)
-                      << std::left << std::setprecision(5) << std::scientific
-                      << deltaEnergy << std::setw(15) << std::left
-                      << std::setprecision(5) << std::fixed
-                      << params.hostData.energy1 << std::setw(15) << std::left
-                      << std::setprecision(5) << std::fixed
-                      << params.hostData.energy2 << std::setw(5) << std::left
-                      << params.hostData.numNeighborsSearched << std::endl;
+            printf("%9d ", (numSteps + 1) * stabilizationSteps);
+            printf("%9.9g ", deltaEnergy);
+            printf("%9.9g ", params.hostData.energy1);
+            printf("%9.9g ", params.hostData.energy2);
+            printf("%9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }
 
@@ -1037,15 +1029,17 @@ void run(std::string &&inputFileName) {
     if (params.hostData.snapshotFrequency > 0.0)
         saveSnapshot(params);
 
-    std::cout << "\n==========\nIntegration\n==========" << std::endl;
-
-    std::cout << std::setw(10) << std::left << "T" << std::setw(10) << std::left
-              << "phi" << std::setw(10) << std::left << "R" << std::setw(10)
-              << std::left << "#b" << std::setw(10) << std::left << "#pairs"
-              << std::setw(10) << std::left << "#steps" << std::setw(10)
-              << std::left << "#searches" << std::setw(10) << std::left
-              << "min ts" << std::setw(10) << std::left << "max ts"
-              << std::setw(10) << std::left << "avg ts" << std::endl;
+    printf("\n===========\nIntegration\n===========\n");
+    printf("%9s ", "T");
+    printf("%9s ", "phi");
+    printf("%9s ", "R");
+    printf("%9s ", "#b");
+    printf("%9s ", "#pairs");
+    printf("%9s ", "#steps");
+    printf("%9s ", "#searches");
+    printf("%9s ", "min ts");
+    printf("%9s ", "max ts");
+    printf("%9s \n", "avg ts");
 
     bool continueIntegration = true;
     double minTimestep = 9999999.9;
@@ -1128,27 +1122,21 @@ void run(std::string &&inputFileName) {
                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
                            << "\n";
             } else {
-                std::cout << "Couldn't open file stream to append results to!"
-                          << std::endl;
+                printf("Couldn't open file stream to append results to!\n");
             }
 
             const double phi = totalVolume(params) / boxVolume(params);
 
-            // Print some values
-            std::cout << std::setw(10) << std::left
-                      << params.hostData.timesPrinted << std::setw(10)
-                      << std::left << std::setprecision(6) << std::fixed << phi
-                      << std::setw(10) << std::left << std::setprecision(6)
-                      << std::fixed << relRad << std::setw(10) << std::left
-                      << params.bubbles.count << std::setw(10) << std::left
-                      << params.pairs.count << std::setw(10) << std::left
-                      << params.hostData.numStepsInTimeStep << std::setw(10)
-                      << std::left << params.hostData.numNeighborsSearched
-                      << std::setw(10) << std::left << minTimestep
-                      << std::setw(10) << std::left << maxTimestep
-                      << std::setw(10) << std::left
-                      << avgTimestep / params.hostData.numStepsInTimeStep
-                      << std::endl;
+            printf("%9d ", params.hostData.timesPrinted);
+            printf("%#9.9g ", phi);
+            printf("%#9.9g ", relRad);
+            printf("%9d ", params.bubbles.count);
+            printf("%9d ", params.pairs.count);
+            printf("%9d ", params.hostData.numStepsInTimeStep);
+            printf("%9d ", params.hostData.numNeighborsSearched);
+            printf("%#9.9g ", minTimestep);
+            printf("%#9.9g ", maxTimestep);
+            printf("%#9.9g ", avgTimestep / params.hostData.numStepsInTimeStep);
 
             ++params.hostData.timesPrinted;
             params.hostData.numStepsInTimeStep = 0;

@@ -124,10 +124,7 @@ struct Bubbles {
         return static_cast<void *>(prevI);
     }
 
-    void print() {
-        std::cout << "number of bubbles: " << count << "\nstride: " << stride
-                  << std::endl;
-    }
+    void print() { printf("#bubbles: %d, stride: %d\n", count, bubbles); }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 
@@ -152,10 +149,7 @@ struct Pairs {
         return static_cast<void *>(prev);
     }
 
-    void print() {
-        std::cout << "number of pairs: " << count << "\nstride: " << stride
-                  << std::endl;
-    }
+    void print() { printf("#pairs: %d, stride: %d\n", count, bubbles); }
 };
 static_assert(sizeof(Pairs) % 8 == 0);
 
@@ -184,17 +178,23 @@ struct Constants {
     bool zWall = false;
 
     void print() {
-        std::cout << "lower back bottom: " << lbb
-                  << "\ntop front right: " << tfr << "\ninterval: " << interval
-                  << "\nflow lbb: " << flowLbb << "\nflow tfr: " << flowTfr
-                  << "\nflow vel: " << flowVel << "\nminimum radius: " << minRad
-                  << "\nf0/mu0: " << fZeroPerMuZero
-                  << "\nk parameter: " << kParameter << "\nkappa: " << kappa
-                  << "\nwall drag: " << wallDragStrength
-                  << "\nskin radius: " << skinRadius
-                  << "\n#dim: " << dimensionality << "\nx has wall: " << xWall
-                  << "\ny has wall: " << yWall << "\nz has wall: " << zWall
-                  << std::endl;
+        printf("\tlower back bottom: (%g, %g, %g)", lbb.x, lbb.y, lbb.z);
+        printf("\n\ttop front right: (%g, %g, %g)", tfr.x, tfr.y, tfr.z);
+        printf("\n\tinterval: (%g, %g, %g)", interval.x, interval.y,
+               interval.z);
+        printf("\n\tflow lbb: (%g, %g, %g)", flowLbb.x, flowLbb.y, flowLbb.z);
+        printf("\n\tflow tfr: (%g, %g, %g)", flowTfr.x, flowTfr.y, flowTfr.z);
+        printf("\n\tflow vel: (%g, %g, %g)", flowVel.x, flowVel.y, flowVel.z);
+        printf("\n\tminimum radius: %g", minRad);
+        printf("\n\tf0/mu0: %g", fZeroPerMuZero);
+        printf("\n\tk parameter: %g", kParameter);
+        printf("\n\tkappa: %g", kappa);
+        printf("\n\twall drag: %g", wallDragStrength);
+        printf("\n\tskin radius: %g", skinRadius);
+        printf("\n\tdimensions: %d", dimensionality);
+        printf("\n\tx has wall: %d", xWall);
+        printf("\n\ty has wall: %d", yWall);
+        printf("\n\tz has wall: %d\n", zWall);
     }
 };
 
@@ -224,11 +224,11 @@ struct HostData {
     bool addFlow = false;
 
     void print() {
-        std::cout << "error tolerance : " << errorTolerance
-                  << "\nsnapshot frequency : " << snapshotFrequency
-                  << "\naverage radius : " << avgRad
-                  << "\nminimum number of bubbles : " << minNumBubbles
-                  << "\nimpose flow: " << addFlow << std::endl;
+        printf("\terror tolerance: %g", errorTolerance);
+        printf("\n\tsnapshot frequency: %g", snapshotFrequency);
+        printf("\n\taverage radius: %g", avgRad);
+        printf("\n\tminimum number of bubbles: %d", minNumBubbles);
+        printf("\n\timpose flow: %d\n", addFlow);
     }
 };
 

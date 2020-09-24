@@ -13,9 +13,9 @@ int main(int argc, char **argv) {
     std::exception_ptr pExc = nullptr;
 
     if (argc != 2) {
-        std::cout << "\nUsage: " << argv[0] << " inputFile"
-                  << "\ninputFile = the name of the (.json) file that contains"
-                  << " the necessary inputs" << std::endl;
+        printf("Usage: %s inputFile,\nwhere inputFile is the name of the "
+               "(.json) file containing the simulation input.\n",
+               argv[0]);
 
         return EXIT_FAILURE;
     }
