@@ -953,7 +953,7 @@ void init(const char *inputFileName, Params &params) {
     int numSteps = 0;
     const int failsafe = 500;
 
-    printf("%-10s %-10s %-10s %-10s %-10s\n", "#steps", "dE", "e1", "e2",
+    printf("%-11s %-11s %-11s %-11s %-11s\n", "#steps", "dE", "e1", "e2",
            "#searches");
     while (true) {
         double time = stabilize(params, stabilizationSteps) *
@@ -1031,16 +1031,16 @@ void run(std::string &&inputFileName) {
         saveSnapshot(params);
 
     printf("\n===========\nIntegration\n===========\n");
-    printf("%-9s ", "T");
-    printf("%-9s ", "phi");
-    printf("%-9s ", "R");
+    printf("%-5s ", "T");
+    printf("%-8s ", "phi");
+    printf("%-6s ", "R");
     printf("%-9s ", "#b");
-    printf("%-9s ", "#pairs");
-    printf("%-9s ", "#steps");
+    printf("%-10s ", "#pairs");
+    printf("%-6s ", "#steps");
     printf("%-9s ", "#searches");
-    printf("%-9s ", "min ts");
-    printf("%-9s ", "max ts");
-    printf("%-9s \n", "avg ts");
+    printf("%-11s ", "min ts");
+    printf("%-11s ", "max ts");
+    printf("%-11s \n", "avg ts");
 
     bool continueIntegration = true;
     double minTimestep = 9999999.9;
@@ -1128,13 +1128,13 @@ void run(std::string &&inputFileName) {
 
             const double phi = totalVolume(params) / boxVolume(params);
 
-            printf("%-9d ", params.hostData.timesPrinted);
+            printf("%-5d ", params.hostData.timesPrinted);
             printf("%-#9.6g ", phi);
-            printf("%-#9.6g ", relRad);
-            printf("%-9d ", params.bubbles.count);
-            printf("%-9d ", params.pairs.count);
-            printf("%-9d ", params.hostData.numStepsInTimeStep);
-            printf("%-9d ", params.hostData.numNeighborsSearched);
+            printf("%-#9.4g ", relRad);
+            printf("%9d ", params.bubbles.count);
+            printf("%10d ", params.pairs.count);
+            printf("%6d ", params.hostData.numStepsInTimeStep);
+            printf("%9d ", params.hostData.numNeighborsSearched);
             printf("%-9.5e ", minTimestep);
             printf("%-9.5e ", maxTimestep);
             printf("%-9.5e \n",
