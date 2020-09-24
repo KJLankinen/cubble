@@ -511,13 +511,11 @@ void saveSnapshot(Params &params) {
        << params.hostData.numSnapshots;
     std::ofstream file(ss.str().c_str(), std::ios::out);
     if (file.is_open()) {
-        // Copy entire bubble struct to host memory
-        uint64_t bytes = params.bubbles.getMemReq();
-        std::vector<char> rawMem;
-        rawMem.resize(bytes);
-        void *memStart = static_cast<void *>(rawMem.data());
-        // Async copy so host can sort pointers while copy is happening
-        CUDA_CALL(cudaMemcpyAsync(memStart, params.memory, bytes,
+        // Copy all device memory to host.
+        void *memStart = static_cast<void *>(params.hostMemory.data());
+        CUDA_CALL(cudaMemcpyAsync(memStart, params.memory,
+                                  params.hostMemory.size() *
+                                      sizeof(params.hostMemory[0]),
                                   cudaMemcpyDeviceToHost, 0));
 
         // Get host pointer for each device pointer
@@ -760,6 +758,12 @@ void init(const char *inputFileName, Params &params) {
     uint64_t bytes = params.bubbles.getMemReq();
     bytes += 2 * params.pairs.getMemReq();
     CUDA_ASSERT(cudaMalloc(&params.memory, bytes));
+
+    // If we're going to be saving snapshots, allocate enough memory to hold all
+    // the device data.
+    if (0.0 < params.snapshotFrequency) {
+        params.hostMemory.resize(bytes);
+    }
 
     // Each named pointer is setup by these functions to point to
     // a different stride inside the continuous memory blob

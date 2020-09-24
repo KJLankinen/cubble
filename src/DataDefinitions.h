@@ -260,6 +260,7 @@ struct Params {
     std::vector<double> previousX;
     std::vector<double> previousY;
     std::vector<double> previousZ;
+    std::vector<char> hostMemory;
 
     void setTempPointers(void *ptr) {
         tempD1 = static_cast<double *>(ptr);
