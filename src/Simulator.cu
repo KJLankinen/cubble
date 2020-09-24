@@ -511,15 +511,18 @@ void saveSnapshot(Params &params) {
        << params.hostData.numSnapshots;
     std::ofstream file(ss.str().c_str(), std::ios::out);
     if (file.is_open()) {
+        printf("P1\n");
         // Copy entire bubble struct to host memory
         uint64_t bytes = params.bubbles.getMemReq();
         std::vector<char> rawMem;
         rawMem.resize(bytes);
         void *memStart = static_cast<void *>(rawMem.data());
+        printf("P2\n");
         // Async copy so host can sort pointers while copy is happening
         CUDA_CALL(cudaMemcpyAsync(memStart, params.memory, bytes,
                                   cudaMemcpyDeviceToHost, 0));
 
+        printf("P3\n");
         // Get host pointer for each device pointer
         auto getHostPtr = [&params,
                            &memStart](auto devPtr) -> decltype(devPtr) {
@@ -542,6 +545,7 @@ void saveSnapshot(Params &params) {
         // Starting to access the data, so need to sync to make sure all the
         // data is there
         CUDA_CALL(cudaDeviceSynchronize());
+        printf("P4\n");
 
         if (params.hostData.numSnapshots == 0) {
             // If this is the first snapshot, store current positions in the
@@ -553,6 +557,7 @@ void saveSnapshot(Params &params) {
                 params.previousZ[ind] = z[i];
             }
         }
+        printf("P5\n");
 
         file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                 "error,index\n ";
