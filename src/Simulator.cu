@@ -1034,8 +1034,8 @@ void run(std::string &&inputFileName) {
     printf("%-5s ", "T");
     printf("%-8s ", "phi");
     printf("%-6s ", "R");
-    printf("%-9s ", "#b");
-    printf("%-10s ", "#pairs");
+    printf("%9s ", "#b   ");
+    printf("%10s ", "#pairs  ");
     printf("%-6s ", "#steps");
     printf("%-9s ", "#searches");
     printf("%-11s ", "min ts");
