@@ -206,7 +206,7 @@ inline void printRelevantInfoOfCurrentDevice() {
     CUDA_ASSERT(cudaGetDevice(&device));
     CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
 
-    printf("\n---------------Properties of current device----------------\n");
+    printf("\n---------------Properties of current device----------------");
     printf("\n\tGeneral\n\t-------");
     printf("\n\tName: %s", prop.name);
     printf("\n\tCompute capability: %d.%d", prop.major, prop.minor);

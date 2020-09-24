@@ -734,7 +734,7 @@ void init(const char *inputFileName, Params &params) {
         (params.hostConstants.dimensionality == 3) ? 11 : 4;
     params.pairs.stride = avgNumNeighbors * params.bubbles.stride;
 
-    printf(":\n---------------Starting parameters---------------\n");
+    printf("---------------Starting parameters---------------\n");
     params.hostConstants.print();
     params.hostData.print();
     params.bubbles.print();
@@ -953,31 +953,32 @@ void init(const char *inputFileName, Params &params) {
     int numSteps = 0;
     const int failsafe = 500;
 
-    printf("%9s %9s %9s %9s %9s\n", "#steps", "dE", "e1", "e2", "#searches");
+    printf("%-10s %-10s %-10s %-10s %-10s\n", "#steps", "dE", "e1", "e2",
+           "#searches");
     while (true) {
-        double time = stabilize(params, stabilizationSteps);
+        double time = stabilize(params, stabilizationSteps) *
+                      params.hostData.timeScalingFactor;
         double deltaEnergy =
             std::abs(1.0 - params.hostData.energy1 / params.hostData.energy2) /
             time;
 
         if (deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"]) {
             printf("Final energies:");
-            printf("\n\tbefore: %#9.9g", params.hostData.energy1);
-            printf("\n\tafter: %#9.9g", params.hostData.energy2);
-            printf("\n\tdelta: %#9.9g", deltaEnergy);
-            printf("\n\ttime: %#9.9g\n",
-                   time * params.hostData.timeScalingFactor);
+            printf("\nbefore: %9.5e", params.hostData.energy1);
+            printf("\nafter: %9.5e", params.hostData.energy2);
+            printf("\ndelta: %9.5e", deltaEnergy);
+            printf("\ntime: %9.5g\n", time);
             break;
         } else if (numSteps > failsafe) {
             printf("Over %d steps taken and required delta energy not reached. "
                    "Constraints might be too strict.\n");
             break;
         } else {
-            printf("%9d ", (numSteps + 1) * stabilizationSteps);
-            printf("%9.9g ", deltaEnergy);
-            printf("%9.9g ", params.hostData.energy1);
-            printf("%9.9g ", params.hostData.energy2);
-            printf("%9d\n", params.hostData.numNeighborsSearched);
+            printf("%-9d ", (numSteps + 1) * stabilizationSteps);
+            printf("%-9.5e ", deltaEnergy);
+            printf("%-9.5e ", params.hostData.energy1);
+            printf("%-9.5e ", params.hostData.energy2);
+            printf("%-9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }
 
@@ -1030,16 +1031,16 @@ void run(std::string &&inputFileName) {
         saveSnapshot(params);
 
     printf("\n===========\nIntegration\n===========\n");
-    printf("%9s ", "T");
-    printf("%9s ", "phi");
-    printf("%9s ", "R");
-    printf("%9s ", "#b");
-    printf("%9s ", "#pairs");
-    printf("%9s ", "#steps");
-    printf("%9s ", "#searches");
-    printf("%9s ", "min ts");
-    printf("%9s ", "max ts");
-    printf("%9s \n", "avg ts");
+    printf("%-9s ", "T");
+    printf("%-9s ", "phi");
+    printf("%-9s ", "R");
+    printf("%-9s ", "#b");
+    printf("%-9s ", "#pairs");
+    printf("%-9s ", "#steps");
+    printf("%-9s ", "#searches");
+    printf("%-9s ", "min ts");
+    printf("%-9s ", "max ts");
+    printf("%-9s \n", "avg ts");
 
     bool continueIntegration = true;
     double minTimestep = 9999999.9;
@@ -1127,16 +1128,17 @@ void run(std::string &&inputFileName) {
 
             const double phi = totalVolume(params) / boxVolume(params);
 
-            printf("%9d ", params.hostData.timesPrinted);
-            printf("%#9.9g ", phi);
-            printf("%#9.9g ", relRad);
-            printf("%9d ", params.bubbles.count);
-            printf("%9d ", params.pairs.count);
-            printf("%9d ", params.hostData.numStepsInTimeStep);
-            printf("%9d ", params.hostData.numNeighborsSearched);
-            printf("%#9.9g ", minTimestep);
-            printf("%#9.9g ", maxTimestep);
-            printf("%#9.9g ", avgTimestep / params.hostData.numStepsInTimeStep);
+            printf("%-9d ", params.hostData.timesPrinted);
+            printf("%-#9.6g ", phi);
+            printf("%-#9.6g ", relRad);
+            printf("%-9d ", params.bubbles.count);
+            printf("%-9d ", params.pairs.count);
+            printf("%-9d ", params.hostData.numStepsInTimeStep);
+            printf("%-9d ", params.hostData.numNeighborsSearched);
+            printf("%-9.5e ", minTimestep);
+            printf("%-9.5e ", maxTimestep);
+            printf("%-9.5e \n",
+                   avgTimestep / params.hostData.numStepsInTimeStep);
 
             ++params.hostData.timesPrinted;
             params.hostData.numStepsInTimeStep = 0;

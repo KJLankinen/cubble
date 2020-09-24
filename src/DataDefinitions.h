@@ -124,7 +124,7 @@ struct Bubbles {
         return static_cast<void *>(prevI);
     }
 
-    void print() { printf("#bubbles: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#bubbles: %d, stride: %d\n", count, stride); }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 
@@ -149,7 +149,7 @@ struct Pairs {
         return static_cast<void *>(prev);
     }
 
-    void print() { printf("#pairs: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#pairs: %d, stride: %d\n", count, stride); }
 };
 static_assert(sizeof(Pairs) % 8 == 0);
 
