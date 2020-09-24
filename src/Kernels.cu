@@ -952,6 +952,12 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
     }
 }
 
+__global__ void initGlobals() {
+    if (0 == threadIdx.x + blockIdx.x) {
+        resetDeviceGlobals();
+    }
+}
+
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg) {
     if (condition == false) {
@@ -1113,5 +1119,6 @@ __device__ void resetDeviceGlobals() {
     dMaxExpansion = 0.0;
     dNumToBeDeleted = 0;
     dNumPairsNew = dNumPairs;
+    dErrorEncountered = false;
 }
 } // namespace cubble
