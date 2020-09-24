@@ -595,54 +595,23 @@ void saveSnapshot(Params &params) {
             file << ",";
             file << vzi;
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << vr[i];
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << path[i];
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << energy[i];
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << sqrt(displX * displX + displY * displY + displZ * displZ);
             file << ",";
             file << error[i];
             file << ",";
-
-            // Temporary
-            file.flush();
-
             file << ind;
             file << "\n";
-
-            // Temporary
-            file.flush();
-
             params.previousX[ind] = xi;
             params.previousY[ind] = yi;
             params.previousZ[ind] = zi;
-
-            // Temporary
-            file.flush();
         }
 
         ++params.hostData.numSnapshots;
