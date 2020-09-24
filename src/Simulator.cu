@@ -601,10 +601,22 @@ void saveSnapshot(Params &params) {
 
             file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << vr[i];
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << path[i];
             file << ",";
+
+            // Temporary
+            file.flush();
+
             file << energy[i];
             file << ",";
 
