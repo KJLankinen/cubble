@@ -560,7 +560,8 @@ void saveSnapshot(Params &params) {
         printf("P5\n");
 
         file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
-                "error,index\n ";
+                "error,index\n";
+        printf("P6\n");
         for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
             const int ind = index[i];
             const double xi = x[i];
@@ -620,6 +621,7 @@ void saveSnapshot(Params &params) {
             params.previousZ[ind] = zi;
         }
 
+        printf("P7\n");
         ++params.hostData.numSnapshots;
     }
 }
