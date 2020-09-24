@@ -211,12 +211,12 @@ inline void printRelevantInfoOfCurrentDevice() {
     printf("\n\tName: %s", prop.name);
     printf("\n\tCompute capability: %d.%d", prop.major, prop.minor);
     printf("\n\n\tMemory\n\t------");
-    printf("\n\tGlobal: %d B", prop.totalGlobalMem);
-    printf("\n\tShared per block: %d B", prop.sharedMemPerBlock);
-    printf("\n\tConstant: %d B", prop.totalConstMem);
+    printf("\n\tGlobal: %u B", prop.totalGlobalMem);
+    printf("\n\tShared per block: %u B", prop.sharedMemPerBlock);
+    printf("\n\tConstant: %u B", prop.totalConstMem);
     printf("\n\tRegisters per block: %d", prop.regsPerBlock);
     printf("\n\n\tWarp, threads, blocks, grid\n\t---------------------------");
-    printf("\n\tWarp size: " << prop.warpSize);
+    printf("\n\tWarp size: %d", prop.warpSize);
     printf("\n\tThreads per block: %d", prop.maxThreadsPerBlock);
     printf("\n\tBlock size: (%d, %d, %d)", prop.maxThreadsDim[0],
            prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
