@@ -504,13 +504,6 @@ double boxVolume(Params &params) {
 }
 
 void saveSnapshot(Params &params) {
-    // This lambda helps calculate the host address for each pointer from the
-    // device address.
-    auto getHostPtr = [&params, &memStart](auto devPtr) -> decltype(devPtr) {
-        return static_cast<decltype(devPtr)>(memStart) +
-               (devPtr - static_cast<decltype(devPtr)>(params.memory));
-    };
-
     // Calculate energies of bubbles to tempD1, but don't reduce.
     KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
                   params.tempD1);
@@ -528,8 +521,14 @@ void saveSnapshot(Params &params) {
         cudaMemcpyAsync(memStart, params.memory,
                         params.hostMemory.size() * sizeof(params.hostMemory[0]),
                         cudaMemcpyDeviceToHost, 0));
-
     CUDA_CALL(cudaEventRecord(params.snapshotParams.event, 0));
+
+    // This lambda helps calculate the host address for each pointer from the
+    // device address.
+    auto getHostPtr = [&params, &memStart](auto devPtr) -> decltype(devPtr) {
+        return static_cast<decltype(devPtr)>(memStart) +
+               (devPtr - static_cast<decltype(devPtr)>(params.memory));
+    };
 
     // Get the host pointers from the device pointers
     params.snapshotParams.x = getHostPtr(params.bubbles.x);
@@ -560,7 +559,7 @@ void saveSnapshot(Params &params) {
             CUDA_CALL(cudaEventSynchronize(params.event));
             file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                     "error,index\n";
-            for (uint64_t i = 0; i < count; ++i) {
+            for (uint64_t i = 0; i < params.count; ++i) {
                 const int ind = params.index[i];
                 const double xi = params.x[i];
                 const double yi = params.y[i];
@@ -1003,7 +1002,7 @@ void init(const char *inputFileName, Params &params) {
         ++numSteps;
     }
 
-    if (0.0 < params.snapshotFrequency) {
+    if (0.0 < params.hostData.snapshotFrequency) {
         // Set starting positions.
         // Avoiding batched copy, because the pointers might not be in order
         int *index = reinterpret_cast<int *>(params.hostMemory.data());
