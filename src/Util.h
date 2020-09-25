@@ -5,9 +5,9 @@
 #include <cuda_runtime_api.h>
 #include <curand.h>
 #include <exception>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <stdio.h>
 
 #if (USE_PROFILING == 1)
 #define NVTX_RANGE_PUSH_A(string) nvtxRangePushA(string)

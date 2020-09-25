@@ -4,12 +4,14 @@
 #include "Vec.h"
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
+#include <algorithm>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
-#include <iostream>
+#include <functional>
 #include <nvToolsExt.h>
 #include <sstream>
+#include <stdio.h>
 #include <string>
 #include <vector>
 
@@ -502,121 +504,136 @@ double boxVolume(Params &params) {
 }
 
 void saveSnapshot(Params &params) {
-    // Should measure at some point how long it takes to save a snapshot
-    // since there are many optimization possibilities here.
-    totalEnergy(params);
+    // This lambda helps calculate the host address for each pointer from the
+    // device address.
+    auto getHostPtr = [&params, &memStart](auto devPtr) -> decltype(devPtr) {
+        return static_cast<decltype(devPtr)>(memStart) +
+               (devPtr - static_cast<decltype(devPtr)>(params.memory));
+    };
 
-    std::stringstream ss;
-    ss << params.hostData.snapshotFilename << ".csv."
-       << params.hostData.numSnapshots;
-    std::ofstream file(ss.str().c_str(), std::ios::out);
-    if (file.is_open()) {
-        // Copy all device memory to host.
-        void *memStart = static_cast<void *>(params.hostMemory.data());
-        CUDA_CALL(cudaMemcpyAsync(memStart, params.memory,
-                                  params.hostMemory.size() *
-                                      sizeof(params.hostMemory[0]),
-                                  cudaMemcpyDeviceToHost, 0));
+    // Calculate energies of bubbles to tempD1, but don't reduce.
+    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+                  params.tempD1);
+    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
+                  params.tempD1);
 
-        // Get host pointer for each device pointer
-        auto getHostPtr = [&params,
-                           &memStart](auto devPtr) -> decltype(devPtr) {
-            return static_cast<decltype(devPtr)>(memStart) +
-                   (devPtr - static_cast<decltype(devPtr)>(params.memory));
-        };
-        double *x = getHostPtr(params.bubbles.x);
-        double *y = getHostPtr(params.bubbles.y);
-        double *z = getHostPtr(params.bubbles.z);
-        double *r = getHostPtr(params.bubbles.r);
-        double *vx = getHostPtr(params.bubbles.dxdt);
-        double *vy = getHostPtr(params.bubbles.dydt);
-        double *vz = getHostPtr(params.bubbles.dzdt);
-        double *vr = getHostPtr(params.bubbles.drdt);
-        double *path = getHostPtr(params.bubbles.path);
-        double *error = getHostPtr(params.bubbles.error);
-        double *energy = getHostPtr(params.tempD1);
-        int *index = getHostPtr(params.bubbles.index);
+    // Make sure the thread is not working
+    if (params.ioThread.joinable()) {
+        params.ioThread.join();
+    }
 
-        // Starting to access the data, so need to sync to make sure all the
-        // data is there
-        CUDA_CALL(cudaDeviceSynchronize());
+    // Copy all device memory to host.
+    void *memStart = static_cast<void *>(params.hostMemory.data());
+    CUDA_CALL(
+        cudaMemcpyAsync(memStart, params.memory,
+                        params.hostMemory.size() * sizeof(params.hostMemory[0]),
+                        cudaMemcpyDeviceToHost, 0));
 
-        if (params.hostData.numSnapshots == 0) {
-            // If this is the first snapshot, store current positions in the
-            // previous
-            for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
-                const int ind = index[i];
-                params.previousX[ind] = x[i];
-                params.previousY[ind] = y[i];
-                params.previousZ[ind] = z[i];
+    CUDA_CALL(cudaEventRecord(params.snapshotParams.event, 0));
+
+    // Get the host pointers from the device pointers
+    params.snapshotParams.x = getHostPtr(params.bubbles.x);
+    params.snapshotParams.y = getHostPtr(params.bubbles.y);
+    params.snapshotParams.z = getHostPtr(params.bubbles.z);
+    params.snapshotParams.r = getHostPtr(params.bubbles.r);
+    params.snapshotParams.vx = getHostPtr(params.bubbles.dxdt);
+    params.snapshotParams.vy = getHostPtr(params.bubbles.dydt);
+    params.snapshotParams.vz = getHostPtr(params.bubbles.dzdt);
+    params.snapshotParams.vr = getHostPtr(params.bubbles.drdt);
+    params.snapshotParams.path = getHostPtr(params.bubbles.path);
+    params.snapshotParams.error = getHostPtr(params.bubbles.error);
+    params.snapshotParams.energy = getHostPtr(params.tempD1);
+    params.snapshotParams.index = getHostPtr(params.bubbles.index);
+    params.snapshotParams.wrapCountX = getHostPtr(params.bubbles.wrapCountX);
+    params.snapshotParams.wrapCountY = getHostPtr(params.bubbles.wrapCountY);
+    params.snapshotParams.wrapCountZ = getHostPtr(params.bubbles.wrapCountZ);
+
+    params.snapshotParams.count = params.bubbles.count;
+
+    auto writeSnapshot = [](const SnapshotParams &params, uint32_t snapshotNum,
+                            double *xPrev, double *yPrev, double *zPrev) {
+        std::stringstream ss;
+        ss << params.name << ".csv." << snapshotNum;
+        std::ofstream file(ss.str().c_str(), std::ios::out);
+        if (file.is_open()) {
+            // Wait for the copy initiated by the main thread to be complete.
+            CUDA_CALL(cudaEventSynchronize(params.event));
+            file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
+                    "error,index\n";
+            for (uint64_t i = 0; i < count; ++i) {
+                const int ind = params.index[i];
+                const double xi = params.x[i];
+                const double yi = params.y[i];
+                const double zi = params.z[i];
+                const double vxi = params.vx[i];
+                const double vyi = params.vy[i];
+                const double vzi = params.vz[i];
+                const double px = xPrev[ind];
+                const double py = yPrev[ind];
+                const double pz = zPrev[ind];
+
+                double displX = abs(xi - px);
+                displX = displX > 0.5 * params.interval.x
+                             ? displX - params.interval.x
+                             : displX;
+                double displY = abs(yi - py);
+                displY = displY > 0.5 * params.interval.y
+                             ? displY - params.interval.y
+                             : displY;
+                double displZ = abs(zi - pz);
+                displZ = displZ > 0.5 * params.interval.z
+                             ? displZ - params.interval.z
+                             : displZ;
+
+                file << xi;
+                file << ",";
+                file << yi;
+                file << ",";
+                file << zi;
+                file << ",";
+                file << params.r[i];
+                file << ",";
+                file << vxi;
+                file << ",";
+                file << vyi;
+                file << ",";
+                file << vzi;
+                file << ",";
+                file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
+                file << ",";
+                file << params.vr[i];
+                file << ",";
+                file << params.path[i];
+                file << ",";
+                file << params.energy[i];
+                file << ",";
+                file << sqrt(displX * displX + displY * displY +
+                             displZ * displZ);
+                file << ",";
+                file << params.error[i];
+                file << ",";
+                file << ind;
+                file << "\n";
+
+                xPrev[ind] = xi;
+                yPrev[ind] = yi;
+                zPrev[ind] = zi;
             }
         }
+    };
 
-        file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
-                "error,index\n";
-        for (uint64_t i = 0; i < (uint64_t)params.bubbles.count; ++i) {
-            const int ind = index[i];
-            const double xi = x[i];
-            const double yi = y[i];
-            const double zi = z[i];
-            const double vxi = vx[i];
-            const double vyi = vy[i];
-            const double vzi = vz[i];
-            const double px = params.previousX[ind];
-            const double py = params.previousY[ind];
-            const double pz = params.previousZ[ind];
-
-            double displX = abs(xi - px);
-            displX = displX > 0.5 * params.hostConstants.interval.x
-                         ? displX - params.hostConstants.interval.x
-                         : displX;
-            double displY = abs(yi - py);
-            displY = displY > 0.5 * params.hostConstants.interval.y
-                         ? displY - params.hostConstants.interval.y
-                         : displY;
-            double displZ = abs(zi - pz);
-            displZ = displZ > 0.5 * params.hostConstants.interval.z
-                         ? displZ - params.hostConstants.interval.z
-                         : displZ;
-
-            file << xi;
-            file << ",";
-            file << yi;
-            file << ",";
-            file << zi;
-            file << ",";
-            file << r[i];
-            file << ",";
-            file << vxi;
-            file << ",";
-            file << vyi;
-            file << ",";
-            file << vzi;
-            file << ",";
-            file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
-            file << ",";
-            file << vr[i];
-            file << ",";
-            file << path[i];
-            file << ",";
-            file << energy[i];
-            file << ",";
-            file << sqrt(displX * displX + displY * displY + displZ * displZ);
-            file << ",";
-            file << error[i];
-            file << ",";
-            file << ind;
-            file << "\n";
-            params.previousX[ind] = xi;
-            params.previousY[ind] = yi;
-            params.previousZ[ind] = zi;
-        }
-
-        ++params.hostData.numSnapshots;
-    }
+    // Spawn a new thread to write the snapshot to a file
+    params.ioThread =
+        std::thread(writeSnapshot, std::cref(params.snapshotParams),
+                    params.hostData.numSnapshots++, params.previousX.data(),
+                    params.previousY.data(), params.previousZ.data());
 }
 
 void end(Params &params) {
+    if (params.ioThread.joinable()) {
+        params.ioThread.join();
+    }
+
     CUDA_CALL(cudaDeviceSynchronize());
 
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
@@ -672,7 +689,7 @@ void init(const char *inputFileName, Params &params) {
 
     params.hostData.errorTolerance = inputJson["errorTolerance"]["value"];
     params.hostData.snapshotFrequency = inputJson["snapShot"]["frequency"];
-    params.hostData.snapshotFilename = inputJson["snapShot"]["filename"];
+    params.snapshotParams.name = inputJson["snapShot"]["filename"];
 
     params.hostConstants.wallDragStrength = wall["drag"];
     params.hostConstants.xWall = wall["x"];
@@ -741,8 +758,10 @@ void init(const char *inputFileName, Params &params) {
 
     CUDA_ASSERT(cudaStreamCreate(&params.stream2));
     CUDA_ASSERT(cudaStreamCreate(&params.stream1));
-    CUDA_CALL(cudaEventCreate(&params.event1));
-    CUDA_CALL(cudaEventCreate(&params.event2));
+    CUDA_CALL(cudaEventCreate(&params.event1, cudaEventDisableTiming));
+    CUDA_CALL(cudaEventCreate(&params.event2, cudaEventDisableTiming));
+    CUDA_CALL(
+        cudaEventCreate(&params.snapshotParams.event, cudaEventDisableTiming));
     printRelevantInfoOfCurrentDevice();
 
     // Set device globals to zero
@@ -774,6 +793,9 @@ void init(const char *inputFileName, Params &params) {
     params.previousX.resize(params.bubbles.stride);
     params.previousY.resize(params.bubbles.stride);
     params.previousZ.resize(params.bubbles.stride);
+    params.snapshotParams.x0.resize(params.bubbles.stride);
+    params.snapshotParams.y0.resize(params.bubbles.stride);
+    params.snapshotParams.z0.resize(params.bubbles.stride);
 
     const uint64_t megs = bytes / (1024 * 1024);
     const uint64_t kilos = (bytes - megs * 1024 * 1024) / 1024;
@@ -910,6 +932,7 @@ void init(const char *inputFileName, Params &params) {
     params.hostConstants.flowLbb =
         params.hostConstants.interval * params.hostConstants.flowLbb +
         params.hostConstants.lbb;
+    params.snapshotParams.interval = params.hostConstants.interval;
 
     double mult = phi * boxVolume(params) / CUBBLE_PI;
     if (params.hostConstants.dimensionality == 3) {
@@ -980,11 +1003,47 @@ void init(const char *inputFileName, Params &params) {
         ++numSteps;
     }
 
-    // TODO: Set starting positions
-    // Avoiding batched memset, because the pointers might not be in order
+    if (0.0 < params.snapshotFrequency) {
+        // Set starting positions.
+        // Avoiding batched copy, because the pointers might not be in order
+        int *index = reinterpret_cast<int *>(params.hostMemory.data());
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousX.data()),
+                             static_cast<void *>(params.bubbles.x),
+                             sizeof(double) * params.bubbles.count,
+                             cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousY.data()),
+                             static_cast<void *>(params.bubbles.y),
+                             sizeof(double) * params.bubbles.count,
+                             cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousZ.data()),
+                             static_cast<void *>(params.bubbles.z),
+                             sizeof(double) * params.bubbles.count,
+                             cudaMemcpyDeviceToHost));
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(index),
+                             static_cast<void *>(params.bubbles.index),
+                             sizeof(int) * params.bubbles.count,
+                             cudaMemcpyDeviceToHost));
+
+        for (uint64_t i = 0; i < params.bubbles.count; i++) {
+            const int ind = index[i];
+            params.snapshotParams.x0[ind] = params.previousX[i];
+            params.snapshotParams.y0[ind] = params.previousY[i];
+            params.snapshotParams.z0[ind] = params.previousZ[i];
+        }
+
+        // 'Previous' vectors are updated with the previous positions after
+        // every snapshot, but since there is nothing previous to the first
+        // snapshot, initialize them with the starting positions.
+        std::copy(params.snapshotParams.x0.begin(),
+                  params.snapshotParams.x0.end(), params.previousX.begin());
+        std::copy(params.snapshotParams.y0.begin(),
+                  params.snapshotParams.y0.end(), params.previousY.begin());
+        std::copy(params.snapshotParams.z0.begin(),
+                  params.snapshotParams.z0.end(), params.previousZ.begin());
+    }
 
     // Reset wrap counts to 0
-    // Again avoiding batched memset, because the pointers might not be in order
+    // Avoiding batched memset, because the pointers might not be in order
     bytes = sizeof(int) * params.bubbles.stride;
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountX, 0, bytes));
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountY, 0, bytes));
@@ -1022,8 +1081,10 @@ namespace cubble {
 void run(std::string &&inputFileName) {
     Params params;
     init(inputFileName.c_str(), params);
-    if (params.hostData.snapshotFrequency > 0.0)
+
+    if (params.hostData.snapshotFrequency > 0.0) {
         saveSnapshot(params);
+    }
 
     printf("\n===========\nIntegration\n===========\n");
     printf("%-5s ", "T");

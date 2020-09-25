@@ -1,8 +1,8 @@
 #include "Util.h"
 #include <cuda.h>
 #include <exception>
-#include <iostream>
 #include <stdexcept>
+#include <stdio.h>
 #include <string>
 
 namespace cubble {
@@ -17,6 +17,13 @@ int main(int argc, char **argv) {
                "(.json) file containing the simulation input.\n",
                argv[0]);
 
+        return EXIT_FAILURE;
+    }
+
+    int numGPUs = 0;
+    CUDA_CALL(cudaGetDeviceCount(&numGPUs));
+    if (1 > numGPUs) {
+        printf("No CUDA capable devices found.\n");
         return EXIT_FAILURE;
     }
 

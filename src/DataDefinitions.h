@@ -5,6 +5,7 @@
 #include "cub/cub/cub.cuh"
 #include <array>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -200,7 +201,6 @@ struct Constants {
 
 // Only accessed by host
 struct HostData {
-    std::string snapshotFilename;
     uint64_t numIntegrationSteps = 0;
     uint64_t numNeighborsSearched = 0;
     uint64_t numStepsInTimeStep = 0;
@@ -218,8 +218,8 @@ struct HostData {
     double avgRad = 0.0;
     double maxBubbleRadius = 0.0;
     int minNumBubbles = 0;
-    uint32_t numSnapshots = 0;
     uint32_t timesPrinted = 0;
+    uint32_t numSnapshots = 0;
 
     bool addFlow = false;
 
@@ -232,10 +232,42 @@ struct HostData {
     }
 };
 
+struct SnapshotParams {
+    uint64_t count = 0;
+
+    double *x = nullptr;
+    double *y = nullptr;
+    double *z = nullptr;
+    double *r = nullptr;
+    double *vx = nullptr;
+    double *vy = nullptr;
+    double *vz = nullptr;
+    double *vr = nullptr;
+    double *path = nullptr;
+    double *error = nullptr;
+    double *energy = nullptr;
+    int *index = nullptr;
+    int *wrapCountX = nullptr;
+    int *wrapCountY = nullptr;
+    int *wrapCountZ = nullptr;
+
+    dvec interval;
+
+    // Starting positions
+    std::vector<double> x0;
+    std::vector<double> y0;
+    std::vector<double> z0;
+
+    std::string name;
+
+    cudaEvent_t event;
+};
+
 struct Params {
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
     HostData hostData;
+    SnapshotParams snapshotParams;
 
     Bubbles bubbles;
     Pairs pairs;
@@ -244,6 +276,8 @@ struct Params {
     cudaStream_t stream2;
     cudaEvent_t event1;
     cudaEvent_t event2;
+
+    std::thread ioThread;
 
     dim3 blockGrid = dim3(1024, 1, 1);
     dim3 threadBlock = dim3(128, 1, 1);

@@ -3,8 +3,8 @@
 #include "nlohmann/json.hpp"
 #include <assert.h>
 #include <cuda_runtime.h>
-#include <iostream>
 #include <math.h>
+#include <stdio.h>
 
 #include "Util.h"
 
