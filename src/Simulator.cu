@@ -549,14 +549,18 @@ void saveSnapshot(Params &params) {
 
     params.snapshotParams.count = params.bubbles.count;
 
+    // TODO: add distance from start
     auto writeSnapshot = [](const SnapshotParams &params, uint32_t snapshotNum,
                             double *xPrev, double *yPrev, double *zPrev) {
+        printf("I/O thread starting\n");
         std::stringstream ss;
         ss << params.name << ".csv." << snapshotNum;
         std::ofstream file(ss.str().c_str(), std::ios::out);
         if (file.is_open()) {
             // Wait for the copy initiated by the main thread to be complete.
+            printf("I/O thread waiting for copy to finish\n");
             CUDA_CALL(cudaEventSynchronize(params.event));
+            printf("I/O thread writing to file\n");
             file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                     "error,index\n";
             for (uint64_t i = 0; i < params.count; ++i) {
@@ -619,6 +623,7 @@ void saveSnapshot(Params &params) {
                 zPrev[ind] = zi;
             }
         }
+        printf("I/O thread finished\n");
     };
 
     // Spawn a new thread to write the snapshot to a file
