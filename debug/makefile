@@ -41,7 +41,7 @@ C_GPU := nvcc
 
 # External libraries to link
 # -----------------------------------------------------
-LIBS := -lcudart -lcurand -lnvToolsExt
+LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 
 # Preprocessor defines
 # -----------------------------------------------------

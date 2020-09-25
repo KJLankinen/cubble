@@ -6,7 +6,7 @@
       "The simulation will stop once the number of bubbles left",
       "in the simulation drops below the given value."
     ],
-    "numStart": 1e5,
+    "numStart": 1e4,
     "numEnd": 1e3,
     "radius": {
       "comment": "Mean and standard deviation of radius of bubbles at start.",
@@ -59,7 +59,7 @@
     },
     "tfr": {
       "comment": "Top, front, right coordinates of the flow area.",
-      "x": 1.0,
+      "x": 0.4,
       "y": 0.525,
       "z": 0.0
     }
@@ -103,7 +103,7 @@
   },
   "rngSeed": {
     "comment": "The seed for the RNG.",
-    "value": 4
+    "value": 426
   },
   "stabilization": {
     "comments": [
@@ -113,7 +113,7 @@
       "changes less than this treshold."
     ],
     "steps": 1e4,
-    "maxDeltaEnergy": 5e-6
+    "maxDeltaEnergy": 1e-5
   },
   "snapShot":{
     "comments": [
