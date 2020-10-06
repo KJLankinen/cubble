@@ -43,35 +43,6 @@ def main():
     temp_dir =              File("$TEMP_DIR", "/tmp")
     print("----------------------------------\n")
     
-    print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
-    shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
-	
-    compile_script_str = "\
-#!/bin/bash\n\
-#SBATCH --job-name=" + sb_compile_name + "\n\
-#SBATCH --mem=1G\n\
-#SBATCH --time=00:10:00\n\
-#SBATCH --gres=" + sb_gres + "\n\
-#SBATCH --constraint=" + sb_constraint + "\n\
-#SBATCH --mail-user=" + sb_mail_user + "\n\
-#SBATCH --mail-type=" + sb_mail_type + "\n\
-TEMP_DIR=$SLURM_JOB_ID\n\
-module load " + sb_modules + "\n\
-mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=-I" + incl_dir.path + "\n\
-cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
-    
-    print("Launching process for compiling the binary.")
-    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
-    compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
-    compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
-
-    if compile_process.returncode != 0:
-        print("Compile process submission was not successful!")
-        return compile_process.returncode
-    else:
-        print(str(compile_stdout.decode()))
-
     print("Reading default input arguments.")
     with open(default_input.path) as json_file_handle:
         json_data = json.load(json_file_handle)
@@ -102,6 +73,35 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 
             data, sep, after = after.partition('{')
             num_runs = num_runs + 1
+
+    print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
+    shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
+	
+    compile_script_str = "\
+#!/bin/bash\n\
+#SBATCH --job-name=" + sb_compile_name + "\n\
+#SBATCH --mem=1G\n\
+#SBATCH --time=00:10:00\n\
+#SBATCH --gres=" + sb_gres + "\n\
+#SBATCH --constraint=" + sb_constraint + "\n\
+#SBATCH --mail-user=" + sb_mail_user + "\n\
+#SBATCH --mail-type=" + sb_mail_type + "\n\
+TEMP_DIR=$SLURM_JOB_ID\n\
+module load " + sb_modules + "\n\
+mkdir " + temp_dir.path + "\n\
+srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=-I" + incl_dir.path + "\n\
+cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
+    
+    print("Launching process for compiling the binary.")
+    compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+    compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
+    compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
+
+    if compile_process.returncode != 0:
+        print("Compile process submission was not successful!")
+        return compile_process.returncode
+    else:
+        print(str(compile_stdout.decode()))
 
     array_script_str = "\
 #!/bin/bash\n\
