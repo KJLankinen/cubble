@@ -16,7 +16,7 @@ def main():
 
     sb_name =           sys.argv[1] 
     sb_compile_name =   "cubble_compile_" + sys.argv[1]
-    sb_modules =        "cuda/10.0.130 gcc/6.3.0"
+    sb_modules =        "cuda/10.1.243 gcc/6.3.0"
     sb_mem =            "32G"
     sb_time =           "120:00:00"
     sb_gres =           "gpu:1"
@@ -63,7 +63,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
     print(compile_script_str )
-'''
+    '''
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
     compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
@@ -73,7 +73,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
         return compile_process.returncode
     else:
         print(str(compile_stdout.decode()))
-'''
+    '''
     print("Reading default input arguments.")
     with open(default_input.path) as json_file_handle:
         json_data = json.load(json_file_handle)
@@ -93,6 +93,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
             outfile_path = os.path.join(run_dir, os.path.split(default_input.path)[1])
 
             data, sep, after = after.partition('}')
+            data = data.strip()
             for line in data.splitlines():
                 param, equals, value = line.partition('=')
                 value = value.strip()
@@ -106,6 +107,8 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
             data, sep, after = after.partition('{')
             num_runs = num_runs + 1
 
+    # TEMP TEMP TEMP
+    compile_slurm_id = '0'
     array_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_" + sb_name + "\n\
@@ -124,13 +127,13 @@ mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
 srun " + executable.path + " " + array_input.path + "\n\
 tar czf " + snapshot_filename + ".tar.gz " + snapshot_filename + ".csv.*\n\
-rm snapshot.csv.*\n\
+rm " + snapshot_filename + ".csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n"
 
     print("Launching an array of processes that run the simulation.")
     print(array_script_str)
-'''
+    '''
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script_str.encode())[0]
 
@@ -143,7 +146,7 @@ cd " + array_work_dir.path + "\n"
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
     print(str(squeue_process.communicate()[0].decode()))
-'''
+    '''
     print("\nJob submission done!")
 
 def recursively_update_dict(d, params, value):

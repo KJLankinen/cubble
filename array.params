@@ -31,7 +31,7 @@ All the rest of the parameters will be taken from the given default input file.
 job 0
 {
     constants.phi.value = 0.9
-    constants.phi.kappa = 0.2
+    constants.kappa.value = 0.2
 }
 
 job 1
