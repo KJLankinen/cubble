@@ -1,0 +1,52 @@
+================================================================================
+This is a simple custom file format for specifying input parameters to an
+array job.  Each set of curly brackets implies one job, and the contents specify
+the values that will be overwritten in the default input file.
+Each parameter inside the curly brackets should be put on a separate line.
+Everything inside curly brackets is assumed to be data and everything outside
+them is ignored.
+
+Example (with angle brackets):
+[
+    constants.phi.value = 0.9
+    flow.impose = true
+    bubbles.numStart = 25000
+]
+[
+    constants.phi.value = 0.85
+    bubbles.numStart = 26000
+]
+
+in this file translates to
+
+input_json["constants"]["phi"]["value"] = 0.9
+input_json["flow"]["impose"] = true
+input_json["bubbles"]["numStart"] = 25000
+
+in json syntax for the first job and similarly for the other.
+Two jobs will be launched, as there are two sets of curly brackets.
+All the rest of the parameters will be taken from the given default input file.
+================================================================================
+
+job 0
+{
+    constants.phi.value = 0.9
+    constants.phi.kappa = 0.2
+}
+
+job 1
+{
+    constants.phi.value = 0.89
+    box.dimensionality = 3
+    box.relativeDimensions.x = 0.5
+}
+
+job 2
+{
+    constants.phi.value = 0.88
+}
+
+job 3
+{
+    constants.phi.value = 0.87
+}

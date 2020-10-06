@@ -35,7 +35,7 @@ def main():
                                  True)
     make_file =             File("makefile", root_dir.path, "final", False, True)
     default_input =         File("input_parameters.json", root_dir.path, None, False, True)
-    arr_params =            File("array_parameters.json", root_dir.path, None, False, True)
+    arr_params =            File("array.params", root_dir.path, None, False, True)
     executable =            File("cubble", data_dir.path)
     array_work_dir =        File("run_$RUN_NUM", data_dir.path)
     array_input =           File(default_input.name, array_work_dir.path)
@@ -62,6 +62,8 @@ srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + te
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
+    print(compile_script_str )
+'''
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
     compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
@@ -71,19 +73,38 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
         return compile_process.returncode
     else:
         print(str(compile_stdout.decode()))
-
+'''
     print("Reading default input arguments.")
     with open(default_input.path) as json_file_handle:
         json_data = json.load(json_file_handle)
 
+    snapshot_filename = json_data["snapShot"]["filename"]
+    print(snapshot_filename)
+
     num_runs = 0
     print("Creating directories and input files.")
-    with open(arr_params.path) as parameter_file_handle:
-        for counter, line in enumerate(parameter_file_handle):
-            run_dir = os.path.join(data_dir.path, "run_" + str(counter))
+    with open(arr_params.path) as f:
+        after = f.read()
+        data, sep, after = after.partition('{')
+        while 0 < len(sep):
+            json_copy = copy.deepcopy(json_data)
+            run_dir = os.path.join(data_dir.path, "run_" + str(num_runs))
+            os.makedirs(run_dir)
             outfile_path = os.path.join(run_dir, os.path.split(default_input.path)[1])
-            create_folder_and_data_file(run_dir, outfile_path, copy.deepcopy(json_data), json.loads(line.strip()))
-            num_runs = counter
+
+            data, sep, after = after.partition('}')
+            for line in data.splitlines():
+                param, equals, value = line.partition('=')
+                value = value.strip()
+                params = param.strip().split('.')
+                print(params, value)
+                json_copy = recursively_update_dict(json_copy, params, value)
+
+            with open(outfile_path, 'w') as outfile:
+                json.dump(json_copy, outfile, indent=4, sort_keys=True)
+
+            data, sep, after = after.partition('{')
+            num_runs = num_runs + 1
 
     array_script_str = "\
 #!/bin/bash\n\
@@ -102,12 +123,14 @@ module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
 cd " + temp_dir.path + "\n\
 srun " + executable.path + " " + array_input.path + "\n\
-tar czf snapshots.tar.gz snapshot.csv.*\n\
+tar czf " + snapshot_filename + ".tar.gz " + snapshot_filename + ".csv.*\n\
 rm snapshot.csv.*\n\
 mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n"
 
     print("Launching an array of processes that run the simulation.")
+    print(array_script_str)
+'''
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script_str.encode())[0]
 
@@ -120,18 +143,15 @@ cd " + array_work_dir.path + "\n"
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
     print(str(squeue_process.communicate()[0].decode()))
+'''
     print("\nJob submission done!")
 
-def create_folder_and_data_file(dir_name, outfile_name, data, inbound):
-    os.makedirs(dir_name)
-    for key, val in inbound.items():
-        if key in data.keys():
-            data.update({key:val})
-        else:
-            print("Key not found in default input file: " + key)
-    
-    with open(outfile_name, 'w') as outfile:
-        json.dump(data, outfile, indent=4, sort_keys=True)
+def recursively_update_dict(d, params, value):
+    if 1 < len(params):
+        d[params[0]] = recursively_update_dict(d[params[0]], params[1:], value)
+    else:
+        d[params[0]] = value
+    return d
 
 class File:
     name = ""
@@ -156,9 +176,6 @@ class File:
             raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), self.path)
         else:
             print(self.path)
-
-
-
 
 if __name__ == "__main__":
     main()
