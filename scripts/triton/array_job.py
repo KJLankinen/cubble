@@ -26,7 +26,7 @@ def main():
 
     print("\nUsing the following paths & files:")
     print("----------------------------------\n")
-    root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)  ###
+    root_dir =              File("cubble", os.environ['WRKDIR'], None, False, True)
     src_dir =               File("src", root_dir.path)
     incl_dir =              File("incl", root_dir.path)
     data_dir =              File(sb_name,
@@ -62,8 +62,6 @@ srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + te
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
-    print(compile_script_str )
-    '''
     compile_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     compile_stdout = compile_process.communicate(input=compile_script_str.encode())[0]
     compile_slurm_id = str(compile_stdout.decode()).strip().split(" ")[-1]
@@ -73,13 +71,12 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
         return compile_process.returncode
     else:
         print(str(compile_stdout.decode()))
-    '''
+
     print("Reading default input arguments.")
     with open(default_input.path) as json_file_handle:
         json_data = json.load(json_file_handle)
 
     snapshot_filename = json_data["snapShot"]["filename"]
-    print(snapshot_filename)
 
     num_runs = 0
     print("Creating directories and input files.")
@@ -98,7 +95,6 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
                 param, equals, value = line.partition('=')
                 value = value.strip()
                 params = param.strip().split('.')
-                print(params, value)
                 json_copy = recursively_update_dict(json_copy, params, value)
 
             with open(outfile_path, 'w') as outfile:
@@ -107,8 +103,6 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
             data, sep, after = after.partition('{')
             num_runs = num_runs + 1
 
-    # TEMP TEMP TEMP
-    compile_slurm_id = '0'
     array_script_str = "\
 #!/bin/bash\n\
 #SBATCH --job-name=cubble_" + sb_name + "\n\
@@ -132,8 +126,6 @@ mv -f " + temp_dir.path + "/* " + array_work_dir.path + "\n\
 cd " + array_work_dir.path + "\n"
 
     print("Launching an array of processes that run the simulation.")
-    print(array_script_str)
-    '''
     array_process = subprocess.Popen(["sbatch"], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
     array_stdout = array_process.communicate(input=array_script_str.encode())[0]
 
@@ -146,13 +138,14 @@ cd " + array_work_dir.path + "\n"
     squeue_process = subprocess.Popen(["slurm", "q"], stdout=subprocess.PIPE)
     print("Slurm queue:")
     print(str(squeue_process.communicate()[0].decode()))
-    '''
     print("\nJob submission done!")
 
 def recursively_update_dict(d, params, value):
     if 1 < len(params):
+        d[params[0]]
         d[params[0]] = recursively_update_dict(d[params[0]], params[1:], value)
     else:
+        d[params[0]]
         d[params[0]] = value
     return d
 
