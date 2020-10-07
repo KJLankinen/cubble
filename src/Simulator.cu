@@ -685,7 +685,7 @@ void init(const char *inputFileName, Params &params) {
         params.hostConstants.kParameter /
         (params.hostData.avgRad * params.hostData.avgRad);
 
-    params.hostData.addFlow = (bool)flow["impose"];
+    params.hostData.addFlow = static_cast<bool>(flow["impose"]);
     params.hostConstants.flowLbb = flow["lbb"];
     params.hostConstants.flowTfr = flow["tfr"];
     params.hostConstants.flowVel = flow["velocity"];
@@ -696,9 +696,9 @@ void init(const char *inputFileName, Params &params) {
     params.snapshotParams.name = inputJson["snapShot"]["filename"];
 
     params.hostConstants.wallDragStrength = wall["drag"];
-    params.hostConstants.xWall = (bool)wall["x"];
-    params.hostConstants.yWall = (bool)wall["y"];
-    params.hostConstants.zWall = (bool)wall["z"];
+    params.hostConstants.xWall = static_cast<bool>(wall["x"]);
+    params.hostConstants.yWall = static_cast<bool>(wall["y"]);
+    params.hostConstants.zWall = static_cast<bool>(wall["z"]);
     params.hostConstants.dimensionality = box["dimensionality"];
 
     // Calculate the size of the box and the starting number of bubbles

@@ -51,7 +51,7 @@ inline void handleException(const std::exception_ptr pExc) {
             std::rethrow_exception(pExc);
     } catch (const json::exception &e) {
         printf("Encountered a json parse error.\nMake sure the .json file is "
-               "correct and filenames are correct.\n%s",
+               "correct and filenames are correct.\n%s\n",
                e.what());
     } catch (const std::exception &e) {
         printf("\n----------Unhandled exception----------\n%s"
