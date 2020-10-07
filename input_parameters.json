@@ -6,7 +6,7 @@
       "The simulation will stop once the number of bubbles left",
       "in the simulation drops below the given value."
     ],
-    "numStart": 1e4,
+    "numStart": 1e5,
     "numEnd": 1e3,
     "radius": {
       "comment": "Mean and standard deviation of radius of bubbles at start.",

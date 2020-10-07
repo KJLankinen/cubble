@@ -30,23 +30,20 @@ All the rest of the parameters will be taken from the given default input file.
 
 job 0
 {
-    constants.phi.value = 0.9
-    constants.kappa.value = 0.2
+    rngSeed.value = 123
+    constants.phi.value = 0.91
+    box.wall.x = 1
 }
 
 job 1
 {
-    constants.phi.value = 0.89
-    box.dimensionality = 3
-    box.relativeDimensions.x = 0.5
+    rngSeed.value = 124
+    constants.phi.value = 0.91
+    box.wall.y = 1
 }
 
 job 2
 {
-    constants.phi.value = 0.88
-}
-
-job 3
-{
-    constants.phi.value = 0.87
+    rngSeed.value = 1322
+    constants.phi.value = 0.91
 }
