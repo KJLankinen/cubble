@@ -33,9 +33,9 @@
         "with a wall."
       ],
       "drag": 0.1,
-      "x": false,
-      "y": false,
-      "z": false
+      "x": 0,
+      "y": 0,
+      "z": 0
     }
   },
   "flow": {
@@ -45,7 +45,7 @@
       "flow box are relative to the simulation box, i.e. 0.5 means the center",
       "of the simulation box."
     ],
-    "impose": false,
+    "impose": 0,
     "velocity": {
       "x": 0.01,
       "y": 0.0,

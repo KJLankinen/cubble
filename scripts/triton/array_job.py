@@ -74,7 +74,6 @@ def main():
             data, sep, after = after.partition('{')
             num_runs = num_runs + 1
 
-    return 1
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
 	
@@ -148,8 +147,6 @@ def recursively_update_dict(d, params, value):
         old = d[params[0]]
         if isinstance(old, str):
             d[params[0]] = str(value)
-        elif isinstance(old, bool):
-            d[params[0]] = bool(value)
         elif isinstance(old, float):
             d[params[0]] = float(value)
         elif isinstance(old, int):
