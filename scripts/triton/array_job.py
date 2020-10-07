@@ -74,6 +74,10 @@ def main():
             data, sep, after = after.partition('{')
             num_runs = num_runs + 1
 
+    if 1 > num_runs:
+        print("Array parameter file doesn't contain a single '{'. Terminating.")
+        return 1
+
     print("Copying makefile from " + make_file.path + " to " + data_dir.path + "/" + make_file.name)
     shutil.copyfile(make_file.path, os.path.join(data_dir.path, make_file.name))
 	
@@ -113,7 +117,7 @@ cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
 #SBATCH --mail-user=" + sb_mail_user + "\n\
 #SBATCH --mail-type=" + sb_mail_type + "\n\
 #SBATCH --dependency=aftercorr:" + compile_slurm_id + "\n\
-#SBATCH --array=0-" + str(num_runs) + "\n\
+#SBATCH --array=0-" + str(num_runs - 1) + "\n\
 RUN_NUM=$SLURM_ARRAY_TASK_ID\n\
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
