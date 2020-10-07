@@ -5,7 +5,6 @@
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
-#include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
 #include <functional>
@@ -1059,22 +1058,6 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.timesPrinted = 1;
     params.hostData.numIntegrationSteps = 0;
 }
-
-#if (USE_PROFILING == 1)
-void startProfiling(bool start) {
-    if (start) {
-        CUDA_CALL(cudaProfilerStart());
-    }
-}
-
-void stopProfiling(bool stop, bool &continueIntegration) {
-    if (stop) {
-        CUDA_CALL(cudaDeviceSynchronize());
-        CUDA_CALL(cudaProfilerStop());
-        continueIntegration = false;
-    }
-}
-#endif
 }; // namespace
 
 namespace cubble {
@@ -1108,14 +1091,6 @@ void run(std::string &&inputFileName) {
     // end condition is met
     while (continueIntegration) {
         continueIntegration = integrate(params);
-
-        // When profiling, we don't want to run the entire simulation until the
-        // end, but rather just enough simulation steps to get a representative
-        // view of the entire simulation
-        CUDA_PROFILER_START(params.hostData.numIntegrationSteps == 2000);
-        CUDA_PROFILER_STOP(params.hostData.numIntegrationSteps == 12000,
-                           continueIntegration);
-
         // Track timestep
         minTimestep = params.hostData.timeStep < minTimestep
                           ? params.hostData.timeStep
