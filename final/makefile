@@ -1,5 +1,5 @@
 # Profile or not?
-USE_PROFILING := 0
+USE_PROFILING := 1
 
 # Directories
 # -----------------------------------------------------
@@ -54,7 +54,9 @@ NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 # Flags
 # -----------------------------------------------------
 CPU_FLAGS := -Wall -std=c++14 -m64
-GPU_ARCH := -arch=sm_70
+GPU_ARCH := -gencode arch=compute_70,code=compute_70	\
+	    -gencode arch=compute_70,code=sm_70		\
+	    -gencode arch=compute_60,code=sm_60
 GPU_FLAGS := $(GPU_ARCH) -std=c++14 --expt-relaxed-constexpr -lineinfo
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O3

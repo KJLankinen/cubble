@@ -125,6 +125,6 @@
       "1/8.5th time step."
     ],
     "filename": "bubbles",
-    "frequency": 1.0
+    "frequency": 0.0
   }
 }
