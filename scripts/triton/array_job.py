@@ -146,13 +146,13 @@ def recursively_update_dict(d, params, value):
         d[params[0]] = recursively_update_dict(d[params[0]], params[1:], value)
     else:
         old = d[params[0]]
-        if isinstance(old, str)
+        if isinstance(old, str):
             d[params[0]] = str(value)
-        elif isinstance(old, bool)
+        elif isinstance(old, bool):
             d[params[0]] = bool(value)
-        elif isinstance(old, float)
+        elif isinstance(old, float):
             d[params[0]] = float(value)
-        elif isinstance(old, int)
+        elif isinstance(old, int):
             d[params[0]] = int(value)
     return d
 
