@@ -45,7 +45,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 
 # Preprocessor defines
 # -----------------------------------------------------
-DEFINES := -DNDEBUG -DUSE_PROFILING=$(USE_PROFILING)
+DEFINES := -DNDEBUG
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 # Flags
@@ -57,10 +57,6 @@ GPU_ARCH := -gencode arch=compute_70,code=compute_70	\
 GPU_FLAGS := $(GPU_ARCH) -std=c++14 --expt-relaxed-constexpr -lineinfo
 COMMON_FLAGS := $(INCL)
 OPTIM_FLAGS := -O3
-PROFILING_FLAGS :=
-ifeq ($(USE_PROFILING), 1)
-PROFILING_FLAGS := -pg
-endif
 
 # First rule: Builds the project with default settings
 # -----------------------------------------------------
@@ -72,12 +68,12 @@ all : | $(BIN_PATH)
 # -----------------------------------------------------
 # By default has some safety nets at place but also uses some optimizations.
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
-	$(C_CPU) $(PROFILING_FLAGS) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
+	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
 
 # Rule for linking the GPU code to a single object file
 # -----------------------------------------------------
 $(GPU_CODE) : $(GPU_OBJS)
-	$(C_GPU) $(PROFILING_FLAGS) $(GPU_ARCH) -dlink $^ -o $@
+	$(C_GPU) $(GPU_ARCH) -dlink $^ -o $@
 
 
 # Rule for the intermediate objects
@@ -85,13 +81,13 @@ $(GPU_CODE) : $(GPU_OBJS)
 # CPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cpp
 	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES) $(PROFILING_FLAGS))
+	$(OPTIM_FLAGS) $(DEFINES))
 	$(C_CPU) $< $(OPTIONS) -c -o $@
 
 # GPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILING_FLAGS))
+	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 # Clean up

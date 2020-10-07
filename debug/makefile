@@ -45,7 +45,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 
 # Preprocessor defines
 # -----------------------------------------------------
-DEFINES := -DUSE_PROFILING=0
+DEFINES :=
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
 # Flags
