@@ -1,6 +1,3 @@
-# Profile or not?
-USE_PROFILING := 0
-
 # Directories
 # -----------------------------------------------------
 # bin will be created when building the program.
