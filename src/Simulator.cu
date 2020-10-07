@@ -8,7 +8,6 @@
 #include <curand.h>
 #include <fstream>
 #include <functional>
-#include <nvToolsExt.h>
 #include <sstream>
 #include <stdio.h>
 #include <string>
@@ -20,7 +19,6 @@ using namespace cubble;
 double totalEnergy(Params &params);
 
 void searchNeighbors(Params &params) {
-    NVTX_RANGE_PUSH_A("Neighbors");
     params.hostData.numNeighborsSearched++;
 
     KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, params.stream1,
@@ -138,12 +136,9 @@ void searchNeighbors(Params &params) {
     KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
                   params.pairs);
 
-    NVTX_RANGE_POP();
 }
 
 void removeBubbles(Params &params, int numToBeDeleted) {
-    NVTX_RANGE_PUSH_A("BubbleRemoval");
-
     KERNEL_LAUNCH(swapDataCountPairs, params, 0, 0, params.bubbles,
                   params.pairs, params.tempI);
 
@@ -154,8 +149,6 @@ void removeBubbles(Params &params, int numToBeDeleted) {
     const int numBlocks =
         std::min(1024, (int)std::ceil(params.bubbles.count / 128.0));
     params.blockGrid = dim3(numBlocks, 1, 1);
-
-    NVTX_RANGE_POP();
 }
 
 double stabilize(Params &params, int numStepsToRelax) {
@@ -264,8 +257,6 @@ double stabilize(Params &params, int numStepsToRelax) {
 }
 
 bool integrate(Params &params) {
-    NVTX_RANGE_PUSH_A("Integration function");
-
     double error = 100000;
     uint32_t numLoopsDone = 0;
     const int numBlocks = params.blockGrid.x;
@@ -290,7 +281,6 @@ bool integrate(Params &params) {
     }
 
     do {
-        NVTX_RANGE_PUSH_A("Integration step");
         KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
                       params.bubbles.count, true, params.bubbles.dxdtp,
                       params.bubbles.dydtp, params.bubbles.dzdtp,
@@ -341,7 +331,6 @@ bool integrate(Params &params) {
             params.hostData.timeStep *= 0.5;
 
         ++numLoopsDone;
-        NVTX_RANGE_POP();
     } while (error > params.hostData.errorTolerance);
 
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
@@ -452,7 +441,6 @@ bool integrate(Params &params) {
                   0.5 * params.hostConstants.interval.getMinComponent()
             : true;
 
-    NVTX_RANGE_POP();
     return continueSimulation;
 }
 } // namespace
