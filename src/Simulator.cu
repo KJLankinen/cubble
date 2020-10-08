@@ -8,6 +8,7 @@
 #include <curand.h>
 #include <fstream>
 #include <functional>
+#include <nvToolsExt.h>
 #include <sstream>
 #include <stdio.h>
 #include <string>
@@ -19,6 +20,7 @@ using namespace cubble;
 double totalEnergy(Params &params);
 
 void searchNeighbors(Params &params) {
+    nvtxRangePush("Neighbors");
     params.hostData.numNeighborsSearched++;
 
     KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, params.stream1,
@@ -135,10 +137,11 @@ void searchNeighbors(Params &params) {
 
     KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
                   params.pairs);
-
+    nvtxRangePop();
 }
 
 void removeBubbles(Params &params, int numToBeDeleted) {
+    nvtxRangePush("Removal");
     KERNEL_LAUNCH(swapDataCountPairs, params, 0, 0, params.bubbles,
                   params.pairs, params.tempI);
 
@@ -149,9 +152,11 @@ void removeBubbles(Params &params, int numToBeDeleted) {
     const int numBlocks =
         std::min(1024, (int)std::ceil(params.bubbles.count / 128.0));
     params.blockGrid = dim3(numBlocks, 1, 1);
+    nvtxRangePop();
 }
 
 double stabilize(Params &params, int numStepsToRelax) {
+    nvtxRangePush("Stabilization");
     // This function integrates only the positions of the bubbles.
     // Gas exchange is not used. This is used for equilibrating the foam.
     params.hostData.energy1 = totalEnergy(params);
@@ -165,8 +170,10 @@ double stabilize(Params &params, int numStepsToRelax) {
     void *cubOutput = nullptr;
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
 
+    nvtxRangePush("For-loop");
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
+            nvtxRangePush("Do-loop");
             KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
                           true, params.bubbles.dxdtp, params.bubbles.dydtp,
                           params.bubbles.dzdtp);
@@ -198,6 +205,7 @@ double stabilize(Params &params, int numStepsToRelax) {
             else if (error > params.hostData.errorTolerance)
                 params.hostData.timeStep *= 0.5;
 
+            nvtxRangePop();
         } while (error > params.hostData.errorTolerance);
 
         // Update the current values with the calculated predictions
@@ -251,12 +259,15 @@ double stabilize(Params &params, int numStepsToRelax) {
         }
     }
 
+    nvtxRangePop();
     params.hostData.energy2 = totalEnergy(params);
+    nvtxRangePop();
 
     return elapsedTime;
 }
 
 bool integrate(Params &params) {
+    nvtxRangePush("Intergration");
     double error = 100000;
     uint32_t numLoopsDone = 0;
     const int numBlocks = params.blockGrid.x;
@@ -280,6 +291,7 @@ bool integrate(Params &params) {
                       params.bubbles, params.pairs);
     }
 
+    nvtxRangePush("Do-loop");
     do {
         KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
                       params.bubbles.count, true, params.bubbles.dxdtp,
@@ -289,13 +301,6 @@ bool integrate(Params &params) {
         KERNEL_LAUNCH(predict, params, 0, params.stream1,
                       params.hostData.timeStep, true, params.bubbles);
         CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-
-        // Gas exchange can start immediately after predict, since they
-        // are computed in the same stream
-        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.pairs, params.tempD1);
-        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.tempD1);
 
         // Velocity calculations
         // Wait for the event recorded after predict kernel
@@ -314,6 +319,15 @@ bool integrate(Params &params) {
                           params.bubbles);
         }
 
+        // Gas exchange can start immediately after predict, since they
+        // are computed in the same stream
+        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.pairs, params.tempD1);
+        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.tempD1);
+
+        // Correct happens in default stream, so it automatically happens after
+        // gas exchange and velocity
         KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep, true,
                       params.bubbles, params.tempD2, params.tempI);
 
@@ -332,6 +346,7 @@ bool integrate(Params &params) {
 
         ++numLoopsDone;
     } while (error > params.hostData.errorTolerance);
+    nvtxRangePop();
 
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int), 0,
@@ -441,6 +456,8 @@ bool integrate(Params &params) {
                   0.5 * params.hostConstants.interval.getMinComponent()
             : true;
 
+    nvtxRangePop();
+
     return continueSimulation;
 }
 } // namespace
@@ -449,6 +466,7 @@ namespace // anonymous
 {
 using namespace cubble;
 double totalEnergy(Params &params) {
+    nvtxRangePush("Energy");
     KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
                   params.tempD1);
     KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
@@ -463,11 +481,13 @@ double totalEnergy(Params &params) {
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
+    nvtxRangePop();
 
     return total;
 }
 
 double totalVolume(Params &params) {
+    nvtxRangePush("Volume");
     KERNEL_LAUNCH(calculateVolumes, params, 0, 0, params.bubbles,
                   params.tempD1);
 
@@ -480,6 +500,7 @@ double totalVolume(Params &params) {
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
+    nvtxRangePop();
 
     return total;
 }
@@ -537,39 +558,40 @@ void saveSnapshot(Params &params) {
     params.snapshotParams.count = params.bubbles.count;
 
     // TODO: add distance from start
-    auto writeSnapshot = [](const SnapshotParams &params, uint32_t snapshotNum,
-                            double *xPrev, double *yPrev, double *zPrev) {
+    auto writeSnapshot = [](const SnapshotParams &snapshotParams,
+                            uint32_t snapshotNum, double *xPrev, double *yPrev,
+                            double *zPrev) {
         std::stringstream ss;
-        ss << params.name << ".csv." << snapshotNum;
+        ss << snapshotParams.name << ".csv." << snapshotNum;
         std::ofstream file(ss.str().c_str(), std::ios::out);
         if (file.is_open()) {
             // Wait for the copy initiated by the main thread to be complete.
-            CUDA_CALL(cudaEventSynchronize(params.event));
+            CUDA_CALL(cudaEventSynchronize(snapshotParams.event));
             file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                     "error,index\n";
-            for (uint64_t i = 0; i < params.count; ++i) {
-                const int ind = params.index[i];
-                const double xi = params.x[i];
-                const double yi = params.y[i];
-                const double zi = params.z[i];
-                const double vxi = params.vx[i];
-                const double vyi = params.vy[i];
-                const double vzi = params.vz[i];
+            for (uint64_t i = 0; i < snapshotParams.count; ++i) {
+                const int ind = snapshotParams.index[i];
+                const double xi = snapshotParams.x[i];
+                const double yi = snapshotParams.y[i];
+                const double zi = snapshotParams.z[i];
+                const double vxi = snapshotParams.vx[i];
+                const double vyi = snapshotParams.vy[i];
+                const double vzi = snapshotParams.vz[i];
                 const double px = xPrev[ind];
                 const double py = yPrev[ind];
                 const double pz = zPrev[ind];
 
                 double displX = abs(xi - px);
-                displX = displX > 0.5 * params.interval.x
-                             ? displX - params.interval.x
+                displX = displX > 0.5 * snapshotParams.interval.x
+                             ? displX - snapshotParams.interval.x
                              : displX;
                 double displY = abs(yi - py);
-                displY = displY > 0.5 * params.interval.y
-                             ? displY - params.interval.y
+                displY = displY > 0.5 * snapshotParams.interval.y
+                             ? displY - snapshotParams.interval.y
                              : displY;
                 double displZ = abs(zi - pz);
-                displZ = displZ > 0.5 * params.interval.z
-                             ? displZ - params.interval.z
+                displZ = displZ > 0.5 * snapshotParams.interval.z
+                             ? displZ - snapshotParams.interval.z
                              : displZ;
 
                 file << xi;
@@ -578,7 +600,7 @@ void saveSnapshot(Params &params) {
                 file << ",";
                 file << zi;
                 file << ",";
-                file << params.r[i];
+                file << snapshotParams.r[i];
                 file << ",";
                 file << vxi;
                 file << ",";
@@ -588,16 +610,16 @@ void saveSnapshot(Params &params) {
                 file << ",";
                 file << sqrt(vxi * vxi + vyi * vyi + vzi * vzi);
                 file << ",";
-                file << params.vr[i];
+                file << snapshotParams.vr[i];
                 file << ",";
-                file << params.path[i];
+                file << snapshotParams.path[i];
                 file << ",";
-                file << params.energy[i];
+                file << snapshotParams.energy[i];
                 file << ",";
                 file << sqrt(displX * displX + displY * displY +
                              displZ * displZ);
                 file << ",";
-                file << params.error[i];
+                file << snapshotParams.error[i];
                 file << ",";
                 file << ind;
                 file << "\n";
