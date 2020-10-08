@@ -291,8 +291,8 @@ bool integrate(Params &params) {
                       params.bubbles, params.pairs);
     }
 
-    nvtxRangePush("Do-loop");
     do {
+        nvtxRangePush("Do-loop");
         KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
                       params.bubbles.count, true, params.bubbles.dxdtp,
                       params.bubbles.dydtp, params.bubbles.dzdtp,
@@ -345,8 +345,8 @@ bool integrate(Params &params) {
             params.hostData.timeStep *= 0.5;
 
         ++numLoopsDone;
+        nvtxRangePop();
     } while (error > params.hostData.errorTolerance);
-    nvtxRangePop();
 
     CUDA_CALL(cudaMemcpyFromSymbolAsync(
         static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int), 0,
