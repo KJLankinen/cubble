@@ -164,6 +164,8 @@ double stabilize(Params &params, int numStepsToRelax) {
     double elapsedTime = 0.0;
     double error = 100000;
     const int numBlocks = params.blockGrid.x;
+    bool errorTooLarge = true;
+    double &ts = params.hostData.timeStep;
 
     void *cubPtr = params.tempPair2;
     uint64_t maxCubMem = params.pairs.getMemReq() / 2;
@@ -178,8 +180,7 @@ double stabilize(Params &params, int numStepsToRelax) {
                           true, params.bubbles.dxdtp, params.bubbles.dydtp,
                           params.bubbles.dzdtp);
 
-            KERNEL_LAUNCH(predict, params, 0, 0, params.hostData.timeStep,
-                          false, params.bubbles);
+            KERNEL_LAUNCH(predict, params, 0, 0, ts, false, params.bubbles);
 
             KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles,
                           params.pairs);
@@ -189,8 +190,8 @@ double stabilize(Params &params, int numStepsToRelax) {
                 KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
             }
 
-            KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep,
-                          false, params.bubbles, params.tempD2, params.tempI);
+            KERNEL_LAUNCH(correct, params, 0, 0, ts, false, params.bubbles,
+                          params.tempD2, params.tempI);
 
             // Reduce error
             CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
@@ -199,14 +200,15 @@ double stabilize(Params &params, int numStepsToRelax) {
             CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
                                            dMaxRadius, sizeof(double)));
 
-            if (error < params.hostData.errorTolerance &&
-                params.hostData.timeStep < 0.1)
-                params.hostData.timeStep *= 1.9;
-            else if (error > params.hostData.errorTolerance)
-                params.hostData.timeStep *= 0.5;
+            errorTooLarge = error > params.hostData.errorTolerance;
+            if (errorTooLarge) {
+                ts *= 0.5;
+            } else if (ts < 0.1) {
+                ts *= 1.9;
+            }
 
             nvtxRangePop();
-        } while (error > params.hostData.errorTolerance);
+        } while (errorTooLarge);
 
         // Update the current values with the calculated predictions
         double *swapper = params.bubbles.dxdto;
@@ -236,7 +238,7 @@ double stabilize(Params &params, int numStepsToRelax) {
         params.bubbles.z = params.bubbles.zp;
         params.bubbles.zp = swapper;
 
-        elapsedTime += params.hostData.timeStep;
+        elapsedTime += ts;
 
         // Reduce block maximum expansions to a global maximum
         double maxExpansion = 0.0;
@@ -268,9 +270,10 @@ double stabilize(Params &params, int numStepsToRelax) {
 
 bool integrate(Params &params) {
     nvtxRangePush("Intergration");
-    double error = 100000;
     uint32_t numLoopsDone = 0;
     const int numBlocks = params.blockGrid.x;
+    double &ts = params.hostData.timeStep;
+    bool errorTooLarge = true;
 
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
@@ -292,92 +295,106 @@ bool integrate(Params &params) {
 
     do {
         nvtxRangePush("Do-loop");
-        KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
-                      params.bubbles.count, true, params.bubbles.dxdtp,
-                      params.bubbles.dydtp, params.bubbles.dzdtp,
-                      params.bubbles.drdtp, params.tempD1, params.tempD2);
-
-        KERNEL_LAUNCH(predict, params, 0, params.stream1,
-                      params.hostData.timeStep, true, params.bubbles);
-        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-
-        // Velocity calculations
-        // Wait for the event recorded after predict kernel
-        CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
-        KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2, params.bubbles,
-                      params.pairs);
-
-        if (params.hostData.addFlow) {
-            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
+        // Stream1
+        {
+            KERNEL_LAUNCH(predict, params, 0, params.stream1, ts, true,
                           params.bubbles);
+            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
+
+            // Gas exchange
+            KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
+                          params.bubbles, params.pairs, params.tempD1);
+            KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
+                          params.bubbles, params.tempD1);
         }
 
-        if (params.hostConstants.xWall || params.hostConstants.yWall ||
-            params.hostConstants.zWall) {
-            KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
-                          params.bubbles);
+        // Stream2
+        {
+            KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
+                          params.bubbles.count, true, params.bubbles.dxdtp,
+                          params.bubbles.dydtp, params.bubbles.dzdtp,
+                          params.bubbles.drdtp, params.tempD1, params.tempD2);
+
+            // Wait for the event recorded after predict kernel in stream1
+            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
+            KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2,
+                          params.bubbles, params.pairs);
+
+            if (params.hostData.addFlow) {
+                KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
+                              params.bubbles);
+            }
+
+            if (params.hostConstants.xWall || params.hostConstants.yWall ||
+                params.hostConstants.zWall) {
+                KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
+                              params.bubbles);
+            }
         }
 
-        // Gas exchange can start immediately after predict, since they
-        // are computed in the same stream
-        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.pairs, params.tempD1);
-        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.tempD1);
+        // Correction in default stream (implicit synchronization with streams)
+        KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
+                      params.tempD2, params.tempI);
 
-        // Correct happens in default stream, so it automatically happens after
-        // gas exchange and velocity
-        KERNEL_LAUNCH(correct, params, 0, 0, params.hostData.timeStep, true,
-                      params.bubbles, params.tempD2, params.tempI);
+        // Stream1
+        {
+            // Reduce error
+            void *pDMaxError = nullptr;
+            CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
+            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                       params.tempD2, static_cast<double *>(pDMaxError),
+                       numBlocks, params.stream1, false);
+            CUDA_CALL(cudaMemcpyFromSymbolAsync(
+                static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
+                cudaMemcpyDeviceToHost, params.stream1));
+            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
-        // Reduce error
-        void *pDMaxError = nullptr;
-        CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
-        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem, params.tempD2,
-                   static_cast<double *>(pDMaxError), numBlocks, params.stream1,
-                   false);
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
-            cudaMemcpyDeviceToHost, params.stream1));
-        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
+            // Reduce expansion
+            void *pDMaxExpansion = nullptr;
+            CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
+            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                       params.tempD2 + 2 * numBlocks,
+                       static_cast<double *>(pDMaxExpansion), numBlocks,
+                       params.stream1, false);
+            CUDA_CALL(cudaMemcpyFromSymbolAsync(
+                static_cast<void *>(hMaxExpansion), dMaxExpansion,
+                sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream1));
+        }
 
-        void *pDMaxRadius = nullptr;
-        CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
-        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                   params.tempD2 + numBlocks,
-                   static_cast<double *>(pDMaxRadius), numBlocks,
-                   params.stream2, false);
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
-            cudaMemcpyDeviceToHost, params.stream2));
+        // Stream2
+        {
+            // Copy numToBeDeleted
+            CUDA_CALL(cudaMemcpyFromSymbolAsync(
+                static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted,
+                sizeof(int), 0, cudaMemcpyDeviceToHost, params.stream2));
 
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
-            0, cudaMemcpyDeviceToHost, params.stream2));
+            // Reduce radius
+            void *pDMaxRadius = nullptr;
+            CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
+            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                       params.tempD2 + numBlocks,
+                       static_cast<double *>(pDMaxRadius), numBlocks,
+                       params.stream2, false);
+            CUDA_CALL(cudaMemcpyFromSymbolAsync(
+                static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
+                cudaMemcpyDeviceToHost, params.stream2));
 
-        void *pDMaxExpansion = nullptr;
-        CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
-        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                   params.tempD2 + 2 * numBlocks,
-                   static_cast<double *>(pDMaxExpansion), numBlocks,
-                   params.stream2, false);
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double),
-            0, cudaMemcpyDeviceToHost, params.stream2));
-        CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
+            CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
+        }
 
         // Wait until the copy of maximum error is done
         CUDA_CALL(cudaEventSynchronize(params.event1));
-        error = *hMaxError;
-        if (error < params.hostData.errorTolerance &&
-            params.hostData.timeStep < 0.1)
-            params.hostData.timeStep *= 1.9;
-        else if (error > params.hostData.errorTolerance)
-            params.hostData.timeStep *= 0.5;
+
+        errorTooLarge = *hMaxError > params.hostData.errorTolerance;
+        if (errorTooLarge) {
+            ts *= 0.5;
+        } else if (ts < 0.1) {
+            ts *= 1.9;
+        }
 
         ++numLoopsDone;
         nvtxRangePop();
-    } while (error > params.hostData.errorTolerance);
+    } while (errorTooLarge);
 
     // Increment the path of each bubble
     KERNEL_LAUNCH(incrementPath, params, 0, params.stream1, params.bubbles);
@@ -428,7 +445,7 @@ bool integrate(Params &params) {
     // <= 1.0 to which the potentially very small timeStep gets added. This
     // keeps the precision of the time relatively constant even when the
     // simulation has run a long time.
-    params.hostData.timeFraction += params.hostData.timeStep;
+    params.hostData.timeFraction += ts;
     params.hostData.timeInteger += (uint64_t)params.hostData.timeFraction;
     params.hostData.timeFraction =
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
@@ -1098,19 +1115,16 @@ void run(std::string &&inputFileName) {
     double maxTimestep = -1.0;
     double avgTimestep = 0.0;
     bool resetErrors = false;
+    const double ts = params.hostData.timeStep;
 
     // This is the simulation loop, which runs until (at least) one
     // end condition is met
     while (continueIntegration) {
         continueIntegration = integrate(params);
         // Track timestep
-        minTimestep = params.hostData.timeStep < minTimestep
-                          ? params.hostData.timeStep
-                          : minTimestep;
-        maxTimestep = params.hostData.timeStep > maxTimestep
-                          ? params.hostData.timeStep
-                          : maxTimestep;
-        avgTimestep += params.hostData.timeStep;
+        minTimestep = ts < minTimestep ? ts : minTimestep;
+        maxTimestep = ts > maxTimestep ? ts : maxTimestep;
+        avgTimestep += ts;
 
         // Here we compare potentially very large integers (> 10e6) to each
         // other and small doubles (<= 1.0) to each other to preserve precision.
