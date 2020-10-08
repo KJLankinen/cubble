@@ -268,7 +268,7 @@ double stabilize(Params &params, int numStepsToRelax) {
     return elapsedTime;
 }
 
-bool integrate(Params &params) {
+void integrate(Params &params) {
     nvtxRangePush("Intergration");
     uint32_t numLoopsDone = 0;
     const int numBlocks = params.blockGrid.x;
@@ -452,6 +452,8 @@ bool integrate(Params &params) {
 
     CUDA_CALL(cudaEventSynchronize(params.event1));
     CUDA_CALL(cudaEventSynchronize(params.event2));
+    params.hostData.maxBubbleRadius = *hMaxRadius;
+
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See correct kernel for the
     // comparison & calculation.
@@ -466,18 +468,7 @@ bool integrate(Params &params) {
         searchNeighbors(params);
     }
 
-    params.hostData.maxBubbleRadius = *hMaxRadius;
-    bool continueSimulation =
-        params.bubbles.count > params.hostData.minNumBubbles;
-    continueSimulation &=
-        (params.hostConstants.dimensionality == 3)
-            ? params.hostData.maxBubbleRadius <
-                  0.5 * params.hostConstants.interval.getMinComponent()
-            : true;
-
     nvtxRangePop();
-
-    return continueSimulation;
 }
 } // namespace
 
@@ -658,6 +649,7 @@ void saveSnapshot(Params &params) {
 }
 
 void end(Params &params) {
+    printf("Cleaning up...\n");
     if (params.ioThread.joinable()) {
         params.ioThread.join();
     }
@@ -1110,17 +1102,24 @@ void run(std::string &&inputFileName) {
     printf("%-11s ", "max ts");
     printf("%-11s \n", "avg ts");
 
-    bool continueIntegration = true;
+    bool continueSimulation = true;
     double minTimestep = 9999999.9;
     double maxTimestep = -1.0;
     double avgTimestep = 0.0;
     bool resetErrors = false;
     double &ts = params.hostData.timeStep;
 
-    // This is the simulation loop, which runs until (at least) one
-    // end condition is met
-    while (continueIntegration) {
-        continueIntegration = integrate(params);
+    while (continueSimulation) {
+        integrate(params);
+
+        // Continue if there are more than the specified minimum number of
+        // bubbles left in the simulation and if the largest bubble is smaller
+        // than the simulation box in every dimension
+        continueSimulation =
+            params.bubbles.count > params.hostData.minNumBubbles &&
+            params.hostData.maxBubbleRadius <
+                0.5 * params.hostConstants.interval.getMinComponent();
+
         // Track timestep
         minTimestep = ts < minTimestep ? ts : minTimestep;
         maxTimestep = ts > maxTimestep ? ts : maxTimestep;
@@ -1235,10 +1234,25 @@ void run(std::string &&inputFileName) {
         ++params.hostData.numStepsInTimeStep;
     }
 
+    if (params.bubbles.count < params.hostData.minNumBubbles) {
+        printf("Stopping simulation, since the number of bubbles left in the "
+               "simulation (%d) is less than the specified minimum (%d)\n",
+               params.bubbles.count, params.hostData.minNumBubbles);
+    } else if (params.hostData.maxBubbleRadius >
+               0.5 * params.hostConstants.interval.getMinComponent()) {
+        dvec temp = params.hostConstants.interval;
+        printf("Stopping simulation, since the radius of the largest bubble "
+               "(%g) is greater than the simulation box (%g, %g, %g)\n",
+               params.hostData.maxBubbleRadius, temp.x, temp.y, temp.z);
+    } else {
+        printf("Stopping simulation for an unknown reason...\n");
+    }
+
     if (params.hostData.snapshotFrequency > 0.0) {
         saveSnapshot(params);
     }
 
     end(params);
+    printf("Done\n");
 }
 } // namespace cubble
