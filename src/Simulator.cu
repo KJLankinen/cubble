@@ -274,12 +274,11 @@ bool integrate(Params &params) {
 
     double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
     double *hMaxExpansion = hMaxRadius + 1;
-    int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxExpansion + 1);
+    double *hMaxError = hMaxExpansion + 1;
+    int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxError + 1);
 
     void *cubPtr = params.tempPair2;
     uint64_t maxCubMem = params.pairs.getMemReq() / 2;
-    void *cubOutput = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
 
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
@@ -332,12 +331,44 @@ bool integrate(Params &params) {
                       params.bubbles, params.tempD2, params.tempI);
 
         // Reduce error
+        void *pDMaxError = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
         CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem, params.tempD2,
-                   static_cast<double *>(cubOutput), numBlocks, (cudaStream_t)0,
+                   static_cast<double *>(pDMaxError), numBlocks, params.stream1,
                    false);
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error), dMaxRadius,
-                                       sizeof(double)));
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
+            cudaMemcpyDeviceToHost, params.stream1));
+        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
+        void *pDMaxRadius = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                   params.tempD2 + numBlocks,
+                   static_cast<double *>(pDMaxRadius), numBlocks,
+                   params.stream2, false);
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
+            cudaMemcpyDeviceToHost, params.stream2));
+
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
+            0, cudaMemcpyDeviceToHost, params.stream2));
+
+        void *pDMaxExpansion = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                   params.tempD2 + 2 * numBlocks,
+                   static_cast<double *>(pDMaxExpansion), numBlocks,
+                   params.stream2, false);
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double),
+            0, cudaMemcpyDeviceToHost, params.stream2));
+        CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
+
+        // Wait until the copy of maximum error is done
+        CUDA_CALL(cudaEventSynchronize(params.event1));
+        error = *hMaxError;
         if (error < params.hostData.errorTolerance &&
             params.hostData.timeStep < 0.1)
             params.hostData.timeStep *= 1.9;
@@ -348,38 +379,9 @@ bool integrate(Params &params) {
         nvtxRangePop();
     } while (error > params.hostData.errorTolerance);
 
-    CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int), 0,
-        cudaMemcpyDeviceToHost, params.stream1));
-
     // Increment the path of each bubble
     KERNEL_LAUNCH(incrementPath, params, 0, params.stream1, params.bubbles);
     CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-
-    // In correct kernel each block reduced a maximum value of the encountered
-    // radii and expansions. Reduce those per block maximums to a global
-    // maximum.
-    void *pDMaxRadius = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-               params.tempD2 + numBlocks, static_cast<double *>(pDMaxRadius),
-               numBlocks, params.stream2, false);
-    CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
-        cudaMemcpyDeviceToHost, params.stream2));
-
-    void *pDMaxExpansion = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
-    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-               params.tempD2 + 2 * numBlocks,
-               static_cast<double *>(pDMaxExpansion), numBlocks, params.stream2,
-               false);
-    CUDA_CALL(cudaMemcpyFromSymbolAsync(
-        static_cast<void *>(hMaxExpansion), dMaxExpansion, sizeof(double), 0,
-        cudaMemcpyDeviceToHost, params.stream2));
-
-    // Record event after both reductions & copies are done
-    CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
 
     // Update values
     double *swapper = params.bubbles.dxdto;
@@ -431,10 +433,11 @@ bool integrate(Params &params) {
     params.hostData.timeFraction =
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
+    CUDA_CALL(cudaEventSynchronize(params.event1));
+    CUDA_CALL(cudaEventSynchronize(params.event2));
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See correct kernel for the
     // comparison & calculation.
-    CUDA_CALL(cudaEventSynchronize(params.event1));
     if (*hNumToBeDeleted > 0) {
         removeBubbles(params, *hNumToBeDeleted);
     }
@@ -442,12 +445,11 @@ bool integrate(Params &params) {
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
     // See correct kernel, comparePair for details.
-    CUDA_CALL(cudaEventSynchronize(params.event2));
-    params.hostData.maxBubbleRadius = *hMaxRadius;
     if (*hMaxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
     }
 
+    params.hostData.maxBubbleRadius = *hMaxRadius;
     bool continueSimulation =
         params.bubbles.count > params.hostData.minNumBubbles;
     continueSimulation &=
@@ -781,7 +783,7 @@ void init(const char *inputFileName, Params &params) {
 
     printf("Reserving device memory\n");
     CUDA_CALL(
-        cudaMallocHost(&params.pinnedMemory, sizeof(int) + 2 * sizeof(double)));
+        cudaMallocHost(&params.pinnedMemory, sizeof(int) + 3 * sizeof(double)));
 
     uint64_t bytes = params.bubbles.getMemReq();
     bytes += 2 * params.pairs.getMemReq();
