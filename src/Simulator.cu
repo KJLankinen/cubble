@@ -1239,7 +1239,7 @@ void run(std::string &&inputFileName) {
         ++params.hostData.numStepsInTimeStep;
     }
 
-    if (params.bubbles.count < params.hostData.minNumBubbles) {
+    if (params.bubbles.count <= params.hostData.minNumBubbles) {
         printf("Stopping simulation, since the number of bubbles left in the "
                "simulation (%d) is less than the specified minimum (%d)\n",
                params.bubbles.count, params.hostData.minNumBubbles);
