@@ -1115,7 +1115,7 @@ void run(std::string &&inputFileName) {
     double maxTimestep = -1.0;
     double avgTimestep = 0.0;
     bool resetErrors = false;
-    const double ts = params.hostData.timeStep;
+    double &ts = params.hostData.timeStep;
 
     // This is the simulation loop, which runs until (at least) one
     // end condition is met
