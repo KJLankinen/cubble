@@ -202,9 +202,9 @@ double stabilize(Params &params, int numStepsToRelax) {
 
             errorTooLarge = error > params.hostData.errorTolerance;
             if (errorTooLarge) {
-                ts *= 0.8167;
+                ts *= 0.37;
             } else {
-                ts *= 1.169;
+                ts *= 1.69;
             }
             nvtxRangePop();
         } while (errorTooLarge);
@@ -386,9 +386,9 @@ void integrate(Params &params) {
 
         errorTooLarge = *hMaxError > params.hostData.errorTolerance;
         if (errorTooLarge) {
-            ts *= 0.8167;
+            ts *= 0.37;
         } else {
-            ts *= 1.169;
+            ts *= 1.69;
         }
 
         ++numLoopsDone;
