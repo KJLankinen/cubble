@@ -507,21 +507,22 @@ __global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles) {
     // Adams-Bashforth integration
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
-        bubbles.xp[i] =
-            bubbles.x[i] +
-            0.5 * timeStep * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
-        bubbles.yp[i] =
-            bubbles.y[i] +
-            0.5 * timeStep * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
-        if (dConstants->dimensionality == 3) {
-            bubbles.zp[i] =
-                bubbles.z[i] +
-                0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
-        }
         if (useGasExchange) {
             bubbles.rp[i] =
                 bubbles.r[i] +
                 0.5 * timeStep * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
+        } else {
+            bubbles.xp[i] =
+                bubbles.x[i] +
+                0.5 * timeStep * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
+            bubbles.yp[i] =
+                bubbles.y[i] +
+                0.5 * timeStep * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
+            if (dConstants->dimensionality == 3) {
+                bubbles.zp[i] =
+                    bubbles.z[i] +
+                    0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
+            }
         }
     }
 }

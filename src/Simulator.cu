@@ -295,13 +295,14 @@ void integrate(Params &params) {
 
     do {
         nvtxRangePush("Do-loop");
+        KERNEL_LAUNCH(initGlobals, params, 0, 0);
         // Stream1
         {
+            KERNEL_LAUNCH(resetArrays, params, 0, params.stream1, 0.0,
+                          params.bubbles.count, false, params.bubbles.drdtp,
+                          params.tempD1);
             KERNEL_LAUNCH(predict, params, 0, params.stream1, ts, true,
                           params.bubbles);
-            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-
-            // Gas exchange
             KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
                           params.bubbles, params.pairs, params.tempD1);
             KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
@@ -311,12 +312,11 @@ void integrate(Params &params) {
         // Stream2
         {
             KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
-                          params.bubbles.count, true, params.bubbles.dxdtp,
+                          params.bubbles.count, false, params.bubbles.dxdtp,
                           params.bubbles.dydtp, params.bubbles.dzdtp,
-                          params.bubbles.drdtp, params.tempD1, params.tempD2);
-
-            // Wait for the event recorded after predict kernel in stream1
-            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
+                          params.tempD2);
+            KERNEL_LAUNCH(predict, params, 0, params.stream2, ts, false,
+                          params.bubbles);
             KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2,
                           params.bubbles, params.pairs);
 
@@ -1108,6 +1108,13 @@ void run(std::string &&inputFileName) {
     double avgTimestep = 0.0;
     bool resetErrors = false;
     double &ts = params.hostData.timeStep;
+    const double minInterval =
+        3 == params.hostConstants.dimensionality
+            ? 0.5 * params.hostConstants.interval.getMinComponent()
+            : 0.5 * (params.hostConstants.interval.x <
+                             params.hostConstants.interval.y
+                         ? params.hostConstants.interval.x
+                         : params.hostConstants.interval.y);
 
     while (continueSimulation) {
         integrate(params);
@@ -1117,8 +1124,7 @@ void run(std::string &&inputFileName) {
         // than the simulation box in every dimension
         continueSimulation =
             params.bubbles.count > params.hostData.minNumBubbles &&
-            params.hostData.maxBubbleRadius <
-                0.5 * params.hostConstants.interval.getMinComponent();
+            params.hostData.maxBubbleRadius < minInterval;
 
         // Track timestep
         minTimestep = ts < minTimestep ? ts : minTimestep;
@@ -1238,8 +1244,7 @@ void run(std::string &&inputFileName) {
         printf("Stopping simulation, since the number of bubbles left in the "
                "simulation (%d) is less than the specified minimum (%d)\n",
                params.bubbles.count, params.hostData.minNumBubbles);
-    } else if (params.hostData.maxBubbleRadius >
-               0.5 * params.hostConstants.interval.getMinComponent()) {
+    } else if (params.hostData.maxBubbleRadius > minInterval) {
         dvec temp = params.hostConstants.interval;
         printf("Stopping simulation, since the radius of the largest bubble "
                "(%g) is greater than the simulation box (%g, %g, %g)\n",
