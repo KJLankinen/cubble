@@ -201,9 +201,10 @@ double stabilize(Params &params, int numStepsToRelax) {
                                            dMaxRadius, sizeof(double)));
 
             errorTooLarge = error > params.hostData.errorTolerance;
+            bool increaseTs = error < 0.7 * params.hostData.errorTolerance;
             if (errorTooLarge) {
                 ts *= 0.37;
-            } else {
+            } else if (increaseTs) {
                 ts *= 1.69;
             }
             nvtxRangePop();
@@ -385,9 +386,10 @@ void integrate(Params &params) {
         CUDA_CALL(cudaEventSynchronize(params.event1));
 
         errorTooLarge = *hMaxError > params.hostData.errorTolerance;
+        bool increaseTs = *hMaxError < 0.7 * params.hostData.errorTolerance;
         if (errorTooLarge) {
             ts *= 0.37;
-        } else {
+        } else if (increaseTs) {
             ts *= 1.69;
         }
 
