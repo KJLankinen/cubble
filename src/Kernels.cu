@@ -234,26 +234,21 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             zsh[tid] = 0.0;
         }
 
-        // Warp id of this thread
         const int wid = tid % 32;
-        // idx1 of the First Of Warp
         const int fowidx = pairs.i[i - i % 32];
-        // ThreadIdx of the last of warp + 1, i.e 32, 64, 96 or 128
-        const int k = (1 + tid / 32) * 32;
-        // (Always positive) difference between idx1 of this thread and the idx1
-        // of the first thread of this warp, e.g.
-        // [0, 0, 1, 1, 1, 2, 2, 3, 4, 4, ...]
+        const int lowtid = tid / 32 * 32 + 31;
         temp[tid] = pairs.i[i] - fowidx;
 
         __syncwarp();
 
-        if (wid <= temp[k - 1]) {
-            int j = tid / 32 * 32;
+        if (wid <= temp[lowtid]) {
+            int j = 0;
+            const int k = tid / 32 * 32;
             double xt = 0.0;
             double yt = 0.0;
             double zt = 0.0;
-            while (temp[j] <= wid && j < k) {
-                if (temp[j] == wid) {
+            while (temp[j + k] <= wid && j < 32) {
+                if (temp[j + k] == wid) {
                     xt += xsh[j];
                     yt += ysh[j];
                     zt += zsh[j];
