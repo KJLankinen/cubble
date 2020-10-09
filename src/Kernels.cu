@@ -197,6 +197,79 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
 
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
     const dvec interval = dConstants->interval;
+    const double fzpmz = dConstants->fZeroPerMuZero;
+    __shared__ int temp[128];
+    __shared__ double xsh[128];
+    __shared__ double ysh[128];
+    __shared__ double zsh[128];
+    const int tid = threadIdx.x;
+
+    for (int i = tid + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
+        double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
+        dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
+        dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
+        if (dConstants->dimensionality == 3) {
+            p1.z = bubbles.zp[idx1];
+            p2.z = bubbles.zp[idx2];
+        }
+        dvec distances = wrappedDifference(p1, p2, interval);
+        const double distance = distances.getSquaredLength();
+        if (radii * radii >= distance) {
+            distances =
+                distances * fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
+            xsh[tid] = distances.x;
+            ysh[tid] = distances.y;
+            zsh[tid] = 0.0;
+            atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
+            atomicAdd(&bubbles.dydtp[idx2], -distances.y);
+            if (dConstants->dimensionality == 3) {
+                zsh[tid] = distances.z;
+                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
+            }
+        } else {
+            xsh[tid] = 0.0;
+            ysh[tid] = 0.0;
+            zsh[tid] = 0.0;
+        }
+
+        const int wid = tid % 32;
+        const int fowidx = pairs.i[i - i % 32];
+        const int lowtid = tid / 32 * 32 + 31;
+        temp[tid] = pairs.i[i] - fowidx;
+
+        __syncwarp();
+
+        if (wid <= temp[lowtid]) {
+            int j = 0;
+            const int k = tid / 32 * 32;
+            double xt = 0.0;
+            double yt = 0.0;
+            double zt = 0.0;
+            while (temp[j + k] <= wid && j < 32) {
+                if (temp[j + k] == wid) {
+                    xt += xsh[j];
+                    yt += ysh[j];
+                    zt += zsh[j];
+                }
+
+                j++;
+            }
+            atomicAdd(&bubbles.dxdtp[fowidx + wid], xt);
+            atomicAdd(&bubbles.dydtp[fowidx + wid], yt);
+            if (dConstants->dimensionality == 3) {
+                atomicAdd(&bubbles.dzdtp[fowidx + wid], zt);
+            }
+        }
+        __syncwarp();
+    }
+}
+
+/*
+__global__ void pairVelocityOld(Bubbles bubbles, Pairs pairs) {
+    const dvec interval = dConstants->interval;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
@@ -226,6 +299,7 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         }
     }
 }
+*/
 
 __global__ void wallVelocity(Bubbles bubbles) {
     const double drag = 1.0 - dConstants->wallDragStrength;
