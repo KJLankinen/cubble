@@ -210,28 +210,31 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
     zsh[tid] = 0.0;
     __syncwarp();
 
-    for (int i = tid + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
-        const int idx2 = pairs.j[i];
-        double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
-        dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
-        dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-        if (dConstants->dimensionality == 3) {
-            p1.z = bubbles.zp[idx1];
-            p2.z = bubbles.zp[idx2];
-        }
-        dvec distances = wrappedDifference(p1, p2, interval);
-        const double distance = distances.getSquaredLength();
-        if (radii * radii >= distance) {
-            distances = distances * fzpmz * (rsqrt(distance) - 1.0 / radii);
-            xsh[tid] = distances.x;
-            ysh[tid] = distances.y;
-            atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
-            atomicAdd(&bubbles.dydtp[idx2], -distances.y);
+    // Make sure the entire warp enters the loop, if any thread of the warp does
+    for (int i = tid + blockIdx.x * blockDim.x;
+         i < dNumPairs + 32 - dNumPairs % 32; i += gridDim.x * blockDim.x) {
+        if (i < dNumPairs) {
+            const int idx1 = pairs.i[i];
+            const int idx2 = pairs.j[i];
+            double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
+            dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
+            dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
             if (dConstants->dimensionality == 3) {
-                zsh[tid] = distances.z;
-                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
+                p1.z = bubbles.zp[idx1];
+                p2.z = bubbles.zp[idx2];
+            }
+            dvec distances = wrappedDifference(p1, p2, interval);
+            const double distance = distances.getSquaredLength();
+            if (radii * radii >= distance) {
+                distances = distances * fzpmz * (rsqrt(distance) - 1.0 / radii);
+                xsh[tid] = distances.x;
+                ysh[tid] = distances.y;
+                atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
+                atomicAdd(&bubbles.dydtp[idx2], -distances.y);
+                if (dConstants->dimensionality == 3) {
+                    zsh[tid] = distances.z;
+                    atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
+                }
             }
         }
 
@@ -241,11 +244,12 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         const int fowidx = pairs.i[i - i % 32];
         // ThreadIdx of the last of warp + 1, i.e 32, 64, 96 or 128
         const int k = (1 + tid / 32) * 32;
-        // (Always positive) difference between idx1 of this thread and the idx1
-        // of the first thread of this warp, e.g.
-        // [0, 0, 1, 1, 1, 2, 2, 3, 4, 4, ...]
-        temp[tid] = pairs.i[i] - fowidx;
-
+        // (Always positive) difference between idx1 of this thread and the
+        // idx1 of the first thread of this warp, e.g. [0, 0, 1, 1, 1, 2, 2,
+        // 3, 4, 4, ...]
+        if (i < dNumPairs) {
+            temp[tid] = pairs.i[i] - fowidx;
+        }
         __syncwarp();
 
         if (wid <= temp[k - 1]) {
@@ -268,12 +272,12 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
                 atomicAdd(&bubbles.dzdtp[fowidx + wid], zt);
             }
         }
+        __syncwarp();
 
         temp[tid] = 99;
         xsh[tid] = 0.0;
         ysh[tid] = 0.0;
         zsh[tid] = 0.0;
-        __syncwarp();
     }
 }
 
