@@ -204,12 +204,6 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
     __shared__ double zsh[128];
     const int tid = threadIdx.x;
 
-    temp[tid] = 99;
-    xsh[tid] = 0.0;
-    ysh[tid] = 0.0;
-    zsh[tid] = 0.0;
-    __syncwarp();
-
     for (int i = tid + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         const int idx1 = pairs.i[i];
@@ -227,12 +221,17 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             distances = distances * fzpmz * (rsqrt(distance) - 1.0 / radii);
             xsh[tid] = distances.x;
             ysh[tid] = distances.y;
+            zsh[tid] = 0.0;
             atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
             atomicAdd(&bubbles.dydtp[idx2], -distances.y);
             if (dConstants->dimensionality == 3) {
                 zsh[tid] = distances.z;
                 atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
             }
+        } else {
+            xsh[tid] = 0.0;
+            ysh[tid] = 0.0;
+            zsh[tid] = 0.0;
         }
 
         // Warp id of this thread
@@ -268,11 +267,6 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
                 atomicAdd(&bubbles.dzdtp[fowidx + wid], zt);
             }
         }
-
-        temp[tid] = 99;
-        xsh[tid] = 0.0;
-        ysh[tid] = 0.0;
-        zsh[tid] = 0.0;
         __syncwarp();
     }
 }
