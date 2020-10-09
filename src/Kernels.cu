@@ -218,7 +218,8 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         dvec distances = wrappedDifference(p1, p2, interval);
         const double distance = distances.getSquaredLength();
         if (radii * radii >= distance) {
-            distances = distances * fzpmz * (rsqrt(distance) - 1.0 / radii);
+            distances =
+                distances * fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
             xsh[tid] = distances.x;
             ysh[tid] = distances.y;
             zsh[tid] = 0.0;
