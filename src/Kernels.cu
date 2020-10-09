@@ -252,7 +252,7 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             double xt = 0.0;
             double yt = 0.0;
             double zt = 0.0;
-            while (j < k && temp[j] <= wid) {
+            while (temp[j] <= wid && j < k) {
                 if (temp[j] == wid) {
                     xt += xsh[j];
                     yt += ysh[j];
