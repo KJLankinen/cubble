@@ -406,7 +406,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
-    __shared__ double sbuf[2 * BLOCK_SIZE];
+    __shared__ double sbuf[4 * BLOCK_SIZE];
     const int tid = threadIdx.x;
     double ta = 0.0;    // total area of all bubbles
     double toa = 0.0;   // total overlap area
@@ -510,65 +510,78 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         __syncwarp(active);
     }
 
-    auto sum = [&tid](double *p1, double *p2, double *sbuf) {
-        for (int i = BLOCK_SIZE / 2; i >= 32; i /= 2) {
-            if (tid < i) {
-                sbuf[tid] = sbuf[tid + i];
-                sbuf[tid + BLOCK_SIZE] = sbuf[tid + i + BLOCK_SIZE];
-            }
-            __syncthreads();
+    __syncthreads();
+    sbuf[tid + 0 * BLOCK_SIZE] = ta;
+    sbuf[tid + 1 * BLOCK_SIZE] = tapr;
+    sbuf[tid + 2 * BLOCK_SIZE] = toa;
+    sbuf[tid + 3 * BLOCK_SIZE] = toapr;
+    __syncthreads();
+
+    for (int i = BLOCK_SIZE / 2; i >= 32; i /= 2) {
+        if (tid < i) {
+            sbuf[tid] = sbuf[tid + i];
+            sbuf[tid + BLOCK_SIZE] = sbuf[tid + i + BLOCK_SIZE];
         }
+        __syncthreads();
+    }
 
-        if (tid < 32) {
-            double temp1 = 0.0;
-            double temp2 = 0.0;
+    if (tid < 32) {
+        double temp[4];
 
-            temp1 = sbuf[tid ^ 16];
-            temp2 = sbuf[tid ^ 16 + BLOCK_SIZE];
-            __syncwarp();
-            sbuf[tid] += temp1;
-            sbuf[tid + BLOCK_SIZE] += temp2;
-            __syncwarp();
+        temp[0] = sbuf[tid ^ 16 + 0 * BLOCK_SIZE];
+        temp[1] = sbuf[tid ^ 16 + 1 * BLOCK_SIZE];
+        temp[2] = sbuf[tid ^ 16 + 2 * BLOCK_SIZE];
+        temp[3] = sbuf[tid ^ 16 + 3 * BLOCK_SIZE];
+        __syncwarp();
+        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
+        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
+        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
+        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        __syncwarp();
 
-            temp1 = sbuf[tid ^ 8];
-            temp2 = sbuf[tid ^ 8 + BLOCK_SIZE];
-            __syncwarp();
-            sbuf[tid] += temp1;
-            sbuf[tid + BLOCK_SIZE] += temp2;
-            __syncwarp();
+        temp[0] = sbuf[tid ^ 8 + 0 * BLOCK_SIZE];
+        temp[1] = sbuf[tid ^ 8 + 1 * BLOCK_SIZE];
+        temp[2] = sbuf[tid ^ 8 + 2 * BLOCK_SIZE];
+        temp[3] = sbuf[tid ^ 8 + 3 * BLOCK_SIZE];
+        __syncwarp();
+        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
+        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
+        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
+        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        __syncwarp();
 
-            temp1 = sbuf[tid ^ 4];
-            temp2 = sbuf[tid ^ 4 + BLOCK_SIZE];
-            __syncwarp();
-            sbuf[tid] += temp1;
-            sbuf[tid + BLOCK_SIZE] += temp2;
-            __syncwarp();
+        temp[0] = sbuf[tid ^ 4 + 0 * BLOCK_SIZE];
+        temp[1] = sbuf[tid ^ 4 + 1 * BLOCK_SIZE];
+        temp[2] = sbuf[tid ^ 4 + 2 * BLOCK_SIZE];
+        temp[3] = sbuf[tid ^ 4 + 3 * BLOCK_SIZE];
+        __syncwarp();
+        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
+        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
+        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
+        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        __syncwarp();
 
-            temp1 = sbuf[tid ^ 2];
-            temp2 = sbuf[tid ^ 2 + BLOCK_SIZE];
-            __syncwarp();
-            sbuf[tid] += temp1;
-            sbuf[tid + BLOCK_SIZE] += temp2;
-            __syncwarp();
-        }
+        temp[0] = sbuf[tid ^ 2 + 0 * BLOCK_SIZE];
+        temp[1] = sbuf[tid ^ 2 + 1 * BLOCK_SIZE];
+        temp[2] = sbuf[tid ^ 2 + 2 * BLOCK_SIZE];
+        temp[3] = sbuf[tid ^ 2 + 3 * BLOCK_SIZE];
+        __syncwarp();
+        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
+        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
+        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
+        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        __syncwarp();
+    }
 
-        if (0 == tid) {
-            atomicAdd(p1, sbuf[0] + sbuf[1]);
-            atomicAdd(p2, sbuf[BLOCK_SIZE] + sbuf[BLOCK_SIZE + 1]);
-        }
-    };
-
-    __syncthreads();
-    sbuf[tid] = ta;
-    sbuf[tid + BLOCK_SIZE] = tapr;
-    __syncthreads();
-    sum(&dTotalArea, &dTotalAreaPerRadius, sbuf);
-
-    __syncthreads();
-    sbuf[tid] = toa;
-    sbuf[tid + BLOCK_SIZE] = toapr;
-    __syncthreads();
-    sum(&dTotalOverlapArea, &dTotalOverlapAreaPerRadius, sbuf);
+    if (0 == tid) {
+        atomicAdd(&dTotalArea, sbuf[0] + sbuf[1]);
+        atomicAdd(&dTotalAreaPerRadius,
+                  sbuf[BLOCK_SIZE] + sbuf[BLOCK_SIZE + 1]);
+        atomicAdd(&dTotalOverlapArea,
+                  sbuf[2 * BLOCK_SIZE] + sbuf[2 * BLOCK_SIZE + 1]);
+        atomicAdd(&dTotalOverlapAreaPerRadius,
+                  sbuf[3 * BLOCK_SIZE] + sbuf[3 * BLOCK_SIZE + 1]);
+    }
 }
 
 __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
