@@ -220,11 +220,8 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
                 distances * fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
             vx[threadIdx.x] = distances.x;
             vy[threadIdx.x] = distances.y;
-            atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
-            atomicAdd(&bubbles.dydtp[idx2], -distances.y);
             if (dConstants->dimensionality == 3) {
                 vz[threadIdx.x] = distances.z;
-                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
             }
         } else {
             vx[threadIdx.x] = 0.0;
@@ -237,29 +234,53 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         // a leader amongst the threads with the same idx1, which sums the
         // values calculated by the warp and does a single atomicAdd per index.
         __syncwarp();
-        const int wid = threadIdx.x & 31;
         const unsigned int active = __activemask();
-        const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << wid) - 1;
-        const unsigned int rank = __popc(matches & lanemask_lt);
-        if (0 == rank) {
-            double tx = 0.0;
-            double ty = 0.0;
-            double tz = 0.0;
+        const unsigned int matches1 = __match_any_sync(active, idx1);
+        const unsigned int matches2 = __match_any_sync(active, idx2);
+        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+        const unsigned int rank1 = __popc(matches1 & lanemask_lt);
+        const unsigned int rank2 = __popc(matches2 & lanemask_lt);
+        if (0 == rank1 || 0 == rank2) {
+            double tx1 = 0.0;
+            double ty1 = 0.0;
+            double tz1 = 0.0;
+            double tx2 = 0.0;
+            double ty2 = 0.0;
+            double tz2 = 0.0;
             // thread id of the first lane of this warp, multiple of 32
             const int flt = 32 * (threadIdx.x >> 5);
-            // The warps with the same idx1 are consecutive, so loop over only
-            // those indices
-            const int n = __popc(matches) + wid;
-            for (int j = wid; j < n; j++) {
-                tx += vx[j + flt];
-                ty += vy[j + flt];
-                tz += vz[j + flt];
+#pragma unroll
+            for (int j = 0; j < 32; j++) {
+                const int mul1 = !!(matches1 & 1 << j);
+                const int mul2 = !!(matches2 & 1 << j);
+
+                double temp = vx[j + flt];
+                tx1 += temp * mul1;
+                tx2 += temp * mul2;
+
+                temp = vy[j + flt];
+                ty1 += temp * mul1;
+                ty2 += temp * mul2;
+
+                temp = vz[j + flt];
+                tz1 += temp * mul1;
+                tz2 += temp * mul2;
             }
-            atomicAdd(&bubbles.dxdtp[idx1], tx);
-            atomicAdd(&bubbles.dydtp[idx1], ty);
-            if (dConstants->dimensionality == 3) {
-                atomicAdd(&bubbles.dzdtp[idx1], tz);
+
+            if (0 == rank1) {
+                atomicAdd(&bubbles.dxdtp[idx1], tx1);
+                atomicAdd(&bubbles.dydtp[idx1], ty1);
+                if (dConstants->dimensionality == 3) {
+                    atomicAdd(&bubbles.dzdtp[idx1], tz1);
+                }
+            }
+
+            if (0 == rank2) {
+                atomicAdd(&bubbles.dxdtp[idx2], -tx2);
+                atomicAdd(&bubbles.dydtp[idx2], -ty2);
+                if (dConstants->dimensionality == 3) {
+                    atomicAdd(&bubbles.dzdtp[idx2], -tz2);
+                }
             }
         }
         __syncwarp();
