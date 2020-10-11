@@ -5,6 +5,7 @@
 #include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
+#include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
 #include <functional>
@@ -994,6 +995,7 @@ void init(const char *inputFileName, Params &params) {
 
     printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
            "#searches");
+    cudaProfilerStart();
     while (true) {
         double time = stabilize(params, stabilizationSteps) *
                       params.hostData.timeScalingFactor;
@@ -1019,6 +1021,10 @@ void init(const char *inputFileName, Params &params) {
             printf("%-9.5e ", params.hostData.energy2);
             printf("%-9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
+        }
+
+        if (0 == numSteps) {
+            cudaProfilerStop();
         }
 
         ++numSteps;
