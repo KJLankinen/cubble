@@ -559,13 +559,13 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         }
     };
 
+    __syncthreads();
     sbuf[tid] = ta;
     sbuf[tid + BLOCK_SIZE] = tapr;
     __syncthreads();
     sum(&dTotalArea, &dTotalAreaPerRadius, sbuf);
 
     __syncthreads();
-
     sbuf[tid] = toa;
     sbuf[tid + BLOCK_SIZE] = toapr;
     __syncthreads();
