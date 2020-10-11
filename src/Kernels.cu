@@ -465,7 +465,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                 overlapArea = 2.0 * sqrt(overlapArea);
             }
 
-            sbuf[tid] = ovelapArea;
+            sbuf[tid] = overlapArea;
             atomicAdd(&overlap[idx2], overlapArea);
 
             r1 = 1.0 / r1;
@@ -511,7 +511,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         __syncwarp();
     }
 
-    auto sum = [&tid, &sbuf](double *p1, double *p2) {
+    auto sum = [&tid](double *p1, double *p2, double *sbuf) {
         for (int i = BLOCK_SIZE / 2; i >= 32; i /= 2) {
             if (tid < i) {
                 sbuf[tid] = sbuf[tid + i];
@@ -562,14 +562,14 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     sbuf[tid] = ta;
     sbuf[tid + BLOCK_SIZE] = tapr;
     __syncthreads();
-    sum(&dTotalArea, &dTotalAreaPerRadius);
+    sum(&dTotalArea, &dTotalAreaPerRadius, sbuf);
 
     __syncthreads();
 
     sbuf[tid] = toa;
     sbuf[tid + BLOCK_SIZE] = toapr;
     __syncthreads();
-    sum(&dTotalOverlapArea, &dTotalOverlapAreaPerRadius);
+    sum(&dTotalOverlapArea, &dTotalOverlapAreaPerRadius, sbuf);
 }
 
 __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
