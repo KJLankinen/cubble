@@ -406,12 +406,12 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
-    __shared__ double sbuf[4 * BLOCK_SIZE];
+    __shared__ double sbuf[2 * BLOCK_SIZE];
+    __shared__ double ta[BLOCK_SIZE]       // total area of all bubbles
+        __shared__ double toa[BLOCK_SIZE]; // total overlap area
+    __shared__ double tapr[BLOCK_SIZE];    // ta per radius
+    __shared__ double toapr[BLOCK_SIZE];   // toa per radius
     const int tid = threadIdx.x;
-    double ta = 0.0;    // total area of all bubbles
-    double toa = 0.0;   // total overlap area
-    double tapr = 0.0;  // ta per radius
-    double toapr = 0.0; // toa per radius
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
@@ -426,8 +426,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             if (dConstants->dimensionality == 3) {
                 areaPerRad *= 2.0 * r1;
             }
-            ta += areaPerRad * r1;
-            tapr += areaPerRad;
+            ta[tid] += areaPerRad * r1;
+            tapr[tid] += areaPerRad;
         }
 
         double r1 = bubbles.rp[idx1];
@@ -470,8 +470,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             r1 = 1.0 / r1;
             r2 = 1.0 / r2;
 
-            toa += 2.0 * overlapArea;
-            toapr += overlapArea * (r1 + r2);
+            toa[tid] += 2.0 * overlapArea;
+            toapr[tid] += overlapArea * (r1 + r2);
 
             overlapArea *= (r2 - r1);
 
@@ -511,76 +511,68 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     }
 
     __syncthreads();
-    sbuf[tid + 0 * BLOCK_SIZE] = ta;
-    sbuf[tid + 1 * BLOCK_SIZE] = tapr;
-    sbuf[tid + 2 * BLOCK_SIZE] = toa;
-    sbuf[tid + 3 * BLOCK_SIZE] = toapr;
-    __syncthreads();
 
     if (tid < 32) {
 #pragma unroll
         for (int i = 1; i < BLOCK_SIZE / 32; i++) {
-            sbuf[tid + 0 * BLOCK_SIZE] += sbuf[tid + i * 32 + 0 * BLOCK_SIZE];
-            sbuf[tid + 1 * BLOCK_SIZE] += sbuf[tid + i * 32 + 1 * BLOCK_SIZE];
-            sbuf[tid + 2 * BLOCK_SIZE] += sbuf[tid + i * 32 + 2 * BLOCK_SIZE];
-            sbuf[tid + 3 * BLOCK_SIZE] += sbuf[tid + i * 32 + 3 * BLOCK_SIZE];
+            ta[tid] += ta[tid + i * 32];
+            toa[tid] += toa[tid + i * 32];
+            tapr[tid] += tapr[tid + i * 32];
+            toapr[tid] += toapr[tid + i * 32];
         }
         __syncwarp();
 
         double temp[4];
-        temp[0] = sbuf[tid ^ 16 + 0 * BLOCK_SIZE];
-        temp[1] = sbuf[tid ^ 16 + 1 * BLOCK_SIZE];
-        temp[2] = sbuf[tid ^ 16 + 2 * BLOCK_SIZE];
-        temp[3] = sbuf[tid ^ 16 + 3 * BLOCK_SIZE];
+        temp[0] = ta[tid ^ 16];
+        temp[1] = toa[tid ^ 16];
+        temp[2] = tapr[tid ^ 16];
+        temp[3] = toapr[tid ^ 16];
         __syncwarp();
-        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
-        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
-        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
-        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
-        __syncwarp();
-
-        temp[0] = sbuf[tid ^ 8 + 0 * BLOCK_SIZE];
-        temp[1] = sbuf[tid ^ 8 + 1 * BLOCK_SIZE];
-        temp[2] = sbuf[tid ^ 8 + 2 * BLOCK_SIZE];
-        temp[3] = sbuf[tid ^ 8 + 3 * BLOCK_SIZE];
-        __syncwarp();
-        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
-        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
-        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
-        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        ta[tid] += temp[0];
+        toa[tid] += temp[1];
+        tapr[tid] += temp[2];
+        toapr[tid] += temp[3];
         __syncwarp();
 
-        temp[0] = sbuf[tid ^ 4 + 0 * BLOCK_SIZE];
-        temp[1] = sbuf[tid ^ 4 + 1 * BLOCK_SIZE];
-        temp[2] = sbuf[tid ^ 4 + 2 * BLOCK_SIZE];
-        temp[3] = sbuf[tid ^ 4 + 3 * BLOCK_SIZE];
+        temp[0] = ta[tid ^ 8];
+        temp[1] = toa[tid ^ 8];
+        temp[2] = tapr[tid ^ 8];
+        temp[3] = toapr[tid ^ 8];
         __syncwarp();
-        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
-        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
-        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
-        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        ta[tid] += temp[0];
+        toa[tid] += temp[1];
+        tapr[tid] += temp[2];
+        toapr[tid] += temp[3];
         __syncwarp();
 
-        temp[0] = sbuf[tid ^ 2 + 0 * BLOCK_SIZE];
-        temp[1] = sbuf[tid ^ 2 + 1 * BLOCK_SIZE];
-        temp[2] = sbuf[tid ^ 2 + 2 * BLOCK_SIZE];
-        temp[3] = sbuf[tid ^ 2 + 3 * BLOCK_SIZE];
+        temp[0] = ta[tid ^ 4];
+        temp[1] = toa[tid ^ 4];
+        temp[2] = tapr[tid ^ 4];
+        temp[3] = toapr[tid ^ 4];
         __syncwarp();
-        sbuf[tid + 0 * BLOCK_SIZE] += temp[0];
-        sbuf[tid + 1 * BLOCK_SIZE] += temp[1];
-        sbuf[tid + 2 * BLOCK_SIZE] += temp[2];
-        sbuf[tid + 3 * BLOCK_SIZE] += temp[3];
+        ta[tid] += temp[0];
+        toa[tid] += temp[1];
+        tapr[tid] += temp[2];
+        toapr[tid] += temp[3];
+        __syncwarp();
+
+        temp[0] = ta[tid ^ 2];
+        temp[1] = toa[tid ^ 2];
+        temp[2] = tapr[tid ^ 2];
+        temp[3] = toapr[tid ^ 2];
+        __syncwarp();
+        ta[tid] += temp[0];
+        toa[tid] += temp[1];
+        tapr[tid] += temp[2];
+        toapr[tid] += temp[3];
         __syncwarp();
     }
 
     if (0 == tid) {
-        atomicAdd(&dTotalArea, sbuf[0] + sbuf[1]);
-        atomicAdd(&dTotalAreaPerRadius,
-                  sbuf[BLOCK_SIZE] + sbuf[BLOCK_SIZE + 1]);
-        atomicAdd(&dTotalOverlapArea,
-                  sbuf[2 * BLOCK_SIZE] + sbuf[2 * BLOCK_SIZE + 1]);
-        atomicAdd(&dTotalOverlapAreaPerRadius,
-                  sbuf[3 * BLOCK_SIZE] + sbuf[3 * BLOCK_SIZE + 1]);
+        atomicAdd(&dTotalArea, ta[0] + ta[1]);
+        atomicAdd(&dTotalAreaPerRadius, tapr[0] + tapr[1]);
+        atomicAdd(&dTotalOverlapArea, toa[0] + toa[1]);
+        atomicAdd(&dTotalOverlapAreaPerRadius, toapr[0] + toapr[1]);
     }
 }
 
