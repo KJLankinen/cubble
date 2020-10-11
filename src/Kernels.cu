@@ -237,9 +237,10 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         // a leader amongst the threads with the same idx1, which sums the
         // values calculated by the warp and does a single atomicAdd per index.
         __syncwarp();
-        unsigned int active = __activemask();
-        unsigned int matches = __match_any_sync(active, idx1);
-        unsigned int rank = __popc(matches & __lanemask_lt());
+        const unsigned int active = __activemask();
+        const unsigned int matches = __match_any_sync(active, idx1);
+        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+        unsigned int rank = __popc(matches & lanemask_lt);
         if (0 == rank) {
             double tx = 0.0;
             double ty = 0.0;
