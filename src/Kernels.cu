@@ -407,8 +407,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
     __shared__ double sbuf[2 * BLOCK_SIZE];
-    __shared__ double ta[BLOCK_SIZE]       // total area of all bubbles
-        __shared__ double toa[BLOCK_SIZE]; // total overlap area
+    __shared__ double ta[BLOCK_SIZE];      // total area of all bubbles
+    __shared__ double toa[BLOCK_SIZE];     // total overlap area
     __shared__ double tapr[BLOCK_SIZE];    // ta per radius
     __shared__ double toapr[BLOCK_SIZE];   // toa per radius
     const int tid = threadIdx.x;
