@@ -554,8 +554,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         }
 
         if (0 == tid) {
-            atomicAdd(p1, sbuf[tid]);
-            atomicAdd(p2, sbuf[tid + BLOCK_SIZE]);
+            atomicAdd(p1, sbuf[0] + sbuf[1]);
+            atomicAdd(p2, sbuf[BLOCK_SIZE] + sbuf[BLOCK_SIZE + 1]);
         }
     };
 
