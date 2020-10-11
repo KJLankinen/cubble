@@ -476,7 +476,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
 
             overlapArea *= (r2 - r1);
 
-            sbuf[tid + BLOCK_SIZE] = ovelapArea;
+            sbuf[tid + BLOCK_SIZE] = overlapArea;
             atomicAdd(&bubbles.drdtp[idx2], -overlapArea);
         } else {
             sbuf[tid] = 0.0;
