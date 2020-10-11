@@ -237,9 +237,10 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         // a leader amongst the threads with the same idx1, which sums the
         // values calculated by the warp and does a single atomicAdd per index.
         __syncwarp();
+        const int wid = threadIdx.x & 31;
         const unsigned int active = __activemask();
         const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+        const unsigned int lanemask_lt = (1 << wid) - 1;
         const unsigned int rank = __popc(matches & lanemask_lt);
         if (0 == rank) {
             double tx = 0.0;
@@ -247,11 +248,13 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             double tz = 0.0;
             // thread id of the first lane of this warp, multiple of 32
             const int flt = 32 * (threadIdx.x >> 5);
-            for (int j = 0; j < 32; j++) {
-                const int mul = !!(matches & 1 << j);
-                tx += vx[j + flt] * mul;
-                ty += vy[j + flt] * mul;
-                tz += vz[j + flt] * mul;
+            // The warps with the same idx1 are consecutive, so loop over only
+            // those indices
+            const int n = __popc(matches) + wid;
+            for (int j = wid; j < n; j++) {
+                tx += vx[j + flt];
+                ty += vy[j + flt];
+                tz += vz[j + flt];
             }
             atomicAdd(&bubbles.dxdtp[idx1], tx);
             atomicAdd(&bubbles.dydtp[idx1], ty);
@@ -262,39 +265,6 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         __syncwarp();
     }
 }
-/*
-__global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
-    const dvec interval = dConstants->interval;
-    const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        int idx1 = pairs.i[i];
-        int idx2 = pairs.j[i];
-        double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
-        dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
-        dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-        if (dConstants->dimensionality == 3) {
-            p1.z = bubbles.zp[idx1];
-            p2.z = bubbles.zp[idx2];
-        }
-        dvec distances = wrappedDifference(p1, p2, interval);
-        const double distance = distances.getSquaredLength();
-        if (radii * radii >= distance) {
-            distances =
-                distances * fZeroPerMuZero * (rsqrt(distance) - 1.0 / radii);
-            atomicAdd(&bubbles.dxdtp[idx1], distances.x);
-            atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
-            atomicAdd(&bubbles.dydtp[idx1], distances.y);
-            atomicAdd(&bubbles.dydtp[idx2], -distances.y);
-            if (dConstants->dimensionality == 3) {
-                atomicAdd(&bubbles.dzdtp[idx1], distances.z);
-                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
-            }
-        }
-    }
-}
-*/
 
 __global__ void wallVelocity(Bubbles bubbles) {
     const double drag = 1.0 - dConstants->wallDragStrength;

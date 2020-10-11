@@ -995,7 +995,6 @@ void init(const char *inputFileName, Params &params) {
 
     printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
            "#searches");
-    cudaProfilerStart();
     while (true) {
         double time = stabilize(params, stabilizationSteps) *
                       params.hostData.timeScalingFactor;
@@ -1021,10 +1020,6 @@ void init(const char *inputFileName, Params &params) {
             printf("%-9.5e ", params.hostData.energy2);
             printf("%-9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
-        }
-
-        if (0 == numSteps) {
-            cudaProfilerStop();
         }
 
         ++numSteps;
@@ -1123,7 +1118,13 @@ void run(std::string &&inputFileName) {
                          ? params.hostConstants.interval.x
                          : params.hostConstants.interval.y);
 
+    cudaProfilerStart();
     while (continueSimulation) {
+        if (2 == params.hostData.timesPrinted &&
+            1 == params.hostData.numStepsInTimeStep) {
+            cudaProfilerStop();
+        }
+
         integrate(params);
 
         // Continue if there are more than the specified minimum number of
