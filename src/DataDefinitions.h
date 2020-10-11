@@ -8,6 +8,8 @@
 #include <thread>
 #include <vector>
 
+#define BLOCK_SIZE 128
+
 namespace {
 template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
     *p = *prev;
@@ -280,7 +282,7 @@ struct Params {
     std::thread ioThread;
 
     dim3 blockGrid = dim3(1024, 1, 1);
-    dim3 threadBlock = dim3(128, 1, 1);
+    dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
 
     void *memory = nullptr;
     void *pinnedMemory = nullptr;

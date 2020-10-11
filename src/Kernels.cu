@@ -196,9 +196,9 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
 }
 
 __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
-    __shared__ double vx[128];
-    __shared__ double vy[128];
-    __shared__ double vz[128];
+    __shared__ double vx[BLOCK_SIZE];
+    __shared__ double vy[BLOCK_SIZE];
+    __shared__ double vz[BLOCK_SIZE];
     const dvec interval = dConstants->interval;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
 
@@ -237,8 +237,8 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         // have the same address to save the values to. Here the threads choose
         // a leader amongst the threads with the same idx1, which sums the
         // values calculated by the warp and does a single atomicAdd per index.
-        __syncwarp();
         const unsigned int active = __activemask();
+        __syncwarp(active);
         const unsigned int matches = __match_any_sync(active, idx1);
         const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
         const unsigned int rank = __popc(matches & lanemask_lt);
@@ -262,7 +262,7 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
                 atomicAdd(&bubbles.dzdtp[idx1], tz);
             }
         }
-        __syncwarp();
+        __syncwarp(active);
     }
 }
 
@@ -402,7 +402,6 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
     }
 }
 
-#define BLOCK_SIZE 128
 __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
@@ -488,8 +487,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         // have the same address to save the values to. Here the threads choose
         // a leader amongst the threads with the same idx1, which sums the
         // values calculated by the warp and does a single atomicAdd per index.
-        __syncwarp();
         const unsigned int active = __activemask();
+        __syncwarp(active);
         const unsigned int matches = __match_any_sync(active, idx1);
         const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
         const unsigned int rank = __popc(matches & lanemask_lt);
@@ -508,7 +507,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             atomicAdd(&overlap[idx1], oa);
             atomicAdd(&bubbles.drdtp[idx1], vr);
         }
-        __syncwarp();
+        __syncwarp(active);
     }
 
     auto sum = [&tid](double *p1, double *p2, double *sbuf) {
@@ -626,15 +625,15 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
     const double minRad = dConstants->minRad;
     int tid = threadIdx.x;
     // maximum error
-    __shared__ double me[128];
+    __shared__ double me[BLOCK_SIZE];
     // maximum radius
-    __shared__ double mr[128];
+    __shared__ double mr[BLOCK_SIZE];
     // volume of remaining bubbles, i.e. new total volume
-    __shared__ double tvn[128];
+    __shared__ double tvn[BLOCK_SIZE];
     // boundary expansion, i.e. how far the boundary of a bubble has moved since
     // neighbors were last searched. Boundary expansion =
     // distance moved + radius increased with gas exchange.
-    __shared__ double be[128];
+    __shared__ double be[BLOCK_SIZE];
     me[tid] = 0.0;
     mr[tid] = 0.0;
     tvn[tid] = 0.0;
@@ -760,7 +759,7 @@ __global__ void incrementPath(Bubbles bubbles) {
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted) {
     // Count of pairs to be deleted
-    __shared__ int tbds[128];
+    __shared__ int tbds[BLOCK_SIZE];
     int tid = threadIdx.x;
     tbds[tid] = 0;
 
