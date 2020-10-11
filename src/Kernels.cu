@@ -517,17 +517,17 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     sbuf[tid + 3 * BLOCK_SIZE] = toapr;
     __syncthreads();
 
-    for (int i = BLOCK_SIZE / 2; i >= 32; i /= 2) {
-        if (tid < i) {
-            sbuf[tid] = sbuf[tid + i];
-            sbuf[tid + BLOCK_SIZE] = sbuf[tid + i + BLOCK_SIZE];
-        }
-        __syncthreads();
-    }
-
     if (tid < 32) {
-        double temp[4];
+#pragma unroll
+        for (int i = 1; i < BLOCK_SIZE / 32; i++) {
+            sbuf[tid + 0 * BLOCK_SIZE] += sbuf[tid + i * 32 + 0 * BLOCK_SIZE];
+            sbuf[tid + 1 * BLOCK_SIZE] += sbuf[tid + i * 32 + 1 * BLOCK_SIZE];
+            sbuf[tid + 2 * BLOCK_SIZE] += sbuf[tid + i * 32 + 2 * BLOCK_SIZE];
+            sbuf[tid + 3 * BLOCK_SIZE] += sbuf[tid + i * 32 + 3 * BLOCK_SIZE];
+        }
+        __syncwarp();
 
+        double temp[4];
         temp[0] = sbuf[tid ^ 16 + 0 * BLOCK_SIZE];
         temp[1] = sbuf[tid ^ 16 + 1 * BLOCK_SIZE];
         temp[2] = sbuf[tid ^ 16 + 2 * BLOCK_SIZE];
