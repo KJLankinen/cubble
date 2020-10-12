@@ -320,21 +320,60 @@ __global__ void wallVelocity(Bubbles bubbles) {
 }
 
 __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
+    __shared__ double vx[BLOCK_SIZE];
+    __shared__ double vy[BLOCK_SIZE];
+    __shared__ double vz[BLOCK_SIZE];
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
 
-        atomicAdd(&bubbles.flowVx[idx1], bubbles.dxdto[idx2]);
-        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
+        vx[threadIdx.x] = bubbles.dxdto[idx2];
+        vy[threadIdx.x] = bubbles.dydto[idx2];
 
-        atomicAdd(&bubbles.flowVy[idx1], bubbles.dydto[idx2]);
+        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
         atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
 
         if (dConstants->dimensionality == 3) {
-            atomicAdd(&bubbles.flowVz[idx1], bubbles.dzdto[idx2]);
+            vz[threadIdx.x] = bubbles.dzdto[idx2];
             atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
         }
+
+        // pairs.i is an ordered list, such that the same index can be repeated
+        // multiple times in a row. This means that many threads of a warp might
+        // have the same address to save the values to. Here the threads choose
+        // a leader amongst the threads with the same idx1, which sums the
+        // values calculated by the warp and does a single atomicAdd per index.
+        const unsigned int active = __activemask();
+        __syncwarp(active);
+        const unsigned int matches = __match_any_sync(active, idx1);
+        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+        const unsigned int rank = __popc(matches & lanemask_lt);
+        if (0 == rank) {
+            double tx = 0.0;
+            double ty = 0.0;
+            double tz = 0.0;
+            // thread id of the first lane of this warp, multiple of 32
+            const int flt = 32 * (threadIdx.x >> 5);
+#pragma unroll
+            for (int j = 0; j < 32; j++) {
+                const int mul = !!(matches & 1 << j);
+                tx += vx[j + flt] * mul;
+                ty += vy[j + flt] * mul;
+
+                if (dConstants->dimensionality == 3) {
+                    tz += vz[j + flt] * mul;
+                }
+            }
+
+            atomicAdd(&bubbles.flowVx[idx1], tx);
+            atomicAdd(&bubbles.flowVy[idx1], ty);
+            if (dConstants->dimensionality == 3) {
+                atomicAdd(&bubbles.flowVz[idx1], tz);
+            }
+        }
+        __syncwarp(active);
     }
 }
 

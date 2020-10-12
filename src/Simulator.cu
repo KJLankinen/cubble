@@ -287,10 +287,10 @@ void integrate(Params &params) {
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
         // step.
-        KERNEL_LAUNCH(resetArrays, params, 0, params.stream1, 0.0,
+        KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
                       params.bubbles.count, false, params.bubbles.flowVx,
                       params.bubbles.flowVy, params.bubbles.flowVz);
-        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, params.stream1,
+        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, params.stream2,
                       params.bubbles, params.pairs);
     }
 
