@@ -317,7 +317,7 @@ void integrate(Params &params) {
                           params.bubbles.count, false, params.bubbles.dxdtp,
                           params.bubbles.dydtp, params.bubbles.dzdtp,
                           params.tempD2);
-            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1));
+            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
             KERNEL_LAUNCH(predict, params, 0, params.stream2, ts, false,
                           params.bubbles);
             KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2,
