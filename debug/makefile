@@ -72,7 +72,7 @@ $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 # Rule for linking the GPU code to a single object file
 # -----------------------------------------------------
 $(GPU_CODE) : $(GPU_OBJS)
-	$(C_GPU) -arch=$(CUDA_ARCH) -dlink $^ -o $@
+	$(C_GPU) $(GPU_ARCH) -dlink $^ -o $@
 
 # Rule for the intermediate objects
 # -----------------------------------------------------
