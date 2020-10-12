@@ -19,6 +19,22 @@
     cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
 #define CUB_LAUNCH(...) cubble::cubLaunch(__FILE__, __LINE__, __VA_ARGS__)
 
+#ifdef PROFILE
+#define CUBBLE_PROFILE(start)                                                  \
+    if (start) {                                                               \
+        cudaProfilerStart();                                                   \
+    } else {                                                                   \
+        bool stopProfiling = 1000 == params.hostData.numStepsInTimeStep;       \
+        stopProfiling |= 2 == params.hostData.timesPrinted &&                  \
+                         1 == params.hostData.numStepsInTimeStep;              \
+        if (stopProfiling) {                                                   \
+            cudaProfilerStop();                                                \
+        }                                                                      \
+    }
+#else
+#define CUBBLE_PROFILE(start)
+#endif
+
 // Macro for device assert.
 #ifndef NDEBUG
 #define DEVICE_ASSERT(statement, msg)                                          \

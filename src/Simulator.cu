@@ -1118,12 +1118,9 @@ void run(std::string &&inputFileName) {
                          ? params.hostConstants.interval.x
                          : params.hostConstants.interval.y);
 
-    cudaProfilerStart();
+    CUBBLE_PROFILE(true);
     while (continueSimulation) {
-        if (2 == params.hostData.timesPrinted &&
-            1 == params.hostData.numStepsInTimeStep) {
-            cudaProfilerStop();
-        }
+        CUBBLE_PROFILE(false);
 
         integrate(params);
 
