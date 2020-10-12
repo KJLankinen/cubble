@@ -63,6 +63,13 @@ OPTIM_FLAGS := -O3
 all : | $(BIN_PATH)
 	$(MAKE) -j8 $(EXEC)
 
+# For profiling
+# -----------------------------------------------------
+.PHONY: profile
+profile : | $(BIN_PATH)
+	$(eval DEFINES += -DPROFILE)
+	$(MAKE) all
+
 # Rule for main executable.
 # -----------------------------------------------------
 # By default has some safety nets at place but also uses some optimizations.
