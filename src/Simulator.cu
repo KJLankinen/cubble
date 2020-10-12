@@ -296,9 +296,10 @@ void integrate(Params &params) {
 
     do {
         nvtxRangePush("Do-loop");
-        KERNEL_LAUNCH(initGlobals, params, 0, 0);
         // Stream1
         {
+            KERNEL_LAUNCH(initGlobals, params, 0, params.stream1);
+            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
             KERNEL_LAUNCH(resetArrays, params, 0, params.stream1, 0.0,
                           params.bubbles.count, false, params.bubbles.drdtp,
                           params.tempD1);
@@ -316,6 +317,7 @@ void integrate(Params &params) {
                           params.bubbles.count, false, params.bubbles.dxdtp,
                           params.bubbles.dydtp, params.bubbles.dzdtp,
                           params.tempD2);
+            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1));
             KERNEL_LAUNCH(predict, params, 0, params.stream2, ts, false,
                           params.bubbles);
             KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2,
