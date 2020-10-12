@@ -45,6 +45,7 @@ LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 
 # Preprocessor defines
 # -----------------------------------------------------
+PROFILE ?=
 DEFINES := -DNDEBUG
 NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 
@@ -63,16 +64,8 @@ OPTIM_FLAGS := -O3
 all : | $(BIN_PATH)
 	$(MAKE) -j8 $(EXEC)
 
-# For profiling
-# -----------------------------------------------------
-.PHONY: profile
-profile : | $(BIN_PATH)
-	$(eval DEFINES += -DPROFILE)
-	$(MAKE) all
-
 # Rule for main executable.
 # -----------------------------------------------------
-# By default has some safety nets at place but also uses some optimizations.
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
 	$(C_CPU) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
 
@@ -87,13 +80,13 @@ $(GPU_CODE) : $(GPU_OBJS)
 # CPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cpp
 	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES))
+	$(OPTIM_FLAGS) $(DEFINES) $(PROFILE))
 	$(C_CPU) $< $(OPTIONS) -c -o $@
 
 # GPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
 	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES))
+	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILE))
 	$(C_GPU) $< $(OPTIONS) -dc -o $@
 
 # Clean up
