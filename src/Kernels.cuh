@@ -29,11 +29,10 @@ __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
 __global__ void indexByCell(int *cellIndices, int *cellOffsets,
                             int *bubbleIndices, int count);
 __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles, Pairs &pairs);
+                            int *pairJ, Bubbles &bubbles);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
-                               int *pairI, int *pairJ, Bubbles bubbles,
-                               Pairs pairs);
+                               int *pairI, int *pairJ, Bubbles bubbles);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
