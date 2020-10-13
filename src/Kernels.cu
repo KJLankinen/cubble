@@ -451,6 +451,10 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     __shared__ double tapr[BLOCK_SIZE];    // ta per radius
     __shared__ double toapr[BLOCK_SIZE];   // toa per radius
     const int tid = threadIdx.x;
+    ta[tid] = 0.0;
+    toa[tid] = 0.0;
+    tapr[tid] = 0.0;
+    toapr[tid] = 0.0;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
