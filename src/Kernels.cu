@@ -432,6 +432,7 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
 __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
+    const dvec interval = dConstants->interval;
     __shared__ double sbuf[4 * BLOCK_SIZE];
     const int tid = threadIdx.x;
     double ta = 0.0;    // total area of all bubbles
@@ -441,41 +442,41 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
+        int idx1 = pairs.i[i];
         int idx2 = pairs.j[i];
 
         DEVICE_ASSERT(idx1 != idx2, "Bubble is a pair with itself");
 
-        double r1 = 0.0;
-        double r2 = 0.0;
         if (i < bubbles.count) {
-            r1 = bubbles.rp[i];
-            r2 = 2.0 * CUBBLE_PI;
+            double r1 = bubbles.rp[i];
+            double areaPerRad = 2.0 * CUBBLE_PI;
             if (dConstants->dimensionality == 3) {
-                r2 *= 2.0 * r1;
+                areaPerRad *= 2.0 * r1;
             }
-            ta += r2 * r1;
-            tapr += r2;
+            ta += areaPerRad * r1;
+            tapr += areaPerRad;
         }
 
-        r1 = bubbles.rp[idx1];
-        r2 = bubbles.rp[idx2];
-        double overlapArea = r1 + r2;
+        double r1 = bubbles.rp[idx1];
+        double r2 = bubbles.rp[idx2];
+        const double r1sq = r1 * r1;
+        const double r2sq = r2 * r2;
+        const double radii = r1 + r2;
 
         double magnitude = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
                                              bubbles.zp[idx1], bubbles.xp[idx2],
                                              bubbles.yp[idx2], bubbles.zp[idx2])
                                .getSquaredLength();
 
-        if (magnitude < overlapArea * overlapArea) {
-            if (magnitude < r1 * r1 || magnitude < r2 * r2) {
-                overlapArea = r1 < r2 ? r1 : r2;
-                overlapArea *= overlapArea;
+        if (magnitude < radii * radii) {
+            double overlapArea = 0;
+            if (magnitude < r1sq || magnitude < r2sq) {
+                overlapArea = r1sq < r2sq ? r1sq : r2sq;
             } else {
-                overlapArea = 0.5 * (r2 * r2 - r1 * r1 + magnitude);
+                overlapArea = 0.5 * (r2sq - r1sq + magnitude);
                 overlapArea *= overlapArea;
                 overlapArea /= magnitude;
-                overlapArea = r2 * r2 - overlapArea;
+                overlapArea = r2sq - overlapArea;
                 overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
             }
 
@@ -511,22 +512,22 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         const unsigned int active = __activemask();
         __syncwarp(active);
         const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int rank =
-            __popc(matches & (1 << (threadIdx.x & 31)) - 1);
+        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+        const unsigned int rank = __popc(matches & lanemask_lt);
         if (0 == rank) {
-            r1 = 0.0;
-            r2 = 0.0;
+            double oa = 0.0;
+            double vr = 0.0;
             // thread id of the first lane of this warp, multiple of 32
-            idx2 = 32 * (threadIdx.x >> 5);
+            const int flt = 32 * (threadIdx.x >> 5);
 #pragma unroll
             for (int j = 0; j < 32; j++) {
                 const int mul = !!(matches & 1 << j);
-                r1 += sbuf[j + idx2] * mul;
-                r2 += sbuf[j + idx2 + BLOCK_SIZE] * mul;
+                oa += sbuf[j + flt] * mul;
+                vr += sbuf[j + flt + BLOCK_SIZE] * mul;
             }
 
-            atomicAdd(&overlap[idx1], r1);
-            atomicAdd(&bubbles.drdtp[idx1], r2);
+            atomicAdd(&overlap[idx1], oa);
+            atomicAdd(&bubbles.drdtp[idx1], vr);
         }
         __syncwarp(active);
     }
