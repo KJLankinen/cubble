@@ -38,7 +38,7 @@ __global__ void indexByCell(int *cellIndices, int *cellOffsets,
 }
 
 __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles) {
+                            int *pairJ, Bubbles &bubbles, Pairs &pairs) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
     if (wrappedDifference(dConstants->interval, bubbles.x[idx1],
@@ -59,7 +59,8 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
 
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
-                               int *pairI, int *pairJ, Bubbles bubbles) {
+                               int *pairI, int *pairJ, Bubbles bubbles,
+                               Pairs pairs) {
     DEVICE_ASSERT(blockDim.x >= 32, "Use at least 32 threads.");
     // Loop over each cell in the simulation box
     for (int i = blockIdx.x; i < numCells; i += gridDim.x) {
@@ -114,7 +115,9 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                 DEVICE_ASSERT(b2 < bubbles.count, "Invalid bubble index!");
                 DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
 
-                comparePair(b1, b2, histogram, pairI, pairJ, bubbles);
+                comparePair(b1, b2, histogram, pairI, pairJ, bubbles, pairs);
+                DEVICE_ASSERT(pairs.stride > dNumPairs,
+                              "Too many neighbor indices!");
             }
         }
     }
@@ -390,6 +393,7 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
          i += gridDim.x * blockDim.x) {
         int idx1 = pairs.i[i];
         int idx2 = pairs.j[i];
+
         DEVICE_ASSERT(idx1 != idx2, "Bubble is a pair with itself");
 
         if (i < bubbles.count) {
