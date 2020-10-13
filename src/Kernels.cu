@@ -684,6 +684,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
 
     for (int i = tid + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
+        int shouldDelete = 0;
         double delta = 0.0;
         auto correctPrediction = [&timeStep, &i, &delta](double *p, double *pp,
                                                          double *po, double *v,
@@ -1095,7 +1096,7 @@ __global__ void initGlobals() {
 }
 
 __device__ int atomicAggInc(int *ctr) {
-    auto g = cooperative_groups::coalesced_threads();
+    auto g = cooperative_group::coalesced_threads();
     int warp_res;
     if (g.thread_rank() == 0)
         warp_res = atomicAdd(ctr, g.size());
