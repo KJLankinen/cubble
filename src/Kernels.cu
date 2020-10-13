@@ -691,44 +691,27 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
 
     __syncthreads();
 
-    auto reduceMax = [&tid](auto *arr, int base) {
-        arr[tid] =
-            fmax(fmax(fmax(arr[tid], arr[tid + base]), arr[tid + 2 * base]),
-                 arr[tid + 3 * base]);
-    };
-
-    // Perform reductions for the values stored in shared memory
+    const int warpNum = tid >> 5;
+    const int wid = tid & 31;
     if (tid < 32) {
-        reduceMax(me, 32);
-        reduceMax(mr, 32);
-        reduceMax(be, 32);
-
-        tvn[tid] += tvn[32 + tid] + tvn[64 + tid] + tvn[96 + tid];
-        __syncwarp();
-
-        if (tid < 8) {
-            reduceMax(me, 8);
-            reduceMax(mr, 8);
-            reduceMax(be, 8);
-
-            tvn[tid] += tvn[8 + tid] + tvn[16 + tid] + tvn[24 + tid];
-            __syncwarp();
-
-            if (tid < 2) {
-                reduceMax(me, 2);
-                reduceMax(mr, 2);
-                reduceMax(be, 2);
-
-                tvn[tid] += tvn[2 + tid] + tvn[4 + tid] + tvn[6 + tid];
-                __syncwarp();
-
-                if (tid == 0) {
-                    maximums[blockIdx.x] = fmax(me[tid], me[1]);
-                    maximums[blockIdx.x + gridDim.x] = fmax(mr[tid], mr[1]);
-                    maximums[blockIdx.x + 2 * gridDim.x] = fmax(be[tid], be[1]);
-                    atomicAdd(&dTotalVolumeNew, tvn[tid] + tvn[1]);
-                }
-            }
+        reduce(me, warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x] = me[tid];
+        }
+    } else if (tid < 64) {
+        reduce(mr, warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x + gridDim.x] = mr[tid];
+        }
+    } else if (tid < 96) {
+        reduce(be, warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x + 2 * gridDim.x] = be[tid];
+        }
+    } else if (tid < 128) {
+        reduce(tvn, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalVolumeNew, tvn[tid]);
         }
     }
 }
