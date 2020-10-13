@@ -70,6 +70,47 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
 
+template <typename T> __device__ T sum(T a, T b) { return a + b; }
+template <typename T> __device__ T max(T a, T b) { return a > b ? a : b; }
+template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
+    // Assumes that addr.length() == BLOCK_SIZE
+    const int tid = threadIdx.x;
+    const int wid = (tid & 31);
+#pragma unroll
+    for (int i = 0; i < BLOCK_SIZE / 32; i++) {
+        if (i == warp) {
+            continue;
+        }
+        addr[tid] = f(addr[tid], addr[wid + i * 32]);
+    }
+    __syncwarp();
+
+    T temp;
+    temp = addr[tid ^ 16];
+    __syncwarp();
+    addr[tid] = f(addr[tid], temp);
+    __syncwarp();
+
+    temp = addr[tid ^ 8];
+    __syncwarp();
+    addr[tid] = f(addr[tid], temp);
+    __syncwarp();
+
+    temp = addr[tid ^ 4];
+    __syncwarp();
+    addr[tid] = f(addr[tid], temp);
+    __syncwarp();
+
+    temp = addr[tid ^ 2];
+    __syncwarp();
+    addr[tid] = f(addr[tid], temp);
+    __syncwarp();
+
+    if (0 == wid) {
+        addr[tid] = f(addr[tid], addr[tid + 1]);
+    }
+}
+
 template <typename... Arguments>
 void cubLaunch(const char *file, int line,
                cudaError_t (*func)(void *, size_t &, Arguments...),

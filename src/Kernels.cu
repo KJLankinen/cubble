@@ -434,10 +434,10 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
     __shared__ double sbuf[2 * BLOCK_SIZE];
-    __shared__ double ta[BLOCK_SIZE];      // total area of all bubbles
-    __shared__ double toa[BLOCK_SIZE];     // total overlap area
-    __shared__ double tapr[BLOCK_SIZE];    // ta per radius
-    __shared__ double toapr[BLOCK_SIZE];   // toa per radius
+    __shared__ double ta[BLOCK_SIZE];    // total area of all bubbles
+    __shared__ double toa[BLOCK_SIZE];   // total overlap area
+    __shared__ double tapr[BLOCK_SIZE];  // ta per radius
+    __shared__ double toapr[BLOCK_SIZE]; // toa per radius
     const int tid = threadIdx.x;
     ta[tid] = 0.0;
     toa[tid] = 0.0;
@@ -538,67 +538,28 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
 
     __syncthreads();
 
+    const int warpNum = tid >> 5;
+    const int wid = tid & 31;
     if (tid < 32) {
-#pragma unroll
-        for (int i = 1; i < BLOCK_SIZE / 32; i++) {
-            ta[tid] += ta[tid + i * 32];
-            toa[tid] += toa[tid + i * 32];
-            tapr[tid] += tapr[tid + i * 32];
-            toapr[tid] += toapr[tid + i * 32];
+        reduce(ta, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalArea, ta[tid]);
         }
-        __syncwarp();
-
-        double temp[4];
-        temp[0] = ta[tid ^ 16];
-        temp[1] = toa[tid ^ 16];
-        temp[2] = tapr[tid ^ 16];
-        temp[3] = toapr[tid ^ 16];
-        __syncwarp();
-        ta[tid] += temp[0];
-        toa[tid] += temp[1];
-        tapr[tid] += temp[2];
-        toapr[tid] += temp[3];
-        __syncwarp();
-
-        temp[0] = ta[tid ^ 8];
-        temp[1] = toa[tid ^ 8];
-        temp[2] = tapr[tid ^ 8];
-        temp[3] = toapr[tid ^ 8];
-        __syncwarp();
-        ta[tid] += temp[0];
-        toa[tid] += temp[1];
-        tapr[tid] += temp[2];
-        toapr[tid] += temp[3];
-        __syncwarp();
-
-        temp[0] = ta[tid ^ 4];
-        temp[1] = toa[tid ^ 4];
-        temp[2] = tapr[tid ^ 4];
-        temp[3] = toapr[tid ^ 4];
-        __syncwarp();
-        ta[tid] += temp[0];
-        toa[tid] += temp[1];
-        tapr[tid] += temp[2];
-        toapr[tid] += temp[3];
-        __syncwarp();
-
-        temp[0] = ta[tid ^ 2];
-        temp[1] = toa[tid ^ 2];
-        temp[2] = tapr[tid ^ 2];
-        temp[3] = toapr[tid ^ 2];
-        __syncwarp();
-        ta[tid] += temp[0];
-        toa[tid] += temp[1];
-        tapr[tid] += temp[2];
-        toapr[tid] += temp[3];
-        __syncwarp();
-    }
-
-    if (0 == tid) {
-        atomicAdd(&dTotalArea, ta[0] + ta[1]);
-        atomicAdd(&dTotalAreaPerRadius, tapr[0] + tapr[1]);
-        atomicAdd(&dTotalOverlapArea, toa[0] + toa[1]);
-        atomicAdd(&dTotalOverlapAreaPerRadius, toapr[0] + toapr[1]);
+    } else if (tid < 64) {
+        reduce(tapr, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalAreaPerRadius, tapr[tid]);
+        }
+    } else if (tid < 96) {
+        reduce(toa, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalOverlapArea, toa[tid]);
+        }
+    } else if (tid < 128) {
+        reduce(toapr, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalOverlapAreaPerRadius, toapr[tid]);
+        }
     }
 }
 
