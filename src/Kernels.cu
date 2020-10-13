@@ -194,7 +194,6 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
     __shared__ double vx[BLOCK_SIZE];
     __shared__ double vy[BLOCK_SIZE];
     __shared__ double vz[BLOCK_SIZE];
-    const dvec interval = dConstants->interval;
     const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
@@ -223,30 +222,13 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
             vz[threadIdx.x] = 0.0;
         }
 
-        // pairs.i is an ordered list, such that the same index can be repeated
-        // multiple times in a row. This means that many threads of a warp might
-        // have the same address to save the values to. Here the threads choose
-        // a leader amongst the threads with the same idx1, which sums the
-        // values calculated by the warp and does a single atomicAdd per index.
         const unsigned int active = __activemask();
         __syncwarp(active);
-        const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-        const unsigned int rank = __popc(matches & lanemask_lt);
-        if (0 == rank) {
-            double tx = 0.0;
-            double ty = 0.0;
-            double tz = 0.0;
-            // thread id of the first lane of this warp, multiple of 32
-            const int flt = 32 * (threadIdx.x >> 5);
-#pragma unroll
-            for (int j = 0; j < 32; j++) {
-                const int mul = !!(matches & 1 << j);
-                tx += vx[j + flt] * mul;
-                ty += vy[j + flt] * mul;
-                tz += vz[j + flt] * mul;
-            }
-
+        double tx = 0.0;
+        double ty = 0.0;
+        double tz = 0.0;
+        if (0 ==
+            warpReduceMatching(active, idx1, &sum, &tx, vx, &ty, vy, &tz, vz)) {
             atomicAdd(&bubbles.dxdtp[idx1], tx);
             atomicAdd(&bubbles.dydtp[idx1], ty);
             if (dConstants->dimensionality == 3) {
@@ -410,8 +392,6 @@ __global__ void imposedFlowVelocity(Bubbles bubbles) {
 }
 
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
-    const dvec interval = dConstants->interval;
-
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         const int idx1 = pairs.i[i];

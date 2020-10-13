@@ -111,6 +111,37 @@ template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
     }
 }
 
+template <typename T>
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T mul, T *to, T *from) {
+    *to = f(*to, from[idx] * mul);
+}
+
+template <typename... Args, typename T>
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T mul, T *to, T *from,
+                                Args... args) {
+    recursiveReduce(f, idx, mul, to, from);
+    recursiveReduce(f, idx, mul, args...);
+}
+
+template <typename... Args, typename T>
+__device__ int warpReduceMatching(int active, int matchOn, T (*f)(T, T),
+                                  Args... args) {
+    const unsigned int matches = __match_any_sync(active, matchOn);
+    const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+    const unsigned int rank = __popc(matches & lanemask_lt);
+    const int flt = 32 * (threadIdx.x >> 5);
+
+    if (0 == rank) {
+#pragma unroll
+        for (int j = 0; j < 32; j++) {
+            const int mul = !!(matches & 1 << j);
+            recursiveReduce(f, j + flt, mul, args...);
+        }
+    }
+
+    return rank;
+}
+
 template <typename... Arguments>
 void cubLaunch(const char *file, int line,
                cudaError_t (*func)(void *, size_t &, Arguments...),
