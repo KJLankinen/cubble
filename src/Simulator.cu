@@ -1004,7 +1004,11 @@ void init(const char *inputFileName, Params &params) {
             std::abs(1.0 - params.hostData.energy1 / params.hostData.energy2) /
             time;
 
-        if (deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"]) {
+        const bool stop =
+            deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"] ||
+            params.hostData.energy2 < 1e-5;
+
+        if (stop) {
             printf("Final energies:");
             printf("\nbefore: %9.5e", params.hostData.energy1);
             printf("\nafter: %9.5e", params.hostData.energy2);
