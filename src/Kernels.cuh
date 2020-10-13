@@ -135,8 +135,8 @@ __device__ unsigned int warpReduceMatching(const unsigned int active,
     if (0 == rank) {
 #pragma unroll
         for (int j = 0; j < 32; j++) {
-            const int mul = !!(matches & 1 << j);
-            recursiveReduce(f, j + flt, mul, args...);
+            int mul = !!(matches & 1 << j);
+            recursiveReduce(f, j + flt, (T)mul, args...);
         }
     }
 
