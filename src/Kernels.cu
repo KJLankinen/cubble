@@ -806,27 +806,12 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 
     __syncthreads();
 
-    auto reduceSum = [&tid](auto *arr, int base) {
-        arr[tid] += arr[tid + base] + arr[tid + 2 * base] + arr[tid + 3 * base];
-    };
-
+    const int warpNum = tid >> 5;
+    const int wid = tid & 31;
     if (tid < 32) {
-        reduceSum(tbds, 32);
-        __syncwarp();
-
-        if (tid < 8) {
-            reduceSum(tbds, 8);
-            __syncwarp();
-
-            if (tid < 2) {
-                reduceSum(tbds, 2);
-                __syncwarp();
-
-                if (tid < 1) {
-                    tbds[tid] += tbds[tid + 1];
-                    atomicAdd(&dNumPairsNew, -tbds[0]);
-                }
-            }
+        reduce(tbds, warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dNumPairsNew, -tbds[0]);
         }
     }
 }
