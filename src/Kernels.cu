@@ -25,7 +25,7 @@ __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
         const int ci = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
                                          bubbles.z[i], cellDim);
         cellIndices[i] = ci;
-        atomicAdd(&cellSizes[ci], 1);
+        atomicAggInc(&cellSizes[ci]);
     }
 }
 
@@ -50,7 +50,7 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        atomicAdd(&histogram[idx1], 1);
+        atomicAggInc(&histogram[idx1]);
         id = atomicAggInc(&dNumPairs);
         pairI[id] = idx1;
         pairJ[id] = idx2;
@@ -133,8 +133,8 @@ __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        atomicAdd(&bubbles.numNeighbors[pairs.i[i]], 1);
-        atomicAdd(&bubbles.numNeighbors[pairs.j[i]], 1);
+        atomicAggInc(&bubbles.numNeighbors[pairs.i[i]]);
+        atomicAggInc(&bubbles.numNeighbors[pairs.j[i]]);
     }
 }
 
