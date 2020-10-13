@@ -433,16 +433,12 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
     const dvec interval = dConstants->interval;
-    __shared__ double sbuf[2 * BLOCK_SIZE];
-    __shared__ double ta[BLOCK_SIZE];    // total area of all bubbles
-    __shared__ double toa[BLOCK_SIZE];   // total overlap area
-    __shared__ double tapr[BLOCK_SIZE];  // ta per radius
-    __shared__ double toapr[BLOCK_SIZE]; // toa per radius
+    __shared__ double sbuf[4 * BLOCK_SIZE];
     const int tid = threadIdx.x;
-    ta[tid] = 0.0;
-    toa[tid] = 0.0;
-    tapr[tid] = 0.0;
-    toapr[tid] = 0.0;
+    double ta = 0.0;    // total area of all bubbles
+    double toa = 0.0;   // total overlap area
+    double tapr = 0.0;  // ta per radius
+    double toapr = 0.0; // toa per radius
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
@@ -457,8 +453,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             if (dConstants->dimensionality == 3) {
                 areaPerRad *= 2.0 * r1;
             }
-            ta[tid] += areaPerRad * r1;
-            tapr[tid] += areaPerRad;
+            ta += areaPerRad * r1;
+            tapr += areaPerRad;
         }
 
         double r1 = bubbles.rp[idx1];
@@ -496,8 +492,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             r1 = 1.0 / r1;
             r2 = 1.0 / r2;
 
-            toa[tid] += 2.0 * overlapArea;
-            toapr[tid] += overlapArea * (r1 + r2);
+            toa += 2.0 * overlapArea;
+            toapr += overlapArea * (r1 + r2);
 
             overlapArea *= (r2 - r1);
 
@@ -536,29 +532,34 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         __syncwarp(active);
     }
 
+    sbuf[tid + 0 * BLOCK_SIZE] = ta;
+    sbuf[tid + 1 * BLOCK_SIZE] = tapr;
+    sbuf[tid + 2 * BLOCK_SIZE] = toa;
+    sbuf[tid + 3 * BLOCK_SIZE] = toapr;
+
     __syncthreads();
 
     const int warpNum = tid >> 5;
     const int wid = tid & 31;
     if (tid < 32) {
-        reduce(ta, warpNum, &sum);
+        reduce(&sbuf[0], warpNum, &sum);
         if (0 == wid) {
-            atomicAdd(&dTotalArea, ta[tid]);
+            atomicAdd(&dTotalArea, sbuf[tid]);
         }
     } else if (tid < 64) {
-        reduce(tapr, warpNum, &sum);
+        reduce(&sbuf[BLOCK_SIZE], warpNum, &sum);
         if (0 == wid) {
-            atomicAdd(&dTotalAreaPerRadius, tapr[tid]);
+            atomicAdd(&dTotalAreaPerRadius, sbuf[tid + 1 * BLOCK_SIZE]);
         }
     } else if (tid < 96) {
-        reduce(toa, warpNum, &sum);
+        reduce(&sbuf[2 * BLOCK_SIZE], warpNum, &sum);
         if (0 == wid) {
-            atomicAdd(&dTotalOverlapArea, toa[tid]);
+            atomicAdd(&dTotalOverlapArea, sbuf[tid + 2 * BLOCK_SIZE]);
         }
     } else if (tid < 128) {
-        reduce(toapr, warpNum, &sum);
+        reduce(&sbuf[3 * BLOCK_SIZE], warpNum, &sum);
         if (0 == wid) {
-            atomicAdd(&dTotalOverlapAreaPerRadius, toapr[tid]);
+            atomicAdd(&dTotalOverlapAreaPerRadius, sbuf[tid + 3 * BLOCK_SIZE]);
         }
     }
 }
