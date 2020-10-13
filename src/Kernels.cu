@@ -313,33 +313,13 @@ __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
             atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
         }
 
-        // pairs.i is an ordered list, such that the same index can be repeated
-        // multiple times in a row. This means that many threads of a warp might
-        // have the same address to save the values to. Here the threads choose
-        // a leader amongst the threads with the same idx1, which sums the
-        // values calculated by the warp and does a single atomicAdd per index.
         const unsigned int active = __activemask();
         __syncwarp(active);
-        const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-        const unsigned int rank = __popc(matches & lanemask_lt);
-        if (0 == rank) {
-            double tx = 0.0;
-            double ty = 0.0;
-            double tz = 0.0;
-            // thread id of the first lane of this warp, multiple of 32
-            const int flt = 32 * (threadIdx.x >> 5);
-#pragma unroll
-            for (int j = 0; j < 32; j++) {
-                const int mul = !!(matches & 1 << j);
-                tx += vx[j + flt] * mul;
-                ty += vy[j + flt] * mul;
-
-                if (dConstants->dimensionality == 3) {
-                    tz += vz[j + flt] * mul;
-                }
-            }
-
+        double tx = 0.0;
+        double ty = 0.0;
+        double tz = 0.0;
+        if (0 == warpReduceMatching(active, idx1, &sum<double>, &tx, vx, &ty,
+                                    vy, &tz, vz)) {
             atomicAdd(&bubbles.flowVx[idx1], tx);
             atomicAdd(&bubbles.flowVy[idx1], ty);
             if (dConstants->dimensionality == 3) {
@@ -483,28 +463,12 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
             sbuf[tid + BLOCK_SIZE] = 0.0;
         }
 
-        // pairs.i is an ordered list, such that the same index can be repeated
-        // multiple times in a row. This means that many threads of a warp might
-        // have the same address to save the values to. Here the threads choose
-        // a leader amongst the threads with the same idx1, which sums the
-        // values calculated by the warp and does a single atomicAdd per index.
         const unsigned int active = __activemask();
         __syncwarp(active);
-        const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-        const unsigned int rank = __popc(matches & lanemask_lt);
-        if (0 == rank) {
-            double oa = 0.0;
-            double vr = 0.0;
-            // thread id of the first lane of this warp, multiple of 32
-            const int flt = 32 * (threadIdx.x >> 5);
-#pragma unroll
-            for (int j = 0; j < 32; j++) {
-                const int mul = !!(matches & 1 << j);
-                oa += sbuf[j + flt] * mul;
-                vr += sbuf[j + flt + BLOCK_SIZE] * mul;
-            }
-
+        double oa = 0.0;
+        double vr = 0.0;
+        if (0 == warpReduceMatching(active, idx1, &sum<double>, &oa, sbuf, &vr,
+                                    &sbuf[BLOCK_SIZE])) {
             atomicAdd(&overlap[idx1], oa);
             atomicAdd(&bubbles.drdtp[idx1], vr);
         }
