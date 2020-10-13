@@ -1,5 +1,4 @@
 #include "Kernels.cuh"
-#include <cooperative_groups.h>
 
 namespace cubble {
 __device__ Constants *dConstants;
@@ -717,7 +716,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
             if (rad > minRad) {
                 tvn[tid] += vol;
             } else {
-                toBeDeleted[atomicAggInc(&dNumToBeDeleted)] = i;
+                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = fmax(mr[tid], rad);
         }
@@ -1081,22 +1080,6 @@ __global__ void initGlobals() {
     if (0 == threadIdx.x + blockIdx.x) {
         resetDeviceGlobals();
     }
-}
-
-__device__ int atomicAggInc(int *ctr) {
-    auto g = cooperative_groups::coalesced_threads();
-    int warp_res;
-    if (g.thread_rank() == 0)
-        warp_res = atomicAdd(ctr, g.size());
-    return g.shfl(warp_res, 0) + g.thread_rank();
-}
-
-__device__ int atomicAggDec(int *ctr) {
-    auto g = cooperative_groups::coalesced_threads();
-    int warp_res;
-    if (g.thread_rank() == 0)
-        warp_res = atomicSub(ctr, g.size());
-    return g.shfl(warp_res, 0) - g.thread_rank();
 }
 
 __device__ void logError(bool condition, const char *statement,

@@ -63,8 +63,6 @@ __global__ void initGlobals();
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();
-__device__ int atomicAggInc(int *ctr);
-__device__ int atomicAggDec(int *ctr);
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2);
 __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
