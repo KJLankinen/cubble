@@ -1006,7 +1006,8 @@ void init(const char *inputFileName, Params &params) {
 
         const bool stop =
             deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"] ||
-            params.hostData.energy2 < 1e-5;
+            params.hostData.energy2 <
+                inputJson["stabilization"]["maxDeltaEnergy"];
 
         if (stop) {
             printf("Final energies:");
