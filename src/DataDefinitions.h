@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-#define BLOCK_SIZE 128
+#define BLOCK_SIZE 384
 
 namespace {
 template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {

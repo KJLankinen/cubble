@@ -296,43 +296,32 @@ void integrate(Params &params) {
 
     do {
         nvtxRangePush("Do-loop");
-        // Stream1
-        {
-            KERNEL_LAUNCH(initGlobals, params, 0, params.stream1);
-            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-            KERNEL_LAUNCH(resetArrays, params, 0, params.stream1, 0.0,
-                          params.bubbles.count, false, params.bubbles.drdtp,
-                          params.tempD1);
-            KERNEL_LAUNCH(predict, params, 0, params.stream1, ts, true,
+
+        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
+                      true, params.bubbles.dxdtp, params.bubbles.dydtp,
+                      params.bubbles.dzdtp, params.bubbles.drdtp, params.tempD1,
+                      params.tempD2);
+
+        KERNEL_LAUNCH(predict, params, 0, params.stream1, ts, true,
+                      params.bubbles);
+
+        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.pairs, params.tempD1);
+        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.tempD1);
+
+        KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2, params.bubbles,
+                      params.pairs);
+
+        if (params.hostData.addFlow) {
+            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
                           params.bubbles);
-            KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
-                          params.bubbles, params.pairs, params.tempD1);
-            KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
-                          params.bubbles, params.tempD1);
         }
 
-        // Stream2
-        {
-            KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
-                          params.bubbles.count, false, params.bubbles.dxdtp,
-                          params.bubbles.dydtp, params.bubbles.dzdtp,
-                          params.tempD2);
-            CUDA_CALL(cudaStreamWaitEvent(params.stream2, params.event1, 0));
-            KERNEL_LAUNCH(predict, params, 0, params.stream2, ts, false,
+        if (params.hostConstants.xWall || params.hostConstants.yWall ||
+            params.hostConstants.zWall) {
+            KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
                           params.bubbles);
-            KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2,
-                          params.bubbles, params.pairs);
-
-            if (params.hostData.addFlow) {
-                KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
-                              params.bubbles);
-            }
-
-            if (params.hostConstants.xWall || params.hostConstants.yWall ||
-                params.hostConstants.zWall) {
-                KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
-                              params.bubbles);
-            }
         }
 
         // Correction in default stream (implicit synchronization with streams)
