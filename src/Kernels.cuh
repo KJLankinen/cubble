@@ -135,7 +135,7 @@ __device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
 #pragma unroll
         for (int j = 0; j < 32; j++) {
             int mul = !!(matches & 1 << j);
-            recursiveReduce(f, j + flt, mul, args...);
+            recursiveReduce(f, j + flt, (T)mul, args...);
         }
     }
 
