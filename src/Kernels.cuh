@@ -60,7 +60,6 @@ __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
 __global__ void initGlobals();
-__device__ int atomicAggInc(int *ctr);
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();

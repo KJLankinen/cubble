@@ -1,5 +1,4 @@
 #include "Kernels.cuh"
-#include <cooperative_groups.h>
 
 namespace cubble {
 __device__ Constants *dConstants;
@@ -25,7 +24,7 @@ __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
         const int ci = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
                                          bubbles.z[i], cellDim);
         cellIndices[i] = ci;
-        atomicAggInc(&cellSizes[ci]);
+        atomicAdd(&cellSizes[ci], 1);
     }
 }
 
@@ -54,8 +53,8 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
-        atomicAggInc(&histogram[idx1]);
-        id = atomicAggInc(&dNumPairs);
+        atomicAdd(&histogram[idx1], 1);
+        id = atomicAdd(&dNumPairs, 1);
         pairI[id] = idx1;
         pairJ[id] = idx2;
     }
@@ -140,8 +139,8 @@ __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        atomicAggInc(&bubbles.numNeighbors[pairs.i[i]]);
-        atomicAggInc(&bubbles.numNeighbors[pairs.j[i]]);
+        atomicAdd(&bubbles.numNeighbors[pairs.i[i]], 1);
+        atomicAdd(&bubbles.numNeighbors[pairs.j[i]], 1);
     }
 }
 
@@ -332,8 +331,10 @@ __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
 
         vx[threadIdx.x] = bubbles.dxdto[idx2];
         vy[threadIdx.x] = bubbles.dydto[idx2];
+
         atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
         atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
+
         if (dConstants->dimensionality == 3) {
             vz[threadIdx.x] = bubbles.dzdto[idx2];
             atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
@@ -684,7 +685,6 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
 
     for (int i = tid + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
-        int shouldDelete = 0;
         double delta = 0.0;
         auto correctPrediction = [&timeStep, &i, &delta](double *p, double *pp,
                                                          double *po, double *v,
@@ -729,7 +729,7 @@ __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
             if (rad > minRad) {
                 tvn[tid] += vol;
             } else {
-                toBeDeleted[atomicAggInc(&dNumToBeDeleted)] = i;
+                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
             mr[tid] = fmax(mr[tid], rad);
         }
@@ -1093,14 +1093,6 @@ __global__ void initGlobals() {
     if (0 == threadIdx.x + blockIdx.x) {
         resetDeviceGlobals();
     }
-}
-
-__device__ int atomicAggInc(int *ctr) {
-    auto g = cooperative_group::coalesced_threads();
-    int warp_res;
-    if (g.thread_rank() == 0)
-        warp_res = atomicAdd(ctr, g.size());
-    return g.shfl(warp_res, 0) + g.thread_rank();
 }
 
 __device__ void logError(bool condition, const char *statement,
