@@ -302,8 +302,7 @@ void integrate(Params &params) {
                       params.bubbles.dzdtp, params.bubbles.drdtp, params.tempD1,
                       params.tempD2);
 
-        KERNEL_LAUNCH(predict, params, 0, params.stream1, ts, true,
-                      params.bubbles);
+        KERNEL_LAUNCH(predict, params, 0, 0, ts, true, params.bubbles);
 
         KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
                       params.bubbles, params.pairs, params.tempD1);
