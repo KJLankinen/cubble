@@ -124,9 +124,8 @@ __device__ void recursiveReduce(T (*f)(T, T), int idx, T mul, T *to, T *from,
 }
 
 template <typename... Args, typename T>
-__device__ unsigned int warpReduceMatching(const unsigned int active,
-                                           int matchOn, T (*f)(T, T),
-                                           Args... args) {
+__device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
+                                           T (*f)(T, T), Args... args) {
     const unsigned int matches = __match_any_sync(active, matchOn);
     const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
     const unsigned int rank = __popc(matches & lanemask_lt);
@@ -136,7 +135,7 @@ __device__ unsigned int warpReduceMatching(const unsigned int active,
 #pragma unroll
         for (int j = 0; j < 32; j++) {
             int mul = !!(matches & 1 << j);
-            recursiveReduce(f, j + flt, (T)mul, args...);
+            recursiveReduce(f, j + flt, mul, args...);
         }
     }
 
