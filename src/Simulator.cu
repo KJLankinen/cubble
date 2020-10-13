@@ -375,6 +375,7 @@ void integrate(Params &params) {
 
         // Wait until the copy of maximum error is done
         CUDA_CALL(cudaEventSynchronize(params.event1));
+        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
         errorTooLarge = *hMaxError > params.hostData.errorTolerance;
         bool increaseTs = *hMaxError < 0.45 * params.hostData.errorTolerance;
@@ -389,8 +390,7 @@ void integrate(Params &params) {
     } while (errorTooLarge);
 
     // Increment the path of each bubble
-    KERNEL_LAUNCH(incrementPath, params, 0, params.stream1, params.bubbles);
-    CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
+    KERNEL_LAUNCH(incrementPath, params, 0, 0, params.bubbles);
 
     // Update values
     double *swapper = params.bubbles.dxdto;
