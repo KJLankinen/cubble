@@ -40,14 +40,9 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
                             int *pairJ, Bubbles &bubbles, Pairs &pairs) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
-    dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
-    dvec p2 = dvec(bubbles.x[idx2], bubbles.y[idx2], 0.0);
-    if (dConstants->dimensionality == 3) {
-        p1.z = bubbles.z[idx1];
-        p2.z = bubbles.z[idx2];
-    }
-    if (wrappedDifference(p1, p2, dConstants->interval).getSquaredLength() <
-        maxDistance * maxDistance) {
+    if (wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
+                          bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
+            .getSquaredLength() < maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
         int id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
@@ -207,13 +202,9 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         int idx1 = pairs.i[i];
         int idx2 = pairs.j[i];
         double radii = bubbles.rp[idx1] + bubbles.rp[idx2];
-        dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
-        dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-        if (dConstants->dimensionality == 3) {
-            p1.z = bubbles.zp[idx1];
-            p2.z = bubbles.zp[idx2];
-        }
-        dvec distances = wrappedDifference(p1, p2, interval);
+        dvec distances = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
+                                           bubbles.zp[idx1], bubbles.xp[idx2],
+                                           bubbles.yp[idx2], bubbles.zp[idx2]);
         const double distance = distances.getSquaredLength();
         if (radii * radii >= distance) {
             distances =
@@ -425,14 +416,11 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
          i += gridDim.x * blockDim.x) {
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
-        dvec p1 = dvec(bubbles.x[idx1], bubbles.y[idx1], 0.0);
-        dvec p2 = dvec(bubbles.x[idx2], bubbles.y[idx2], 0.0);
-        if (dConstants->dimensionality == 3) {
-            p1.z = bubbles.z[idx1];
-            p2.z = bubbles.z[idx2];
-        }
-        double e = bubbles.r[idx1] + bubbles.r[idx2] -
-                   wrappedDifference(p1, p2, interval).getLength();
+        double e =
+            bubbles.r[idx1] + bubbles.r[idx2] -
+            wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
+                              bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
+                .getLength();
         if (e > 0) {
             e *= e;
             atomicAdd(&energy[idx1], e);
@@ -479,15 +467,10 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
         const double r2sq = r2 * r2;
         const double radii = r1 + r2;
 
-        dvec p1 = dvec(bubbles.xp[idx1], bubbles.yp[idx1], 0.0);
-        dvec p2 = dvec(bubbles.xp[idx2], bubbles.yp[idx2], 0.0);
-        if (dConstants->dimensionality == 3) {
-            p1.z = bubbles.zp[idx1];
-            p2.z = bubbles.zp[idx2];
-        }
-
-        double magnitude =
-            wrappedDifference(p1, p2, interval).getSquaredLength();
+        double magnitude = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
+                                             bubbles.zp[idx1], bubbles.xp[idx2],
+                                             bubbles.yp[idx2], bubbles.zp[idx2])
+                               .getSquaredLength();
 
         if (magnitude < radii * radii) {
             double overlapArea = 0;
@@ -1127,17 +1110,21 @@ __device__ int getGlobalTid() {
     return tid;
 }
 
-__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval) {
-    const dvec d1 = p1 - p2;
+__device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
+                                  double y2, double z2) {
+    const dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
+    if (3 == dConstants->dimensionality) {
+        d1.z = z1 - z2;
+    }
     dvec d2 = d1;
-    dvec temp = interval - d1.getAbsolute();
+    dvec temp = dConstants->interval - d1.getAbsolute();
     if (!dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }
     if (!dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
         d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
     }
-    if (dConstants->dimensionality == 3 && !dConstants->zWall &&
+    if (3 == dConstants->dimensionality && !dConstants->zWall &&
         temp.z * temp.z < d1.z * d1.z) {
         d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
     }

@@ -63,7 +63,8 @@ __global__ void initGlobals();
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();
-__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
+__device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
+                                  double y2, double z2);
 __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);

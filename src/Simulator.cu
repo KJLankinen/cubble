@@ -1249,7 +1249,8 @@ void run(std::string &&inputFileName) {
 
     if (params.bubbles.count <= params.hostData.minNumBubbles) {
         printf("Stopping simulation, since the number of bubbles left in the "
-               "simulation (%d) is less than the specified minimum (%d)\n",
+               "simulation (%d) is less than or equal to the specified minimum "
+               "(%d)\n",
                params.bubbles.count, params.hostData.minNumBubbles);
     } else if (params.hostData.maxBubbleRadius > minInterval) {
         dvec temp = params.hostConstants.interval;
