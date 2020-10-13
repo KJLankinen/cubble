@@ -1112,7 +1112,7 @@ __device__ int getGlobalTid() {
 
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2) {
-    const dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
+    dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
     if (3 == dConstants->dimensionality) {
         d1.z = z1 - z2;
     }
