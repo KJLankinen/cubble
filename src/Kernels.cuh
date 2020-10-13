@@ -64,8 +64,7 @@ __device__ int atomicAggInc(int *ctr);
 __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ int getGlobalTid();
-__device__ dvec wrappedDifference(dvec interval, double x1, double y1,
-                                  double z1, double x2, double y2, double z2);
+__device__ dvec wrappedDifference(dvec p1, dvec p2, dvec interval);
 __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
@@ -128,61 +127,6 @@ template <typename T, typename... Args>
 __device__ void swapValues(int from, int to, T *arr, Args... args) {
     swapValues(from, to, arr);
     swapValues(from, to, args...);
-}
-
-template <typename T>
-__device__ void addTo(int idx, int mul, T *to, T *from, bool predicate) {
-    if (predicate) {
-        *to += mul * from[idx];
-    }
-}
-template <typename T>
-__device__ void addTo(int idx, int mul, T *to, T *from, T *, bool predicate) {
-    addTo(idx, mul, to, from, predicate);
-}
-template <typename T, typename... Args>
-__device__ void addTo(int idx, int mul, T *to, T *from, T *, bool predicate,
-                      Args... args) {
-    addTo(idx, mul, to, from, predicate);
-    addTo(idx, mul, args...);
-}
-
-template <typename T>
-__device__ void recursiveAtomicAdd(T *addr, T *from, bool predicate) {
-    if (predicate) {
-        atomicAdd(addr, *from);
-    }
-}
-template <typename T>
-__device__ void recursiveAtomicAdd(T *from, T *, T *addr, bool predicate) {
-    recursiveAtomicAdd(addr, from, predicate);
-}
-template <typename T, typename... Args>
-__device__ void recursiveAtomicAdd(T *from, T *, T *addr, bool predicate,
-                                   Args... args) {
-    recursiveAtomicAdd(addr, from, predicate);
-    recursiveAtomicAdd(args...);
-}
-
-template <typename... Args>
-__device__ void warpCoopAdd(int matchOn, Args... args) {
-    const unsigned int active = __activemask();
-    __syncwarp(active);
-    const unsigned int matches = __match_any_sync(active, matchOn);
-    const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-    const unsigned int rank = __popc(matches & lanemask_lt);
-
-    if (0 == rank) {
-        const int flt = 32 * (threadIdx.x >> 5);
-#pragma unroll
-        for (int j = 0; j < 32; j++) {
-            const int mul = !!(matches & 1 << j);
-            addTo(j + flt, mul, args...);
-        }
-
-        recursiveAtomicAdd(args...);
-    }
-    __syncwarp(active);
 }
 
 __device__ void resetDeviceGlobals();
