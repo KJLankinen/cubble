@@ -227,8 +227,8 @@ __global__ void pairVelocity(Bubbles bubbles, Pairs pairs) {
         double tx = 0.0;
         double ty = 0.0;
         double tz = 0.0;
-        if (0 ==
-            warpReduceMatching(active, idx1, &sum, &tx, vx, &ty, vy, &tz, vz)) {
+        if (0 == warpReduceMatching(active, idx1, &sum, &tx, &vx[0], &ty,
+                                    &vy[0], &tz, &vz[0])) {
             atomicAdd(&bubbles.dxdtp[idx1], tx);
             atomicAdd(&bubbles.dydtp[idx1], ty);
             if (dConstants->dimensionality == 3) {
