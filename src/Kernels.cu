@@ -432,7 +432,6 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
 __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                     double *overlap) {
     // Gas exchange between bubbles, a.k.a. local gas exchange
-    const dvec interval = dConstants->interval;
     __shared__ double sbuf[4 * BLOCK_SIZE];
     const int tid = threadIdx.x;
     double ta = 0.0;    // total area of all bubbles
@@ -442,25 +441,23 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        int idx1 = pairs.i[i];
-        int idx2 = pairs.j[i];
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
 
         DEVICE_ASSERT(idx1 != idx2, "Bubble is a pair with itself");
 
         if (i < bubbles.count) {
-            double r1 = bubbles.rp[i];
+            double r = bubbles.rp[i];
             double areaPerRad = 2.0 * CUBBLE_PI;
             if (dConstants->dimensionality == 3) {
-                areaPerRad *= 2.0 * r1;
+                areaPerRad *= 2.0 * r;
             }
-            ta += areaPerRad * r1;
+            ta += areaPerRad * r;
             tapr += areaPerRad;
         }
 
         double r1 = bubbles.rp[idx1];
         double r2 = bubbles.rp[idx2];
-        const double r1sq = r1 * r1;
-        const double r2sq = r2 * r2;
         const double radii = r1 + r2;
 
         double magnitude = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
@@ -469,6 +466,8 @@ __global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
                                .getSquaredLength();
 
         if (magnitude < radii * radii) {
+            const double r1sq = r1 * r1;
+            const double r2sq = r2 * r2;
             double overlapArea = 0;
             if (magnitude < r1sq || magnitude < r2sq) {
                 overlapArea = r1sq < r2sq ? r1sq : r2sq;
