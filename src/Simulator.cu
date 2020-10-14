@@ -202,7 +202,8 @@ double stabilize(Params &params, int numStepsToRelax) {
                                            dMaxRadius, sizeof(double)));
 
             errorTooLarge = error > params.hostData.errorTolerance;
-            bool increaseTs = error < 0.45 * params.hostData.errorTolerance;
+            const bool increaseTs =
+                error < 0.45 * params.hostData.errorTolerance && ts < 10;
             if (errorTooLarge) {
                 ts *= 0.37;
             } else if (increaseTs) {
@@ -378,7 +379,8 @@ void integrate(Params &params) {
         CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
         errorTooLarge = *hMaxError > params.hostData.errorTolerance;
-        bool increaseTs = *hMaxError < 0.45 * params.hostData.errorTolerance;
+        const bool increaseTs =
+            *hMaxError < 0.45 * params.hostData.errorTolerance && ts < 10;
         if (errorTooLarge) {
             ts *= 0.37;
         } else if (increaseTs) {
