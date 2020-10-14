@@ -985,22 +985,23 @@ void init(const char *inputFileName, Params &params) {
 
     printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
            "#searches");
+    const double &e1 = params.hostData.energy1;
+    const double &e2 = params.hostData.energy2;
     while (true) {
         double time = stabilize(params, stabilizationSteps) *
                       params.hostData.timeScalingFactor;
-        double deltaEnergy =
-            std::abs(1.0 - params.hostData.energy1 / params.hostData.energy2) /
-            time;
+        double de = std::abs(e2 - e1);
+        if (de > 0.0) {
+            de *= 2.0 / ((e2 + e1) * time);
+        }
 
-        const bool stop =
-            deltaEnergy < inputJson["stabilization"]["maxDeltaEnergy"] ||
-            (params.hostData.energy2 < 1.0 && deltaEnergy < 0.1);
-
+        const bool stop = de < inputJson["stabilization"]["maxDeltaEnergy"] ||
+                          (e2 < 1.0 && de < 0.1);
         if (stop) {
             printf("Final energies:");
-            printf("\nbefore: %9.5e", params.hostData.energy1);
-            printf("\nafter: %9.5e", params.hostData.energy2);
-            printf("\ndelta: %9.5e", deltaEnergy);
+            printf("\nbefore: %9.5e", e1);
+            printf("\nafter: %9.5e", e2);
+            printf("\ndelta: %9.5e", de);
             printf("\ntime: %9.5g\n", time);
             break;
         } else if (numSteps > failsafe) {
@@ -1009,9 +1010,9 @@ void init(const char *inputFileName, Params &params) {
             break;
         } else {
             printf("%-7d ", (numSteps + 1) * stabilizationSteps);
-            printf("%-9.5e ", deltaEnergy);
-            printf("%-9.5e ", params.hostData.energy1);
-            printf("%-9.5e ", params.hostData.energy2);
+            printf("%-9.5e ", de);
+            printf("%-9.5e ", e1);
+            printf("%-9.5e ", e2);
             printf("%-9d\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }

@@ -112,15 +112,15 @@ template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
 }
 
 template <typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T mul, T *to, T *from) {
-    *to = f(*to, from[idx] * mul);
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from) {
+    *to = f(*to, from[idx]);
 }
 
 template <typename... Args, typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T mul, T *to, T *from,
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from,
                                 Args... args) {
-    recursiveReduce(f, idx, mul, to, from);
-    recursiveReduce(f, idx, mul, args...);
+    recursiveReduce(f, idx, to, from);
+    recursiveReduce(f, idx, args...);
 }
 
 template <typename... Args, typename T>
@@ -134,8 +134,9 @@ __device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
     if (0 == rank) {
 #pragma unroll
         for (int j = 0; j < 32; j++) {
-            int mul = !!(matches & 1 << j);
-            recursiveReduce(f, j + flt, (T)mul, args...);
+            if (!!(matches & 1 << j)) {
+                recursiveReduce(f, j + flt, args...);
+            }
         }
     }
 
