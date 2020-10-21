@@ -1,18 +1,15 @@
-# CUBBLE (CUDA bubble)
-
-## To Whom It May Concern,
-
-This is a CUDA accelerated version of and older code for simulating the coarsening and mechanics of bubbles. Everything has been rewritten from scratch, meaning the old version was only used as a model of the simulation.
+# CUBBLE
+This is a C++/Cuda implementation of a wet foam model based on the work by Durian.
+The program can be used to simulate two and three dimensional foams in different conditions.
+More information of the physics of the simulation can be found in this thesis writted about it.
 
 ## Contents of the repository
-In addition to this readme, the repository contains the following items:
-- **include/**: All the extra dependencies are put here. E.g. the json parser and cub related files.
-- **makefile**: Used to build the program.
+- **debug/**: Directory for the binaries of Make target 'debug'
+- **default/**: Directory for the binaries of Make target 'default'
+- **final/**: Directory for the binaries of Make target 'final'
+- **incl/**: All the extra dependencies are put here. E.g. the json parser and cub related files.
 - **scripts/**: Contains scripts for running the program on triton and some scripts for plotting data.
 - **src/**: Contains all of the source code.
-- **default/**: Directory for the binaries of Make target 'default'
-- **debug/**: Directory for the binaries of Make target 'debug'
-- **final/**: Directory for the binaries of Make target 'final'
 
 ## Building and running the program
 **N.B.** The dimensionality of the simulation is controlled from the makefile.
