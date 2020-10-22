@@ -3,7 +3,7 @@
 # bin will be created when building the program.
 # Executable and the intermediate object files will be placed there.
 # 'make clean' will completely remove bin and its contents.
-BIN_PATH := bin
+BIN_PREFIX := bin
 
 # All the source files recide here.
 SRC_PATH := src
@@ -15,24 +15,24 @@ INCL = -Iincl/
 # -----------------------------------------------------
 # List all objects that contain CPU code.
 OBJ_NAMES := Main.o Simulator.o Kernels.o
-OBJS := $(addprefix $(BIN_PATH)/, $(OBJ_NAMES))
+OBJS = $(addprefix $(BIN_PATH)/, $(OBJ_NAMES))
 
 # List all the objects that contain GPU code.
 # Overlap with the objects above is totally fine.
 # These are only related to linking, compiling is done automatically
 # based on the file extension (.cpp vs. .cu)
 GPU_OBJ_NAMES := Simulator.o Kernels.o
-GPU_OBJS := $(addprefix $(BIN_PATH)/, $(GPU_OBJ_NAMES))
+GPU_OBJS = $(addprefix $(BIN_PATH)/, $(GPU_OBJ_NAMES))
 
 # Find all headers in source dir.
 HEADERS := $(wildcard $(SRC_PATH)/*.h)
 HEADERS += $(wildcard $(SRC_PATH)/*.cuh)
 
 # Name of the linked GPU code.
-GPU_CODE := $(BIN_PATH)/GPUCode.o
+GPU_CODE = $(BIN_PATH)/GPUCode.o
 
 # Name of the final executable.
-EXEC := $(BIN_PATH)/cubble
+EXEC = $(BIN_PATH)/cubble
 
 # Compilers to use
 # -----------------------------------------------------
@@ -62,8 +62,8 @@ COMMON_FLAGS := $(INCL)
 # -----------------------------------------------------
 .PHONY : all
 all :
-	mkdir $(BIN_PATH)/debug
-	$(MAKE) -j8 BIN_PATH=$(BIN_PATH)/optimized \
+	mkdir $(BIN_PREFIX)/optimized
+	$(MAKE) -j8 BIN_PATH=$(BIN_PREFIX)/optimized \
 	    GPU_FLAGS=-lineinfo OPTIM_FLAGS=-O3 \
 	    DEFINES=-DNDEBUG $(EXEC)
 
@@ -71,8 +71,8 @@ all :
 # -----------------------------------------------------
 .PHONY : debug
 debug :
-	mkdir $(BIN_PATH)/debug
-	$(MAKE) -j8 BIN_PATH=$(BIN_PATH)/debug \
+	mkdir $(BIN_PREFIX)/debug
+	$(MAKE) -j8 BIN_PATH=$(BIN_PREFIX)/debug \
 	    GPU_FLAGS='-g -G' OPTIM_FLAGS=-O0 \
 	    LINK_FLAGS=-g3 $(EXEC)
 
