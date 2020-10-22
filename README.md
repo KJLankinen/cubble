@@ -3,7 +3,7 @@ This is a C++/Cuda implementation of a wet foam model based on the work by
 Durian. The program can be used to simulate two and three dimensional foams
 in different conditions. More information of the physics of the simulation
 can be found in [this thesis](http://urn.fi/URN:NBN:fi:hulib-202003301668)
-writted about it.
+written about it.
 
 ## Contents of the repository
 - **array.params**:
