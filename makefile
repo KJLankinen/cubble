@@ -36,74 +36,67 @@ EXEC = $(BIN_PATH)/cubble
 
 # Compilers to use
 # -----------------------------------------------------
-C_CPU := g++
-C_GPU := nvcc
+CPU_COMPILER := g++
+GPU_COMPILER := nvcc
 
 # External libraries to link
 # -----------------------------------------------------
 LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 
-# Preprocessor defines
-# -----------------------------------------------------
-PROFILE ?=
-DEFINES ?=
-NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
-
 # Flags
 # -----------------------------------------------------
+#  PROFILE=-DPROFILE can be passed to make from cmd, when profiling
+PROFILE ?=
 LINK_FLAGS ?=
+NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 override CPU_FLAGS += -Wall -std=c++14 -m64
 GPU_ARCH := -gencode arch=compute_70,code=compute_70	\
 	    -gencode arch=compute_70,code=sm_70
-override GPU_FLAGS += $(GPU_ARCH) -std=c++14 --expt-relaxed-constexpr
-COMMON_FLAGS := $(INCL)
+override GPU_FLAGS += $(GPU_ARCH) $(NVCC_DEFINES) \
+    -std=c++14 --expt-relaxed-constexpr
+COMMON_FLAGS = $(INCL) $(OPTIM_FLAGS) $(DEFINES)
 
 # Default first rule
 # -----------------------------------------------------
 .PHONY : all
 all :
-	mkdir $(BIN_PREFIX)/optimized
-	$(MAKE) -j8 BIN_PATH=$(BIN_PREFIX)/optimized \
-	    GPU_FLAGS=-lineinfo OPTIM_FLAGS=-O3 \
-	    DEFINES=-DNDEBUG $(EXEC)
+	$(eval BIN_PATH = $(BIN_PREFIX)/optimized)
+	mkdir -p $(BIN_PATH)
+	$(MAKE) -j8 BIN_PATH=$(BIN_PATH) GPU_FLAGS=-lineinfo OPTIM_FLAGS=-O3 \
+	    DEFINES='-DNDEBUG $(PROFILE)' $(EXEC)
 
 # Debug rule
 # -----------------------------------------------------
 .PHONY : debug
 debug :
-	mkdir $(BIN_PREFIX)/debug
-	$(MAKE) -j8 BIN_PATH=$(BIN_PREFIX)/debug \
-	    GPU_FLAGS='-g -G' OPTIM_FLAGS=-O0 \
-	    LINK_FLAGS=-g3 $(EXEC)
-
+	$(eval BIN_PATH = $(BIN_PREFIX)/debug)
+	mkdir -p $(BIN_PATH)
+	$(MAKE) -j8 BIN_PATH=$(BIN_PATH) GPU_FLAGS='-g -G' \
+	    OPTIM_FLAGS=-O0 LINK_FLAGS=-g3 $(EXEC)
 
 # Rule for main executable.
 # -----------------------------------------------------
 $(EXEC) : $(HEADERS) $(OBJS) $(GPU_CODE)
-	$(C_CPU) $(LINK_FLAGS) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
+	$(CPU_COMPILER) $(LINK_FLAGS) $(OBJS) $(GPU_CODE) $(LIBS) -o $@
 
 # Rule for linking the GPU code to a single object file
 # -----------------------------------------------------
 $(GPU_CODE) : $(GPU_OBJS)
-	$(C_GPU) $(GPU_ARCH) -dlink $^ -o $@
+	$(GPU_COMPILER) $(GPU_ARCH) -dlink $^ -o $@
 
 
 # Rule for the intermediate objects
 # -----------------------------------------------------
 # CPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cpp
-	$(eval OPTIONS = $(CPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES) $(PROFILE))
-	$(C_CPU) $< $(OPTIONS) -c -o $@
+	$(CPU_COMPILER) $< $(CPU_FLAGS) $(COMMON_FLAGS) -c -o $@
 
 # GPU code
 $(BIN_PATH)/%.o : $(SRC_PATH)/%.cu
-	$(eval OPTIONS = $(GPU_FLAGS) $(COMMON_FLAGS) \
-	$(OPTIM_FLAGS) $(DEFINES) $(NVCC_DEFINES) $(PROFILE))
-	$(C_GPU) $< $(OPTIONS) -dc -o $@
+	$(GPU_COMPILER) $< $(GPU_FLAGS) $(COMMON_FLAGS) -dc -o $@
 
 # Clean up
 # -----------------------------------------------------
 .PHONY : clean
 clean :
-	rm -rf $(BIN_PATH)
+	rm -rf $(BIN_PREFIX)

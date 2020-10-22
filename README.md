@@ -1,48 +1,95 @@
 # CUBBLE
-This is a C++/Cuda implementation of a wet foam model based on the work by Durian.
-The program can be used to simulate two and three dimensional foams in different conditions.
-More information of the physics of the simulation can be found in this thesis writted about it.
+This is a C++/Cuda implementation of a wet foam model based on the work by
+Durian. The program can be used to simulate two and three dimensional foams
+in different conditions. More information of the physics of the simulation
+can be found in this thesis writted about it.
 
 ## Contents of the repository
-- **debug/**: Directory for the binaries of Make target 'debug'
-- **default/**: Directory for the binaries of Make target 'default'
-- **final/**: Directory for the binaries of Make target 'final'
-- **incl/**: All the extra dependencies are put here. E.g. the json parser and cub related files.
-- **scripts/**: Contains scripts for running the program on triton and some scripts for plotting data.
-- **src/**: Contains all of the source code.
+- **array.params**:
+    File for controlling the inputs of an array job on the cluster
+- **incl/**:
+    External dependencies of the program
+- **input_parameters.json**:
+    File for controlling the inputs of the simulation
+- **LICENSE**:
+    The license of the program
+- **makefile**:
+    Makefile for building the program
+- **README**:
+    This file
+- **scripts/**:
+    Scripts for running the program on triton cluster and various scripts
+    for plotting data
+- **src/**:
+    Source files
 
-## Building and running the program
-**N.B.** The dimensionality of the simulation is controlled from the makefile.
+## Dependencies
+- Linux environment
+- GPU with compute capability 7.x or higher (e.g. Volta V100)
+- Cuda 10.1.243 or higher
+- gcc 6.5.0 or higher
+- The contents of the incl directory
 
-Each make target is built into a separate directory, final, default or debug. Each of these directories has its own makefile and all the targets are built/cleaned in the same way:
+## Building the program
+The program can be built with the accompanying makefile.
+It contains three rules to choose from:
 ```
 make
+make debug
 make clean
 ```
+The first rule should normally be used to build the simulation. It builds
+an optimized executable to bin/optimized/cubble. The second rule can be used
+to build a very slow version of the code for debugging. Note that this version
+is extremely slow compared to the optimized version, since the GPU and CPU are
+synchronized between every GPU call and additionally all the compiler
+optimizations are turned off. The debug executable can be found in
+bin/debug/cubble. The third rule removes the contents of the bin directory.
 
-Final target is the one that should be run when doing simulations. It's the fastest and most optimized.
-
-Default target is built with -O2 flag so it's quite fast, but some internal debug cababilities are still on and it's significantly slower than the final target. Mostly for testing some new cababilities.
-
-Debug is built with -O0 and debug cababilities, only meant for debugging. Very slow.
-
-In addition to the options above, there are some extra parameters in the makefile which can be used to e.g. turn profiling on/off.
-
-The program can be run by typing
+## Running the program
+Once the binary has been compiled, it can be found in bin/xxx/cubble, where
+xxx depends on the build target. The program takes the path to the input file
+as an argument. By default it's called input_parameters.json. Thus, running
+the program is as simple as typing
 ```
-make run
+bin/optimized/cubble input_parameters.json
 ```
-or by manually writing the path to the executable and the io files, e.g.
-```
-final/bin/cubble input_parameters.json state.bin
-```
-The program runs until a certain amount of bubbles is left. After this, the program writes one final data file and returns.
+assuming you've built the optimized version and are running the program from
+the base directory.
 
-**N.B.** The parameter that controls this amount of bubbles (called MinNumBubbles) should always be larger than the number of bubbles in one cell multiplied by 3^NumDim. In other words, if the number of bubbles in a cell is 32 and the dimensionality of the program is 2 (2D simulation), then the minimum number of bubbles should be larger than **32 * 3^2 = 32 * 3 * 3 = 288**. For 3D this would be 864. **300 and 900 are nice round numbers for MinNumBubbles**.
+## Inputs of the program
+Read the comments inside the input file for more information on what each
+input variable does. Adding new inputs is easy: just add them to the input
+json and then access them from the source code. The source code does not
+care about any extra variables in the input file, so new variables can be added
+freely and they do nothing, if they're not accessed from the source code.
 
-The reason for this is that the neighbor search is done in a manner that assumes at least 3 cells in each dimension. If there are less than 3 cells per dimension, some cells are searched through more than once, leading to bubbles having the same bubble as a neighbor multiple times. The implementation should and could be improved to circumvent this, but "in the mean time" just follow the above rule.
+One should not change the names of the variables in the input file, unless
+the names are changed in the source as well. In other words, the names of the
+input variables are hard coded in the source code.
 
-## Notes and tips
-The whole program was authored by one person, meaning it might not be the most easy or intuitive to use for someone else. If you as a user find something that was difficult for you to understand, but to which you were able to find an answer to, make note of it. If you have access to this repository, please add a small comment or a description of the problem and solution to it below. If you find that the implementation is stupid, feel free to make it less stupid.
+The best way to learn and understand what each variable does is to see where
+it is used in the program, change it slightly and see how it affects the
+simulation. Some care should be taken however, as some values are essentially
+meaningless, like negative values for the physical parameters of the foam
+(e.g. kappa, K, phi, etc.). Some values are also coupled with your running
+environment, i.e. you should not save snapshots frequently if you have low disk
+space or use very large simulation sizes (bubbles.numStart >= 10^7) if your
+GPU doesn't have a lot of memory.
 
-- When adding new parameters to the .json, always add an explanation of the parameter **BEFORE** the parameter itself: "ParamExpl" : "This parameter means this and that.", \n "Param" : 3.1415
+## Profiling the program
+Profiling the program is an involved process and you should be sure to know
+what you're doing before starting it. Make sure to read the available
+documentation on Nsight-systems and Nsight-compute thoroughly before starting.
+If cudaProfilerApi is to be used with profiling, one can pass the command line
+argument PROFILE=-DPROFILE to make when compiling the optimized version of the
+code. There are points in the source code between which profiling data is
+collected, if the flag has been passed to the code. These can be moved around
+at will, given that you know what you're doing.
+
+## Debugging the program
+You can use cuda-gdg to debug the program. For this you need to build the
+program with the debug rule, i.e. make debug. Since the debug version of the
+program is painfully slow, it can be time consuming to debug the simulation
+if the input size is large. I recommend always checking if the problem or bug
+manifests itself with a smaller problem size, e.g. 10^4 bubbles.
