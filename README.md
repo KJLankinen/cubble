@@ -89,7 +89,7 @@ collected, if the flag has been passed to the code. These can be moved around
 at will, given that you know what you're doing.
 
 ## Debugging the program
-You can use `cuda-gdg` to debug the program. For this you need to build the
+You can use `cuda-gdb` to debug the program. For this you need to build the
 program with the debug rule, i.e. `make debug`. Since the debug version of the
 program is painfully slow, it can be time consuming to debug the simulation
 if the input size is large. I recommend always checking if the problem or bug
