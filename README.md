@@ -5,8 +5,6 @@ in different conditions. More information of the physics of the simulation
 can be found in [this thesis](http://urn.fi/URN:NBN:fi:hulib-202003301668)
 writted about it.
 
----
-
 ## Contents of the repository
 - **array.params**:
     File for controlling the inputs of an array job on the cluster
