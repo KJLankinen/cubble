@@ -48,12 +48,10 @@ LIBS := -lcudart -lcurand -lnvToolsExt -lpthread
 #  PROFILE=-DPROFILE can be passed to make from cmd, when profiling
 PROFILE ?=
 LINK_FLAGS ?=
-NVCC_DEFINES := -D_FORCE_INLINES -D_MWAITXINTRIN_H_INCLUDED -D__STRICT_ANSI__
 override CPU_FLAGS += -Wall -std=c++14 -m64
 GPU_ARCH := -gencode arch=compute_70,code=compute_70	\
 	    -gencode arch=compute_70,code=sm_70
-override GPU_FLAGS += $(GPU_ARCH) $(NVCC_DEFINES) \
-    -std=c++14 --expt-relaxed-constexpr
+override GPU_FLAGS += $(GPU_ARCH) -std=c++14
 COMMON_FLAGS = $(INCL) $(OPTIM_FLAGS) $(DEFINES)
 
 # Default first rule
