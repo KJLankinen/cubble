@@ -30,11 +30,6 @@ written about it.
 - Cuda 10.1.243 or higher[^2]
 - gcc 6.5.0 or higher[^2]
 
-[^1]: This is a hard limit, as the program uses operations that are not
-available on older devices.
-[^2]: Older versions may or may not work, so this is not a hard limit.
-Most of the development and testing has been done with these versions.
-
 ## Building the program
 The program can be built with the accompanying makefile.
 It contains three rules to choose from:
@@ -98,3 +93,10 @@ program with the debug rule, i.e. `make debug`. Since the debug version of the
 program is painfully slow, it can be time consuming to debug the simulation
 if the input size is large. I recommend always checking if the problem or bug
 manifests itself with a smaller problem size, e.g. 10^4 bubbles.
+
+## Notes
+[^1]: This is a hard limit, as the program uses operations that are not
+available on older devices.
+[^2]: Older versions may or may not work, so this is not a hard limit.
+Most of the development and testing has been done with these versions.
+
