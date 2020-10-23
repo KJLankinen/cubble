@@ -277,7 +277,7 @@ double stabilize(Params &params, int numStepsToRelax) {
             uint64_t bytes = params.bubbles.stride * sizeof(double);
             CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                                       static_cast<void *>(params.bubbles.r),
-                                      bytes, cudaMemcpyDeviceToDevice, 0));
+                                      bytes, cudaMemcpyDefault, 0));
         }
     }
 
@@ -356,7 +356,7 @@ void integrate(Params &params) {
                        numBlocks, params.stream1, false);
             CUDA_CALL(cudaMemcpyFromSymbolAsync(
                 static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
-                cudaMemcpyDeviceToHost, params.stream1));
+                cudaMemcpyDefault, params.stream1));
             CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
             // Reduce expansion
@@ -368,7 +368,7 @@ void integrate(Params &params) {
                        params.stream1, false);
             CUDA_CALL(cudaMemcpyFromSymbolAsync(
                 static_cast<void *>(hMaxExpansion), dMaxExpansion,
-                sizeof(double), 0, cudaMemcpyDeviceToHost, params.stream1));
+                sizeof(double), 0, cudaMemcpyDefault, params.stream1));
         }
 
         // Stream2
@@ -376,7 +376,7 @@ void integrate(Params &params) {
             // Copy numToBeDeleted
             CUDA_CALL(cudaMemcpyFromSymbolAsync(
                 static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted,
-                sizeof(int), 0, cudaMemcpyDeviceToHost, params.stream2));
+                sizeof(int), 0, cudaMemcpyDefault, params.stream2));
 
             // Reduce radius
             void *pDMaxRadius = nullptr;
@@ -387,7 +387,7 @@ void integrate(Params &params) {
                        params.stream2, false);
             CUDA_CALL(cudaMemcpyFromSymbolAsync(
                 static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
-                cudaMemcpyDeviceToHost, params.stream2));
+                cudaMemcpyDefault, params.stream2));
 
             CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
         }
@@ -550,7 +550,7 @@ void saveSnapshot(Params &params) {
     CUDA_CALL(
         cudaMemcpyAsync(memStart, params.memory,
                         params.hostMemory.size() * sizeof(params.hostMemory[0]),
-                        cudaMemcpyDeviceToHost, 0));
+                        cudaMemcpyDefault, 0));
     CUDA_CALL(cudaEventRecord(params.snapshotParams.event, 0));
 
     // This lambda helps calculate the host address for each pointer from the
@@ -783,7 +783,7 @@ void init(const char *inputFileName, Params &params) {
                            sizeof(Constants)));
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),
                          static_cast<void *>(&params.hostConstants),
-                         sizeof(Constants), cudaMemcpyHostToDevice));
+                         sizeof(Constants), cudaMemcpyDefault));
     CUDA_CALL(cudaMemcpyToSymbol(dConstants,
                                  static_cast<void *>(&params.deviceConstants),
                                  sizeof(Constants *)));
@@ -882,16 +882,16 @@ void init(const char *inputFileName, Params &params) {
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
                               static_cast<void *>(params.bubbles.x), bytes,
-                              cudaMemcpyDeviceToDevice, 0));
+                              cudaMemcpyDefault, 0));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.yp),
                               static_cast<void *>(params.bubbles.y), bytes,
-                              cudaMemcpyDeviceToDevice, 0));
+                              cudaMemcpyDefault, 0));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.zp),
                               static_cast<void *>(params.bubbles.z), bytes,
-                              cudaMemcpyDeviceToDevice, 0));
+                              cudaMemcpyDefault, 0));
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                               static_cast<void *>(params.bubbles.r), bytes,
-                              cudaMemcpyDeviceToDevice, 0));
+                              cudaMemcpyDefault, 0));
 
     printf("Calculating initial velocities for Adams-Bashforth-Moulton\n");
     KERNEL_LAUNCH(
@@ -977,7 +977,7 @@ void init(const char *inputFileName, Params &params) {
     // Copy the updated constants to GPU
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),
                          static_cast<void *>(&params.hostConstants),
-                         sizeof(Constants), cudaMemcpyHostToDevice));
+                         sizeof(Constants), cudaMemcpyDefault));
 
     KERNEL_LAUNCH(transformPositions, params, 0, 0, false, params.bubbles);
 
@@ -992,7 +992,7 @@ void init(const char *inputFileName, Params &params) {
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                               static_cast<void *>(params.bubbles.r), bytes,
-                              cudaMemcpyDeviceToDevice, 0));
+                              cudaMemcpyDefault, 0));
 
     printf("Stabilizing a few rounds after scaling\n");
     for (uint32_t i = 0; i < 5; ++i)
@@ -1047,19 +1047,19 @@ void init(const char *inputFileName, Params &params) {
         CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousX.data()),
                              static_cast<void *>(params.bubbles.x),
                              sizeof(double) * params.bubbles.count,
-                             cudaMemcpyDeviceToHost));
+                             cudaMemcpyDefault));
         CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousY.data()),
                              static_cast<void *>(params.bubbles.y),
                              sizeof(double) * params.bubbles.count,
-                             cudaMemcpyDeviceToHost));
+                             cudaMemcpyDefault));
         CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousZ.data()),
                              static_cast<void *>(params.bubbles.z),
                              sizeof(double) * params.bubbles.count,
-                             cudaMemcpyDeviceToHost));
+                             cudaMemcpyDefault));
         CUDA_CALL(cudaMemcpy(static_cast<void *>(index),
                              static_cast<void *>(params.bubbles.index),
                              sizeof(int) * params.bubbles.count,
-                             cudaMemcpyDeviceToHost));
+                             cudaMemcpyDefault));
 
         for (uint64_t i = 0; i < params.bubbles.count; i++) {
             const int ind = index[i];
