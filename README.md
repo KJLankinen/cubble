@@ -26,10 +26,14 @@ written about it.
 
 ## Dependencies
 - Linux environment
-- GPU with compute capability 7.x or higher (e.g. Volta V100)
-- Cuda 10.1.243 or higher
-- gcc 6.5.0 or higher
-- The contents of the incl directory
+- GPU with compute capability 7.x or higher (e.g. Volta V100)[^1]
+- Cuda 10.1.243 or higher[^2]
+- gcc 6.5.0 or higher[^2]
+
+[^1]: This is a hard limit, as the program uses operations that are not
+available on older devices.
+[^2]: Older versions may or may not work, so this is not a hard limit.
+Most of the development and testing has been done with these versions.
 
 ## Building the program
 The program can be built with the accompanying makefile.
