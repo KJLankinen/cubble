@@ -348,7 +348,7 @@ void integrate(Params &params) {
 
         // Device 0
         CUDA_CALL(cudaSetDevice(0));
-        CUDA_CALL(cudaStreamWaitEvent(params.event3));
+        CUDA_CALL(cudaStreamWaitEvent(0, params.event3));
         KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
                       params.tempD2, params.tempI);
 
