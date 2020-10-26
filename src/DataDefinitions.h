@@ -238,6 +238,7 @@ struct HostData {
     double avgRad = 0.0;
     double maxBubbleRadius = 0.0;
     int minNumBubbles = 0;
+    int numGPUs = 0;
     uint32_t timesPrinted = 0;
     uint32_t numSnapshots = 0;
 
