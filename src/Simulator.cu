@@ -352,51 +352,44 @@ void integrate(Params &params) {
         KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
                       params.tempD2, params.tempI);
 
-        // Stream1
-        {
-            // Reduce error
-            void *pDMaxError = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2, static_cast<double *>(pDMaxError),
-                       numBlocks, params.stream1, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
-                cudaMemcpyDefault, params.stream1));
-            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
+        // Reduce error in stream1
+        void *pDMaxError = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem, params.tempD2,
+                   static_cast<double *>(pDMaxError), numBlocks, params.stream1,
+                   false);
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(static_cast<void *>(hMaxError),
+                                            dMaxError, sizeof(double), 0,
+                                            cudaMemcpyDefault, params.stream1));
+        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
 
-            // Reduce expansion
-            void *pDMaxExpansion = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2 + 2 * numBlocks,
-                       static_cast<double *>(pDMaxExpansion), numBlocks,
-                       params.stream1, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxExpansion), dMaxExpansion,
-                sizeof(double), 0, cudaMemcpyDefault, params.stream1));
-        }
+        // Copy numToBeDeleted in stream2
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
+            0, cudaMemcpyDefault, params.stream2));
 
-        // Stream2
-        {
-            // Copy numToBeDeleted
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted,
-                sizeof(int), 0, cudaMemcpyDefault, params.stream2));
+        // Reduce expansion in stream1
+        void *pDMaxExpansion = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                   params.tempD2 + 2 * numBlocks,
+                   static_cast<double *>(pDMaxExpansion), numBlocks,
+                   params.stream1, false);
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(static_cast<void *>(hMaxExpansion),
+                                            dMaxExpansion, sizeof(double), 0,
+                                            cudaMemcpyDefault, params.stream1));
 
-            // Reduce radius
-            void *pDMaxRadius = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2 + numBlocks,
-                       static_cast<double *>(pDMaxRadius), numBlocks,
-                       params.stream2, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
-                cudaMemcpyDefault, params.stream2));
-
-            CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
-        }
+        // Reduce radius in stream2
+        void *pDMaxRadius = nullptr;
+        CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
+        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
+                   params.tempD2 + numBlocks,
+                   static_cast<double *>(pDMaxRadius), numBlocks,
+                   params.stream2, false);
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(static_cast<void *>(hMaxRadius),
+                                            dMaxRadius, sizeof(double), 0,
+                                            cudaMemcpyDefault, params.stream2));
+        CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
 
         // Wait until the copy of maximum error is done
         CUDA_CALL(cudaEventSynchronize(params.event1));
