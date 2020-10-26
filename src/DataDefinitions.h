@@ -297,6 +297,7 @@ struct Params {
     cudaStream_t stream2;
     cudaEvent_t event1;
     cudaEvent_t event2;
+    cudaEvent_t event3;
 
     std::thread ioThread;
 

@@ -344,12 +344,11 @@ void integrate(Params &params) {
                       params.pairs, params.tempD1);
         KERNEL_LAUNCH(mediatedGasExchange, params, 0, 0, params.bubbles,
                       params.tempD1);
-        CUDA_CALL(cudaEventRecord(params.event1));
+        CUDA_CALL(cudaEventRecord(params.event3));
 
         // Device 0
         CUDA_CALL(cudaSetDevice(0));
-        CUDA_CALL(cudaEventSynchronize(params.event1));
-        // Correction in default stream (implicit synchronization with streams)
+        CUDA_CALL(cudaStreamWaitEvent(params.event3));
         KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
                       params.tempD2, params.tempI);
 
@@ -681,6 +680,7 @@ void end(Params &params) {
 
     CUDA_CALL(cudaEventDestroy(params.event1));
     CUDA_CALL(cudaEventDestroy(params.event2));
+    CUDA_CALL(cudaEventDestroy(params.event3));
 
     CUDA_CALL(cudaStreamDestroy(params.stream2));
     CUDA_CALL(cudaStreamDestroy(params.stream1));
@@ -788,6 +788,20 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaGetDeviceCount(&params.hostData.numGPUs));
     CUDA_CALL(cudaSetDevice(0));
 
+    int canAccessPeer01 = 0;
+    int canAccessPeer10 = 0;
+    CUDA_CALL(cudaDeviceCanAccessPeer(&canAccessPeer01, 0, 1));
+    CUDA_CALL(cudaDeviceCanAccessPeer(&canAccessPeer10, 1, 0));
+    if (0 == canAccessPeer01 || 0 == canAccessPeer10) {
+        assert(false && "Peer access not supported.");
+    } else {
+        CUDA_CALL(cudaSetDevice(0));
+        CUDA_CALL(cudaDeviceEnablePeerAccess(1, 0));
+        CUDA_CALL(cudaSetDevice(1));
+        CUDA_CALL(cudaDeviceEnablePeerAccess(0, 0));
+        CUDA_CALL(cudaSetDevice(0));
+    }
+
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
                            sizeof(Constants)));
@@ -804,6 +818,11 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaEventCreate(&params.event2, cudaEventDisableTiming));
     CUDA_CALL(
         cudaEventCreate(&params.snapshotParams.event, cudaEventDisableTiming));
+
+    CUDA_CALL(cudaSetDevice(1));
+    CUDA_CALL(cudaEventCreate(&params.event3, cudaEventDisableTiming));
+    CUDA_CALL(cudaSetDevice(0));
+
     printRelevantInfoOfCurrentDevice();
 
     // Set device globals to zero
