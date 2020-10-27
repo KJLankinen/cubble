@@ -42,11 +42,10 @@ void searchNeighbors(Params &params) {
     nvtxRangePush("Neighbors");
     params.hostData.numNeighborsSearched++;
 
-    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, params.stream1,
-                  params.bubbles);
+    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, 0, params.bubbles);
 
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0,
-                              params.pairs.getMemReq(), params.stream2));
+                              params.pairs.getMemReq(), 0));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
     ivec cellDim = (params.hostConstants.interval /
@@ -185,11 +184,11 @@ double stabilize(Params &params, int numStepsToRelax) {
     const int numBlocks = params.blockGrid.x;
     bool errorTooLarge = true;
     double &ts = params.hostData.timeStep;
+    double maxExpansion = 0.0;
 
-    void *cubPtr = params.tempPair2;
-    uint64_t maxCubMem = params.pairs.getMemReq() / 2;
-    void *cubOutput = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+    if (params.maximums.size() < 3 * numBlocks) {
+        params.maximums.resize(3 * numBlocks);
+    }
 
     nvtxRangePush("For-loop");
     for (int i = 0; i < numStepsToRelax; ++i) {
@@ -210,16 +209,22 @@ double stabilize(Params &params, int numStepsToRelax) {
                           params.bubbles, params.tempD2, params.tempD1,
                           params.tempI);
 
-            // Reduce error
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2, static_cast<double *>(cubOutput),
-                       numBlocks, (cudaStream_t)0, false);
-            CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&error),
-                                           dMaxRadius, sizeof(double)));
+            void *memStart = static_cast<void *>(params.maximums.data());
+            CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
+                                 params.maximums.size() * sizeof(double),
+                                 cudaMemcpyDefault));
 
-            errorTooLarge = error > params.hostData.errorTolerance;
+            maxExpansion = 0.0;
+            double maxError = 0.0;
+            double *p = static_cast<double *>(memStart);
+            for (uint32_t i = 0; i < numBlocks; i++) {
+                maxError = max(maxError, p[i]);
+                maxExpansion = max(maxExpansion, p[i + 2 * numBlocks]);
+            }
+
+            errorTooLarge = maxError > params.hostData.errorTolerance;
             const bool increaseTs =
-                error < 0.45 * params.hostData.errorTolerance && ts < 10;
+                maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
             if (errorTooLarge) {
                 ts *= 0.37;
             } else if (increaseTs) {
@@ -258,15 +263,6 @@ double stabilize(Params &params, int numStepsToRelax) {
 
         elapsedTime += ts;
 
-        // Reduce block maximum expansions to a global maximum
-        double maxExpansion = 0.0;
-        CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                   params.tempD2 + 2 * numBlocks,
-                   static_cast<double *>(cubOutput), numBlocks, (cudaStream_t)0,
-                   false);
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&maxExpansion),
-                                       dMaxRadius, sizeof(double)));
-
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             searchNeighbors(params);
             // After searchNeighbors r is correct,
@@ -303,11 +299,11 @@ void integrate(Params &params) {
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
         // step.
-        KERNEL_LAUNCH(resetArrays, params, 0, params.stream2, 0.0,
-                      params.bubbles.count, false, params.bubbles.flowVx,
-                      params.bubbles.flowVy, params.bubbles.flowVz);
-        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, params.stream2,
-                      params.bubbles, params.pairs);
+        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
+                      false, params.bubbles.flowVx, params.bubbles.flowVy,
+                      params.bubbles.flowVz);
+        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, 0, params.bubbles,
+                      params.pairs);
     }
 
     do {
@@ -318,17 +314,14 @@ void integrate(Params &params) {
                       params.pairs, params.tempD1, true);
 
         if (params.hostData.addFlow) {
-            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
-                          params.bubbles);
+            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, 0, params.bubbles);
         }
 
         if (params.hostConstants.xWall || params.hostConstants.yWall ||
             params.hostConstants.zWall) {
-            KERNEL_LAUNCH(wallVelocity, params, 0, params.stream2,
-                          params.bubbles);
+            KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
         }
 
-        // Correction in default stream (implicit synchronization with streams)
         KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, true,
                       params.bubbles, params.tempD2, params.tempD1,
                       params.tempI);
@@ -343,6 +336,8 @@ void integrate(Params &params) {
                              params.maximums.size() * sizeof(double),
                              cudaMemcpyDefault));
 
+        maxRadius = 0.0;
+        maxExpansion = 0.0;
         double maxError = 0.0;
         double *p = static_cast<double *>(memStart);
         for (uint32_t i = 0; i < numBlocks; i++) {
@@ -625,12 +620,6 @@ void end(Params &params) {
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedMemory)));
-
-    CUDA_CALL(cudaEventDestroy(params.event1));
-    CUDA_CALL(cudaEventDestroy(params.event2));
-
-    CUDA_CALL(cudaStreamDestroy(params.stream2));
-    CUDA_CALL(cudaStreamDestroy(params.stream1));
 }
 
 void init(const char *inputFileName, Params &params) {
@@ -742,10 +731,6 @@ void init(const char *inputFileName, Params &params) {
                                  static_cast<void *>(&params.deviceConstants),
                                  sizeof(Constants *)));
 
-    CUDA_ASSERT(cudaStreamCreate(&params.stream2));
-    CUDA_ASSERT(cudaStreamCreate(&params.stream1));
-    CUDA_CALL(cudaEventCreate(&params.event1, cudaEventDisableTiming));
-    CUDA_CALL(cudaEventCreate(&params.event2, cudaEventDisableTiming));
     CUDA_CALL(
         cudaEventCreate(&params.snapshotParams.event, cudaEventDisableTiming));
     printRelevantInfoOfCurrentDevice();

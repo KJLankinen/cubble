@@ -294,11 +294,6 @@ struct Params {
     Bubbles bubbles;
     Pairs pairs;
 
-    cudaStream_t stream1;
-    cudaStream_t stream2;
-    cudaEvent_t event1;
-    cudaEvent_t event2;
-
     std::thread ioThread;
 
     dim3 blockGrid = dim3(1024, 1, 1);
