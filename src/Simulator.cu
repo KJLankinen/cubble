@@ -180,7 +180,6 @@ double stabilize(Params &params, int numStepsToRelax) {
     params.hostData.energy1 = totalEnergy(params);
 
     double elapsedTime = 0.0;
-    double error = 100000;
     const int numBlocks = params.blockGrid.x;
     bool errorTooLarge = true;
     double &ts = params.hostData.timeStep;
