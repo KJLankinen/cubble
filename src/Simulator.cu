@@ -291,15 +291,15 @@ void integrate(Params &params) {
     uint32_t numLoopsDone = 0;
     const int numBlocks = params.blockGrid.x;
     double &ts = params.hostData.timeStep;
+    int *hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
     bool errorTooLarge = true;
+    const double bytes = 3 * numBlocks * sizeof(double);
+    double maxRadius = 0.0;
+    double maxExpansion = 0.0;
 
-    double *hMaxRadius = static_cast<double *>(params.pinnedMemory);
-    double *hMaxExpansion = hMaxRadius + 1;
-    double *hMaxError = hMaxExpansion + 1;
-    int *hNumToBeDeleted = reinterpret_cast<int *>(hMaxError + 1);
-
-    void *cubPtr = params.tempPair2;
-    uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+    if (params.hostMemory.size() < bytes) {
+        params.hostMemory.resize(bytes);
+    }
 
     if (params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
@@ -313,7 +313,6 @@ void integrate(Params &params) {
 
     do {
         nvtxRangePush("Do-loop");
-
         KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, true, params.bubbles,
                       params.tempD1, params.tempD2);
         KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
@@ -335,59 +334,26 @@ void integrate(Params &params) {
                       params.bubbles, params.tempD2, params.tempD1,
                       params.tempI);
 
-        // Stream1
-        {
-            // Reduce error
-            void *pDMaxError = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxError, dMaxError));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2, static_cast<double *>(pDMaxError),
-                       numBlocks, params.stream1, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxError), dMaxError, sizeof(double), 0,
-                cudaMemcpyDefault, params.stream1));
-            CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
+        // Copy numToBeDeleted
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
+            0, cudaMemcpyDefault, 0));
 
-            // Reduce expansion
-            void *pDMaxExpansion = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxExpansion, dMaxExpansion));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2 + 2 * numBlocks,
-                       static_cast<double *>(pDMaxExpansion), numBlocks,
-                       params.stream1, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxExpansion), dMaxExpansion,
-                sizeof(double), 0, cudaMemcpyDefault, params.stream1));
+        void *memStart = static_cast<void *>(params.hostMemory.data());
+        CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
+                             bytes, cudaMemcpyDefault));
+
+        double maxError = 0.0;
+        double *p = static_cast<double *>(memStart);
+        for (uint32_t i = 0; i < numBlocks; i++) {
+            maxError = max(maxError, p[i]);
+            maxRadius = max(maxRadius, p[i + numBlocks]);
+            maxExpansion = max(maxExpansion, p[i + 2 * numBlocks]);
         }
 
-        // Stream2
-        {
-            // Copy numToBeDeleted
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted,
-                sizeof(int), 0, cudaMemcpyDefault, params.stream2));
-
-            // Reduce radius
-            void *pDMaxRadius = nullptr;
-            CUDA_CALL(cudaGetSymbolAddress(&pDMaxRadius, dMaxRadius));
-            CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
-                       params.tempD2 + numBlocks,
-                       static_cast<double *>(pDMaxRadius), numBlocks,
-                       params.stream2, false);
-            CUDA_CALL(cudaMemcpyFromSymbolAsync(
-                static_cast<void *>(hMaxRadius), dMaxRadius, sizeof(double), 0,
-                cudaMemcpyDefault, params.stream2));
-
-            CUDA_CALL(cudaEventRecord(params.event2, params.stream2));
-        }
-
-        // Wait until the copy of maximum error is done
-        CUDA_CALL(cudaEventSynchronize(params.event1));
-        CUDA_CALL(cudaEventRecord(params.event1, params.stream1));
-
-        errorTooLarge = *hMaxError > params.hostData.errorTolerance;
+        errorTooLarge = maxError > params.hostData.errorTolerance;
         const bool increaseTs =
-            *hMaxError < 0.45 * params.hostData.errorTolerance && ts < 10;
+            maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
         if (errorTooLarge) {
             ts *= 0.37;
         } else if (increaseTs) {
@@ -454,9 +420,7 @@ void integrate(Params &params) {
     params.hostData.timeFraction =
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
-    CUDA_CALL(cudaEventSynchronize(params.event1));
-    CUDA_CALL(cudaEventSynchronize(params.event2));
-    params.hostData.maxBubbleRadius = *hMaxRadius;
+    params.hostData.maxBubbleRadius = maxRadius;
 
     // Delete, if there are nonzero amount of bubbles with a radius
     // smaller than the minimum radius. See postIntegrate kernel for the
@@ -468,7 +432,7 @@ void integrate(Params &params) {
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
     // See postIntegrate kernel, comparePair for details.
-    if (*hMaxExpansion >= 0.5 * params.hostConstants.skinRadius) {
+    if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
     }
 
@@ -795,8 +759,7 @@ void init(const char *inputFileName, Params &params) {
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
 
     printf("Reserving device memory\n");
-    CUDA_CALL(
-        cudaMallocHost(&params.pinnedMemory, sizeof(int) + 3 * sizeof(double)));
+    CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
 
     uint64_t bytes = params.bubbles.getMemReq();
     bytes += 2 * params.pairs.getMemReq();
