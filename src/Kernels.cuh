@@ -55,13 +55,12 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
-__global__ void pairVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void wallVelocity(Bubbles bubbles);
 __global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void imposedFlowVelocity(Bubbles bubbles);
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
-__global__ void pairwiseGasExchange(Bubbles bubbles, Pairs pairs,
-                                    double *overlap);
+__global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
+                                    double *overlap, bool useGasExchange);
 __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap);
 __global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles);
 __global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,

@@ -201,8 +201,8 @@ double stabilize(Params &params, int numStepsToRelax) {
 
             KERNEL_LAUNCH(predict, params, 0, 0, ts, false, params.bubbles);
 
-            KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles,
-                          params.pairs);
+            KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                          params.pairs, params.tempD1, false);
 
             if (params.hostConstants.xWall || params.hostConstants.yWall ||
                 params.hostConstants.zWall) {
@@ -272,7 +272,7 @@ double stabilize(Params &params, int numStepsToRelax) {
         if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
             searchNeighbors(params);
             // After searchNeighbors r is correct,
-            // but rp is trash. pairVelocity always uses
+            // but rp is trash. pairwiseInteraction always uses
             // predicted values, so copy r to rp
             uint64_t bytes = params.bubbles.stride * sizeof(double);
             CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
@@ -320,16 +320,11 @@ void integrate(Params &params) {
                       true, params.bubbles.dxdtp, params.bubbles.dydtp,
                       params.bubbles.dzdtp, params.bubbles.drdtp, params.tempD1,
                       params.tempD2);
-
         KERNEL_LAUNCH(predict, params, 0, 0, ts, true, params.bubbles);
-
-        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.pairs, params.tempD1);
+        KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                      params.pairs, params.tempD1, true);
         KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
                       params.bubbles, params.tempD1);
-
-        KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2, params.bubbles,
-                      params.pairs);
 
         if (params.hostData.addFlow) {
             KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
@@ -877,7 +872,7 @@ void init(const char *inputFileName, Params &params) {
     searchNeighbors(params);
 
     // After searchNeighbors x, y, z, r are correct,
-    // but all predicted are trash. pairVelocity always uses
+    // but all predicted are trash. pairwiseInteraction always uses
     // predicted values, so copy currents to predicteds
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
@@ -899,11 +894,12 @@ void init(const char *inputFileName, Params &params) {
         params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
-    KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles, params.pairs);
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, false);
     KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
-    // pairVelocity calculates to predicteds by accumulating values
+    // pairwiseInteraction calculates to predicteds by accumulating values
     // using atomicAdd. They would have to be reset to zero after every
     // integration, but olds were set to zero above, so we can just swap.
     double *swapper = params.bubbles.dxdto;
@@ -918,7 +914,8 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(pairVelocity, params, 0, 0, params.bubbles, params.pairs);
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, false);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
@@ -987,7 +984,7 @@ void init(const char *inputFileName, Params &params) {
     printf("Neighbor search after scaling\n");
     searchNeighbors(params);
     // After searchNeighbors r is correct,
-    // but rp is trash. pairVelocity always uses
+    // but rp is trash. pairwiseInteraction always uses
     // predicted values, so copy r to rp
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
