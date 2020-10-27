@@ -525,8 +525,8 @@ __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
     }
 }
 
-__global__ void preIntegrate(double timeStep, bool useGasExchange,
-                             Bubbles bubbles, double *temp1, double *temp2) {
+__global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+                             double *temp1, double *temp2) {
     // Adams-Bashforth integration
     if (threadIdx.x + blockIdx.x == 0) {
         resetDeviceGlobals();
@@ -538,132 +538,134 @@ __global__ void preIntegrate(double timeStep, bool useGasExchange,
         temp2[i] = 0.0;
 
         bubbles.dxdtp[i] = 0.0;
-        bubbles.xp[i] =
-            bubbles.x[i] +
-            0.5 * timeStep * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
+        bubbles.xp[i] = bubbles.x[i] +
+                        0.5 * ts * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
 
         bubbles.dydtp[i] = 0.0;
-        bubbles.yp[i] =
-            bubbles.y[i] +
-            0.5 * timeStep * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
+        bubbles.yp[i] = bubbles.y[i] +
+                        0.5 * ts * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
 
         if (dConstants->dimensionality == 3) {
             bubbles.dzdtp[i] = 0.0;
             bubbles.zp[i] =
                 bubbles.z[i] +
-                0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
+                0.5 * ts * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
         }
 
         if (useGasExchange) {
             bubbles.drdtp[i] = 0.0;
             bubbles.rp[i] =
                 bubbles.r[i] +
-                0.5 * timeStep * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
+                0.5 * ts * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
         }
     }
 }
 
-__global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
-                        double *maximums, int *toBeDeleted) {
+__global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+                              double *maximums, int *toBeDeleted) {
     // Adams-Moulton integration
-    const double minRad = dConstants->minRad;
-    int tid = threadIdx.x;
-    // maximum error
-    __shared__ double me[BLOCK_SIZE];
-    // maximum radius
-    __shared__ double mr[BLOCK_SIZE];
-    // volume of remaining bubbles, i.e. new total volume
-    __shared__ double tvn[BLOCK_SIZE];
-    // boundary expansion, i.e. how far the boundary of a bubble has moved since
-    // neighbors were last searched. Boundary expansion =
-    // distance moved + radius increased with gas exchange.
-    __shared__ double be[BLOCK_SIZE];
-    me[tid] = 0.0;
-    mr[tid] = 0.0;
-    tvn[tid] = 0.0;
-    be[tid] = 0.0;
+    __shared__ double sbuf[4 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 0 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 1 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = 0.0;
 
-    for (int i = tid + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
+        double pred = 0.0;
+        double corr = 0.0;
         double delta = 0.0;
-        auto correctPrediction = [&timeStep, &i, &delta](double *p, double *pp,
-                                                         double *po, double *v,
-                                                         double *vp) -> double {
-            double predicted = pp[i];
-            double corrected = p[i] + 0.5 * timeStep * (v[i] + vp[i]);
-            pp[i] = corrected;
-            delta = corrected - po[i];
+        double maxErr = 0.0;
+        double dist = 0.0;
 
-            predicted -= corrected;
-            return predicted < 0.0 ? -predicted : predicted;
-        };
-
-        double maxErr = correctPrediction(bubbles.x, bubbles.xp, bubbles.savedX,
-                                          bubbles.dxdt, bubbles.dxdtp);
-        double dist = delta * delta;
-        maxErr = fmax(maxErr,
-                      correctPrediction(bubbles.y, bubbles.yp, bubbles.savedY,
-                                        bubbles.dydt, bubbles.dydtp));
+        // X
+        pred = bubbles.xp[i];
+        corr = bubbles.x[i] + 0.5 * ts * (bubbles.dxdt[i] + bubbles.dxdtp[i]);
+        bubbles.xp[i] = corr;
+        delta = corr - bubbles.savedX[i];
+        maxErr = fmax(abs(pred - corr), maxErr);
         dist += delta * delta;
+
+        // Y
+        pred = bubbles.yp[i];
+        corr = bubbles.y[i] + 0.5 * ts * (bubbles.dydt[i] + bubbles.dydtp[i]);
+        bubbles.yp[i] = corr;
+        delta = corr - bubbles.savedY[i];
+        maxErr = fmax(abs(pred - corr), maxErr);
+        dist += delta * delta;
+
+        // Z
         if (dConstants->dimensionality == 3) {
-            maxErr = fmax(
-                maxErr, correctPrediction(bubbles.z, bubbles.zp, bubbles.savedZ,
-                                          bubbles.dzdt, bubbles.dzdtp));
+            pred = bubbles.zp[i];
+            corr =
+                bubbles.z[i] + 0.5 * ts * (bubbles.dzdt[i] + bubbles.dzdtp[i]);
+            bubbles.zp[i] = corr;
+            delta = corr - bubbles.savedZ[i];
+            maxErr = fmax(abs(pred - corr), maxErr);
             dist += delta * delta;
         }
+
         dist = sqrt(dist);
 
+        // R
         if (useGasExchange) {
-            maxErr = fmax(
-                maxErr, correctPrediction(bubbles.r, bubbles.rp, bubbles.savedR,
-                                          bubbles.drdt, bubbles.drdtp));
+            pred = bubbles.rp[i];
+            corr =
+                bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + bubbles.drdtp[i]);
+            bubbles.rp[i] = corr;
+            delta = corr - bubbles.savedR[i];
+            maxErr = fmax(abs(pred - corr), maxErr);
             dist += delta;
-            // Predicted value has been overwritten by the corrected value
-            // inside the lambda
-            double rad = bubbles.rp[i];
-            double vol = rad * rad;
+
+            double vol = corr * corr;
             if (dConstants->dimensionality == 3) {
-                vol *= rad;
+                vol *= corr;
             }
+
             // Add remaining bubbles to new total volume
-            if (rad > minRad) {
-                tvn[tid] += vol;
+            if (corr > dConstants->minRad) {
+                sbuf[threadIdx.x + 3 * BLOCK_SIZE] += vol;
             } else {
                 toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
-            mr[tid] = fmax(mr[tid], rad);
+
+            sbuf[threadIdx.x + 1 * BLOCK_SIZE] =
+                fmax(sbuf[threadIdx.x + 1 * BLOCK_SIZE], corr);
         }
+
         // Store the maximum error per bubble in device memory
         // The errors are reset to zero between time steps
         bubbles.error[i] = fmax(maxErr, bubbles.error[i]);
-
-        me[tid] = fmax(me[tid], maxErr);
-        be[tid] = fmax(be[tid], dist);
+        sbuf[threadIdx.x] = fmax(sbuf[threadIdx.x], maxErr);
+        sbuf[threadIdx.x + 2 * BLOCK_SIZE] =
+            fmax(sbuf[threadIdx.x + 2 * BLOCK_SIZE], dist);
     }
 
     __syncthreads();
 
-    const int warpNum = tid >> 5;
-    const int wid = tid & 31;
-    if (tid < 32) {
-        reduce(me, warpNum, &max);
+    const int warpNum = threadIdx.x >> 5;
+    const int wid = threadIdx.x & 31;
+    if (threadIdx.x < 32) {
+        reduce(sbuf, warpNum, &max);
         if (0 == wid) {
-            maximums[blockIdx.x] = me[tid];
+            maximums[blockIdx.x] = sbuf[threadIdx.x];
         }
-    } else if (tid < 64) {
-        reduce(mr, warpNum, &max);
+    } else if (threadIdx.x < 64) {
+        reduce(&sbuf[1 * BLOCK_SIZE], warpNum, &max);
         if (0 == wid) {
-            maximums[blockIdx.x + gridDim.x] = mr[tid];
+            maximums[blockIdx.x + gridDim.x] =
+                sbuf[threadIdx.x + 1 * BLOCK_SIZE];
         }
-    } else if (tid < 96) {
-        reduce(be, warpNum, &max);
+    } else if (threadIdx.x < 96) {
+        reduce(&sbuf[2 * BLOCK_SIZE], warpNum, &max);
         if (0 == wid) {
-            maximums[blockIdx.x + 2 * gridDim.x] = be[tid];
+            maximums[blockIdx.x + 2 * gridDim.x] =
+                sbuf[threadIdx.x + 2 * BLOCK_SIZE];
         }
-    } else if (tid < 128) {
-        reduce(tvn, warpNum, &sum);
+    } else if (threadIdx.x < 128) {
+        reduce(&sbuf[3 * BLOCK_SIZE], warpNum, &sum);
         if (0 == wid) {
-            atomicAdd(&dTotalVolumeNew, tvn[tid]);
+            atomicAdd(&dTotalVolumeNew, sbuf[threadIdx.x + 3 * BLOCK_SIZE]);
         }
     }
 }
@@ -847,14 +849,14 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
     }
 }
 
-__global__ void euler(double timeStep, Bubbles bubbles) {
+__global__ void euler(double ts, Bubbles bubbles) {
     // Euler integration
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
-        bubbles.xp[i] += bubbles.dxdtp[i] * timeStep;
-        bubbles.yp[i] += bubbles.dydtp[i] * timeStep;
+        bubbles.xp[i] += bubbles.dxdtp[i] * ts;
+        bubbles.yp[i] += bubbles.dydtp[i] * ts;
         if (dConstants->dimensionality == 3) {
-            bubbles.zp[i] += bubbles.dzdtp[i] * timeStep;
+            bubbles.zp[i] += bubbles.dzdtp[i] * ts;
         }
     }
 }

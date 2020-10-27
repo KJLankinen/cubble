@@ -206,8 +206,8 @@ double stabilize(Params &params, int numStepsToRelax) {
                 KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
             }
 
-            KERNEL_LAUNCH(correct, params, 0, 0, ts, false, params.bubbles,
-                          params.tempD2, params.tempI);
+            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false,
+                          params.bubbles, params.tempD2, params.tempI);
 
             // Reduce error
             CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
@@ -332,7 +332,7 @@ void integrate(Params &params) {
         }
 
         // Correction in default stream (implicit synchronization with streams)
-        KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
+        KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, params.bubbles,
                       params.tempD2, params.tempI);
 
         // Stream1
@@ -456,7 +456,7 @@ void integrate(Params &params) {
     params.hostData.maxBubbleRadius = *hMaxRadius;
 
     // Delete, if there are nonzero amount of bubbles with a radius
-    // smaller than the minimum radius. See correct kernel for the
+    // smaller than the minimum radius. See postIntegrate kernel for the
     // comparison & calculation.
     if (*hNumToBeDeleted > 0) {
         removeBubbles(params, *hNumToBeDeleted);
@@ -464,7 +464,7 @@ void integrate(Params &params) {
 
     // If the boundary of the bubble with maximum sum of movement & expansion
     // has moved more than half of the "skin radius", reorder bubbles.
-    // See correct kernel, comparePair for details.
+    // See postIntegrate kernel, comparePair for details.
     if (*hMaxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
     }

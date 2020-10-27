@@ -62,16 +62,16 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange);
 __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap);
-__global__ void preIntegrate(double timeStep, bool useGasExchange,
-                             Bubbles bubbles, double *temp1, double *temp2);
-__global__ void correct(double timeStep, bool useGasExchange, Bubbles bubbles,
-                        double *maximums, int *toBeDeleted);
+__global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+                             double *temp1, double *temp2);
+__global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+                              double *maximums, int *toBeDeleted);
 __global__ void incrementPath(Bubbles bubbles);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
                                   int *toBeDeleted);
-__global__ void euler(double timeStep, Bubbles bubbles);
+__global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);
 __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
 __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
