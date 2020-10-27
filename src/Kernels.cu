@@ -476,24 +476,24 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const int warpNum = threadIdx.x >> 5;
         const int wid = threadIdx.x & 31;
         if (threadIdx.x < 32) {
-            reduce(&sbuf[0], warpNum, &sum);
+            reduce(&sbuf[5 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
                 atomicAdd(&dTotalArea, sbuf[threadIdx.x + 5 * BLOCK_SIZE]);
             }
         } else if (threadIdx.x < 64) {
-            reduce(&sbuf[BLOCK_SIZE], warpNum, &sum);
+            reduce(&sbuf[6 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
                 atomicAdd(&dTotalAreaPerRadius,
                           sbuf[threadIdx.x + 6 * BLOCK_SIZE]);
             }
         } else if (threadIdx.x < 96) {
-            reduce(&sbuf[2 * BLOCK_SIZE], warpNum, &sum);
+            reduce(&sbuf[7 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
                 atomicAdd(&dTotalOverlapArea,
                           sbuf[threadIdx.x + 7 * BLOCK_SIZE]);
             }
         } else if (threadIdx.x < 128) {
-            reduce(&sbuf[3 * BLOCK_SIZE], warpNum, &sum);
+            reduce(&sbuf[8 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
                 atomicAdd(&dTotalOverlapAreaPerRadius,
                           sbuf[threadIdx.x + 8 * BLOCK_SIZE]);
