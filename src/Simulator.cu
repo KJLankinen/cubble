@@ -207,7 +207,8 @@ double stabilize(Params &params, int numStepsToRelax) {
             }
 
             KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false,
-                          params.bubbles, params.tempD2, params.tempI);
+                          params.bubbles, params.tempD2, params.tempD1,
+                          params.tempI);
 
             // Reduce error
             CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, maxCubMem,
@@ -317,8 +318,6 @@ void integrate(Params &params) {
                       params.tempD1, params.tempD2);
         KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                       params.pairs, params.tempD1, true);
-        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
-                      params.bubbles, params.tempD1);
 
         if (params.hostData.addFlow) {
             KERNEL_LAUNCH(imposedFlowVelocity, params, 0, params.stream2,
@@ -333,7 +332,7 @@ void integrate(Params &params) {
 
         // Correction in default stream (implicit synchronization with streams)
         KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, params.bubbles,
-                      params.tempD2, params.tempI);
+                      params.tempD2, params.tempD1, params.tempI);
 
         // Stream1
         {

@@ -502,29 +502,6 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     }
 }
 
-__global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
-    // Gas exchange mediated by the liquid surrounding the bubbles,
-    // a.k.a. global gas exchange
-    const double kappa = dConstants->kappa;
-    const double kParameter = dConstants->kParameter;
-    const double averageSurfaceAreaIn = dConstants->averageSurfaceAreaIn;
-    const double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
-                          (dTotalArea - dTotalOverlapArea);
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        const double rad = bubbles.rp[i];
-        double area = 2.0 * CUBBLE_PI * rad;
-        if (dConstants->dimensionality == 3) {
-            area *= 2.0 * rad;
-        }
-        const double vr = bubbles.drdtp[i] + kappa * averageSurfaceAreaIn *
-                                                 bubbles.count / dTotalArea *
-                                                 (area - overlap[i]) *
-                                                 (invRho - 1.0 / rad);
-        bubbles.drdtp[i] = kParameter * vr / area;
-    }
-}
-
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1, double *temp2) {
     // Adams-Bashforth integration
@@ -562,7 +539,8 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 }
 
 __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
-                              double *maximums, int *toBeDeleted) {
+                              double *maximums, double *overlap,
+                              int *toBeDeleted) {
     // Adams-Moulton integration
     __shared__ double sbuf[4 * BLOCK_SIZE];
     sbuf[threadIdx.x + 0 * BLOCK_SIZE] = 0.0;
@@ -608,9 +586,24 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 
         // R
         if (useGasExchange) {
+            // First update the drdtp by the liquid mediated gas exchange
+            double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
+                            (dTotalArea - dTotalOverlapArea);
             pred = bubbles.rp[i];
-            corr =
-                bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + bubbles.drdtp[i]);
+            corr = 2.0 * CUBBLE_PI * pred;
+            if (dConstants->dimensionality == 3) {
+                corr *= 2.0 * pred;
+            }
+
+            double vr = bubbles.drdtp[i] +
+                        dConstants->kappa * dConstants->averageSurfaceAreaIn *
+                            bubbles.count / dTotalArea * (corr - overlap[i]) *
+                            (invRho - 1.0 / pred);
+            vr = dConstants->kParameter * vr / corr;
+            bubbles.drdtp[i] = vr;
+
+            // Correct
+            corr = bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + vr);
             bubbles.rp[i] = corr;
             maxErr = fmax(abs(pred - corr), maxErr);
             pred = corr - bubbles.savedR[i];
@@ -642,7 +635,6 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
     }
 
     __syncthreads();
-
     const int warpNum = threadIdx.x >> 5;
     const int wid = threadIdx.x & 31;
     if (threadIdx.x < 32) {
