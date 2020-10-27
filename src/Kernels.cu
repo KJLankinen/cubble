@@ -385,7 +385,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                 bubbles.xp[idx2], bubbles.yp[idx2], bubbles.zp[idx2]);
             double magnitude = distances.getSquaredLength();
 
-            if (magnitude < radii * radii) {
+            if (magnitude <= radii * radii) {
                 // Pair velocities
                 distances = distances * fZeroPerMuZero *
                             (rsqrt(magnitude) - 1.0 / radii);
@@ -461,17 +461,15 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
             __syncwarp(active);
         }
 
-        if (exchangeGas) {
-            // Per bubble calculations
-            if (i < bubbles.count) {
-                double r = bubbles.rp[i];
-                double areaPerRad = 2.0 * CUBBLE_PI;
-                if (dConstants->dimensionality == 3) {
-                    areaPerRad *= 2.0 * r;
-                }
-                ta += areaPerRad * r;
-                tapr += areaPerRad;
+        // Per bubble calculations
+        if (exchangeGas && i < bubbles.count) {
+            double r = bubbles.rp[i];
+            double areaPerRad = 2.0 * CUBBLE_PI;
+            if (dConstants->dimensionality == 3) {
+                areaPerRad *= 2.0 * r;
             }
+            ta += areaPerRad * r;
+            tapr += areaPerRad;
         }
     }
 

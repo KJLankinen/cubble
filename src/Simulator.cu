@@ -200,7 +200,7 @@ double stabilize(Params &params, int numStepsToRelax) {
                           params.bubbles.dzdtp);
             KERNEL_LAUNCH(predict, params, 0, 0, ts, false, params.bubbles);
             KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                          params.pairs, nullptr, false);
+                          params.pairs, params.tempD1, false);
 
             if (params.hostConstants.xWall || params.hostConstants.yWall ||
                 params.hostConstants.zWall) {
@@ -892,7 +892,7 @@ void init(const char *inputFileName, Params &params) {
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, nullptr, false);
+                  params.pairs, params.tempD1, false);
     KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
@@ -912,7 +912,7 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdtp = swapper;
 
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, nullptr, false);
+                  params.pairs, params.tempD1, false);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
