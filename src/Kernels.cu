@@ -361,6 +361,10 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange) {
     __shared__ double sbuf[9 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 7 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 8 * BLOCK_SIZE] = 0.0;
     // If phi is very small, there could be zero pairs, but this loop is assumed
     // to run at least bubbles.count times for the per bubble sums
     const int n = dNumPairs > bubbles.count ? dNumPairs : bubbles.count;
