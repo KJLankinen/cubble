@@ -538,7 +538,8 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
     }
 }
 
-__global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+__global__ void postIntegrate(double ts, bool useGasExchange,
+                              bool incrementPath, Bubbles bubbles,
                               double *maximums, double *overlap,
                               int *toBeDeleted) {
     // Adams-Moulton integration
@@ -626,6 +627,22 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                 fmax(sbuf[threadIdx.x + 1 * BLOCK_SIZE], corr);
         }
 
+        // Path
+        if (incrementPath) {
+            pred = bubbles.x[i] - bubbles.xp[i];
+            corr = pred * pred;
+
+            pred = bubbles.y[i] - bubbles.yp[i];
+            corr += pred * pred;
+
+            if (dConstants->dimensionality == 3) {
+                pred = bubbles.z[i] - bubbles.zp[i];
+                corr += pred * pred;
+            }
+
+            overlap[i] = bubbles.path[i] + sqrt(corr);
+        }
+
         // Store the maximum error per bubble in device memory
         // The errors are reset to zero between time steps
         bubbles.error[i] = fmax(maxErr, bubbles.error[i]);
@@ -659,21 +676,6 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
         if (0 == wid) {
             atomicAdd(&dTotalVolumeNew, sbuf[threadIdx.x + 3 * BLOCK_SIZE]);
         }
-    }
-}
-
-__global__ void incrementPath(Bubbles bubbles) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += blockDim.x * gridDim.x) {
-        double diff = bubbles.x[i] - bubbles.xp[i];
-        double pl = diff * diff;
-        diff = bubbles.y[i] - bubbles.yp[i];
-        pl += diff * diff;
-        if (dConstants->dimensionality == 3) {
-            diff = bubbles.z[i] - bubbles.zp[i];
-            pl += diff * diff;
-        }
-        bubbles.path[i] += sqrt(pl);
     }
 }
 

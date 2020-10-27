@@ -63,10 +63,10 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange);
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1, double *temp2);
-__global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+__global__ void postIntegrate(double ts, bool useGasExchange,
+                              bool incrementPath, Bubbles bubbles,
                               double *maximums, double *overlap,
                               int *toBeDeleted);
-__global__ void incrementPath(Bubbles bubbles);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,

@@ -206,7 +206,7 @@ double stabilize(Params &params, int numStepsToRelax) {
                 KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
             }
 
-            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false,
+            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false, false,
                           params.bubbles, params.tempD2, params.tempD1,
                           params.tempI);
 
@@ -331,8 +331,9 @@ void integrate(Params &params) {
         }
 
         // Correction in default stream (implicit synchronization with streams)
-        KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, params.bubbles,
-                      params.tempD2, params.tempD1, params.tempI);
+        KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, true,
+                      params.bubbles, params.tempD2, params.tempD1,
+                      params.tempI);
 
         // Stream1
         {
@@ -397,8 +398,11 @@ void integrate(Params &params) {
         nvtxRangePop();
     } while (errorTooLarge);
 
-    // Increment the path of each bubble
-    KERNEL_LAUNCH(incrementPath, params, 0, 0, params.bubbles);
+    // postIntegrate has incremented path to tempD1, copy it
+    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.path),
+                              static_cast<void *>(params.tempD1),
+                              params.bubbles.stride * sizeof(double),
+                              cudaMemcpyDefault, 0));
 
     // Update values
     double *swapper = params.bubbles.dxdto;
