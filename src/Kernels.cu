@@ -574,7 +574,6 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
          i += blockDim.x * gridDim.x) {
         double pred = 0.0;
         double corr = 0.0;
-        double delta = 0.0;
         double maxErr = 0.0;
         double dist = 0.0;
 
@@ -582,27 +581,27 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
         pred = bubbles.xp[i];
         corr = bubbles.x[i] + 0.5 * ts * (bubbles.dxdt[i] + bubbles.dxdtp[i]);
         bubbles.xp[i] = corr;
-        delta = corr - bubbles.savedX[i];
         maxErr = fmax(abs(pred - corr), maxErr);
-        dist += delta * delta;
+        pred = corr - bubbles.savedX[i];
+        dist += pred * pred;
 
         // Y
         pred = bubbles.yp[i];
         corr = bubbles.y[i] + 0.5 * ts * (bubbles.dydt[i] + bubbles.dydtp[i]);
         bubbles.yp[i] = corr;
-        delta = corr - bubbles.savedY[i];
         maxErr = fmax(abs(pred - corr), maxErr);
-        dist += delta * delta;
+        pred = corr - bubbles.savedY[i];
+        dist += pred * pred;
 
         // Z
-        if (dConstants->dimensionality == 3) {
+        if (3 == dConstants->dimensionality) {
             pred = bubbles.zp[i];
             corr =
                 bubbles.z[i] + 0.5 * ts * (bubbles.dzdt[i] + bubbles.dzdtp[i]);
             bubbles.zp[i] = corr;
-            delta = corr - bubbles.savedZ[i];
             maxErr = fmax(abs(pred - corr), maxErr);
-            dist += delta * delta;
+            pred = corr - bubbles.savedZ[i];
+            dist += pred * pred;
         }
 
         dist = sqrt(dist);
@@ -613,18 +612,19 @@ __global__ void postIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
             corr =
                 bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + bubbles.drdtp[i]);
             bubbles.rp[i] = corr;
-            delta = corr - bubbles.savedR[i];
             maxErr = fmax(abs(pred - corr), maxErr);
-            dist += delta;
+            pred = corr - bubbles.savedR[i];
+            dist += pred;
 
-            double vol = corr * corr;
+            // Calculate volume
+            pred = corr * corr;
             if (dConstants->dimensionality == 3) {
-                vol *= corr;
+                pred *= corr;
             }
 
             // Add remaining bubbles to new total volume
             if (corr > dConstants->minRad) {
-                sbuf[threadIdx.x + 3 * BLOCK_SIZE] += vol;
+                sbuf[threadIdx.x + 3 * BLOCK_SIZE] += pred;
             } else {
                 toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
             }
