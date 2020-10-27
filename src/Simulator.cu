@@ -804,11 +804,6 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemcpyToSymbol(dConstants,
                                  static_cast<void *>(&params.deviceConstants),
                                  sizeof(Constants *)));
-    CUDA_CALL(cudaSetDevice(1));
-    CUDA_CALL(cudaMemcpyToSymbol(dConstants,
-                                 static_cast<void *>(&params.deviceConstants),
-                                 sizeof(Constants *)));
-    CUDA_CALL(cudaSetDevice(0));
 
     CUDA_ASSERT(cudaStreamCreate(&params.stream2));
     CUDA_ASSERT(cudaStreamCreate(&params.stream1));
