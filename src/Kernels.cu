@@ -531,10 +531,10 @@ __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
     const double kappa = dConstants->kappa;
     const double kParameter = dConstants->kParameter;
     const double averageSurfaceAreaIn = dConstants->averageSurfaceAreaIn;
+    const double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
+                          (dTotalArea - dTotalOverlapArea);
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
-                        (dTotalArea - dTotalOverlapArea);
         const double rad = bubbles.rp[i];
         double area = 2.0 * CUBBLE_PI * rad;
         if (dConstants->dimensionality == 3) {
