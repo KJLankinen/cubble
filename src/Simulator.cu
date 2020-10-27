@@ -293,12 +293,11 @@ void integrate(Params &params) {
     double &ts = params.hostData.timeStep;
     int *hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
     bool errorTooLarge = true;
-    const double bytes = 3 * numBlocks * sizeof(double);
     double maxRadius = 0.0;
     double maxExpansion = 0.0;
 
-    if (params.hostMemory.size() < bytes) {
-        params.hostMemory.resize(bytes);
+    if (params.maximums.size() < 3 * numBlocks) {
+        params.maximums.resize(3 * numBlocks);
     }
 
     if (params.hostData.addFlow) {
@@ -339,9 +338,10 @@ void integrate(Params &params) {
             static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
             0, cudaMemcpyDefault, 0));
 
-        void *memStart = static_cast<void *>(params.hostMemory.data());
+        void *memStart = static_cast<void *>(params.maximums.data());
         CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
-                             bytes, cudaMemcpyDefault));
+                             params.maximums.size() * sizeof(double),
+                             cudaMemcpyDefault));
 
         double maxError = 0.0;
         double *p = static_cast<double *>(memStart);
@@ -363,12 +363,6 @@ void integrate(Params &params) {
         ++numLoopsDone;
         nvtxRangePop();
     } while (errorTooLarge);
-
-    // postIntegrate has incremented path to tempD1, copy it
-    CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.path),
-                              static_cast<void *>(params.tempD1),
-                              params.bubbles.stride * sizeof(double),
-                              cudaMemcpyDefault, 0));
 
     // Update values
     double *swapper = params.bubbles.dxdto;
@@ -406,6 +400,10 @@ void integrate(Params &params) {
     swapper = params.bubbles.r;
     params.bubbles.r = params.bubbles.rp;
     params.bubbles.rp = swapper;
+
+    swapper = params.bubbles.path;
+    params.bubbles.path = params.bubbles.pathNew;
+    params.bubbles.pathNew = swapper;
 
     ++params.hostData.numIntegrationSteps;
 

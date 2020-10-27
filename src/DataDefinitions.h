@@ -64,6 +64,7 @@ struct Bubbles {
     double *drdto = nullptr;
 
     double *path = nullptr;
+    double *pathNew = nullptr;
     double *error = nullptr;
 
     double *flowVx = nullptr;
@@ -90,7 +91,7 @@ struct Bubbles {
     uint64_t stride = 0;
 
     // How many pointers of each type do we have in this struct
-    const uint64_t numDP = 29;
+    const uint64_t numDP = 30;
     const uint64_t numIP = 5;
 
     uint64_t getMemReq() const {
@@ -122,6 +123,7 @@ struct Bubbles {
         setIncr(&dzdto, &prev, stride);
         setIncr(&drdto, &prev, stride);
         setIncr(&path, &prev, stride);
+        setIncr(&pathNew, &prev, stride);
         setIncr(&error, &prev, stride);
         setIncr(&flowVx, &prev, stride);
         setIncr(&flowVy, &prev, stride);
@@ -315,6 +317,7 @@ struct Params {
     std::vector<double> previousY;
     std::vector<double> previousZ;
     std::vector<char> hostMemory;
+    std::vector<double> maximums;
 
     void setTempPointers(void *ptr) {
         tempD1 = static_cast<double *>(ptr);

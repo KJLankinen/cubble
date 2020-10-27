@@ -640,7 +640,7 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
                 corr += pred * pred;
             }
 
-            overlap[i] = bubbles.path[i] + sqrt(corr);
+            bubbles.pathNew[i] = bubbles.path[i] + sqrt(corr);
         }
 
         // Store the maximum error per bubble in device memory
