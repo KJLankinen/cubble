@@ -316,11 +316,18 @@ void integrate(Params &params) {
     do {
         nvtxRangePush("Do-loop");
 
-        // Device 0
         KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
                       true, params.bubbles.dxdtp, params.bubbles.dydtp,
-                      params.bubbles.dzdtp, params.tempD2);
-        KERNEL_LAUNCH(predict, params, 0, 0, ts, false, params.bubbles);
+                      params.bubbles.dzdtp, params.bubbles.drdtp, params.tempD1,
+                      params.tempD2);
+
+        KERNEL_LAUNCH(predict, params, 0, 0, ts, true, params.bubbles);
+
+        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.pairs, params.tempD1);
+        KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
+                      params.bubbles, params.tempD1);
+
         KERNEL_LAUNCH(pairVelocity, params, 0, params.stream2, params.bubbles,
                       params.pairs);
 
@@ -335,20 +342,6 @@ void integrate(Params &params) {
                           params.bubbles);
         }
 
-        // Device 1
-        CUDA_CALL(cudaSetDevice(1));
-        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
-                      true, params.bubbles.drdtp, params.tempD1);
-        KERNEL_LAUNCH(predict, params, 0, 0, ts, true, params.bubbles);
-        KERNEL_LAUNCH(pairwiseGasExchange, params, 0, 0, params.bubbles,
-                      params.pairs, params.tempD1);
-        KERNEL_LAUNCH(mediatedGasExchange, params, 0, 0, params.bubbles,
-                      params.tempD1);
-        CUDA_CALL(cudaEventRecord(params.event1));
-
-        // Device 0
-        CUDA_CALL(cudaSetDevice(0));
-        CUDA_CALL(cudaEventSynchronize(params.event1));
         // Correction in default stream (implicit synchronization with streams)
         KERNEL_LAUNCH(correct, params, 0, 0, ts, true, params.bubbles,
                       params.tempD2, params.tempI);
@@ -784,9 +777,6 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.print();
     params.pairs.print();
     printf("-------------------------------------------------\n");
-
-    CUDA_CALL(cudaGetDeviceCount(&params.hostData.numGPUs));
-    CUDA_CALL(cudaSetDevice(0));
 
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
