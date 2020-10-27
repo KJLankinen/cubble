@@ -525,22 +525,37 @@ __global__ void mediatedGasExchange(Bubbles bubbles, double *overlap) {
     }
 }
 
-__global__ void predict(double timeStep, bool useGasExchange, Bubbles bubbles) {
+__global__ void preIntegrate(double timeStep, bool useGasExchange,
+                             Bubbles bubbles, double *temp1, double *temp2) {
     // Adams-Bashforth integration
+    if (threadIdx.x + blockIdx.x == 0) {
+        resetDeviceGlobals();
+    }
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
+        temp1[i] = 0.0;
+        temp2[i] = 0.0;
+
+        bubbles.dxdtp[i] = 0.0;
         bubbles.xp[i] =
             bubbles.x[i] +
             0.5 * timeStep * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
+
+        bubbles.dydtp[i] = 0.0;
         bubbles.yp[i] =
             bubbles.y[i] +
             0.5 * timeStep * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
+
         if (dConstants->dimensionality == 3) {
+            bubbles.dzdtp[i] = 0.0;
             bubbles.zp[i] =
                 bubbles.z[i] +
                 0.5 * timeStep * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
         }
+
         if (useGasExchange) {
+            bubbles.drdtp[i] = 0.0;
             bubbles.rp[i] =
                 bubbles.r[i] +
                 0.5 * timeStep * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);

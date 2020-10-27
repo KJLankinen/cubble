@@ -195,11 +195,8 @@ double stabilize(Params &params, int numStepsToRelax) {
     for (int i = 0; i < numStepsToRelax; ++i) {
         do {
             nvtxRangePush("Do-loop");
-            KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
-                          true, params.bubbles.dxdtp, params.bubbles.dydtp,
-                          params.bubbles.dzdtp);
-
-            KERNEL_LAUNCH(predict, params, 0, 0, ts, false, params.bubbles);
+            KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, false, params.bubbles,
+                          params.tempD1, params.tempD2);
 
             KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                           params.pairs, params.tempD1, false);
@@ -316,11 +313,8 @@ void integrate(Params &params) {
     do {
         nvtxRangePush("Do-loop");
 
-        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
-                      true, params.bubbles.dxdtp, params.bubbles.dydtp,
-                      params.bubbles.dzdtp, params.bubbles.drdtp, params.tempD1,
-                      params.tempD2);
-        KERNEL_LAUNCH(predict, params, 0, 0, ts, true, params.bubbles);
+        KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, true, params.bubbles,
+                      params.tempD1, params.tempD2);
         KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                       params.pairs, params.tempD1, true);
         KERNEL_LAUNCH(mediatedGasExchange, params, 0, params.stream1,
