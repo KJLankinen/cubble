@@ -225,6 +225,7 @@ struct IntegrationParams {
     bool useGasExchange = false;
     bool incrementPath = false;
     bool errorTooLarge = true;
+    bool stabilize = true;
     double maxRadius = 0.0;
     double maxExpansion = 0.0;
     double maxError = 0.0;

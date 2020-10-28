@@ -222,9 +222,9 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
 }
 
 __global__ void postIntegrate(double ts, bool useGasExchange,
-                              bool incrementPath, bool useFlow, Bubbles bubbles,
-                              double *maximums, double *overlap,
-                              int *toBeDeleted) {
+                              bool incrementPath, bool useFlow, bool stabilize,
+                              Bubbles bubbles, double *maximums,
+                              double *overlap, int *toBeDeleted) {
     // This kernel applies all per bubble computations that are to be done after
     // the pairwise interactions have been calculated. These include imposed
     // flow velocity, wall velocity and liquid mediated gas exchange. After all
@@ -241,7 +241,7 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
-        if (useFlow) {
+        if (useFlow && false == stabilize) {
             addFlowVelocity(bubbles, i);
         }
 

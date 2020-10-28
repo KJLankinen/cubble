@@ -45,9 +45,9 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange);
 __global__ void postIntegrate(double ts, bool useGasExchange,
-                              bool incrementPath, bool useFlow, Bubbles bubbles,
-                              double *maximums, double *overlap,
-                              int *toBeDeleted);
+                              bool incrementPath, bool useFlow, bool stabilize,
+                              Bubbles bubbles, double *maximums,
+                              double *overlap, int *toBeDeleted);
 __device__ void addFlowVelocity(Bubbles &bubbles, int i);
 __device__ void addWallVelocity(Bubbles &bubbles, int i);
 

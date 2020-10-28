@@ -203,10 +203,10 @@ void step(Params &params, IntegrationParams &ip) {
                   params.pairs, params.tempD1, ip.useGasExchange);
 
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  ip.incrementPath, params.hostData.addFlow, params.bubbles,
-                  params.tempD2, params.tempD1, params.tempI);
+                  ip.incrementPath, params.hostData.addFlow, ip.stabilize,
+                  params.bubbles, params.tempD2, params.tempD1, params.tempI);
 
-    if (ip.useGasExchange) {
+    if (false == ip.stabilize) {
         assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
         // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
@@ -353,6 +353,7 @@ void stabilize(Params &params, int numStepsToRelax) {
     ip.useGasExchange = false;
     ip.incrementPath = false;
     ip.errorTooLarge = true;
+    ip.stabilize = true;
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
@@ -997,6 +998,7 @@ void run(std::string &&inputFileName) {
     ip.useGasExchange = true;
     ip.incrementPath = true;
     ip.errorTooLarge = true;
+    ip.stabilize = false;
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
