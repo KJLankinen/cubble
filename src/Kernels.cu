@@ -39,9 +39,9 @@ namespace cubble {
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1, double *temp2) {
     // Adams-Bashforth integration
-    if (threadIdx.x + blockIdx.x == 0) {
-        resetDeviceGlobals();
-    }
+    __shared__ double sbuf[2 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 0 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 1 * BLOCK_SIZE] = 0.0;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
@@ -65,9 +65,34 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 
         if (useGasExchange) {
             bubbles.drdtp[i] = 0.0;
-            bubbles.rp[i] =
-                bubbles.r[i] +
-                0.5 * ts * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
+            double rp = bubbles.r[i] +
+                        0.5 * ts * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
+            bubbles.rp[i] = rp;
+
+            double areaPerRad = 2.0 * CUBBLE_PI;
+            if (dConstants->dimensionality == 3) {
+                areaPerRad *= 2.0 * rp;
+            }
+            sbuf[threadIdx.x + 0 * BLOCK_SIZE] += areaPerRad * rp;
+            sbuf[threadIdx.x + 1 * BLOCK_SIZE] += areaPerRad;
+        }
+    }
+
+    if (useGasExchange) {
+        __syncthreads();
+        const int warpNum = threadIdx.x >> 5;
+        const int wid = threadIdx.x & 31;
+        if (threadIdx.x < 32) {
+            reduce(&sbuf[0 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalArea, sbuf[threadIdx.x + 0 * BLOCK_SIZE]);
+            }
+        } else if (threadIdx.x < 64) {
+            reduce(&sbuf[1 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalAreaPerRadius,
+                          sbuf[threadIdx.x + 1 * BLOCK_SIZE]);
+            }
         }
     }
 }
@@ -78,116 +103,94 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     // velocity. Doing both of these makes this a larger kernel that is slower
     // than either of those separately, but wins in the total execution time.
 
-    __shared__ double sbuf[9 * BLOCK_SIZE];
+    __shared__ double sbuf[7 * BLOCK_SIZE];
     sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
     sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 7 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 8 * BLOCK_SIZE] = 0.0;
 
-    // If phi is very small, there could be zero pairs, but this loop is assumed
-    // to run at least bubbles.count times for the per bubble sums
-    const int n = dNumPairs > bubbles.count ? dNumPairs : bubbles.count;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n;
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        // Per bubble calculations
-        if (useGasExchange && i < bubbles.count) {
-            double r = bubbles.rp[i];
-            double areaPerRad = 2.0 * CUBBLE_PI;
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
+        double r1 = bubbles.rp[idx1];
+        double r2 = bubbles.rp[idx2];
+        const double radii = r1 + r2;
+        dvec distances = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
+                                           bubbles.zp[idx1], bubbles.xp[idx2],
+                                           bubbles.yp[idx2], bubbles.zp[idx2]);
+        double magnitude = distances.getSquaredLength();
+
+        if (radii * radii >= magnitude) {
+            // Pair velocities
+            distances = distances * dConstants->fZeroPerMuZero *
+                        (rsqrt(magnitude) - 1.0 / radii);
+            sbuf[threadIdx.x + 0 * BLOCK_SIZE] = distances.x;
+            sbuf[threadIdx.x + 1 * BLOCK_SIZE] = distances.y;
+            atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
+            atomicAdd(&bubbles.dydtp[idx2], -distances.y);
             if (dConstants->dimensionality == 3) {
-                areaPerRad *= 2.0 * r;
+                sbuf[threadIdx.x + 2 * BLOCK_SIZE] = distances.z;
+                atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
             }
-            sbuf[threadIdx.x + 5 * BLOCK_SIZE] += areaPerRad * r;
-            sbuf[threadIdx.x + 6 * BLOCK_SIZE] += areaPerRad;
+
+            // Pairwise gas exchange
+            if (useGasExchange) {
+                const double r1sq = r1 * r1;
+                const double r2sq = r2 * r2;
+                double overlapArea = 0;
+                if (magnitude < r1sq || magnitude < r2sq) {
+                    overlapArea = r1sq < r2sq ? r1sq : r2sq;
+                } else {
+                    overlapArea = 0.5 * (r2sq - r1sq + magnitude);
+                    overlapArea *= overlapArea;
+                    overlapArea /= magnitude;
+                    overlapArea = r2sq - overlapArea;
+                    overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+                }
+
+                if (dConstants->dimensionality == 3) {
+                    overlapArea *= CUBBLE_PI;
+                } else {
+                    overlapArea = 2.0 * sqrt(overlapArea);
+                }
+
+                sbuf[threadIdx.x + 3 * BLOCK_SIZE] = overlapArea;
+                atomicAdd(&overlap[idx2], overlapArea);
+
+                r1 = 1.0 / r1;
+                r2 = 1.0 / r2;
+
+                sbuf[threadIdx.x + 5 * BLOCK_SIZE] += 2.0 * overlapArea;
+                sbuf[threadIdx.x + 6 * BLOCK_SIZE] += overlapArea * (r1 + r2);
+
+                overlapArea *= (r2 - r1);
+
+                sbuf[threadIdx.x + 4 * BLOCK_SIZE] = overlapArea;
+                atomicAdd(&bubbles.drdtp[idx2], -overlapArea);
+            }
+        } else {
+            continue;
         }
 
-        // Per pair calculations
-        if (i < dNumPairs) {
-            const int idx1 = pairs.i[i];
-            const int idx2 = pairs.j[i];
-            double r1 = bubbles.rp[idx1];
-            double r2 = bubbles.rp[idx2];
-            const double radii = r1 + r2;
-            dvec distances = wrappedDifference(
-                bubbles.xp[idx1], bubbles.yp[idx1], bubbles.zp[idx1],
-                bubbles.xp[idx2], bubbles.yp[idx2], bubbles.zp[idx2]);
-            double magnitude = distances.getSquaredLength();
-
-            if (radii * radii >= magnitude) {
-                // Pair velocities
-                distances = distances * dConstants->fZeroPerMuZero *
-                            (rsqrt(magnitude) - 1.0 / radii);
-                sbuf[threadIdx.x + 0 * BLOCK_SIZE] = distances.x;
-                sbuf[threadIdx.x + 1 * BLOCK_SIZE] = distances.y;
-                atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
-                atomicAdd(&bubbles.dydtp[idx2], -distances.y);
-                if (dConstants->dimensionality == 3) {
-                    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = distances.z;
-                    atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
-                }
-
-                // Pairwise gas exchange
-                if (useGasExchange) {
-                    const double r1sq = r1 * r1;
-                    const double r2sq = r2 * r2;
-                    double overlapArea = 0;
-                    if (magnitude < r1sq || magnitude < r2sq) {
-                        overlapArea = r1sq < r2sq ? r1sq : r2sq;
-                    } else {
-                        overlapArea = 0.5 * (r2sq - r1sq + magnitude);
-                        overlapArea *= overlapArea;
-                        overlapArea /= magnitude;
-                        overlapArea = r2sq - overlapArea;
-                        overlapArea =
-                            overlapArea < 0 ? -overlapArea : overlapArea;
-                    }
-
-                    if (dConstants->dimensionality == 3) {
-                        overlapArea *= CUBBLE_PI;
-                    } else {
-                        overlapArea = 2.0 * sqrt(overlapArea);
-                    }
-
-                    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = overlapArea;
-                    atomicAdd(&overlap[idx2], overlapArea);
-
-                    r1 = 1.0 / r1;
-                    r2 = 1.0 / r2;
-
-                    sbuf[threadIdx.x + 7 * BLOCK_SIZE] += 2.0 * overlapArea;
-                    sbuf[threadIdx.x + 8 * BLOCK_SIZE] +=
-                        overlapArea * (r1 + r2);
-
-                    overlapArea *= (r2 - r1);
-
-                    sbuf[threadIdx.x + 4 * BLOCK_SIZE] = overlapArea;
-                    atomicAdd(&bubbles.drdtp[idx2], -overlapArea);
-                }
-            } else {
-                continue;
+        const unsigned int active = __activemask();
+        __syncwarp(active);
+        double oa = 0.0;
+        double vr = 0.0;
+        double vx = 0.0;
+        double vy = 0.0;
+        double vz = 0.0;
+        if (0 == warpReduceMatching(
+                     active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
+                     &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
+                     &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE])) {
+            atomicAdd(&overlap[idx1], oa);
+            atomicAdd(&bubbles.drdtp[idx1], vr);
+            atomicAdd(&bubbles.dxdtp[idx1], vx);
+            atomicAdd(&bubbles.dydtp[idx1], vy);
+            if (dConstants->dimensionality == 3) {
+                atomicAdd(&bubbles.dzdtp[idx1], vz);
             }
-
-            const unsigned int active = __activemask();
-            __syncwarp(active);
-            double oa = 0.0;
-            double vr = 0.0;
-            double vx = 0.0;
-            double vy = 0.0;
-            double vz = 0.0;
-            if (0 == warpReduceMatching(
-                         active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
-                         &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
-                         &oa, &sbuf[3 * BLOCK_SIZE], &vr,
-                         &sbuf[4 * BLOCK_SIZE])) {
-                atomicAdd(&overlap[idx1], oa);
-                atomicAdd(&bubbles.drdtp[idx1], vr);
-                atomicAdd(&bubbles.dxdtp[idx1], vx);
-                atomicAdd(&bubbles.dydtp[idx1], vy);
-                if (dConstants->dimensionality == 3) {
-                    atomicAdd(&bubbles.dzdtp[idx1], vz);
-                }
-            }
-            __syncwarp(active);
         }
+        __syncwarp(active);
     }
 
     if (useGasExchange) {
@@ -197,25 +200,14 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         if (threadIdx.x < 32) {
             reduce(&sbuf[5 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
-                atomicAdd(&dTotalArea, sbuf[threadIdx.x + 5 * BLOCK_SIZE]);
+                atomicAdd(&dTotalOverlapArea,
+                          sbuf[threadIdx.x + 5 * BLOCK_SIZE]);
             }
         } else if (threadIdx.x < 64) {
             reduce(&sbuf[6 * BLOCK_SIZE], warpNum, &sum);
             if (0 == wid) {
-                atomicAdd(&dTotalAreaPerRadius,
-                          sbuf[threadIdx.x + 6 * BLOCK_SIZE]);
-            }
-        } else if (threadIdx.x < 96) {
-            reduce(&sbuf[7 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
-                atomicAdd(&dTotalOverlapArea,
-                          sbuf[threadIdx.x + 7 * BLOCK_SIZE]);
-            }
-        } else if (threadIdx.x < 128) {
-            reduce(&sbuf[8 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
                 atomicAdd(&dTotalOverlapAreaPerRadius,
-                          sbuf[threadIdx.x + 8 * BLOCK_SIZE]);
+                          sbuf[threadIdx.x + 6 * BLOCK_SIZE]);
             }
         }
     }
@@ -354,7 +346,7 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
     const int warpNum = threadIdx.x >> 5;
     const int wid = threadIdx.x & 31;
     if (threadIdx.x < 32) {
-        reduce(sbuf, warpNum, &max);
+        reduce(&sbuf[0 * BLOCK_SIZE], warpNum, &max);
         if (0 == wid) {
             maximums[blockIdx.x] = sbuf[threadIdx.x];
         }

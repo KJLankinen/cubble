@@ -196,12 +196,11 @@ void step(Params &params, IntegrationParams &ip) {
 
     double &ts = params.hostData.timeStep;
 
+    KERNEL_LAUNCH(initGlobals, params, 0, 0);
     KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   params.bubbles, params.tempD1, params.tempD2);
-
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                   params.pairs, params.tempD1, ip.useGasExchange);
-
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   ip.incrementPath, params.hostData.addFlow, ip.stabilize,
                   params.bubbles, params.tempD2, params.tempD1, params.tempI);
