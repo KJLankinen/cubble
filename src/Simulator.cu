@@ -173,124 +173,66 @@ void removeBubbles(Params &params, int numToBeDeleted) {
     nvtxRangePop();
 }
 
-double stabilize(Params &params, int numStepsToRelax) {
-    nvtxRangePush("Stabilization");
-    // This function integrates only the positions of the bubbles.
-    // Gas exchange is not used. This is used for equilibrating the foam.
-    params.hostData.energy1 = totalEnergy(params);
+void step(Params &params, IntegrationParams &ip) {
+    nvtxRangePush("Integration step");
 
-    double elapsedTime = 0.0;
-    const int numBlocks = params.blockGrid.x;
-    bool errorTooLarge = true;
     double &ts = params.hostData.timeStep;
-    double maxExpansion = 0.0;
 
-    if (params.maximums.size() < 3 * numBlocks) {
-        params.maximums.resize(3 * numBlocks);
+    KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
+                  params.bubbles, params.tempD1, params.tempD2);
+
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, ip.useGasExchange);
+
+    KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
+                  ip.incrementPath, params.hostData.addFlow, params.bubbles,
+                  params.tempD2, params.tempD1, params.tempI);
+
+    if (ip.useGasExchange) {
+        assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
+        // Copy numToBeDeleted
+        CUDA_CALL(cudaMemcpyFromSymbolAsync(
+            static_cast<void *>(ip.hNumToBeDeleted), dNumToBeDeleted,
+            sizeof(int), 0, cudaMemcpyDefault, 0));
     }
 
-    nvtxRangePush("For-loop");
-    for (int i = 0; i < numStepsToRelax; ++i) {
-        do {
-            nvtxRangePush("Do-loop");
-            KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, false, params.bubbles,
-                          params.tempD1, params.tempD2);
+    // blockGrid size can only decrease so this is done only once
+    const uint32_t nMax = 3 * params.blockGrid.x;
+    if (params.maximums.size() < nMax) {
+        params.maximums.resize(nMax);
+    }
 
-            KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                          params.pairs, params.tempD1, false);
+    void *memStart = static_cast<void *>(params.maximums.data());
+    CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
+                         params.maximums.size() * sizeof(double),
+                         cudaMemcpyDefault));
 
-            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false, false, false,
-                          params.bubbles, params.tempD2, params.tempD1,
-                          params.tempI);
+    ip.maxRadius = 0.0;
+    ip.maxExpansion = 0.0;
+    ip.maxError = 0.0;
+    double *p = static_cast<double *>(memStart);
+    for (uint32_t i = 0; i < params.blockGrid.x; i++) {
+        ip.maxError = max(ip.maxError, p[i]);
+        ip.maxRadius = max(ip.maxRadius, p[i + params.blockGrid.x]);
+        ip.maxExpansion = max(ip.maxExpansion, p[i + 2 * params.blockGrid.x]);
+    }
 
-            void *memStart = static_cast<void *>(params.maximums.data());
-            CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
-                                 params.maximums.size() * sizeof(double),
-                                 cudaMemcpyDefault));
-
-            maxExpansion = 0.0;
-            double maxError = 0.0;
-            double *p = static_cast<double *>(memStart);
-            for (uint32_t i = 0; i < numBlocks; i++) {
-                maxError = max(maxError, p[i]);
-                maxExpansion = max(maxExpansion, p[i + 2 * numBlocks]);
-            }
-
-            errorTooLarge = maxError > params.hostData.errorTolerance;
-            const bool increaseTs =
-                maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
-            if (errorTooLarge) {
-                ts *= 0.37;
-            } else if (increaseTs) {
-                ts *= 1.269;
-            }
-            nvtxRangePop();
-        } while (errorTooLarge);
-
-        // Update the current values with the calculated predictions
-        double *swapper = params.bubbles.dxdto;
-        params.bubbles.dxdto = params.bubbles.dxdt;
-        params.bubbles.dxdt = params.bubbles.dxdtp;
-        params.bubbles.dxdtp = swapper;
-
-        swapper = params.bubbles.dydto;
-        params.bubbles.dydto = params.bubbles.dydt;
-        params.bubbles.dydt = params.bubbles.dydtp;
-        params.bubbles.dydtp = swapper;
-
-        swapper = params.bubbles.dzdto;
-        params.bubbles.dzdto = params.bubbles.dzdt;
-        params.bubbles.dzdt = params.bubbles.dzdtp;
-        params.bubbles.dzdtp = swapper;
-
-        swapper = params.bubbles.x;
-        params.bubbles.x = params.bubbles.xp;
-        params.bubbles.xp = swapper;
-
-        swapper = params.bubbles.y;
-        params.bubbles.y = params.bubbles.yp;
-        params.bubbles.yp = swapper;
-
-        swapper = params.bubbles.z;
-        params.bubbles.z = params.bubbles.zp;
-        params.bubbles.zp = swapper;
-
-        elapsedTime += ts;
-
-        if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
-            searchNeighbors(params);
-            // After searchNeighbors r is correct,
-            // but rp is trash. pairwiseInteraction always uses
-            // predicted values, so copy r to rp
-            uint64_t bytes = params.bubbles.stride * sizeof(double);
-            CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
-                                      static_cast<void *>(params.bubbles.r),
-                                      bytes, cudaMemcpyDefault, 0));
-        }
+    ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
+    const bool increaseTs =
+        ip.maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
+    if (ip.errorTooLarge) {
+        ts *= 0.37;
+    } else if (increaseTs) {
+        ts *= 1.269;
     }
 
     nvtxRangePop();
-    params.hostData.energy2 = totalEnergy(params);
-    nvtxRangePop();
-
-    return elapsedTime;
 }
 
-void integrate(Params &params) {
+void integrate(Params &params, IntegrationParams &ip) {
     nvtxRangePush("Intergration");
-    uint32_t numLoopsDone = 0;
-    const int numBlocks = params.blockGrid.x;
-    double &ts = params.hostData.timeStep;
-    int *hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
-    bool errorTooLarge = true;
-    double maxRadius = 0.0;
-    double maxExpansion = 0.0;
 
-    if (params.maximums.size() < 3 * numBlocks) {
-        params.maximums.resize(3 * numBlocks);
-    }
-
-    if (params.hostData.addFlow) {
+    if (ip.useGasExchange && params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
         // step.
         KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
@@ -301,49 +243,8 @@ void integrate(Params &params) {
     }
 
     do {
-        nvtxRangePush("Do-loop");
-        KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, true, params.bubbles,
-                      params.tempD1, params.tempD2);
-
-        KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                      params.pairs, params.tempD1, true);
-
-        KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, true,
-                      params.hostData.addFlow, params.bubbles, params.tempD2,
-                      params.tempD1, params.tempI);
-
-        // Copy numToBeDeleted
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(hNumToBeDeleted), dNumToBeDeleted, sizeof(int),
-            0, cudaMemcpyDefault, 0));
-
-        void *memStart = static_cast<void *>(params.maximums.data());
-        CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
-                             params.maximums.size() * sizeof(double),
-                             cudaMemcpyDefault));
-
-        maxRadius = 0.0;
-        maxExpansion = 0.0;
-        double maxError = 0.0;
-        double *p = static_cast<double *>(memStart);
-        for (uint32_t i = 0; i < numBlocks; i++) {
-            maxError = max(maxError, p[i]);
-            maxRadius = max(maxRadius, p[i + numBlocks]);
-            maxExpansion = max(maxExpansion, p[i + 2 * numBlocks]);
-        }
-
-        errorTooLarge = maxError > params.hostData.errorTolerance;
-        const bool increaseTs =
-            maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
-        if (errorTooLarge) {
-            ts *= 0.37;
-        } else if (increaseTs) {
-            ts *= 1.269;
-        }
-
-        ++numLoopsDone;
-        nvtxRangePop();
-    } while (errorTooLarge);
+        step(params, ip);
+    } while (ip.errorTooLarge);
 
     // Update values
     double *swapper = params.bubbles.dxdto;
@@ -361,11 +262,6 @@ void integrate(Params &params) {
     params.bubbles.dzdt = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    swapper = params.bubbles.drdto;
-    params.bubbles.drdto = params.bubbles.drdt;
-    params.bubbles.drdt = params.bubbles.drdtp;
-    params.bubbles.drdtp = swapper;
-
     swapper = params.bubbles.x;
     params.bubbles.x = params.bubbles.xp;
     params.bubbles.xp = swapper;
@@ -378,13 +274,22 @@ void integrate(Params &params) {
     params.bubbles.z = params.bubbles.zp;
     params.bubbles.zp = swapper;
 
-    swapper = params.bubbles.r;
-    params.bubbles.r = params.bubbles.rp;
-    params.bubbles.rp = swapper;
+    if (ip.useGasExchange) {
+        swapper = params.bubbles.r;
+        params.bubbles.r = params.bubbles.rp;
+        params.bubbles.rp = swapper;
 
-    swapper = params.bubbles.path;
-    params.bubbles.path = params.bubbles.pathNew;
-    params.bubbles.pathNew = swapper;
+        swapper = params.bubbles.drdto;
+        params.bubbles.drdto = params.bubbles.drdt;
+        params.bubbles.drdt = params.bubbles.drdtp;
+        params.bubbles.drdtp = swapper;
+    }
+
+    if (ip.incrementPath) {
+        swapper = params.bubbles.path;
+        params.bubbles.path = params.bubbles.pathNew;
+        params.bubbles.pathNew = swapper;
+    }
 
     ++params.hostData.numIntegrationSteps;
 
@@ -394,27 +299,53 @@ void integrate(Params &params) {
     // <= 1.0 to which the potentially very small timeStep gets added. This
     // keeps the precision of the time relatively constant even when the
     // simulation has run a long time.
-    params.hostData.timeFraction += ts;
+    params.hostData.timeFraction += params.hostData.timeStep;
     params.hostData.timeInteger += (uint64_t)params.hostData.timeFraction;
     params.hostData.timeFraction =
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
-    params.hostData.maxBubbleRadius = maxRadius;
-
-    // Delete, if there are nonzero amount of bubbles with a radius
-    // smaller than the minimum radius. See postIntegrate kernel for the
-    // comparison & calculation.
-    if (*hNumToBeDeleted > 0) {
-        removeBubbles(params, *hNumToBeDeleted);
+    if (ip.useGasExchange) {
+        params.hostData.maxBubbleRadius = maxRadius;
+        if (*hNumToBeDeleted > 0) {
+            removeBubbles(params, *hNumToBeDeleted);
+        }
     }
 
-    // If the boundary of the bubble with maximum sum of movement & expansion
-    // has moved more than half of the "skin radius", reorder bubbles.
-    // See postIntegrate kernel, comparePair for details.
     if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
+        if (false == ip.useGasExchange) {
+            // After searchNeighbors r is correct,
+            // but rp is trash. pairwiseInteraction always uses
+            // predicted values, so copy r to rp
+            uint64_t bytes = params.bubbles.stride * sizeof(double);
+            CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
+                                      static_cast<void *>(params.bubbles.r),
+                                      bytes, cudaMemcpyDefault, 0));
+        }
     }
 
+    nvtxRangePop();
+}
+
+void stabilize(Params &params, int numStepsToRelax) {
+    nvtxRangePush("Stabilization");
+    params.hostData.energy1 = totalEnergy(params);
+
+    IntegrationParams ip;
+    ip.useGasExchange = false;
+    ip.incrementPath = false;
+    ip.errorTooLarge = true;
+    ip.maxRadius = 0.0;
+    ip.maxExpansion = 0.0;
+    ip.maxError = 0.0;
+
+    nvtxRangePush("For-loop");
+    for (int i = 0; i < numStepsToRelax; ++i) {
+        integrate(params, ip);
+    }
+    nvtxRangePop();
+
+    params.hostData.energy2 = totalEnergy(params);
     nvtxRangePop();
 }
 } // namespace
@@ -934,8 +865,14 @@ void init(const char *inputFileName, Params &params) {
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;
     while (true) {
-        double time = stabilize(params, stabilizationSteps) *
+        params.hostData.timeInteger = 0;
+        params.hostData.timeFraction = 0.0;
+
+        stabilize(params, stabilizationSteps);
+        double time = ((double)params.hostData.timeInteger +
+                       params.hostData.timeFraction) *
                       params.hostData.timeScalingFactor;
+
         double de = std::abs(e2 - e1);
         if (de > 0.0) {
             de *= 2.0 / ((e2 + e1) * time);
@@ -952,7 +889,8 @@ void init(const char *inputFileName, Params &params) {
             break;
         } else if (numSteps > failsafe) {
             printf("Over %d steps taken and required delta energy not reached. "
-                   "Constraints might be too strict.\n");
+                   "Constraints might be too strict.\n",
+                   numSteps);
             break;
         } else {
             printf("%-7d ", (numSteps + 1) * stabilizationSteps);
@@ -1060,10 +998,20 @@ void run(std::string &&inputFileName) {
                          : params.hostConstants.interval.y);
 
     CUBBLE_PROFILE(true);
+
+    IntegrationParams ip;
+    ip.useGasExchange = true;
+    ip.incrementPath = true;
+    ip.errorTooLarge = true;
+    ip.maxRadius = 0.0;
+    ip.maxExpansion = 0.0;
+    ip.maxError = 0.0;
+    ip.hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
+
     while (continueSimulation) {
         CUBBLE_PROFILE(false);
 
-        integrate(params);
+        integrate(params, ip);
 
         // Continue if there are more than the specified minimum number of
         // bubbles left in the simulation and if the largest bubble is smaller
