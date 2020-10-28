@@ -647,13 +647,12 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted) {
     // Count of pairs to be deleted
     __shared__ int tbds[BLOCK_SIZE];
-    int tid = threadIdx.x;
-    tbds[tid] = 0;
+    tbds[threadIdx.x] = 0;
 
     // The first 32 threads of the first block swap the data
-    if (blockIdx.x == 0 && tid < 32) {
+    if (blockIdx.x == 0 && threadIdx.x < 32) {
         const int nNew = bubbles.count - dNumToBeDeleted;
-        for (int i = tid; i < dNumToBeDeleted; i += 32) {
+        for (int i = threadIdx.x; i < dNumToBeDeleted; i += 32) {
             // If the to-be-deleted index is inside the remaining indices,
             // it will be swapped with one from the back that won't be
             // removed but which is outside the new range (i.e. would be
@@ -710,7 +709,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
         while (j < dNumToBeDeleted) {
             const int tbd = toBeDeleted[j];
             if (pairs.i[i] == tbd || pairs.j[i] == tbd) {
-                tbds[tid] += 1;
+                tbds[threadIdx.x] += 1;
             }
             j += 1;
         }
@@ -718,9 +717,9 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 
     __syncthreads();
 
-    const int warpNum = tid >> 5;
-    const int wid = tid & 31;
-    if (tid < 32) {
+    const int warpNum = threadIdx.x >> 5;
+    const int wid = threadIdx.x & 31;
+    if (threadIdx.x < 32) {
         reduce(tbds, warpNum, &sum);
         if (0 == wid) {
             atomicAdd(&dNumPairsNew, -tbds[0]);

@@ -249,7 +249,7 @@ void step(Params &params, IntegrationParams &ip) {
 void integrate(Params &params, IntegrationParams &ip) {
     nvtxRangePush("Intergration");
 
-    if (ip.useGasExchange && params.hostData.addFlow) {
+    if (false == ip.stabilize && params.hostData.addFlow) {
         // Average neighbor velocity is calculated from velocities of previous
         // step.
         KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
