@@ -33,7 +33,8 @@
 #include <string>
 #include <vector>
 
-namespace cubble {
+namespace {
+using namespace cubble;
 double totalEnergy(Params &params) {
     nvtxRangePush("Energy");
     KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
@@ -952,7 +953,9 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.timesPrinted = 1;
     params.hostData.numIntegrationSteps = 0;
 }
+} // namespace
 
+namespace cubble {
 void run(std::string &&inputFileName) {
     Params params;
     init(inputFileName.c_str(), params);
