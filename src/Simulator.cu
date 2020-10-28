@@ -33,10 +33,27 @@
 #include <string>
 #include <vector>
 
-namespace // anonymous
-{
-using namespace cubble;
-double totalEnergy(Params &params);
+namespace cubble {
+double totalEnergy(Params &params) {
+    nvtxRangePush("Energy");
+    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
+                  params.tempD1);
+    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
+                  params.tempD1);
+
+    void *cubPtr = static_cast<void *>(params.tempPair2);
+    double total = 0.0;
+    void *cubOutput = nullptr;
+    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
+               params.tempD1, static_cast<double *>(cubOutput),
+               params.bubbles.count, (cudaStream_t)0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
+                                   sizeof(double)));
+    nvtxRangePop();
+
+    return total;
+}
 
 void searchNeighbors(Params &params) {
     nvtxRangePush("Neighbors");
@@ -347,31 +364,6 @@ void stabilize(Params &params, int numStepsToRelax) {
 
     params.hostData.energy2 = totalEnergy(params);
     nvtxRangePop();
-}
-} // namespace
-
-namespace // anonymous
-{
-using namespace cubble;
-double totalEnergy(Params &params) {
-    nvtxRangePush("Energy");
-    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-                  params.tempD1);
-    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
-                  params.tempD1);
-
-    void *cubPtr = static_cast<void *>(params.tempPair2);
-    double total = 0.0;
-    void *cubOutput = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
-               params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
-                                   sizeof(double)));
-    nvtxRangePop();
-
-    return total;
 }
 
 double totalVolume(Params &params) {
@@ -960,9 +952,7 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.timesPrinted = 1;
     params.hostData.numIntegrationSteps = 0;
 }
-}; // namespace
 
-namespace cubble {
 void run(std::string &&inputFileName) {
     Params params;
     init(inputFileName.c_str(), params);
