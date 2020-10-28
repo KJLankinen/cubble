@@ -975,7 +975,7 @@ void run(std::string &&inputFileName) {
     printf("%-5s ", "T");
     printf("%-8s ", "phi");
     printf("%-6s ", "R");
-    printf("%-6s ", "dE");
+    printf("%-11s ", "dE");
     printf("%9s ", "#b   ");
     printf("%10s ", "#pairs");
     printf("%-6s ", "#steps");
@@ -1093,7 +1093,7 @@ void run(std::string &&inputFileName) {
             printf("%-5d ", params.hostData.timesPrinted);
             printf("%-#8.6g ", phi);
             printf("%-#6.4g ", relRad);
-            printf("%-#6.4g ", de);
+            printf("%-9.5e ", de);
             printf("%9d ", params.bubbles.count);
             printf("%10d ", params.pairs.count);
             printf("%6d ", params.hostData.numStepsInTimeStep);
