@@ -975,6 +975,7 @@ void run(std::string &&inputFileName) {
     printf("%-5s ", "T");
     printf("%-8s ", "phi");
     printf("%-6s ", "R");
+    printf("%-6s ", "dE");
     printf("%9s ", "#b   ");
     printf("%10s ", "#pairs");
     printf("%-6s ", "#steps");
@@ -1007,6 +1008,9 @@ void run(std::string &&inputFileName) {
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
     ip.hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
+
+    const double &e1 = params.hostData.energy1;
+    const double &e2 = params.hostData.energy2;
 
     while (continueSimulation) {
         CUBBLE_PROFILE(false);
@@ -1057,9 +1061,11 @@ void run(std::string &&inputFileName) {
             };
 
             params.hostData.energy2 = totalEnergy(params);
-            const double dE =
-                (params.hostData.energy2 - params.hostData.energy1) /
-                params.hostData.energy2;
+
+            double de = std::abs(e2 - e1);
+            if (de > 0.0) {
+                de *= 2.0 / (e2 + e1);
+            }
             const double relRad = getAvg(params.bubbles.r, params.bubbles) /
                                   params.hostData.avgRad;
 
@@ -1074,7 +1080,7 @@ void run(std::string &&inputFileName) {
                 resultFile << params.hostData.timesPrinted << " " << relRad
                            << " " << params.bubbles.count << " "
                            << getAvg(params.bubbles.path, params.bubbles) << " "
-                           << params.hostData.energy2 << " " << dE << " " << vx
+                           << params.hostData.energy2 << " " << de << " " << vx
                            << " " << vy << " " << vz << " "
                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
                            << "\n";
@@ -1087,6 +1093,7 @@ void run(std::string &&inputFileName) {
             printf("%-5d ", params.hostData.timesPrinted);
             printf("%-#8.6g ", phi);
             printf("%-#6.4g ", relRad);
+            printf("%-#6.4g ", de);
             printf("%9d ", params.bubbles.count);
             printf("%10d ", params.pairs.count);
             printf("%6d ", params.hostData.numStepsInTimeStep);
