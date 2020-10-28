@@ -33,6 +33,448 @@ __device__ int dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
+// ==============================================
+// Integration
+// ==============================================
+__global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
+                             double *temp1, double *temp2) {
+    // Adams-Bashforth integration
+    if (threadIdx.x + blockIdx.x == 0) {
+        resetDeviceGlobals();
+    }
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += blockDim.x * gridDim.x) {
+        temp1[i] = 0.0;
+        temp2[i] = 0.0;
+
+        bubbles.dxdtp[i] = 0.0;
+        bubbles.xp[i] = bubbles.x[i] +
+                        0.5 * ts * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
+
+        bubbles.dydtp[i] = 0.0;
+        bubbles.yp[i] = bubbles.y[i] +
+                        0.5 * ts * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
+
+        if (dConstants->dimensionality == 3) {
+            bubbles.dzdtp[i] = 0.0;
+            bubbles.zp[i] =
+                bubbles.z[i] +
+                0.5 * ts * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
+        }
+
+        if (useGasExchange) {
+            bubbles.drdtp[i] = 0.0;
+            bubbles.rp[i] =
+                bubbles.r[i] +
+                0.5 * ts * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
+        }
+    }
+}
+
+__global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
+                                    double *overlap, bool useGasExchange) {
+    // This kernel calculates both, the pairwise gas exchange and the pairwise
+    // velocity. Doing both of these makes this a larger kernel that is slower
+    // than either of those separately, but wins in the total execution time.
+
+    __shared__ double sbuf[9 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 7 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 8 * BLOCK_SIZE] = 0.0;
+
+    // If phi is very small, there could be zero pairs, but this loop is assumed
+    // to run at least bubbles.count times for the per bubble sums
+    const int n = dNumPairs > bubbles.count ? dNumPairs : bubbles.count;
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n;
+         i += gridDim.x * blockDim.x) {
+        // Per bubble calculations
+        if (useGasExchange && i < bubbles.count) {
+            double r = bubbles.rp[i];
+            double areaPerRad = 2.0 * CUBBLE_PI;
+            if (dConstants->dimensionality == 3) {
+                areaPerRad *= 2.0 * r;
+            }
+            sbuf[threadIdx.x + 5 * BLOCK_SIZE] += areaPerRad * r;
+            sbuf[threadIdx.x + 6 * BLOCK_SIZE] += areaPerRad;
+        }
+
+        // Per pair calculations
+        if (i < dNumPairs) {
+            const int idx1 = pairs.i[i];
+            const int idx2 = pairs.j[i];
+            double r1 = bubbles.rp[idx1];
+            double r2 = bubbles.rp[idx2];
+            const double radii = r1 + r2;
+            dvec distances = wrappedDifference(
+                bubbles.xp[idx1], bubbles.yp[idx1], bubbles.zp[idx1],
+                bubbles.xp[idx2], bubbles.yp[idx2], bubbles.zp[idx2]);
+            double magnitude = distances.getSquaredLength();
+
+            if (radii * radii >= magnitude) {
+                // Pair velocities
+                distances = distances * dConstants->fZeroPerMuZero *
+                            (rsqrt(magnitude) - 1.0 / radii);
+                sbuf[threadIdx.x + 0 * BLOCK_SIZE] = distances.x;
+                sbuf[threadIdx.x + 1 * BLOCK_SIZE] = distances.y;
+                atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
+                atomicAdd(&bubbles.dydtp[idx2], -distances.y);
+                if (dConstants->dimensionality == 3) {
+                    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = distances.z;
+                    atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
+                }
+
+                // Pairwise gas exchange
+                if (useGasExchange) {
+                    const double r1sq = r1 * r1;
+                    const double r2sq = r2 * r2;
+                    double overlapArea = 0;
+                    if (magnitude < r1sq || magnitude < r2sq) {
+                        overlapArea = r1sq < r2sq ? r1sq : r2sq;
+                    } else {
+                        overlapArea = 0.5 * (r2sq - r1sq + magnitude);
+                        overlapArea *= overlapArea;
+                        overlapArea /= magnitude;
+                        overlapArea = r2sq - overlapArea;
+                        overlapArea =
+                            overlapArea < 0 ? -overlapArea : overlapArea;
+                    }
+
+                    if (dConstants->dimensionality == 3) {
+                        overlapArea *= CUBBLE_PI;
+                    } else {
+                        overlapArea = 2.0 * sqrt(overlapArea);
+                    }
+
+                    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = overlapArea;
+                    atomicAdd(&overlap[idx2], overlapArea);
+
+                    r1 = 1.0 / r1;
+                    r2 = 1.0 / r2;
+
+                    sbuf[threadIdx.x + 7 * BLOCK_SIZE] += 2.0 * overlapArea;
+                    sbuf[threadIdx.x + 8 * BLOCK_SIZE] +=
+                        overlapArea * (r1 + r2);
+
+                    overlapArea *= (r2 - r1);
+
+                    sbuf[threadIdx.x + 4 * BLOCK_SIZE] = overlapArea;
+                    atomicAdd(&bubbles.drdtp[idx2], -overlapArea);
+                }
+            } else {
+                continue;
+            }
+
+            const unsigned int active = __activemask();
+            __syncwarp(active);
+            double oa = 0.0;
+            double vr = 0.0;
+            double vx = 0.0;
+            double vy = 0.0;
+            double vz = 0.0;
+            if (0 == warpReduceMatching(
+                         active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
+                         &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
+                         &oa, &sbuf[3 * BLOCK_SIZE], &vr,
+                         &sbuf[4 * BLOCK_SIZE])) {
+                atomicAdd(&overlap[idx1], oa);
+                atomicAdd(&bubbles.drdtp[idx1], vr);
+                atomicAdd(&bubbles.dxdtp[idx1], vx);
+                atomicAdd(&bubbles.dydtp[idx1], vy);
+                if (dConstants->dimensionality == 3) {
+                    atomicAdd(&bubbles.dzdtp[idx1], vz);
+                }
+            }
+            __syncwarp(active);
+        }
+    }
+
+    if (useGasExchange) {
+        __syncthreads();
+        const int warpNum = threadIdx.x >> 5;
+        const int wid = threadIdx.x & 31;
+        if (threadIdx.x < 32) {
+            reduce(&sbuf[5 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalArea, sbuf[threadIdx.x + 5 * BLOCK_SIZE]);
+            }
+        } else if (threadIdx.x < 64) {
+            reduce(&sbuf[6 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalAreaPerRadius,
+                          sbuf[threadIdx.x + 6 * BLOCK_SIZE]);
+            }
+        } else if (threadIdx.x < 96) {
+            reduce(&sbuf[7 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalOverlapArea,
+                          sbuf[threadIdx.x + 7 * BLOCK_SIZE]);
+            }
+        } else if (threadIdx.x < 128) {
+            reduce(&sbuf[8 * BLOCK_SIZE], warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalOverlapAreaPerRadius,
+                          sbuf[threadIdx.x + 8 * BLOCK_SIZE]);
+            }
+        }
+    }
+}
+
+__global__ void postIntegrate(double ts, bool useGasExchange,
+                              bool incrementPath, bool useFlow, Bubbles bubbles,
+                              double *maximums, double *overlap,
+                              int *toBeDeleted) {
+    // This kernel applies all per bubble computations that are to be done after
+    // the pairwise interactions have been calculated. These include imposed
+    // flow velocity, wall velocity and liquid mediated gas exchange. After all
+    // these have been computed, the prediction of each bubble is corrected
+    // using Adams-Moulton integration.
+
+    __shared__ double sbuf[4 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 0 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 1 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = 0.0;
+    const bool wall =
+        dConstants->xWall || dConstants->yWall || dConstants->zWall;
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+         i += blockDim.x * gridDim.x) {
+        if (useFlow) {
+            addFlowVelocity(bubbles, i);
+        }
+
+        if (wall) {
+            addWallVelocity(bubbles, i);
+        }
+
+        double pred = 0.0;
+        double corr = 0.0;
+        double maxErr = 0.0;
+        double dist = 0.0;
+
+        // Corrections for x, y and z
+        // X
+        pred = bubbles.xp[i];
+        corr = bubbles.x[i] + 0.5 * ts * (bubbles.dxdt[i] + bubbles.dxdtp[i]);
+        bubbles.xp[i] = corr;
+        maxErr = fmax(abs(pred - corr), maxErr);
+        pred = corr - bubbles.savedX[i];
+        dist += pred * pred;
+
+        // Y
+        pred = bubbles.yp[i];
+        corr = bubbles.y[i] + 0.5 * ts * (bubbles.dydt[i] + bubbles.dydtp[i]);
+        bubbles.yp[i] = corr;
+        maxErr = fmax(abs(pred - corr), maxErr);
+        pred = corr - bubbles.savedY[i];
+        dist += pred * pred;
+
+        // Z
+        if (3 == dConstants->dimensionality) {
+            pred = bubbles.zp[i];
+            corr =
+                bubbles.z[i] + 0.5 * ts * (bubbles.dzdt[i] + bubbles.dzdtp[i]);
+            bubbles.zp[i] = corr;
+            maxErr = fmax(abs(pred - corr), maxErr);
+            pred = corr - bubbles.savedZ[i];
+            dist += pred * pred;
+        }
+
+        dist = sqrt(dist);
+
+        // R
+        if (useGasExchange) {
+            // First update the drdtp by the liquid mediated gas exchange
+            double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
+                            (dTotalArea - dTotalOverlapArea);
+            pred = bubbles.rp[i];
+            corr = 2.0 * CUBBLE_PI * pred;
+            if (dConstants->dimensionality == 3) {
+                corr *= 2.0 * pred;
+            }
+
+            double vr = bubbles.drdtp[i] +
+                        dConstants->kappa * dConstants->averageSurfaceAreaIn *
+                            bubbles.count / dTotalArea * (corr - overlap[i]) *
+                            (invRho - 1.0 / pred);
+            vr = dConstants->kParameter * vr / corr;
+            bubbles.drdtp[i] = vr;
+
+            // Correct
+            corr = bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + vr);
+            bubbles.rp[i] = corr;
+            maxErr = fmax(abs(pred - corr), maxErr);
+            pred = corr - bubbles.savedR[i];
+            dist += pred;
+
+            // Calculate volume
+            pred = corr * corr;
+            if (dConstants->dimensionality == 3) {
+                pred *= corr;
+            }
+
+            // Add remaining bubbles to new total volume
+            if (corr > dConstants->minRad) {
+                sbuf[threadIdx.x + 3 * BLOCK_SIZE] += pred;
+            } else {
+                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
+            }
+
+            sbuf[threadIdx.x + 1 * BLOCK_SIZE] =
+                fmax(sbuf[threadIdx.x + 1 * BLOCK_SIZE], corr);
+        }
+
+        // Path
+        if (incrementPath) {
+            pred = bubbles.x[i] - bubbles.xp[i];
+            corr = pred * pred;
+
+            pred = bubbles.y[i] - bubbles.yp[i];
+            corr += pred * pred;
+
+            if (dConstants->dimensionality == 3) {
+                pred = bubbles.z[i] - bubbles.zp[i];
+                corr += pred * pred;
+            }
+
+            bubbles.pathNew[i] = bubbles.path[i] + sqrt(corr);
+        }
+
+        // Store the maximum error per bubble in device memory
+        // The errors are reset to zero between time steps
+        bubbles.error[i] = fmax(maxErr, bubbles.error[i]);
+        sbuf[threadIdx.x] = fmax(sbuf[threadIdx.x], maxErr);
+        sbuf[threadIdx.x + 2 * BLOCK_SIZE] =
+            fmax(sbuf[threadIdx.x + 2 * BLOCK_SIZE], dist);
+    }
+
+    __syncthreads();
+    const int warpNum = threadIdx.x >> 5;
+    const int wid = threadIdx.x & 31;
+    if (threadIdx.x < 32) {
+        reduce(sbuf, warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x] = sbuf[threadIdx.x];
+        }
+    } else if (threadIdx.x < 64) {
+        reduce(&sbuf[1 * BLOCK_SIZE], warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x + gridDim.x] =
+                sbuf[threadIdx.x + 1 * BLOCK_SIZE];
+        }
+    } else if (threadIdx.x < 96) {
+        reduce(&sbuf[2 * BLOCK_SIZE], warpNum, &max);
+        if (0 == wid) {
+            maximums[blockIdx.x + 2 * gridDim.x] =
+                sbuf[threadIdx.x + 2 * BLOCK_SIZE];
+        }
+    } else if (threadIdx.x < 128) {
+        reduce(&sbuf[3 * BLOCK_SIZE], warpNum, &sum);
+        if (0 == wid) {
+            atomicAdd(&dTotalVolumeNew, sbuf[threadIdx.x + 3 * BLOCK_SIZE]);
+        }
+    }
+}
+
+__device__ void addFlowVelocity(Bubbles &bubbles, int i) {
+    double multiplier = bubbles.numNeighbors[i];
+    multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
+    const double xi = bubbles.xp[i];
+    const double yi = bubbles.yp[i];
+    double riSq = bubbles.rp[i];
+    riSq *= riSq;
+
+    int inside =
+        (int)((xi < dConstants->flowTfr.x && xi > dConstants->flowLbb.x) ||
+              ((dConstants->flowLbb.x - xi) * (dConstants->flowLbb.x - xi) <=
+               riSq) ||
+              ((dConstants->flowTfr.x - xi) * (dConstants->flowTfr.x - xi) <=
+               riSq));
+
+    inside *=
+        (int)((yi < dConstants->flowTfr.y && yi > dConstants->flowLbb.y) ||
+              ((dConstants->flowLbb.y - yi) * (dConstants->flowLbb.y - yi) <=
+               riSq) ||
+              ((dConstants->flowTfr.y - yi) * (dConstants->flowTfr.y - yi) <=
+               riSq));
+
+    if (dConstants->dimensionality == 3) {
+        const double zi = bubbles.zp[i];
+        inside *=
+            (int)((zi < dConstants->flowTfr.z && zi > dConstants->flowLbb.z) ||
+                  ((dConstants->flowLbb.z - zi) *
+                       (dConstants->flowLbb.z - zi) <=
+                   riSq) ||
+                  ((dConstants->flowTfr.z - zi) *
+                       (dConstants->flowTfr.z - zi) <=
+                   riSq));
+
+        bubbles.dzdtp[i] += !inside * multiplier * bubbles.flowVz[i] +
+                            dConstants->flowVel.z * inside;
+    }
+
+    // Either add the average velocity of neighbors or the imposed flow,
+    // if the bubble is inside the flow area
+    bubbles.dxdtp[i] += !inside * multiplier * bubbles.flowVx[i] +
+                        dConstants->flowVel.x * inside;
+    bubbles.dydtp[i] += !inside * multiplier * bubbles.flowVy[i] +
+                        dConstants->flowVel.y * inside;
+}
+
+__device__ void addWallVelocity(Bubbles &bubbles, int i) {
+    const double drag = 1.0 - dConstants->wallDragStrength;
+    const double rad = bubbles.rp[i];
+    double xDrag = 1.0;
+    double yDrag = 1.0;
+    double velocity = 0.0;
+
+    auto touchesWall = [&i, &rad, &velocity](double x, double low,
+                                             double high) -> bool {
+        double d1 = x - low;
+        double d2 = x - high;
+        d1 = d1 * d1 < d2 * d2 ? d1 : d2;
+        if (rad * rad >= d1 * d1) {
+            d2 = d1 < 0.0 ? -1.0 : 1.0;
+            d1 *= d2;
+            velocity = d2 * dConstants->fZeroPerMuZero * (1.0 - d1 / rad);
+            return true;
+        }
+
+        return false;
+    };
+
+    velocity = 0.0;
+    if (dConstants->xWall &&
+        touchesWall(bubbles.xp[i], dConstants->lbb.x, dConstants->tfr.x)) {
+        bubbles.dxdtp[i] += velocity;
+        bubbles.dydtp[i] *= drag;
+        bubbles.dzdtp[i] *= drag;
+        xDrag = drag;
+    }
+
+    velocity = 0.0;
+    if (dConstants->yWall &&
+        touchesWall(bubbles.yp[i], dConstants->lbb.y, dConstants->tfr.y)) {
+        bubbles.dxdtp[i] *= drag;
+        bubbles.dydtp[i] += velocity * xDrag;
+        bubbles.dzdtp[i] *= drag;
+        yDrag = drag;
+    }
+
+    velocity = 0.0;
+    if (dConstants->zWall &&
+        touchesWall(bubbles.zp[i], dConstants->lbb.z, dConstants->tfr.z)) {
+        bubbles.dxdtp[i] *= drag;
+        bubbles.dydtp[i] *= drag;
+        bubbles.dzdtp[i] += velocity * xDrag * yDrag;
+    }
+}
+
+// ==============================================
+// Neighbor search
+// ==============================================
 __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
                                Bubbles bubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
@@ -206,477 +648,9 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
     }
 }
 
-__global__ void wallVelocity(Bubbles bubbles) {
-    const double drag = 1.0 - dConstants->wallDragStrength;
-    const dvec lbb = dConstants->lbb;
-    const dvec tfr = dConstants->tfr;
-    const double fZeroPerMuZero = dConstants->fZeroPerMuZero;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        const double rad = bubbles.rp[i];
-        double xDrag = 1.0;
-        double yDrag = 1.0;
-        double velocity = 0.0;
-
-        auto touchesWall = [&i, &rad, &fZeroPerMuZero, &velocity](
-                               double x, double low, double high) -> bool {
-            double d1 = x - low;
-            double d2 = x - high;
-            d1 = d1 * d1 < d2 * d2 ? d1 : d2;
-            if (rad * rad >= d1 * d1) {
-                d2 = d1 < 0.0 ? -1.0 : 1.0;
-                d1 *= d2;
-                velocity = d2 * fZeroPerMuZero * (1.0 - d1 / rad);
-                return true;
-            }
-
-            return false;
-        };
-
-        velocity = 0.0;
-        if (dConstants->xWall && touchesWall(bubbles.xp[i], lbb.x, tfr.x)) {
-            bubbles.dxdtp[i] += velocity;
-            bubbles.dydtp[i] *= drag;
-            bubbles.dzdtp[i] *= drag;
-            xDrag = drag;
-        }
-
-        velocity = 0.0;
-        if (dConstants->yWall && touchesWall(bubbles.yp[i], lbb.y, tfr.y)) {
-            bubbles.dxdtp[i] *= drag;
-            bubbles.dydtp[i] += velocity * xDrag;
-            bubbles.dzdtp[i] *= drag;
-            yDrag = drag;
-        }
-
-        velocity = 0.0;
-        if (dConstants->zWall && touchesWall(bubbles.zp[i], lbb.z, tfr.z)) {
-            bubbles.dxdtp[i] *= drag;
-            bubbles.dydtp[i] *= drag;
-            bubbles.dzdtp[i] += velocity * xDrag * yDrag;
-        }
-    }
-}
-
-__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
-    __shared__ double vx[BLOCK_SIZE];
-    __shared__ double vy[BLOCK_SIZE];
-    __shared__ double vz[BLOCK_SIZE];
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
-        const int idx2 = pairs.j[i];
-
-        vx[threadIdx.x] = bubbles.dxdto[idx2];
-        vy[threadIdx.x] = bubbles.dydto[idx2];
-
-        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
-        atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
-
-        if (dConstants->dimensionality == 3) {
-            vz[threadIdx.x] = bubbles.dzdto[idx2];
-            atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
-        }
-
-        const unsigned int active = __activemask();
-        __syncwarp(active);
-        double tx = 0.0;
-        double ty = 0.0;
-        double tz = 0.0;
-        if (0 == warpReduceMatching(active, idx1, &sum<double>, &tx, vx, &ty,
-                                    vy, &tz, vz)) {
-            atomicAdd(&bubbles.flowVx[idx1], tx);
-            atomicAdd(&bubbles.flowVy[idx1], ty);
-            if (dConstants->dimensionality == 3) {
-                atomicAdd(&bubbles.flowVz[idx1], tz);
-            }
-        }
-        __syncwarp(active);
-    }
-}
-
-__global__ void imposedFlowVelocity(Bubbles bubbles) {
-    const dvec flowVel = dConstants->flowVel;
-    const dvec flowTfr = dConstants->flowTfr;
-    const dvec flowLbb = dConstants->flowLbb;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += gridDim.x * blockDim.x) {
-        double multiplier = bubbles.numNeighbors[i];
-        multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
-        const double xi = bubbles.xp[i];
-        const double yi = bubbles.yp[i];
-        double riSq = bubbles.rp[i];
-        riSq *= riSq;
-
-        int inside = (int)((xi < flowTfr.x && xi > flowLbb.x) ||
-                           ((flowLbb.x - xi) * (flowLbb.x - xi) <= riSq) ||
-                           ((flowTfr.x - xi) * (flowTfr.x - xi) <= riSq));
-
-        inside *= (int)((yi < flowTfr.y && yi > flowLbb.y) ||
-                        ((flowLbb.y - yi) * (flowLbb.y - yi) <= riSq) ||
-                        ((flowTfr.y - yi) * (flowTfr.y - yi) <= riSq));
-
-        if (dConstants->dimensionality == 3) {
-            const double zi = bubbles.zp[i];
-            inside *= (int)((zi < flowTfr.z && zi > flowLbb.z) ||
-                            ((flowLbb.z - zi) * (flowLbb.z - zi) <= riSq) ||
-                            ((flowTfr.z - zi) * (flowTfr.z - zi) <= riSq));
-
-            bubbles.dzdtp[i] +=
-                !inside * multiplier * bubbles.flowVz[i] + flowVel.z * inside;
-        }
-
-        // Either add the average velocity of neighbors or the imposed flow,
-        // if the bubble is inside the flow area
-        bubbles.dxdtp[i] +=
-            !inside * multiplier * bubbles.flowVx[i] + flowVel.x * inside;
-        bubbles.dydtp[i] +=
-            !inside * multiplier * bubbles.flowVy[i] + flowVel.y * inside;
-    }
-}
-
-__global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
-        const int idx2 = pairs.j[i];
-        double e =
-            bubbles.r[idx1] + bubbles.r[idx2] -
-            wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
-                              bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
-                .getLength();
-        if (e > 0) {
-            e *= e;
-            atomicAdd(&energy[idx1], e);
-            atomicAdd(&energy[idx2], e);
-        }
-    }
-}
-
-__global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
-                                    double *overlap, bool useGasExchange) {
-    __shared__ double sbuf[9 * BLOCK_SIZE];
-    sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 7 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 8 * BLOCK_SIZE] = 0.0;
-    // If phi is very small, there could be zero pairs, but this loop is assumed
-    // to run at least bubbles.count times for the per bubble sums
-    const int n = dNumPairs > bubbles.count ? dNumPairs : bubbles.count;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n;
-         i += gridDim.x * blockDim.x) {
-        // Per bubble calculations
-        if (useGasExchange && i < bubbles.count) {
-            double r = bubbles.rp[i];
-            double areaPerRad = 2.0 * CUBBLE_PI;
-            if (dConstants->dimensionality == 3) {
-                areaPerRad *= 2.0 * r;
-            }
-            sbuf[threadIdx.x + 5 * BLOCK_SIZE] += areaPerRad * r;
-            sbuf[threadIdx.x + 6 * BLOCK_SIZE] += areaPerRad;
-        }
-
-        // Per pair calculations
-        if (i < dNumPairs) {
-            const int idx1 = pairs.i[i];
-            const int idx2 = pairs.j[i];
-            double r1 = bubbles.rp[idx1];
-            double r2 = bubbles.rp[idx2];
-            const double radii = r1 + r2;
-            dvec distances = wrappedDifference(
-                bubbles.xp[idx1], bubbles.yp[idx1], bubbles.zp[idx1],
-                bubbles.xp[idx2], bubbles.yp[idx2], bubbles.zp[idx2]);
-            double magnitude = distances.getSquaredLength();
-
-            if (radii * radii >= magnitude) {
-                // Pair velocities
-                distances = distances * dConstants->fZeroPerMuZero *
-                            (rsqrt(magnitude) - 1.0 / radii);
-                sbuf[threadIdx.x + 0 * BLOCK_SIZE] = distances.x;
-                sbuf[threadIdx.x + 1 * BLOCK_SIZE] = distances.y;
-                atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
-                atomicAdd(&bubbles.dydtp[idx2], -distances.y);
-                if (dConstants->dimensionality == 3) {
-                    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = distances.z;
-                    atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
-                }
-
-                // Pairwise gas exchange
-                if (useGasExchange) {
-                    const double r1sq = r1 * r1;
-                    const double r2sq = r2 * r2;
-                    double overlapArea = 0;
-                    if (magnitude < r1sq || magnitude < r2sq) {
-                        overlapArea = r1sq < r2sq ? r1sq : r2sq;
-                    } else {
-                        overlapArea = 0.5 * (r2sq - r1sq + magnitude);
-                        overlapArea *= overlapArea;
-                        overlapArea /= magnitude;
-                        overlapArea = r2sq - overlapArea;
-                        overlapArea =
-                            overlapArea < 0 ? -overlapArea : overlapArea;
-                    }
-
-                    if (dConstants->dimensionality == 3) {
-                        overlapArea *= CUBBLE_PI;
-                    } else {
-                        overlapArea = 2.0 * sqrt(overlapArea);
-                    }
-
-                    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = overlapArea;
-                    atomicAdd(&overlap[idx2], overlapArea);
-
-                    r1 = 1.0 / r1;
-                    r2 = 1.0 / r2;
-
-                    sbuf[threadIdx.x + 7 * BLOCK_SIZE] += 2.0 * overlapArea;
-                    sbuf[threadIdx.x + 8 * BLOCK_SIZE] +=
-                        overlapArea * (r1 + r2);
-
-                    overlapArea *= (r2 - r1);
-
-                    sbuf[threadIdx.x + 4 * BLOCK_SIZE] = overlapArea;
-                    atomicAdd(&bubbles.drdtp[idx2], -overlapArea);
-                }
-            } else {
-                continue;
-            }
-
-            const unsigned int active = __activemask();
-            __syncwarp(active);
-            double oa = 0.0;
-            double vr = 0.0;
-            double vx = 0.0;
-            double vy = 0.0;
-            double vz = 0.0;
-            if (0 == warpReduceMatching(
-                         active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
-                         &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
-                         &oa, &sbuf[3 * BLOCK_SIZE], &vr,
-                         &sbuf[4 * BLOCK_SIZE])) {
-                atomicAdd(&overlap[idx1], oa);
-                atomicAdd(&bubbles.drdtp[idx1], vr);
-                atomicAdd(&bubbles.dxdtp[idx1], vx);
-                atomicAdd(&bubbles.dydtp[idx1], vy);
-                if (dConstants->dimensionality == 3) {
-                    atomicAdd(&bubbles.dzdtp[idx1], vz);
-                }
-            }
-            __syncwarp(active);
-        }
-    }
-
-    if (useGasExchange) {
-        __syncthreads();
-        const int warpNum = threadIdx.x >> 5;
-        const int wid = threadIdx.x & 31;
-        if (threadIdx.x < 32) {
-            reduce(&sbuf[5 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
-                atomicAdd(&dTotalArea, sbuf[threadIdx.x + 5 * BLOCK_SIZE]);
-            }
-        } else if (threadIdx.x < 64) {
-            reduce(&sbuf[6 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
-                atomicAdd(&dTotalAreaPerRadius,
-                          sbuf[threadIdx.x + 6 * BLOCK_SIZE]);
-            }
-        } else if (threadIdx.x < 96) {
-            reduce(&sbuf[7 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
-                atomicAdd(&dTotalOverlapArea,
-                          sbuf[threadIdx.x + 7 * BLOCK_SIZE]);
-            }
-        } else if (threadIdx.x < 128) {
-            reduce(&sbuf[8 * BLOCK_SIZE], warpNum, &sum);
-            if (0 == wid) {
-                atomicAdd(&dTotalOverlapAreaPerRadius,
-                          sbuf[threadIdx.x + 8 * BLOCK_SIZE]);
-            }
-        }
-    }
-}
-
-__global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
-                             double *temp1, double *temp2) {
-    // Adams-Bashforth integration
-    if (threadIdx.x + blockIdx.x == 0) {
-        resetDeviceGlobals();
-    }
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += blockDim.x * gridDim.x) {
-        temp1[i] = 0.0;
-        temp2[i] = 0.0;
-
-        bubbles.dxdtp[i] = 0.0;
-        bubbles.xp[i] = bubbles.x[i] +
-                        0.5 * ts * (3.0 * bubbles.dxdt[i] - bubbles.dxdto[i]);
-
-        bubbles.dydtp[i] = 0.0;
-        bubbles.yp[i] = bubbles.y[i] +
-                        0.5 * ts * (3.0 * bubbles.dydt[i] - bubbles.dydto[i]);
-
-        if (dConstants->dimensionality == 3) {
-            bubbles.dzdtp[i] = 0.0;
-            bubbles.zp[i] =
-                bubbles.z[i] +
-                0.5 * ts * (3.0 * bubbles.dzdt[i] - bubbles.dzdto[i]);
-        }
-
-        if (useGasExchange) {
-            bubbles.drdtp[i] = 0.0;
-            bubbles.rp[i] =
-                bubbles.r[i] +
-                0.5 * ts * (3.0 * bubbles.drdt[i] - bubbles.drdto[i]);
-        }
-    }
-}
-
-__global__ void postIntegrate(double ts, bool useGasExchange,
-                              bool incrementPath, Bubbles bubbles,
-                              double *maximums, double *overlap,
-                              int *toBeDeleted) {
-    // Adams-Moulton integration
-    __shared__ double sbuf[4 * BLOCK_SIZE];
-    sbuf[threadIdx.x + 0 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 1 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 2 * BLOCK_SIZE] = 0.0;
-    sbuf[threadIdx.x + 3 * BLOCK_SIZE] = 0.0;
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-         i += blockDim.x * gridDim.x) {
-        double pred = 0.0;
-        double corr = 0.0;
-        double maxErr = 0.0;
-        double dist = 0.0;
-
-        // X
-        pred = bubbles.xp[i];
-        corr = bubbles.x[i] + 0.5 * ts * (bubbles.dxdt[i] + bubbles.dxdtp[i]);
-        bubbles.xp[i] = corr;
-        maxErr = fmax(abs(pred - corr), maxErr);
-        pred = corr - bubbles.savedX[i];
-        dist += pred * pred;
-
-        // Y
-        pred = bubbles.yp[i];
-        corr = bubbles.y[i] + 0.5 * ts * (bubbles.dydt[i] + bubbles.dydtp[i]);
-        bubbles.yp[i] = corr;
-        maxErr = fmax(abs(pred - corr), maxErr);
-        pred = corr - bubbles.savedY[i];
-        dist += pred * pred;
-
-        // Z
-        if (3 == dConstants->dimensionality) {
-            pred = bubbles.zp[i];
-            corr =
-                bubbles.z[i] + 0.5 * ts * (bubbles.dzdt[i] + bubbles.dzdtp[i]);
-            bubbles.zp[i] = corr;
-            maxErr = fmax(abs(pred - corr), maxErr);
-            pred = corr - bubbles.savedZ[i];
-            dist += pred * pred;
-        }
-
-        dist = sqrt(dist);
-
-        // R
-        if (useGasExchange) {
-            // First update the drdtp by the liquid mediated gas exchange
-            double invRho = (dTotalAreaPerRadius - dTotalOverlapAreaPerRadius) /
-                            (dTotalArea - dTotalOverlapArea);
-            pred = bubbles.rp[i];
-            corr = 2.0 * CUBBLE_PI * pred;
-            if (dConstants->dimensionality == 3) {
-                corr *= 2.0 * pred;
-            }
-
-            double vr = bubbles.drdtp[i] +
-                        dConstants->kappa * dConstants->averageSurfaceAreaIn *
-                            bubbles.count / dTotalArea * (corr - overlap[i]) *
-                            (invRho - 1.0 / pred);
-            vr = dConstants->kParameter * vr / corr;
-            bubbles.drdtp[i] = vr;
-
-            // Correct
-            corr = bubbles.r[i] + 0.5 * ts * (bubbles.drdt[i] + vr);
-            bubbles.rp[i] = corr;
-            maxErr = fmax(abs(pred - corr), maxErr);
-            pred = corr - bubbles.savedR[i];
-            dist += pred;
-
-            // Calculate volume
-            pred = corr * corr;
-            if (dConstants->dimensionality == 3) {
-                pred *= corr;
-            }
-
-            // Add remaining bubbles to new total volume
-            if (corr > dConstants->minRad) {
-                sbuf[threadIdx.x + 3 * BLOCK_SIZE] += pred;
-            } else {
-                toBeDeleted[atomicAdd(&dNumToBeDeleted, 1)] = i;
-            }
-
-            sbuf[threadIdx.x + 1 * BLOCK_SIZE] =
-                fmax(sbuf[threadIdx.x + 1 * BLOCK_SIZE], corr);
-        }
-
-        // Path
-        if (incrementPath) {
-            pred = bubbles.x[i] - bubbles.xp[i];
-            corr = pred * pred;
-
-            pred = bubbles.y[i] - bubbles.yp[i];
-            corr += pred * pred;
-
-            if (dConstants->dimensionality == 3) {
-                pred = bubbles.z[i] - bubbles.zp[i];
-                corr += pred * pred;
-            }
-
-            bubbles.pathNew[i] = bubbles.path[i] + sqrt(corr);
-        }
-
-        // Store the maximum error per bubble in device memory
-        // The errors are reset to zero between time steps
-        bubbles.error[i] = fmax(maxErr, bubbles.error[i]);
-        sbuf[threadIdx.x] = fmax(sbuf[threadIdx.x], maxErr);
-        sbuf[threadIdx.x + 2 * BLOCK_SIZE] =
-            fmax(sbuf[threadIdx.x + 2 * BLOCK_SIZE], dist);
-    }
-
-    __syncthreads();
-    const int warpNum = threadIdx.x >> 5;
-    const int wid = threadIdx.x & 31;
-    if (threadIdx.x < 32) {
-        reduce(sbuf, warpNum, &max);
-        if (0 == wid) {
-            maximums[blockIdx.x] = sbuf[threadIdx.x];
-        }
-    } else if (threadIdx.x < 64) {
-        reduce(&sbuf[1 * BLOCK_SIZE], warpNum, &max);
-        if (0 == wid) {
-            maximums[blockIdx.x + gridDim.x] =
-                sbuf[threadIdx.x + 1 * BLOCK_SIZE];
-        }
-    } else if (threadIdx.x < 96) {
-        reduce(&sbuf[2 * BLOCK_SIZE], warpNum, &max);
-        if (0 == wid) {
-            maximums[blockIdx.x + 2 * gridDim.x] =
-                sbuf[threadIdx.x + 2 * BLOCK_SIZE];
-        }
-    } else if (threadIdx.x < 128) {
-        reduce(&sbuf[3 * BLOCK_SIZE], warpNum, &sum);
-        if (0 == wid) {
-            atomicAdd(&dTotalVolumeNew, sbuf[threadIdx.x + 3 * BLOCK_SIZE]);
-        }
-    }
-}
-
+// ==============================================
+// Bubble deletion
+// ==============================================
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted) {
     // Count of pairs to be deleted
@@ -841,6 +815,65 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
     }
 }
 
+// ==============================================
+// Miscellaneous
+// ==============================================
+__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
+    __shared__ double vx[BLOCK_SIZE];
+    __shared__ double vy[BLOCK_SIZE];
+    __shared__ double vz[BLOCK_SIZE];
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
+
+        vx[threadIdx.x] = bubbles.dxdto[idx2];
+        vy[threadIdx.x] = bubbles.dydto[idx2];
+
+        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
+        atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
+
+        if (dConstants->dimensionality == 3) {
+            vz[threadIdx.x] = bubbles.dzdto[idx2];
+            atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
+        }
+
+        const unsigned int active = __activemask();
+        __syncwarp(active);
+        double tx = 0.0;
+        double ty = 0.0;
+        double tz = 0.0;
+        if (0 == warpReduceMatching(active, idx1, &sum<double>, &tx, vx, &ty,
+                                    vy, &tz, vz)) {
+            atomicAdd(&bubbles.flowVx[idx1], tx);
+            atomicAdd(&bubbles.flowVy[idx1], ty);
+            if (dConstants->dimensionality == 3) {
+                atomicAdd(&bubbles.flowVz[idx1], tz);
+            }
+        }
+        __syncwarp(active);
+    }
+}
+
+__global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+         i += gridDim.x * blockDim.x) {
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
+        double e =
+            bubbles.r[idx1] + bubbles.r[idx2] -
+            wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
+                              bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
+                .getLength();
+        if (e > 0) {
+            e *= e;
+            atomicAdd(&energy[idx1], e);
+            atomicAdd(&energy[idx2], e);
+        }
+    }
+}
+
 __global__ void euler(double ts, Bubbles bubbles) {
     // Euler integration
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
@@ -974,19 +1007,6 @@ __device__ void logError(bool condition, const char *statement,
 
         dErrorEncountered = true;
     }
-}
-
-__device__ int getGlobalTid() {
-    // Simple helper function for calculating a 1D coordinate
-    // from 1, 2 or 3 dimensional coordinates.
-    int threadsPerBlock = blockDim.x * blockDim.y * blockDim.z;
-    int blocksBefore = blockIdx.z * (gridDim.y * gridDim.x) +
-                       blockIdx.y * gridDim.x + blockIdx.x;
-    int threadsBefore =
-        blockDim.y * blockDim.x * threadIdx.z + blockDim.x * threadIdx.y;
-    int tid = blocksBefore * threadsPerBlock + threadsBefore + threadIdx.x;
-
-    return tid;
 }
 
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,

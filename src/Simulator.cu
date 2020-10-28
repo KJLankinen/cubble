@@ -199,12 +199,7 @@ double stabilize(Params &params, int numStepsToRelax) {
             KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                           params.pairs, params.tempD1, false);
 
-            if (params.hostConstants.xWall || params.hostConstants.yWall ||
-                params.hostConstants.zWall) {
-                KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
-            }
-
-            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false, false,
+            KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, false, false, false,
                           params.bubbles, params.tempD2, params.tempD1,
                           params.tempI);
 
@@ -309,21 +304,13 @@ void integrate(Params &params) {
         nvtxRangePush("Do-loop");
         KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, true, params.bubbles,
                       params.tempD1, params.tempD2);
+
         KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
                       params.pairs, params.tempD1, true);
 
-        if (params.hostData.addFlow) {
-            KERNEL_LAUNCH(imposedFlowVelocity, params, 0, 0, params.bubbles);
-        }
-
-        if (params.hostConstants.xWall || params.hostConstants.yWall ||
-            params.hostConstants.zWall) {
-            KERNEL_LAUNCH(wallVelocity, params, 0, 0, params.bubbles);
-        }
-
         KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, true, true,
-                      params.bubbles, params.tempD2, params.tempD1,
-                      params.tempI);
+                      params.hostData.addFlow, params.bubbles, params.tempD2,
+                      params.tempD1, params.tempI);
 
         // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
