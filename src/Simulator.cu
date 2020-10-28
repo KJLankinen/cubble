@@ -305,13 +305,13 @@ void integrate(Params &params, IntegrationParams &ip) {
         params.hostData.timeFraction - (uint64_t)params.hostData.timeFraction;
 
     if (ip.useGasExchange) {
-        params.hostData.maxBubbleRadius = maxRadius;
-        if (*hNumToBeDeleted > 0) {
-            removeBubbles(params, *hNumToBeDeleted);
+        params.hostData.maxBubbleRadius = ip.maxRadius;
+        if (*(ip.hNumToBeDeleted) > 0) {
+            removeBubbles(params, *(ip.hNumToBeDeleted));
         }
     }
 
-    if (maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
+    if (ip.maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
         if (false == ip.useGasExchange) {
             // After searchNeighbors r is correct,
