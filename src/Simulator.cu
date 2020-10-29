@@ -211,7 +211,7 @@ void step(Params &params, IntegrationParams &ip) {
         // Copy old velocities to host memory
         // X
         void *dst = params.pageLockedRWMem;
-        assert(dst != nullptr, "Page-locked read write memory is nullptr!");
+        assert(dst != nullptr && "Page-locked read write memory is nullptr!");
         double *vx = static_cast<double *>(dst);
         void *src = static_cast<void *>(params.bubbles.dxdto);
         uint32_t bytes = params.bubbles.count * sizeof(double);
@@ -252,7 +252,7 @@ void step(Params &params, IntegrationParams &ip) {
 
         // Reset wo memory while copies are happening
         double *p = params.pageLockedWOMem;
-        assert(p != nullptr, "Page-locked write only memory is nullptr!");
+        assert(p != nullptr && "Page-locked write only memory is nullptr!");
         for (uint32_t i = 0; i < params.bubbles.count; i++) {
             p[i] = 0.0;
             p[i + params.bubbles.count] = 0.0;
