@@ -251,7 +251,7 @@ void step(Params &params, IntegrationParams &ip) {
         CUDA_CALL(cudaEventRecord(params.event, params.stream2));
 
         // Reset wo memory while copies are happening
-        double *p = params.pageLockedWOMem;
+        double *p = static_cast<double *>(params.pageLockedWOMem);
         assert(p != nullptr && "Page-locked write only memory is nullptr!");
         for (uint32_t i = 0; i < params.bubbles.count; i++) {
             p[i] = 0.0;
@@ -623,7 +623,7 @@ void end(Params &params) {
     CUDA_CALL(cudaStreamDestroy(params.stream2));
 
     CUDA_CALL(cudaEventDestroy(params.event));
-    CUDA_CALL(cudaEventDestroy(params.snapShotParams.event));
+    CUDA_CALL(cudaEventDestroy(params.snapshotParams.event));
 
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
@@ -762,7 +762,8 @@ void init(const char *inputFileName, Params &params) {
                                 cudaHostAllocWriteCombined));
         CUDA_CALL(cudaHostAlloc(&params.pageLockedRWMem,
                                 3 * params.bubbles.stride * sizeof(double) +
-                                    2 * params.pairs.stride * sizeof(int)));
+                                    2 * params.pairs.stride * sizeof(int),
+                                cudaHostAllocDefault));
     }
 
     uint64_t bytes = params.bubbles.getMemReq();
