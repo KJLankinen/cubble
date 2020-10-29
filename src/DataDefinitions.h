@@ -229,7 +229,7 @@ struct IntegrationParams {
     double maxRadius = 0.0;
     double maxExpansion = 0.0;
     double maxError = 0.0;
-    int *hNumToBeDeleted = nullptr;
+    int numToBeDeleted = 0;
 };
 
 // Only accessed by host
@@ -307,11 +307,16 @@ struct Params {
 
     std::thread ioThread;
 
+    cudaStream_t stream1;
+    cudaStream_t stream2;
+    cudaEvent_t event;
+
     dim3 blockGrid = dim3(1024, 1, 1);
     dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
 
     void *memory = nullptr;
-    void *pinnedMemory = nullptr;
+    void *pageLockedRWMem = nullptr;
+    void *pageLockedWOMem = nullptr;
 
     double *tempD1 = nullptr;
     double *tempD2 = nullptr;
