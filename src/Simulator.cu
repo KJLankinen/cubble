@@ -196,122 +196,20 @@ void step(Params &params, IntegrationParams &ip) {
 
     double &ts = params.hostData.timeStep;
 
-    KERNEL_LAUNCH(initGlobals, params, 0, params.stream1);
-
-    KERNEL_LAUNCH(preIntegrate, params, 0, params.stream1, ts,
-                  ip.useGasExchange, params.bubbles, params.tempD1,
-                  params.tempD2);
-
-    KERNEL_LAUNCH(pairwiseInteraction, params, 0, params.stream1,
-                  params.bubbles, params.pairs, params.tempD1,
-                  ip.useGasExchange);
-
-    if (params.hostData.addFlow && false == ip.stabilize) {
-        nvtxRangePush("Host neighbor velocities");
-        // Copy old velocities to host memory
-        // X
-        void *dst = params.pageLockedRWMem;
-        assert(dst != nullptr, "Page-locked read write memory is nullptr!");
-        double *vx = static_cast<double *>(dst);
-        void *src = static_cast<void *>(params.bubbles.dxdto);
-        uint32_t bytes = params.bubbles.count * sizeof(double);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-        dst = static_cast<void *>(vx + params.bubbles.count);
-
-        // Y
-        double *vy = static_cast<double *>(dst);
-        src = static_cast<void *>(params.bubbles.dydto);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-        dst = static_cast<void *>(vy + params.bubbles.count);
-
-        // Z
-        double *vz = nullptr;
-        if (3 == params.hostConstants.dimensionality) {
-            vz = static_cast<double *>(dst);
-            src = static_cast<void *>(params.bubbles.dzdto);
-            CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                      params.stream2));
-            dst = static_cast<void *>(vz + params.bubbles.count);
-        }
-        // Pairs i
-        int *idx1 = static_cast<int *>(dst);
-        src = static_cast<void *>(params.pairs.i);
-        bytes = params.pairs.count * sizeof(int);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-        dst = static_cast<void *>(idx1 + params.pairs.count);
-
-        // Pairs j
-        int *idx2 = static_cast<int *>(dst);
-        src = static_cast<void *>(params.pairs.j);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-        CUDA_CALL(cudaEventRecord(params.event, params.stream2));
-
-        // Reset wo memory while copies are happening
-        double *p = params.pageLockedWOMem;
-        assert(p != nullptr, "Page-locked write only memory is nullptr!");
-        for (uint32_t i = 0; i < params.bubbles.count; i++) {
-            p[i] = 0.0;
-            p[i + params.bubbles.count] = 0.0;
-            p[i + 2 * params.bubbles.count] = 0.0;
-        }
-
-        // Wait until all the memory copies are done
-        CUDA_CALL(cudaEventSynchronize(params.event));
-
-        // Calculate the sum of neighbor velocities for each bubble
-        for (uint32_t i = 0; i < params.pairs.count; i++) {
-            const int id1 = idx1[i];
-            const int id2 = idx2[i];
-
-            p[id1] += vx[id2];
-            p[id2] += vx[id1];
-
-            p[id1 + params.bubbles.count] += vy[id2];
-            p[id2 + params.bubbles.count] += vy[id1];
-
-            if (3 == params.hostConstants.dimensionality) {
-                p[id1 + 2 * params.bubbles.count] += vz[id2];
-                p[id2 + 2 * params.bubbles.count] += vz[id1];
-            }
-        }
-
-        // Copy summed neighbor velocities back to device
-        // X
-        dst = static_cast<void *>(params.bubbles.flowVx);
-        src = params.pageLockedWOMem;
-        bytes = params.bubbles.count * sizeof(double);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-
-        // Y
-        dst = static_cast<void *>(params.bubbles.flowVy);
-        src = static_cast<void *>(static_cast<double *>(src) +
-                                  params.bubbles.count);
-        CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                  params.stream2));
-
-        // Z
-        if (3 == params.hostConstants.dimensionality) {
-            dst = static_cast<void *>(params.bubbles.flowVz);
-            src = static_cast<void *>(static_cast<double *>(src) +
-                                      params.bubbles.count);
-            CUDA_CALL(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault,
-                                      params.stream2));
-        }
-        nvtxRangePop();
-    }
-
+    KERNEL_LAUNCH(initGlobals, params, 0, 0);
+    KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
+                  params.bubbles, params.tempD1, params.tempD2);
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, ip.useGasExchange);
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   ip.incrementPath, params.hostData.addFlow, ip.stabilize,
                   params.bubbles, params.tempD2, params.tempD1, params.tempI);
 
     if (false == ip.stabilize) {
+        assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
+        // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(&ip.numToBeDeleted), dNumToBeDeleted,
+            static_cast<void *>(ip.hNumToBeDeleted), dNumToBeDeleted,
             sizeof(int), 0, cudaMemcpyDefault, 0));
     }
 
@@ -350,6 +248,16 @@ void step(Params &params, IntegrationParams &ip) {
 
 void integrate(Params &params, IntegrationParams &ip) {
     nvtxRangePush("Intergration");
+
+    if (false == ip.stabilize && params.hostData.addFlow) {
+        // Average neighbor velocity is calculated from velocities of previous
+        // step.
+        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
+                      false, params.bubbles.flowVx, params.bubbles.flowVy,
+                      params.bubbles.flowVz);
+        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, 0, params.bubbles,
+                      params.pairs);
+    }
 
     do {
         step(params, ip);
@@ -415,8 +323,8 @@ void integrate(Params &params, IntegrationParams &ip) {
 
     if (ip.useGasExchange) {
         params.hostData.maxBubbleRadius = ip.maxRadius;
-        if (ip.numToBeDeleted > 0) {
-            removeBubbles(params, ip.numToBeDeleted);
+        if (*(ip.hNumToBeDeleted) > 0) {
+            removeBubbles(params, *(ip.hNumToBeDeleted));
         }
     }
 
@@ -619,18 +527,9 @@ void end(Params &params) {
 
     CUDA_CALL(cudaDeviceSynchronize());
 
-    CUDA_CALL(cudaStreamDestroy(params.stream1));
-    CUDA_CALL(cudaStreamDestroy(params.stream2));
-
-    CUDA_CALL(cudaEventDestroy(params.event));
-    CUDA_CALL(cudaEventDestroy(params.snapShotParams.event));
-
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
-    if (params.hostData.addFlow) {
-        CUDA_CALL(cudaFreeHost(params.pageLockedWOMem));
-        CUDA_CALL(cudaFreeHost(params.pageLockedRWMem));
-    }
+    CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedMemory)));
 }
 
 void init(const char *inputFileName, Params &params) {
@@ -742,9 +641,6 @@ void init(const char *inputFileName, Params &params) {
                                  static_cast<void *>(&params.deviceConstants),
                                  sizeof(Constants *)));
 
-    CUDA_CALL(cudaStreamCreate(&params.stream1));
-    CUDA_CALL(cudaStreamCreate(&params.stream2));
-    CUDA_CALL(cudaEventCreate(&params.event, cudaEventDisableTiming));
     CUDA_CALL(
         cudaEventCreate(&params.snapshotParams.event, cudaEventDisableTiming));
     printRelevantInfoOfCurrentDevice();
@@ -756,14 +652,7 @@ void init(const char *inputFileName, Params &params) {
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
 
     printf("Reserving device memory\n");
-    if (params.hostData.addFlow) {
-        CUDA_CALL(cudaHostAlloc(&params.pageLockedWOMem,
-                                3 * params.bubbles.stride * sizeof(double),
-                                cudaHostAllocWriteCombined));
-        CUDA_CALL(cudaHostAlloc(&params.pageLockedRWMem,
-                                3 * params.bubbles.stride * sizeof(double) +
-                                    2 * params.pairs.stride * sizeof(int)));
-    }
+    CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
 
     uint64_t bytes = params.bubbles.getMemReq();
     bytes += 2 * params.pairs.getMemReq();
@@ -1112,7 +1001,7 @@ void run(std::string &&inputFileName) {
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
-    ip.numToBeDeleted = 0;
+    ip.hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
 
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;

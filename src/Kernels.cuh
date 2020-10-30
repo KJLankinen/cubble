@@ -70,6 +70,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
                                   int *toBeDeleted);
 
+__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
 __global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);
