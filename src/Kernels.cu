@@ -116,8 +116,8 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        int idx1 = pairs.i[i];
-        int idx2 = pairs.j[i];
+        const int idx1 = pairs.i[i];
+        const int idx2 = pairs.j[i];
 
         if (useFlow && false == stabilize) {
             int fvxMul = 0;
@@ -141,7 +141,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         dvec distances = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
                                            bubbles.zp[idx1], bubbles.xp[idx2],
                                            bubbles.yp[idx2], bubbles.zp[idx2]);
-        double magnitude = distances.getSquaredLength();
+        const double magnitude = distances.getSquaredLength();
 
         if (radii * radii >= magnitude) {
             // Pair velocities
@@ -202,15 +202,14 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const unsigned int active = __activemask();
         __syncwarp(active);
         const unsigned int matches = __match_any_sync(active, idx1);
-        const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-        const unsigned int rank = __popc(matches & lanemask_lt);
+        const unsigned int rank =
+            __popc(matches & (1 << (threadIdx.x & 31)) - 1);
 
         // First id is the threadIdx of the first thread of this warp, i.e. 0,
         // 32, 64, etc.
         int id = 32 * (threadIdx.x >> 5);
 
         if (0 == rank) {
-#pragma unroll
             for (int j = 0; j < 32; j++) {
                 // Skip self to avoid adding it twice
                 if (!!(matches & 1 << j) && threadIdx.x != id) {
