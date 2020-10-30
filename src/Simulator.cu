@@ -739,7 +739,7 @@ void init(const char *inputFileName, Params &params) {
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, false);
+                  params.pairs, params.tempD1, false, false);
     KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
@@ -759,7 +759,7 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdtp = swapper;
 
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, false);
+                  params.pairs, params.tempD1, false, false);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
