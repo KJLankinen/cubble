@@ -107,7 +107,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     // velocity. Doing both of these makes this a larger kernel that is slower
     // than either of those separately, but wins in the total execution time.
 
-    __shared__ double sbuf[7 * BLOCK_SIZE];
+    __shared__ double sbuf[10 * BLOCK_SIZE];
     sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
     sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
 
@@ -117,14 +117,13 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const int idx2 = pairs.j[i];
 
         if (useFlow) {
-            atomicAdd(&bubbles.flowVx[idx1], bubbles.dxdt[idx2]);
+            sbuf[threadIdx.x + 7 * BLOCK_SIZE] = bubbles.dxdt[idx2];
+            sbuf[threadIdx.x + 8 * BLOCK_SIZE] = bubbles.dydt[idx2];
             atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdt[idx1]);
-
-            atomicAdd(&bubbles.flowVy[idx1], bubbles.dydt[idx2]);
             atomicAdd(&bubbles.flowVy[idx2], bubbles.dydt[idx1]);
 
             if (dConstants->dimensionality == 3) {
-                atomicAdd(&bubbles.flowVz[idx1], bubbles.dzdt[idx2]);
+                sbuf[threadIdx.x + 9 * BLOCK_SIZE] = bubbles.dzdt[idx2];
                 atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdt[idx1]);
             }
         }
@@ -196,16 +195,24 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         double vx = 0.0;
         double vy = 0.0;
         double vz = 0.0;
+        double fvx = 0.0;
+        double fvy = 0.0;
+        double fvz = 0.0;
         if (0 == warpReduceMatching(
                      active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
                      &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
-                     &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE])) {
+                     &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE],
+                     &fvx, &sbuf[7 * BLOCK_SIZE], &fvy, &sbuf[8 * BLOCK_SIZE],
+                     &fvz, &sbuf[9 * BLOCK_SIZE])) {
             atomicAdd(&overlap[idx1], oa);
             atomicAdd(&bubbles.drdtp[idx1], vr);
             atomicAdd(&bubbles.dxdtp[idx1], vx);
             atomicAdd(&bubbles.dydtp[idx1], vy);
+            atomicAdd(&bubbles.flowVx[idx1], fvx);
+            atomicAdd(&bubbles.flowVy[idx1], fvy);
             if (dConstants->dimensionality == 3) {
                 atomicAdd(&bubbles.dzdtp[idx1], vz);
+                atomicAdd(&bubbles.flowVz[idx1], fvz);
             }
         }
         __syncwarp(active);
