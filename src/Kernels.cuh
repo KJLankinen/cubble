@@ -43,14 +43,14 @@ namespace cubble {
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1, double *temp2);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
-                                    double *overlap, bool useGasExchange);
+                                    double *overlap, bool useGasExchange,
+                                    bool useFlow);
 __global__ void postIntegrate(double ts, bool useGasExchange,
                               bool incrementPath, bool useFlow, bool stabilize,
                               Bubbles bubbles, double *maximums,
                               double *overlap, int *toBeDeleted);
 __device__ void addFlowVelocity(Bubbles &bubbles, int i);
 __device__ void addWallVelocity(Bubbles &bubbles, int i);
-
 __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
                                Bubbles bubbles);
 __global__ void indexByCell(int *cellIndices, int *cellOffsets,
@@ -64,13 +64,10 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
-
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                                    int *toBeDeleted);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
                                   int *toBeDeleted);
-
-__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs);
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
 __global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);

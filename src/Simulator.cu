@@ -200,7 +200,8 @@ void step(Params &params, IntegrationParams &ip) {
     KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   params.bubbles, params.tempD1, params.tempD2);
     KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, ip.useGasExchange);
+                  params.pairs, params.tempD1, ip.useGasExchange,
+                  params.hostData.addFlow);
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   ip.incrementPath, params.hostData.addFlow, ip.stabilize,
                   params.bubbles, params.tempD2, params.tempD1, params.tempI);
@@ -248,16 +249,6 @@ void step(Params &params, IntegrationParams &ip) {
 
 void integrate(Params &params, IntegrationParams &ip) {
     nvtxRangePush("Intergration");
-
-    if (false == ip.stabilize && params.hostData.addFlow) {
-        // Average neighbor velocity is calculated from velocities of previous
-        // step.
-        KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
-                      false, params.bubbles.flowVx, params.bubbles.flowVy,
-                      params.bubbles.flowVz);
-        KERNEL_LAUNCH(averageNeighborVelocity, params, 0, 0, params.bubbles,
-                      params.pairs);
-    }
 
     do {
         step(params, ip);

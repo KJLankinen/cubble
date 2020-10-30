@@ -47,6 +47,9 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
          i += blockDim.x * gridDim.x) {
         temp1[i] = 0.0;
         temp2[i] = 0.0;
+        bubbles.flowVx[i] = 0.0;
+        bubbles.flowVy[i] = 0.0;
+        bubbles.flowVz[i] = 0.0;
 
         bubbles.dxdtp[i] = 0.0;
         bubbles.xp[i] = bubbles.x[i] +
@@ -98,12 +101,13 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 }
 
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
-                                    double *overlap, bool useGasExchange) {
+                                    double *overlap, bool useGasExchange,
+                                    bool useFlow) {
     // This kernel calculates both, the pairwise gas exchange and the pairwise
     // velocity. Doing both of these makes this a larger kernel that is slower
     // than either of those separately, but wins in the total execution time.
 
-    __shared__ double sbuf[7 * BLOCK_SIZE];
+    __shared__ double sbuf[10 * BLOCK_SIZE];
     sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
     sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
 
@@ -111,6 +115,19 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
          i += gridDim.x * blockDim.x) {
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
+
+        if (useFlow) {
+            sbuf[threadIdx.x + 7 * BLOCK_SIZE] = bubbles.dxdt[idx2];
+            sbuf[threadIdx.x + 8 * BLOCK_SIZE] = bubbles.dydt[idx2];
+            atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdt[idx1]);
+            atomicAdd(&bubbles.flowVy[idx2], bubbles.dydt[idx1]);
+
+            if (dConstants->dimensionality == 3) {
+                sbuf[threadIdx.x + 9 * BLOCK_SIZE] = bubbles.dzdt[idx2];
+                atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdt[idx1]);
+            }
+        }
+
         double r1 = bubbles.rp[idx1];
         double r2 = bubbles.rp[idx2];
         const double radii = r1 + r2;
@@ -178,16 +195,24 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         double vx = 0.0;
         double vy = 0.0;
         double vz = 0.0;
+        double fvx = 0.0;
+        double fvy = 0.0;
+        double fvz = 0.0;
         if (0 == warpReduceMatching(
                      active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
                      &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
-                     &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE])) {
+                     &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE],
+                     &fvx, &sbuf[7 * BLOCK_SIZE], &fvy, &sbuf[8 * BLOCK_SIZE],
+                     &fvz, &sbuf[9 * BLOCK_SIZE])) {
             atomicAdd(&overlap[idx1], oa);
             atomicAdd(&bubbles.drdtp[idx1], vr);
             atomicAdd(&bubbles.dxdtp[idx1], vx);
             atomicAdd(&bubbles.dydtp[idx1], vy);
+            atomicAdd(&bubbles.flowVx[idx1], fvx);
+            atomicAdd(&bubbles.flowVy[idx1], fvy);
             if (dConstants->dimensionality == 3) {
                 atomicAdd(&bubbles.dzdtp[idx1], vz);
+                atomicAdd(&bubbles.flowVz[idx1], fvz);
             }
         }
         __syncwarp(active);
@@ -809,44 +834,6 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
 // ==============================================
 // Miscellaneous
 // ==============================================
-__global__ void averageNeighborVelocity(Bubbles bubbles, Pairs pairs) {
-    __shared__ double vx[BLOCK_SIZE];
-    __shared__ double vy[BLOCK_SIZE];
-    __shared__ double vz[BLOCK_SIZE];
-
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
-         i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
-        const int idx2 = pairs.j[i];
-
-        vx[threadIdx.x] = bubbles.dxdto[idx2];
-        vy[threadIdx.x] = bubbles.dydto[idx2];
-
-        atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdto[idx1]);
-        atomicAdd(&bubbles.flowVy[idx2], bubbles.dydto[idx1]);
-
-        if (dConstants->dimensionality == 3) {
-            vz[threadIdx.x] = bubbles.dzdto[idx2];
-            atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdto[idx1]);
-        }
-
-        const unsigned int active = __activemask();
-        __syncwarp(active);
-        double tx = 0.0;
-        double ty = 0.0;
-        double tz = 0.0;
-        if (0 == warpReduceMatching(active, idx1, &sum<double>, &tx, vx, &ty,
-                                    vy, &tz, vz)) {
-            atomicAdd(&bubbles.flowVx[idx1], tx);
-            atomicAdd(&bubbles.flowVy[idx1], ty);
-            if (dConstants->dimensionality == 3) {
-                atomicAdd(&bubbles.flowVz[idx1], tz);
-            }
-        }
-        __syncwarp(active);
-    }
-}
-
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
