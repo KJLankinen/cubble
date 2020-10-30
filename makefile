@@ -63,6 +63,10 @@ all :
 	$(MAKE) -j8 BIN_PATH=$(BIN_PATH) GPU_FLAGS=-lineinfo OPTIM_FLAGS=-O3 \
 	    DEFINES='-DNDEBUG $(PROFILE)' $(EXEC)
 
+.PHONY : profile
+profile :
+	$(MAKE) PROFILE=-DPROFILE
+
 # Debug rule
 # -----------------------------------------------------
 .PHONY : debug
