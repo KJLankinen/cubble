@@ -229,7 +229,7 @@ struct IntegrationParams {
     double maxRadius = 0.0;
     double maxExpansion = 0.0;
     double maxError = 0.0;
-    int numToBeDeleted = 0;
+    int *hNumToBeDeleted = nullptr;
 };
 
 // Only accessed by host
@@ -323,6 +323,7 @@ struct Params {
     std::vector<double> previousY;
     std::vector<double> previousZ;
     std::vector<char> hostMemory;
+    std::vector<double> maximums;
 
     void setTempPointers(void *ptr) {
         tempD1 = static_cast<double *>(ptr);
