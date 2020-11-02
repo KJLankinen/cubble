@@ -120,30 +120,33 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const int idx2 = pairs.j[i];
 
         if (useFlow && false == stabilize) {
+            int fvxMul = 0;
+            int fvyMul = 1;
+
             if (dConstants->dimensionality == 3) {
-                sbuf[threadIdx.x + 1 * BLOCK_SIZE] = bubbles.dxdt[idx2];
-                sbuf[threadIdx.x + 2 * BLOCK_SIZE] = bubbles.dydt[idx2];
                 sbuf[threadIdx.x + 3 * BLOCK_SIZE] = bubbles.dzdt[idx2];
                 atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdt[idx1]);
-            } else {
-                sbuf[threadIdx.x + 0 * BLOCK_SIZE] = bubbles.dxdt[idx2];
-                sbuf[threadIdx.x + 1 * BLOCK_SIZE] = bubbles.dydt[idx2];
+                fvxMul = 1;
+                fvyMul = 2;
             }
+            sbuf[threadIdx.x + fvxMul * BLOCK_SIZE] = bubbles.dxdt[idx2];
+            sbuf[threadIdx.x + fvyMul * BLOCK_SIZE] = bubbles.dydt[idx2];
             atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdt[idx1]);
             atomicAdd(&bubbles.flowVy[idx2], bubbles.dydt[idx1]);
         }
 
         double r1 = bubbles.rp[idx1];
         double r2 = bubbles.rp[idx2];
+        const double radii = r1 + r2;
         dvec distances = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
                                            bubbles.zp[idx1], bubbles.xp[idx2],
                                            bubbles.yp[idx2], bubbles.zp[idx2]);
         const double magnitude = distances.getSquaredLength();
 
-        if ((r1 + r2) * (r1 + r2) >= magnitude) {
+        if (radii * radii >= magnitude) {
             // Pair velocities
             distances = distances * dConstants->fZeroPerMuZero *
-                        (rsqrt(magnitude) - 1.0 / (r1 + r2));
+                        (rsqrt(magnitude) - 1.0 / radii);
             svx[threadIdx.x] = distances.x;
             svy[threadIdx.x] = distances.y;
             atomicAdd(&bubbles.dxdtp[idx2], -distances.x);
@@ -199,11 +202,14 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const unsigned int active = __activemask();
         __syncwarp(active);
         const unsigned int matches = __match_any_sync(active, idx1);
-        // If this is the smallest thread of the warp with a particular idx1
-        if (0 == __popc(matches & (1 << (threadIdx.x & 31)) - 1)) {
-            // id is the threadIdx of the first thread of this warp, i.e. 0,
-            // 32, 64, etc.
-            int id = 32 * (threadIdx.x >> 5);
+        const unsigned int rank =
+            __popc(matches & (1 << (threadIdx.x & 31)) - 1);
+
+        // First id is the threadIdx of the first thread of this warp, i.e. 0,
+        // 32, 64, etc.
+        int id = 32 * (threadIdx.x >> 5);
+
+        if (0 == rank) {
             for (int j = 0; j < 32; j++) {
                 // Skip self to avoid adding it twice
                 if (!!(matches & 1 << j) && threadIdx.x != id) {
