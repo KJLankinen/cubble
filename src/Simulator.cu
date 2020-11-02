@@ -197,18 +197,11 @@ void step(Params &params, IntegrationParams &ip) {
     double &ts = params.hostData.timeStep;
 
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
-
     KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   params.bubbles, params.tempD1, params.tempD2);
-
-    uint32_t dynSharedMemBytes = params.hostConstants.dimensionality - 2;
-    dynSharedMemBytes += !(ip.stabilize) * params.hostData.addFlow *
-                         params.hostConstants.dimensionality;
-    dynSharedMemBytes *= BLOCK_SIZE * sizeof(double);
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1,
-                  ip.useGasExchange, params.hostData.addFlow, ip.stabilize);
-
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, ip.useGasExchange,
+                  params.hostData.addFlow);
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   ip.incrementPath, params.hostData.addFlow, ip.stabilize,
                   params.bubbles, params.tempD2, params.tempD1, params.tempI);
@@ -745,13 +738,8 @@ void init(const char *inputFileName, Params &params) {
         params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
-
-    uint32_t dynSharedMemBytes = params.hostConstants.dimensionality - 2;
-    dynSharedMemBytes *= BLOCK_SIZE * sizeof(double);
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1, false, false,
-                  true);
-
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, false, false);
     KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
@@ -770,9 +758,8 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1, false, false,
-                  true);
+    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.pairs, params.tempD1, false, false);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.

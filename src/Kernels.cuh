@@ -44,7 +44,7 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1, double *temp2);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange,
-                                    bool useFlow, bool stabilize);
+                                    bool useFlow);
 __global__ void postIntegrate(double ts, bool useGasExchange,
                               bool incrementPath, bool useFlow, bool stabilize,
                               Bubbles bubbles, double *maximums,
@@ -124,6 +124,38 @@ template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
     if (0 == wid) {
         addr[tid] = f(addr[tid], addr[tid + 1]);
     }
+}
+
+template <typename T>
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from) {
+    *to = f(*to, from[idx]);
+}
+
+template <typename... Args, typename T>
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from,
+                                Args... args) {
+    recursiveReduce(f, idx, to, from);
+    recursiveReduce(f, idx, args...);
+}
+
+template <typename... Args, typename T>
+__device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
+                                           T (*f)(T, T), Args... args) {
+    const unsigned int matches = __match_any_sync(active, matchOn);
+    const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+    const unsigned int rank = __popc(matches & lanemask_lt);
+    const int flt = 32 * (threadIdx.x >> 5);
+
+    if (0 == rank) {
+#pragma unroll
+        for (int j = 0; j < 32; j++) {
+            if (!!(matches & 1 << j)) {
+                recursiveReduce(f, j + flt, args...);
+            }
+        }
+    }
+
+    return rank;
 }
 
 template <typename... Arguments>
