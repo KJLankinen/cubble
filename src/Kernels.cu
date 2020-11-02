@@ -212,8 +212,12 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         if (0 == rank) {
 #pragma unroll
             for (int j = 0; j < 32; j++) {
-                // Skip self to avoid adding it twice
-                if (!!(matches & 1 << j) && threadIdx.x != id) {
+                // Skip self, as that's the location of the sum
+                if (threadIdx.x == id) {
+                    continue;
+                }
+
+                if (!!(matches & 1 << j)) {
                     svx[threadIdx.x] += svx[id];
                     svy[threadIdx.x] += svy[id];
 
