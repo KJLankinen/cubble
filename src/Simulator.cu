@@ -207,28 +207,21 @@ void step(Params &params, IntegrationParams &ip) {
                   params.bubbles, params.tempD2, params.tempD1, params.tempI);
 
     if (false == ip.stabilize) {
-        assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
         // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(ip.hNumToBeDeleted), dNumToBeDeleted,
+            static_cast<void *>(&ip.numToBeDeleted), dNumToBeDeleted,
             sizeof(int), 0, cudaMemcpyDefault, 0));
     }
 
-    // blockGrid size can only decrease so this is done only once
-    const uint32_t nMax = 3 * params.blockGrid.x;
-    if (params.maximums.size() < nMax) {
-        params.maximums.resize(nMax);
-    }
-
-    void *memStart = static_cast<void *>(params.maximums.data());
-    CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
-                         params.maximums.size() * sizeof(double),
+    const uint32_t bytes = 3 * params.blockGrid.x * sizeof(double);
+    CUDA_CALL(cudaMemcpy(params.pinnedMemory,
+                         static_cast<void *>(params.tempD2), bytes,
                          cudaMemcpyDefault));
 
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
-    double *p = static_cast<double *>(memStart);
+    double *p = static_cast<double *>(params.pinnedMemory);
     for (uint32_t i = 0; i < params.blockGrid.x; i++) {
         ip.maxError = max(ip.maxError, p[i]);
         ip.maxRadius = max(ip.maxRadius, p[i + params.blockGrid.x]);
@@ -314,8 +307,8 @@ void integrate(Params &params, IntegrationParams &ip) {
 
     if (ip.useGasExchange) {
         params.hostData.maxBubbleRadius = ip.maxRadius;
-        if (*(ip.hNumToBeDeleted) > 0) {
-            removeBubbles(params, *(ip.hNumToBeDeleted));
+        if (ip.numToBeDeleted > 0) {
+            removeBubbles(params, ip.numToBeDeleted);
         }
     }
 
@@ -643,7 +636,8 @@ void init(const char *inputFileName, Params &params) {
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
 
     printf("Reserving device memory\n");
-    CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
+    CUDA_CALL(cudaMallocHost(&params.pinnedMemory,
+                             3 * params.blockGrid.x * sizeof(double)));
 
     uint64_t bytes = params.bubbles.getMemReq();
     bytes += 2 * params.pairs.getMemReq();
@@ -992,7 +986,7 @@ void run(std::string &&inputFileName) {
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
-    ip.hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
+    ip.numToBeDeleted = 0;
 
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;
