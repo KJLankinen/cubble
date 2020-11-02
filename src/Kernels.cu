@@ -106,7 +106,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     // This kernel calculates both, the pairwise gas exchange and the pairwise
     // velocity. Doing both of these makes this a larger kernel that is slower
     // than either of those separately, but wins in the total execution time.
-    extern __shared__ double sbuf[];
+    __shared__ double sbuf[];
     __shared__ double svx[BLOCK_SIZE];
     __shared__ double svy[BLOCK_SIZE];
     __shared__ double svr[BLOCK_SIZE];
