@@ -107,9 +107,9 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     // velocity. Doing both of these makes this a larger kernel that is slower
     // than either of those separately, but wins in the total execution time.
 
-    __shared__ double sbuf[8 * BLOCK_SIZE];
-    double toa = 0.0;
-    double toapr = 0.0;
+    __shared__ double sbuf[10 * BLOCK_SIZE];
+    sbuf[threadIdx.x + 5 * BLOCK_SIZE] = 0.0;
+    sbuf[threadIdx.x + 6 * BLOCK_SIZE] = 0.0;
 
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
@@ -117,13 +117,13 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
         const int idx2 = pairs.j[i];
 
         if (useFlow) {
-            sbuf[threadIdx.x + 5 * BLOCK_SIZE] = bubbles.dxdt[idx2];
-            sbuf[threadIdx.x + 6 * BLOCK_SIZE] = bubbles.dydt[idx2];
+            sbuf[threadIdx.x + 7 * BLOCK_SIZE] = bubbles.dxdt[idx2];
+            sbuf[threadIdx.x + 8 * BLOCK_SIZE] = bubbles.dydt[idx2];
             atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdt[idx1]);
             atomicAdd(&bubbles.flowVy[idx2], bubbles.dydt[idx1]);
 
             if (dConstants->dimensionality == 3) {
-                sbuf[threadIdx.x + 7 * BLOCK_SIZE] = bubbles.dzdt[idx2];
+                sbuf[threadIdx.x + 9 * BLOCK_SIZE] = bubbles.dzdt[idx2];
                 atomicAdd(&bubbles.flowVz[idx2], bubbles.dzdt[idx1]);
             }
         }
@@ -176,8 +176,8 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                 r1 = 1.0 / r1;
                 r2 = 1.0 / r2;
 
-                toa += 2.0 * overlapArea;
-                toapr += overlapArea * (r1 + r2);
+                sbuf[threadIdx.x + 5 * BLOCK_SIZE] += 2.0 * overlapArea;
+                sbuf[threadIdx.x + 6 * BLOCK_SIZE] += overlapArea * (r1 + r2);
 
                 overlapArea *= (r2 - r1);
 
@@ -202,8 +202,8 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                      active, idx1, &sum<double>, &vx, &sbuf[0 * BLOCK_SIZE],
                      &vy, &sbuf[1 * BLOCK_SIZE], &vz, &sbuf[2 * BLOCK_SIZE],
                      &oa, &sbuf[3 * BLOCK_SIZE], &vr, &sbuf[4 * BLOCK_SIZE],
-                     &fvx, &sbuf[5 * BLOCK_SIZE], &fvy, &sbuf[6 * BLOCK_SIZE],
-                     &fvz, &sbuf[7 * BLOCK_SIZE])) {
+                     &fvx, &sbuf[7 * BLOCK_SIZE], &fvy, &sbuf[8 * BLOCK_SIZE],
+                     &fvz, &sbuf[9 * BLOCK_SIZE])) {
             atomicAdd(&overlap[idx1], oa);
             atomicAdd(&bubbles.drdtp[idx1], vr);
             atomicAdd(&bubbles.dxdtp[idx1], vx);
@@ -219,8 +219,6 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     }
 
     if (useGasExchange) {
-        sbuf[threadIdx.x + 5 * BLOCK_SIZE] = toa;
-        sbuf[threadIdx.x + 6 * BLOCK_SIZE] = toapr;
         __syncthreads();
         const int warpNum = threadIdx.x >> 5;
         const int wid = threadIdx.x & 31;
