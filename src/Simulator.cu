@@ -199,14 +199,18 @@ void step(Params &params, IntegrationParams &ip) {
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
     KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
                   params.bubbles, params.tempD1, params.tempD2);
-    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, ip.useGasExchange,
-                  params.hostData.addFlow);
+    const uint32_t dynSharedMemBytes =
+        (params.hostConstants.dimensionality + ip.useGasExchange * 4 +
+         ip.useFlow * params.hostConstants.dimensionality) *
+        BLOCK_SIZE * sizeof(double);
+    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
+                  params.bubbles, params.pairs, params.tempD1,
+                  ip.useGasExchange, ip.useFlow);
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  ip.incrementPath, params.hostData.addFlow, ip.stabilize,
-                  params.bubbles, params.tempD2, params.tempD1, params.tempI);
+                  ip.incrementPath, ip.useFlow, params.bubbles, params.tempD2,
+                  params.tempD1, params.tempI);
 
-    if (false == ip.stabilize) {
+    if (ip.useGasExchange) {
         assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
         // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
@@ -341,9 +345,9 @@ void stabilize(Params &params, int numStepsToRelax) {
 
     IntegrationParams ip;
     ip.useGasExchange = false;
+    ip.useFlow = false;
     ip.incrementPath = false;
     ip.errorTooLarge = true;
-    ip.stabilize = true;
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
@@ -738,8 +742,10 @@ void init(const char *inputFileName, Params &params) {
         params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
         params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
         params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
-    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, false, false);
+    const uint32_t dynSharedMemBytes =
+        params.hostConstants.dimensionality * BLOCK_SIZE * sizeof(double);
+    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
+                  params.bubbles, params.pairs, params.tempD1, false, false);
     KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
                   params.bubbles);
 
@@ -758,8 +764,8 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(pairwiseInteraction, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempD1, false, false);
+    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
+                  params.bubbles, params.pairs, params.tempD1, false, false);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
@@ -986,9 +992,9 @@ void run(std::string &&inputFileName) {
 
     IntegrationParams ip;
     ip.useGasExchange = true;
+    ip.useFlow = params.hostData.addFlow;
     ip.incrementPath = true;
     ip.errorTooLarge = true;
-    ip.stabilize = false;
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;

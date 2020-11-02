@@ -46,9 +46,11 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange,
                                     bool useFlow);
 __global__ void postIntegrate(double ts, bool useGasExchange,
-                              bool incrementPath, bool useFlow, bool stabilize,
-                              Bubbles bubbles, double *maximums,
-                              double *overlap, int *toBeDeleted);
+                              bool incrementPath, bool useFlow, Bubbles bubbles,
+                              double *maximums, double *overlap,
+                              int *toBeDeleted);
+__device__ double correct(int i, double ts, double *pp, double *p, double *v,
+                          double *vp, double *old, double *maxErr);
 __device__ void addFlowVelocity(Bubbles &bubbles, int i);
 __device__ void addWallVelocity(Bubbles &bubbles, int i);
 __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
@@ -127,20 +129,38 @@ template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
 }
 
 template <typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from) {
-    *to = f(*to, from[idx]);
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *baseAddr, T *, T *to,
+                                int offset, bool flag) {
+    if (flag) {
+        *to = f(*to, baseAddr[idx + offset * BLOCK_SIZE]);
+    }
 }
 
 template <typename... Args, typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T *to, T *from,
-                                Args... args) {
-    recursiveReduce(f, idx, to, from);
-    recursiveReduce(f, idx, args...);
+__device__ void recursiveReduce(T (*f)(T, T), int idx, T *baseAddr, T *temp,
+                                T *to, int offset, bool flag, Args... args) {
+    recursiveReduce(f, idx, baseAddr, temp, to, offset, flag);
+    recursiveReduce(f, idx, baseAddr, args...);
+}
+
+template <typename T>
+__device__ void recursiveAtomicAdd(T *to, T *val, int, bool flag) {
+    if (flag) {
+        atomicAdd(to, *val);
+    }
 }
 
 template <typename... Args, typename T>
-__device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
-                                           T (*f)(T, T), Args... args) {
+__device__ void recursiveAtomicAdd(T *to, T *val, int, bool flag,
+                                   Args... args) {
+    recursiveAtomicAdd(to, val, 0, flag);
+    recursiveAtomicAdd(args...);
+}
+
+template <typename... Args, typename T>
+__device__ void warpReduceAtomicAddMatching(unsigned int active, int matchOn,
+                                            T (*f)(T, T), T *baseAddr,
+                                            Args... args) {
     const unsigned int matches = __match_any_sync(active, matchOn);
     const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
     const unsigned int rank = __popc(matches & lanemask_lt);
@@ -150,12 +170,11 @@ __device__ unsigned int warpReduceMatching(unsigned int active, int matchOn,
 #pragma unroll
         for (int j = 0; j < 32; j++) {
             if (!!(matches & 1 << j)) {
-                recursiveReduce(f, j + flt, args...);
+                recursiveReduce(f, j + flt, baseAddr, args...);
             }
         }
+        recursiveAtomicAdd(args...);
     }
-
-    return rank;
 }
 
 template <typename... Arguments>
