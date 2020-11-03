@@ -156,7 +156,7 @@ void searchNeighbors(Params &params) {
 
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, numCellsToSearch,
                   cellDim, cellOffsets, cellSizes, histogram, params.tempPair1,
-                  params.tempPair2, params.bubbles, params.pairs);
+                  params.tempPair2, params.bubbles);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
                                    dNumPairs, sizeof(int)));
@@ -616,7 +616,7 @@ void init(const char *inputFileName, Params &params) {
     // Note that these numbers depend on the "skin radius", i.e.
     // from how far are the neighbors looked for.
     const uint32_t avgNumNeighbors =
-        (params.hostConstants.dimensionality == 3) ? 11 : 4;
+        (params.hostConstants.dimensionality == 3) ? 12 : 4;
     params.pairs.stride = avgNumNeighbors * params.bubbles.stride;
 
     printf("---------------Starting parameters---------------\n");
