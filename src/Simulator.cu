@@ -470,11 +470,11 @@ void saveSnapshot(Params &params) {
                              ? displZ - snapshotParams.interval.z
                              : displZ;
 
-                file << xi;
+                file << xi - 0.5 * snapshotParams.interval.x;
                 file << ",";
-                file << yi;
+                file << yi - 0.5 * snapshotParams.interval.y;
                 file << ",";
-                file << zi;
+                file << zi - 0.5 * snapshotParams.interval.z;
                 file << ",";
                 file << snapshotParams.r[i];
                 file << ",";
