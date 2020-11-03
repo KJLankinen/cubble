@@ -129,7 +129,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
             offset += BLOCK_SIZE;
             sbuf[threadIdx.x + offset] = bubbles.dydt[idx2];
             atomicAdd(&bubbles.flowVy[idx2], bubbles.dydt[idx1]);
-            if (dConstants->dimensionality == 3) {
+            if (3 == dConstants->dimensionality) {
                 // flow vz, offset = (dim + 4 * useGas + 2) * BLOCK_SIZE
                 offset += BLOCK_SIZE;
                 sbuf[threadIdx.x + offset] = bubbles.dzdt[idx2];
@@ -156,7 +156,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
             // dydtp, offset = BLOCK_SIZE
             sbuf[threadIdx.x + BLOCK_SIZE] = distances.y;
             atomicAdd(&bubbles.dydtp[idx2], -distances.y);
-            if (dConstants->dimensionality == 3) {
+            if (3 == dConstants->dimensionality) {
                 // dzdtp, offset = 2 * BLOCK_SIZE
                 sbuf[threadIdx.x + 2 * BLOCK_SIZE] = distances.z;
                 atomicAdd(&bubbles.dzdtp[idx2], -distances.z);
@@ -177,7 +177,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                     overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
                 }
 
-                if (dConstants->dimensionality == 3) {
+                if (3 == dConstants->dimensionality) {
                     overlapArea *= CUBBLE_PI;
                 } else {
                     overlapArea = 2.0 * sqrt(overlapArea);

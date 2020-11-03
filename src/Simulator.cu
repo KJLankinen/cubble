@@ -185,9 +185,6 @@ void removeBubbles(Params &params, int numToBeDeleted) {
                   params.tempI);
 
     params.bubbles.count -= numToBeDeleted;
-    const int numBlocks =
-        std::min(1024, (int)std::ceil(params.bubbles.count / 128.0));
-    params.blockGrid = dim3(numBlocks, 1, 1);
     nvtxRangePop();
 }
 

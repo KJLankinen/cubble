@@ -26,7 +26,7 @@
 #include <thread>
 #include <vector>
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 384
 
 namespace {
 template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
@@ -191,7 +191,7 @@ struct Constants {
     double kParameter = 0.0;
     double kappa = 0.0;
     double wallDragStrength = 0.0;
-    double skinRadius = 1.0;
+    double skinRadius = 0.3;
     double bubbleVolumeMultiplier = 0.0;
 
     int dimensionality = 0;
@@ -307,7 +307,7 @@ struct Params {
 
     std::thread ioThread;
 
-    dim3 blockGrid = dim3(1024, 1, 1);
+    dim3 blockGrid = dim3(5120, 1, 1);
     dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
 
     void *memory = nullptr;
