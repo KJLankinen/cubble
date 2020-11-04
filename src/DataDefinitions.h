@@ -27,6 +27,7 @@
 #include <vector>
 
 #define BLOCK_SIZE 384
+#define GRID_SIZE 5120
 
 namespace {
 template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
@@ -307,14 +308,14 @@ struct Params {
 
     std::thread ioThread;
 
-    dim3 blockGrid = dim3(5120, 1, 1);
+    dim3 blockGrid = dim3(GRID_SIZE, 1, 1);
     dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
 
     void *memory = nullptr;
     void *pinnedMemory = nullptr;
 
     double *tempD1 = nullptr;
-    double *tempD2 = nullptr;
+    double *blockMax = nullptr;
     int *tempI = nullptr;
     int *tempPair1 = nullptr;
     int *tempPair2 = nullptr;
@@ -326,11 +327,16 @@ struct Params {
     std::vector<double> maximums;
 
     void setTempPointers(void *ptr) {
-        tempD1 = static_cast<double *>(ptr);
-        tempD2 = tempD1 + bubbles.stride;
-        tempI = reinterpret_cast<int *>(tempD2 + bubbles.stride);
         tempPair1 = static_cast<int *>(ptr);
         tempPair2 = tempPair1 + pairs.stride;
+        tempI = tempPair2 + pairs.stride;
+        tempD1 = reinterpret_cast<double *>(tempI + bubbles.stride);
+        blockMax = tempD1 + bubbles.stride;
+    }
+
+    uint64_t getTempMemReq() const {
+        return (2 * pairs.stride + bubbles.stride) * sizeof(int) +
+               (bubbles.stride + 3 * GRID_SIZE) * sizeof(double);
     }
 };
 

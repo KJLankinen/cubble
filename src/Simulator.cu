@@ -195,7 +195,7 @@ void step(Params &params, IntegrationParams &ip) {
 
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
     KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  params.bubbles, params.tempD1, params.tempD2);
+                  params.bubbles, params.tempD1);
     const uint32_t dynSharedMemBytes =
         (params.hostConstants.dimensionality + ip.useGasExchange * 4 +
          ip.useFlow * params.hostConstants.dimensionality) *
@@ -204,7 +204,7 @@ void step(Params &params, IntegrationParams &ip) {
                   params.bubbles, params.pairs, params.tempD1,
                   ip.useGasExchange, ip.useFlow);
     KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  ip.incrementPath, ip.useFlow, params.bubbles, params.tempD2,
+                  ip.incrementPath, ip.useFlow, params.bubbles, params.blockMax,
                   params.tempD1, params.tempI);
 
     if (ip.useGasExchange) {
@@ -215,25 +215,24 @@ void step(Params &params, IntegrationParams &ip) {
             sizeof(int), 0, cudaMemcpyDefault, 0));
     }
 
-    // blockGrid size can only decrease so this is done only once
-    const uint32_t nMax = 3 * params.blockGrid.x;
-    if (params.maximums.size() < nMax) {
-        params.maximums.resize(nMax);
-    }
-
     void *memStart = static_cast<void *>(params.maximums.data());
-    CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.tempD2),
-                         params.maximums.size() * sizeof(double),
-                         cudaMemcpyDefault));
+    CUDA_CALL(cudaMemcpy(memStart, static_cast<void *>(params.blockMax),
+                         3 * GRID_SIZE * sizeof(double), cudaMemcpyDefault));
 
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
+    uint32_t n = 1;
+    if (params.bubbles.count > BLOCK_SIZE) {
+        float temp = static_cast<float>(params.bubbles.count) / BLOCK_SIZE;
+        n = static_cast<uint32_t>(std::ceil(temp));
+        n = std::min(n, static_cast<uint32_t>(GRID_SIZE));
+    }
     double *p = static_cast<double *>(memStart);
-    for (uint32_t i = 0; i < params.blockGrid.x; i++) {
+    for (uint32_t i = 0; i < n; i++) {
         ip.maxError = max(ip.maxError, p[i]);
-        ip.maxRadius = max(ip.maxRadius, p[i + params.blockGrid.x]);
-        ip.maxExpansion = max(ip.maxExpansion, p[i + 2 * params.blockGrid.x]);
+        ip.maxRadius = max(ip.maxRadius, p[i + GRID_SIZE]);
+        ip.maxExpansion = max(ip.maxExpansion, p[i + 2 * GRID_SIZE]);
     }
 
     ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
@@ -646,9 +645,14 @@ void init(const char *inputFileName, Params &params) {
     printf("Reserving device memory\n");
     CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
 
+    // Total memory: memory for bubble data, memory for pair data and memory for
+    // temporary arrays
     uint64_t bytes = params.bubbles.getMemReq();
-    bytes += 2 * params.pairs.getMemReq();
+    bytes += params.pairs.getMemReq();
+    bytes += params.getTempMemReq();
     CUDA_ASSERT(cudaMalloc(&params.memory, bytes));
+
+    params.maximums.resize(3 * GRID_SIZE);
 
     // If we're going to be saving snapshots, allocate enough memory to hold all
     // the device data.

@@ -41,13 +41,13 @@ extern __device__ int dNumToBeDeleted;
 
 namespace cubble {
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
-                             double *temp1, double *temp2);
+                             double *temp1);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange,
                                     bool useFlow);
 __global__ void postIntegrate(double ts, bool useGasExchange,
                               bool incrementPath, bool useFlow, Bubbles bubbles,
-                              double *maximums, double *overlap,
+                              double *blockMax, double *overlap,
                               int *toBeDeleted);
 __device__ double correct(int i, double ts, double *pp, double *p, double *v,
                           double *vp, double *old, double *maxErr);
