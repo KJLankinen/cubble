@@ -88,13 +88,26 @@ template <typename T> class vec {
         return v;
     }
 
-    __host__ vec<int> ceil() const {
-        return vec<int>(std::ceil(x), std::ceil(y), std::ceil(z));
+    __host__ vec<T> getCeil() const {
+        vec<T> v;
+        v.x = std::ceil(x);
+        v.y = std::ceil(y);
+        v.z = std::ceil(z);
+
+        return v;
     }
 
-    __host__ vec<int> floor() const {
-        return vec<int>(std::floor(x), std::floor(y), std::floor(z));
+    __host__ vec<T> getFloor() const {
+        vec<T> v;
+        v.x = std::floor(x);
+        v.y = std::floor(y);
+        v.z = std::floor(z);
+
+        return v;
     }
+
+    __host__ static void ceil(vec<T> &v) { v = v.getCeil(); }
+    __host__ static void floor(vec<T> &v) { v = v.getFloor(); }
 
     // + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
     __host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &o) {

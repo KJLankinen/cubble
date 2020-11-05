@@ -69,7 +69,8 @@ void searchNeighbors(Params &params) {
     ivec cellDim = (params.hostConstants.interval /
                     (2 * (params.hostData.maxBubbleRadius +
                           params.hostConstants.skinRadius)))
-                       .floor();
+                       .getFloor()
+                       .asType<int>();
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
     const int numCells = cellDim.x * cellDim.y * cellDim.z;
 
@@ -584,18 +585,14 @@ void init(const char *inputFileName, Params &params) {
         const float a = std::cbrt(relDim.x / relDim.y);
         const float b = std::cbrt(relDim.x / relDim.z);
         const float c = std::cbrt(relDim.y / relDim.z);
-        bubblesPerDim.x = (int)std::ceil(n * a * b);
-        bubblesPerDim.y = (int)std::ceil(n * c / a);
-        bubblesPerDim.z = (int)std::ceil(n / (b * c));
-
+        bubblesPerDim =
+            (n * dvec(a * b, c / a, 1.0 / (b * c))).getCeil().asType<int>();
         params.bubbles.count =
             bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
     } else {
         n = std::sqrt(n);
         const float a = std::sqrt(relDim.x / relDim.y);
-        bubblesPerDim.x = (int)std::ceil(n * a);
-        bubblesPerDim.y = (int)std::ceil(n / a);
-
+        bubblesPerDim = (n * dvec(a, 1.0 / a, 0.0)).getCeil().asType<int>();
         params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
     }
 
