@@ -574,25 +574,28 @@ void init(const char *inputFileName, Params &params) {
     params.hostConstants.dimensionality = box["dimensionality"];
 
     // Calculate the size of the box and the starting number of bubbles
-    dvec relDim = box["relativeDimensions"];
-    relDim = relDim / relDim.x;
     const float d = 2 * params.hostData.avgRad;
-    float x = (float)bubbles["numStart"] * d * d / relDim.y;
+    float n = (float)bubbles["numStart"];
+    dvec relDim = box["relativeDimensions"];
     ivec bubblesPerDim = ivec(0, 0, 0);
 
     if (params.hostConstants.dimensionality == 3) {
-        x = x * d / relDim.z;
-        x = std::cbrt(x);
-        relDim = relDim * x;
-        bubblesPerDim = ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d),
-                             std::ceil(relDim.z / d));
+        n = std::cbrt(n);
+        const float a = std::cbrt(relDim.x / relDim.y);
+        const float b = std::cbrt(relDim.x / relDim.z);
+        const float c = std::cbrt(relDim.y / relDim.z);
+        bubblesPerDim.x = (int)std::ceil(n * a * b);
+        bubblesPerDim.y = (int)std::ceil(n * c / a);
+        bubblesPerDim.z = (int)std::ceil(n / (b * c));
+
         params.bubbles.count =
             bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
     } else {
-        x = std::sqrt(x);
-        relDim = relDim * x;
-        bubblesPerDim =
-            ivec(std::ceil(relDim.x / d), std::ceil(relDim.y / d), 0);
+        n = std::sqrt(n);
+        const float a = std::sqrt(relDim.x / relDim.y);
+        bubblesPerDim.x = (int)std::ceil(n * a);
+        bubblesPerDim.y = (int)std::ceil(n / a);
+
         params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
     }
 
@@ -793,7 +796,6 @@ void init(const char *inputFileName, Params &params) {
 
     KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
 
-    relDim = box["relativeDimensions"];
     double t = bubbleVolume / (phi * relDim.x * relDim.y);
     if (params.hostConstants.dimensionality == 3) {
         t /= relDim.z;
