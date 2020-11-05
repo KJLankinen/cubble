@@ -24,7 +24,7 @@
 #include <string>
 
 namespace cubble {
-void run(std::string &&inputFileName);
+void run(std::string &&inputFileName, int rank, int nProcs);
 }
 
 int main(int argc, char **argv) {
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     }
 
     try {
-        cubble::run(std::string(argv[1]));
+        cubble::run(std::string(argv[1]), 0, 1);
     } catch (const std::exception &e) {
         pExc = std::current_exception();
         cubble::handleException(pExc);

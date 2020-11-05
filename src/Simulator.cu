@@ -379,7 +379,7 @@ double totalVolume(Params &params) {
 }
 
 double boxVolume(Params &params) {
-    dvec temp = params.hostConstants.interval;
+    dvec temp = params.hostConstants.globalInterval;
     return (params.hostConstants.dimensionality == 3) ? temp.x * temp.y * temp.z
                                                       : temp.x * temp.y;
 }
@@ -494,6 +494,9 @@ void saveSnapshot(Params &params) {
                 file << ",";
                 file << snapshotParams.error[i];
                 file << ",";
+                // TODO
+                // add the offset, so that every bubble across all processes has
+                // an unique index
                 file << ind;
                 file << "\n";
 
@@ -566,6 +569,8 @@ void init(const char *inputFileName, Params &params) {
 
     params.hostData.errorTolerance = inputJson["errorTolerance"]["value"];
     params.hostData.snapshotFrequency = inputJson["snapShot"]["frequency"];
+    // TODO
+    // add process number to each snapshot name
     params.snapshotParams.name = inputJson["snapShot"]["filename"];
 
     params.hostConstants.wallDragStrength = wall["drag"];
@@ -575,7 +580,7 @@ void init(const char *inputFileName, Params &params) {
     params.hostConstants.dimensionality = box["dimensionality"];
 
     // Calculate the size of the global simulation box
-    auto computeGlobalBox = [&bubbles, &box, &params]() -> dvec {
+    auto computeGlobalBox = [&bubbles, &box, &params]() {
         const float d = 2 * params.hostData.avgRad;
         float n = (float)bubbles["numStart"];
         dvec dimensions = box["relativeDimensions"];
@@ -592,18 +597,19 @@ void init(const char *inputFileName, Params &params) {
             dimensions = dvec(a, 1.0 / a, 0.0);
         }
 
-        return (n * d * dimensions).getCeil();
+        params.hostConstants.globalInterval = (n * d * dimensions).getCeil();
+        params.hostConstants.globalTfr = params.hostConstants.globalInterval;
+        params.hostConstants.globalLbb = dvec(0, 0, 0);
     };
 
-    auto computeLocalDimensions = [&params](dvec globalDimensions, int rank,
-                                            int nProcs) {
+    auto computeLocalDimensions = [&params]() {
         // Calculate the local dimensions from the global using the rank
-        if (nProcs > 1) {
+        if (1 < params.nProcs) {
             params.hostConstants.tfr = dvec(0, 0, 0);
             params.hostConstants.lbb = dvec(0, 0, 0);
             // TODO
         } else {
-            params.hostConstants.tfr = globalDimensions;
+            params.hostConstants.tfr = params.hostConstants.globalInterval;
             params.hostConstants.lbb = dvec(0, 0, 0);
         }
 
@@ -611,18 +617,22 @@ void init(const char *inputFileName, Params &params) {
             params.hostConstants.tfr - params.hostConstants.lbb;
     };
 
-    dvec globalDimensions = computeGlobalBox();
-    computeLocalDimensions(globalDimensions, 0, 1);
+    computeGlobalBox();
+    computeLocalDimensions();
     ivec bubblesPerDim =
         (params.hostConstants.interval / (2 * params.hostData.avgRad))
             .getCeil()
             .asType<int>();
 
     params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
-
     if (params.hostConstants.dimensionality == 3) {
         params.bubbles.count *= bubblesPerDim.z;
     }
+
+    // TODO
+    // Communicate the number of bubbles each process has, so that the correct
+    // offset can be applied to the static indices saved in snapshots. Rank
+    // determines which counts one should sum as the offset.
 
     // Calculate the length of 'rows'.
     // Make it divisible by 32, as that's the warp size.
@@ -706,7 +716,8 @@ void init(const char *inputFileName, Params &params) {
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(
-        generator, inputJson["rngSeed"]["value"]));
+        generator,
+        static_cast<int>(inputJson["rngSeed"]["value"]) + params.rank));
     if (params.hostConstants.dimensionality == 3)
         CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.z,
                                                 params.bubbles.count));
@@ -740,6 +751,12 @@ void init(const char *inputFileName, Params &params) {
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
+    if (1 < params.nProcs) {
+        // TODO: MPI communication of the average surface area and max radius
+    }
+
+    // Perform a local neighbor search, don't bother with the other processes
+    // yet
     printf("First neighbor search\n");
     searchNeighbors(params);
 
@@ -805,12 +822,17 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
+    // Stabilize locally with concrete walls in all dimensions
     printf("Stabilizing a few rounds after creation\n");
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
     printf("Scaling the simulation box\n");
-    const double bubbleVolume = totalVolume(params);
+    double bubbleVolume = totalVolume(params);
+    if (1 < params.nProcs) {
+        // TODO: Communicate the total volume between processes
+    }
+
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubbleVolume / boxVolume(params), phi);
 
@@ -826,16 +848,19 @@ void init(const char *inputFileName, Params &params) {
         relDim.z = 0.0;
     }
 
-    params.hostConstants.tfr = dvec(t, t, t) * relDim;
-    params.hostConstants.interval =
-        params.hostConstants.tfr - params.hostConstants.lbb;
+    params.hostConstants.globalTfr = dvec(t, t, t) * relDim;
+    params.hostConstants.globalInterval =
+        params.hostConstants.globalTfr - params.hostConstants.globalLbb;
     params.hostConstants.flowTfr =
-        params.hostConstants.interval * params.hostConstants.flowTfr +
-        params.hostConstants.lbb;
+        params.hostConstants.globalInterval * params.hostConstants.flowTfr +
+        params.hostConstants.globalLbb;
     params.hostConstants.flowLbb =
-        params.hostConstants.interval * params.hostConstants.flowLbb +
-        params.hostConstants.lbb;
-    params.snapshotParams.interval = params.hostConstants.interval;
+        params.hostConstants.globalInterval * params.hostConstants.flowLbb +
+        params.hostConstants.globalLbb;
+    params.snapshotParams.interval = params.hostConstants.globalInterval;
+
+    // Update local dimensions
+    computeLocalDimensions();
 
     double mult = phi * boxVolume(params) / CUBBLE_PI;
     if (params.hostConstants.dimensionality == 3) {
@@ -855,6 +880,7 @@ void init(const char *inputFileName, Params &params) {
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubbleVolume / boxVolume(params), phi);
 
+    // Still local neighbors
     printf("Neighbor search after scaling\n");
     searchNeighbors(params);
     // After searchNeighbors r is correct,
@@ -865,10 +891,13 @@ void init(const char *inputFileName, Params &params) {
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDefault, 0));
 
+    // Still local stabilization with concrete walls
     printf("Stabilizing a few rounds after scaling\n");
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
+    // Begin global stabilization, i.e. processors search neighbors from other
+    // processes and calculate values between processor
     printf("\n=============\nStabilization\n=============\n");
     params.hostData.numNeighborsSearched = 0;
     int numSteps = 0;
@@ -878,44 +907,54 @@ void init(const char *inputFileName, Params &params) {
            "#searches");
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;
-    while (true) {
+    bool stop = false;
+    while (false == stop) {
         params.hostData.timeInteger = 0;
         params.hostData.timeFraction = 0.0;
 
         stabilize(params, stabilizationSteps);
-        double time = ((double)params.hostData.timeInteger +
-                       params.hostData.timeFraction) *
-                      params.hostData.timeScalingFactor;
 
-        double de = std::abs(e2 - e1);
-        if (de > 0.0) {
-            de *= 2.0 / ((e2 + e1) * time);
-        }
+        if (0 == params.rank) {
+            double time = ((double)params.hostData.timeInteger +
+                           params.hostData.timeFraction) *
+                          params.hostData.timeScalingFactor;
 
-        const bool stop = de < inputJson["stabilization"]["maxDeltaEnergy"] ||
-                          (e2 < 1.0 && de < 0.1);
-        if (stop) {
-            printf("Final energies:");
-            printf("\nbefore: %9.5e", e1);
-            printf("\nafter: %9.5e", e2);
-            printf("\ndelta: %9.5e", de);
-            printf("\ntime: %9.5g\n", time);
-            break;
-        } else if (numSteps > failsafe) {
-            printf("Over %d steps taken and required delta energy not reached. "
-                   "Constraints might be too strict.\n",
-                   numSteps);
-            break;
+            double de = std::abs(e2 - e1);
+            if (de > 0.0) {
+                de *= 2.0 / ((e2 + e1) * time);
+            }
+
+            stop = de < inputJson["stabilization"]["maxDeltaEnergy"] ||
+                   (e2 < 1.0 && de < 0.1);
+            if (stop) {
+                printf("Final energies:");
+                printf("\nbefore: %9.5e", e1);
+                printf("\nafter: %9.5e", e2);
+                printf("\ndelta: %9.5e", de);
+                printf("\ntime: %9.5g\n", time);
+            } else if (numSteps > failsafe) {
+                printf("Over %d steps taken and required delta energy not "
+                       "reached. "
+                       "Constraints might be too strict.\n",
+                       numSteps);
+                stop = true;
+            } else {
+                printf("%-7d ", (numSteps + 1) * stabilizationSteps);
+                printf("%-9.5e ", de);
+                printf("%-9.5e ", e1);
+                printf("%-9.5e ", e2);
+                printf("%-9d\n", params.hostData.numNeighborsSearched);
+                params.hostData.numNeighborsSearched = 0;
+            }
+
+            // TODO
+            // Communicate the value of stop to others
+
+            ++numSteps;
         } else {
-            printf("%-7d ", (numSteps + 1) * stabilizationSteps);
-            printf("%-9.5e ", de);
-            printf("%-9.5e ", e1);
-            printf("%-9.5e ", e2);
-            printf("%-9d\n", params.hostData.numNeighborsSearched);
-            params.hostData.numNeighborsSearched = 0;
+            // TODO
+            // Ask from rank 0 if we should stop or continue stabilization
         }
-
-        ++numSteps;
     }
 
     if (0.0 < params.hostData.snapshotFrequency) {
@@ -969,6 +1008,8 @@ void init(const char *inputFileName, Params &params) {
                   params.bubbles.error);
 
     params.hostData.energy1 = totalEnergy(params);
+    // TODO
+    // communicate the total energy between processes
     params.hostData.timeInteger = 0;
     params.hostData.timeFraction = 0.0;
     params.hostData.timesPrinted = 1;
@@ -977,8 +1018,10 @@ void init(const char *inputFileName, Params &params) {
 } // namespace
 
 namespace cubble {
-void run(std::string &&inputFileName) {
+void run(std::string &&inputFileName, int rank, int nProcs) {
     Params params;
+    params.rank = rank;
+    params.nProcs = nProcs;
     init(inputFileName.c_str(), params);
 
     if (params.hostData.snapshotFrequency > 0.0) {

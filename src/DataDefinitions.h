@@ -179,6 +179,9 @@ static_assert(sizeof(Pairs) % 8 == 0);
 
 // These values never change after init
 struct Constants {
+    dvec globalLbb = dvec(0.0, 0.0, 0.0);
+    dvec globalTfr = dvec(0.0, 0.0, 0.0);
+    dvec globalInterval = dvec(0.0, 0.0, 0.0);
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
     dvec interval = dvec(0.0, 0.0, 0.0);
@@ -298,6 +301,8 @@ struct SnapshotParams {
 };
 
 struct Params {
+    int rank = 0;
+    int nProcs = 1;
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
     HostData hostData;
