@@ -494,10 +494,7 @@ void saveSnapshot(Params &params) {
                 file << ",";
                 file << snapshotParams.error[i];
                 file << ",";
-                // TODO
-                // add the offset, so that every bubble across all processes has
-                // an unique index
-                file << ind;
+                file << ind + snapshotParams.indexOffset;
                 file << "\n";
 
                 xPrev[ind] = xi;
@@ -633,6 +630,7 @@ void init(const char *inputFileName, Params &params) {
     // Communicate the number of bubbles each process has, so that the correct
     // offset can be applied to the static indices saved in snapshots. Rank
     // determines which counts one should sum as the offset.
+    params.snapshotParams.indexOffset = 0;
 
     // Calculate the length of 'rows'.
     // Make it divisible by 32, as that's the warp size.
@@ -1028,18 +1026,20 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         saveSnapshot(params);
     }
 
-    printf("\n===========\nIntegration\n===========\n");
-    printf("%-5s ", "T");
-    printf("%-8s ", "phi");
-    printf("%-6s ", "R");
-    printf("%-11s ", "dE");
-    printf("%9s ", "#b   ");
-    printf("%10s ", "#pairs");
-    printf("%-6s ", "#steps");
-    printf("%-9s ", "#searches");
-    printf("%-11s ", "min ts");
-    printf("%-11s ", "max ts");
-    printf("%-11s \n", "avg ts");
+    if (0 == params.rank) {
+        printf("\n===========\nIntegration\n===========\n");
+        printf("%-5s ", "T");
+        printf("%-8s ", "phi");
+        printf("%-6s ", "R");
+        printf("%-11s ", "dE");
+        printf("%9s ", "#b   ");
+        printf("%10s ", "#pairs");
+        printf("%-6s ", "#steps");
+        printf("%-9s ", "#searches");
+        printf("%-11s ", "min ts");
+        printf("%-11s ", "max ts");
+        printf("%-11s \n", "avg ts");
+    }
 
     bool continueSimulation = true;
     double minTimestep = 9999999.9;

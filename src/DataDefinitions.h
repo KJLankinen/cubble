@@ -271,6 +271,7 @@ struct HostData {
 
 struct SnapshotParams {
     uint64_t count = 0;
+    uint32_t indexOffset = 0;
 
     double *x = nullptr;
     double *y = nullptr;
