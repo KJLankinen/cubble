@@ -574,32 +574,55 @@ void init(const char *inputFileName, Params &params) {
     params.hostConstants.zWall = 1 == wall["z"];
     params.hostConstants.dimensionality = box["dimensionality"];
 
-    // Calculate the size of the box and the starting number of bubbles
-    const float d = 2 * params.hostData.avgRad;
-    float n = (float)bubbles["numStart"];
-    dvec relDim = box["relativeDimensions"];
-    ivec bubblesPerDim = ivec(0, 0, 0);
+    // Calculate the size of the global simulation box
+    auto computeGlobalBox = [&bubbles, &box, &params]() -> dvec {
+        const float d = 2 * params.hostData.avgRad;
+        float n = (float)bubbles["numStart"];
+        dvec dimensions = box["relativeDimensions"];
+
+        if (params.hostConstants.dimensionality == 3) {
+            n = std::cbrt(n);
+            const float a = std::cbrt(dimensions.x / dimensions.y);
+            const float b = std::cbrt(dimensions.x / dimensions.z);
+            const float c = std::cbrt(dimensions.y / dimensions.z);
+            dimensions = dvec(a * b, c / a, 1.0 / (b * c));
+        } else {
+            n = std::sqrt(n);
+            const float a = std::sqrt(dimensions.x / dimensions.y);
+            dimensions = dvec(a, 1.0 / a, 0.0);
+        }
+
+        return (n * d * dimensions).getCeil();
+    };
+
+    auto computeLocalDimensions = [&params](dvec globalDimensions, int rank,
+                                            int nProcs) {
+        // Calculate the local dimensions from the global using the rank
+        if (nProcs > 1) {
+            params.hostConstants.tfr = dvec(0, 0, 0);
+            params.hostConstants.lbb = dvec(0, 0, 0);
+            // TODO
+        } else {
+            params.hostConstants.tfr = globalDimensions;
+            params.hostConstants.lbb = dvec(0, 0, 0);
+        }
+
+        params.hostConstants.interval =
+            params.hostConstants.tfr - params.hostConstants.lbb;
+    };
+
+    dvec globalDimensions = computeGlobalBox();
+    computeLocalDimensions(globalDimensions, 0, 1);
+    ivec bubblesPerDim =
+        (params.hostConstants.interval / (2 * params.hostData.avgRad))
+            .getCeil()
+            .asType<int>();
+
+    params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
 
     if (params.hostConstants.dimensionality == 3) {
-        n = std::cbrt(n);
-        const float a = std::cbrt(relDim.x / relDim.y);
-        const float b = std::cbrt(relDim.x / relDim.z);
-        const float c = std::cbrt(relDim.y / relDim.z);
-        bubblesPerDim =
-            (n * dvec(a * b, c / a, 1.0 / (b * c))).getCeil().asType<int>();
-        params.bubbles.count =
-            bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
-    } else {
-        n = std::sqrt(n);
-        const float a = std::sqrt(relDim.x / relDim.y);
-        bubblesPerDim = (n * dvec(a, 1.0 / a, 0.0)).getCeil().asType<int>();
-        params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
+        params.bubbles.count *= bubblesPerDim.z;
     }
-
-    params.hostConstants.tfr =
-        d * bubblesPerDim.asType<double>() + params.hostConstants.lbb;
-    params.hostConstants.interval =
-        params.hostConstants.tfr - params.hostConstants.lbb;
 
     // Calculate the length of 'rows'.
     // Make it divisible by 32, as that's the warp size.
@@ -793,6 +816,7 @@ void init(const char *inputFileName, Params &params) {
 
     KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
 
+    dvec relDim = box["relativeDimensions"];
     double t = bubbleVolume / (phi * relDim.x * relDim.y);
     if (params.hostConstants.dimensionality == 3) {
         t /= relDim.z;
