@@ -1045,15 +1045,14 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
     double minTimestep = 9999999.9;
     double maxTimestep = -1.0;
     double avgTimestep = 0.0;
-    bool resetErrors = false;
     double &ts = params.hostData.timeStep;
     const double minInterval =
         3 == params.hostConstants.dimensionality
-            ? 0.5 * params.hostConstants.interval.getMinComponent()
-            : 0.5 * (params.hostConstants.interval.x <
-                             params.hostConstants.interval.y
-                         ? params.hostConstants.interval.x
-                         : params.hostConstants.interval.y);
+            ? 0.5 * params.hostConstants.globalInterval.getMinComponent()
+            : 0.5 * (params.hostConstants.globalInterval.x <
+                             params.hostConstants.globalInterval.y
+                         ? params.hostConstants.globalInterval.x
+                         : params.hostConstants.globalInterval.y);
 
     CUBBLE_PROFILE(true);
 
@@ -1072,38 +1071,66 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
 
     while (continueSimulation) {
         CUBBLE_PROFILE(false);
-
         integrate(params, ip);
 
-        // Continue if there are more than the specified minimum number of
-        // bubbles left in the simulation and if the largest bubble is smaller
-        // than the simulation box in every dimension
-        continueSimulation =
-            params.bubbles.count > params.hostData.minNumBubbles &&
-            params.hostData.maxBubbleRadius < minInterval;
+        bool isSnapshotTime = false;
+        bool print = false;
+        bool resetErrors = false;
+        if (0 == params.rank) {
+            // Continue if there are more than the specified minimum number of
+            // bubbles left in the simulation and if the largest bubble is
+            // smaller than the simulation box in every dimension
 
-        // Track timestep
-        minTimestep = ts < minTimestep ? ts : minTimestep;
-        maxTimestep = ts > maxTimestep ? ts : maxTimestep;
-        avgTimestep += ts;
+            // TODO figure this out with multiple processes
+            continueSimulation =
+                params.bubbles.count > params.hostData.minNumBubbles &&
+                params.hostData.maxBubbleRadius < minInterval;
 
-        // Here we compare potentially very large integers (> 10e6) to each
-        // other and small doubles (<= 1.0) to each other to preserve precision.
-        const double nextPrintTime =
-            params.hostData.timesPrinted / params.hostData.timeScalingFactor;
-        const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
-        const double nextPrintTimeFraction =
-            nextPrintTime - nextPrintTimeInteger;
+            // Track timestep
+            minTimestep = ts < minTimestep ? ts : minTimestep;
+            maxTimestep = ts > maxTimestep ? ts : maxTimestep;
+            avgTimestep += ts;
 
-        // Print stuff to stdout at the earliest possible moment
-        // when simulation time is larger than scaled time
-        const bool print =
-            params.hostData.timeInteger > nextPrintTimeInteger ||
-            (params.hostData.timeInteger == nextPrintTimeInteger &&
-             params.hostData.timeFraction >= nextPrintTimeFraction);
+            // Here we compare potentially very large integers (> 10e6) to each
+            // other and small doubles (<= 1.0) to each other to preserve
+            // precision.
+            const double nextPrintTime = params.hostData.timesPrinted /
+                                         params.hostData.timeScalingFactor;
+            const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
+            const double nextPrintTimeFraction =
+                nextPrintTime - nextPrintTimeInteger;
+
+            // Print stuff to stdout at the earliest possible moment
+            // when simulation time is larger than scaled time
+            print = params.hostData.timeInteger > nextPrintTimeInteger ||
+                    (params.hostData.timeInteger == nextPrintTimeInteger &&
+                     params.hostData.timeFraction >= nextPrintTimeFraction);
+
+            if (params.hostData.snapshotFrequency > 0.0) {
+                const double nextSnapshotTime =
+                    params.hostData.numSnapshots /
+                    (params.hostData.snapshotFrequency *
+                     params.hostData.timeScalingFactor);
+                const uint64_t nextSnapshotTimeInteger =
+                    (uint64_t)nextSnapshotTime;
+                const double nextSnapshotTimeFraction =
+                    nextSnapshotTime - nextSnapshotTimeInteger;
+
+                isSnapshotTime =
+                    params.hostData.timeInteger > nextSnapshotTimeInteger ||
+                    (params.hostData.timeInteger == nextSnapshotTimeInteger &&
+                     params.hostData.timeFraction >= nextSnapshotTimeFraction);
+            }
+            // TODO
+            // Communicate print & snapshottime & continueSimulation to others
+        } else {
+            // TODO
+            // Get print & snapshottime & continueSimulation from rank 0
+        }
+
         if (print) {
             // Define lambda for calculating averages of some values
-            auto getAvg = [&params](double *p, Bubbles &bubbles) -> double {
+            auto getSum = [&params](double *p) -> double {
                 void *cubPtr = static_cast<void *>(params.tempPair2);
                 void *cubOutput = nullptr;
                 double total = 0.0;
@@ -1115,79 +1142,81 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
                                                dMaxRadius, sizeof(double)));
 
-                return total / bubbles.count;
+                return total;
             };
 
-            params.hostData.energy2 = totalEnergy(params);
-
-            double de = std::abs(e2 - e1);
-            if (de > 0.0) {
-                de *= 2.0 / (e2 + e1);
+            uint32_t nBubbles = params.bubbles.count;
+            double energy = totalEnergy(params);
+            double bubbleVolume = totalVolume(params);
+            double relRad = getSum(params.bubbles.r);
+            double avgVx = getSum(params.bubbles.dxdt);
+            double avgVy = getSum(params.bubbles.dydt);
+            double avgVz = 0.0;
+            if (3 == params.hostConstants.dimensionality) {
+                avgVz = getSum(params.bubbles.dzdt);
             }
-            const double relRad = getAvg(params.bubbles.r, params.bubbles) /
-                                  params.hostData.avgRad;
+            double avgVr = getSum(params.bubbles.drdt);
+            double avgPath = getSum(params.bubbles.path);
+            // TODO
+            // Communicate the totals across all processes
 
-            // Add values to data stream
-            std::ofstream resultFile("results.dat", std::ios_base::app);
-            if (resultFile.is_open()) {
-                const double vx = getAvg(params.bubbles.dxdt, params.bubbles);
-                const double vy = getAvg(params.bubbles.dydt, params.bubbles);
-                const double vz = getAvg(params.bubbles.dzdt, params.bubbles);
-                const double vr = getAvg(params.bubbles.drdt, params.bubbles);
+            if (0 == rank) {
+                params.hostData.energy2 = energy;
+                double de = std::abs(e2 - e1);
+                if (de > 0.0) {
+                    de *= 2.0 / (e2 + e1);
+                }
 
-                resultFile << params.hostData.timesPrinted << " " << relRad
-                           << " " << params.bubbles.count << " "
-                           << getAvg(params.bubbles.path, params.bubbles) << " "
-                           << params.hostData.energy2 << " " << de << " " << vx
-                           << " " << vy << " " << vz << " "
-                           << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
-                           << "\n";
-            } else {
-                printf("Couldn't open file stream to append results to!\n");
+                relRad /= params.hostData.avgRad * nBubbles;
+                avgVx /= nBubbles;
+                avgVy /= nBubbles;
+                avgVz /= nBubbles;
+                avgVr /= nBubbles;
+                avgPath /= nBubbles;
+
+                // Add values to data stream
+                std::ofstream resultFile("results.dat", std::ios_base::app);
+                if (resultFile.is_open()) {
+                    resultFile
+                        << params.hostData.timesPrinted << " " << relRad << " "
+                        << nBubbles << " " << avgPath << " "
+                        << params.hostData.energy2 << " " << de << " " << avgVx
+                        << " " << avgVy << " " << avgVz << " "
+                        << sqrt(avgVx * avgVx + avgVy * avgVy + avgVz * avgVz)
+                        << " " << avgVr << "\n";
+                } else {
+                    printf("Couldn't open file stream to append results to!\n");
+                }
+
+                const double phi = bubbleVolume / boxVolume(params);
+
+                printf("%-5d ", params.hostData.timesPrinted);
+                printf("%-#8.6g ", phi);
+                printf("%-#6.4g ", relRad);
+                printf("%-9.5e ", de);
+                printf("%9d ", params.bubbles.count);
+                printf("%10d ", params.pairs.count);
+                printf("%6d ", params.hostData.numStepsInTimeStep);
+                printf("%-9d ", params.hostData.numNeighborsSearched);
+                printf("%-9.5e ", minTimestep);
+                printf("%-9.5e ", maxTimestep);
+                printf("%-9.5e \n",
+                       avgTimestep / params.hostData.numStepsInTimeStep);
+
+                ++params.hostData.timesPrinted;
+                params.hostData.numStepsInTimeStep = 0;
+                params.hostData.energy1 = params.hostData.energy2;
+                params.hostData.numNeighborsSearched = 0;
+                minTimestep = 9999999.9;
+                maxTimestep = -1.0;
+                avgTimestep = 0.0;
             }
 
-            const double phi = totalVolume(params) / boxVolume(params);
-
-            printf("%-5d ", params.hostData.timesPrinted);
-            printf("%-#8.6g ", phi);
-            printf("%-#6.4g ", relRad);
-            printf("%-9.5e ", de);
-            printf("%9d ", params.bubbles.count);
-            printf("%10d ", params.pairs.count);
-            printf("%6d ", params.hostData.numStepsInTimeStep);
-            printf("%-9d ", params.hostData.numNeighborsSearched);
-            printf("%-9.5e ", minTimestep);
-            printf("%-9.5e ", maxTimestep);
-            printf("%-9.5e \n",
-                   avgTimestep / params.hostData.numStepsInTimeStep);
-
-            ++params.hostData.timesPrinted;
-            params.hostData.numStepsInTimeStep = 0;
-            params.hostData.energy1 = params.hostData.energy2;
-            params.hostData.numNeighborsSearched = 0;
-            minTimestep = 9999999.9;
-            maxTimestep = -1.0;
-            avgTimestep = 0.0;
             resetErrors = true;
         }
 
-        // Save snapshot
-        if (params.hostData.snapshotFrequency > 0.0) {
-            const double nextSnapshotTime = params.hostData.numSnapshots /
-                                            (params.hostData.snapshotFrequency *
-                                             params.hostData.timeScalingFactor);
-            const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
-            const double nextSnapshotTimeFraction =
-                nextSnapshotTime - nextSnapshotTimeInteger;
-
-            const bool isSnapshotTime =
-                params.hostData.timeInteger > nextSnapshotTimeInteger ||
-                (params.hostData.timeInteger == nextSnapshotTimeInteger &&
-                 params.hostData.timeFraction >= nextSnapshotTimeFraction);
-
-            if (isSnapshotTime) {
-                saveSnapshot(params);
-            }
+        if (isSnapshotTime) {
+            saveSnapshot(params);
         }
 
         if (resetErrors) {
@@ -1199,13 +1228,16 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         ++params.hostData.numStepsInTimeStep;
     }
 
+    // TODO
+    // Figure out how stopping would work with multiple processes. Do the other
+    // processes give their data to rank 0 once the total number is e.g. < 10^5?
     if (params.bubbles.count <= params.hostData.minNumBubbles) {
         printf("Stopping simulation, since the number of bubbles left in the "
                "simulation (%d) is less than or equal to the specified minimum "
                "(%d)\n",
                params.bubbles.count, params.hostData.minNumBubbles);
     } else if (params.hostData.maxBubbleRadius > minInterval) {
-        dvec temp = params.hostConstants.interval;
+        dvec temp = params.hostConstants.globalInterval;
         printf("Stopping simulation, since the radius of the largest bubble "
                "(%g) is greater than the simulation box (%g, %g, %g)\n",
                params.hostData.maxBubbleRadius, temp.x, temp.y, temp.z);
