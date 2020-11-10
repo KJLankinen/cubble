@@ -390,7 +390,7 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
                 // First update the drdtp by the liquid mediated gas exchange
                 double r = bubbles.rp[i];
                 temp = 2.0 * CUBBLE_PI * r;
-                if (dConstants->dimensionality == 3) {
+                if (3 == dConstants->dimensionality) {
                     temp *= 2.0 * r;
                 }
 
@@ -441,7 +441,7 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
                 temp = bubbles.y[i] - bubbles.yp[i];
                 dist += temp * temp;
 
-                if (dConstants->dimensionality == 3) {
+                if (3 == dConstants->dimensionality) {
                     temp = bubbles.z[i] - bubbles.zp[i];
                     dist += temp * temp;
                 }
@@ -515,7 +515,7 @@ __device__ void addFlowVelocity(Bubbles &bubbles, int i) {
               ((dConstants->flowTfr.y - yi) * (dConstants->flowTfr.y - yi) <=
                riSq));
 
-    if (dConstants->dimensionality == 3) {
+    if (3 == dConstants->dimensionality) {
         const double zi = bubbles.zp[i];
         inside *=
             (int)((zi < dConstants->flowTfr.z && zi > dConstants->flowLbb.z) ||
@@ -852,7 +852,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
                                   int *toBeDeleted) {
     double volMul = dTotalVolumeNew;
-    if (dConstants->dimensionality == 3) {
+    if (3 == dConstants->dimensionality) {
         volMul = rcbrt(volMul);
     } else {
         volMul = rsqrt(volMul);
@@ -955,7 +955,7 @@ __global__ void euler(double ts, Bubbles bubbles) {
          i += blockDim.x * gridDim.x) {
         bubbles.xp[i] += bubbles.dxdtp[i] * ts;
         bubbles.yp[i] += bubbles.dydtp[i] * ts;
-        if (dConstants->dimensionality == 3) {
+        if (3 == dConstants->dimensionality) {
             bubbles.zp[i] += bubbles.dzdtp[i] * ts;
         }
     }
@@ -969,13 +969,13 @@ __global__ void transformPositions(bool normalize, Bubbles bubbles) {
         if (normalize) {
             bubbles.x[i] = (bubbles.x[i] - lbb.x) / interval.x;
             bubbles.y[i] = (bubbles.y[i] - lbb.y) / interval.y;
-            if (dConstants->dimensionality == 3) {
+            if (3 == dConstants->dimensionality) {
                 bubbles.z[i] = (bubbles.z[i] - lbb.z) / interval.z;
             }
         } else {
             bubbles.x[i] = interval.x * bubbles.x[i] + lbb.x;
             bubbles.y[i] = interval.y * bubbles.y[i] + lbb.y;
-            if (dConstants->dimensionality == 3) {
+            if (3 == dConstants->dimensionality) {
                 bubbles.z[i] = interval.z * bubbles.z[i] + lbb.z;
             }
         }
@@ -1008,7 +1008,7 @@ __global__ void calculateVolumes(Bubbles bubbles, double *volumes) {
          i += gridDim.x * blockDim.x) {
         const double radius = bubbles.r[i];
         double volume = radius * radius * CUBBLE_PI;
-        if (dConstants->dimensionality == 3) {
+        if (3 == dConstants->dimensionality) {
             volume *= radius * 1.33333333333333333333333333;
         }
 
@@ -1032,7 +1032,7 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
             ((i / bubblesPerDim.x) % bubblesPerDim.y) / (double)bubblesPerDim.y;
 
         dvec randomOffset(bubbles.x[i], bubbles.y[i], 0);
-        if (dConstants->dimensionality == 3) {
+        if (3 == dConstants->dimensionality) {
             randomOffset.z = bubbles.z[i];
             pos.z = (i / (bubblesPerDim.x * bubblesPerDim.y)) /
                     (double)bubblesPerDim.z;
@@ -1056,7 +1056,7 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                            : pos.z + interval.z;
 
         double area = 2.0 * CUBBLE_PI * rad;
-        if (dConstants->dimensionality == 3) {
+        if (3 == dConstants->dimensionality) {
             area *= 2.0 * rad;
         }
         w[i] = area / bubbles.count;
@@ -1186,7 +1186,7 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
     const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
     int zid = 0;
-    if (dConstants->dimensionality == 3) {
+    if (3 == dConstants->dimensionality) {
         zid = floor(cellDim.z * (z - lbb.z) / interval.z);
     }
 
@@ -1194,16 +1194,14 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
 }
 
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
-    // Linear encoding
     return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
 }
 
 __device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
     ivec idxVec(0, 0, 0);
-    // Linear decoding
     idxVec.x = idx % cellDim.x;
     idxVec.y = (idx / cellDim.x) % cellDim.y;
-    if (dConstants->dimensionality == 3) {
+    if (3 == dConstants->dimensionality) {
         idxVec.z = idx / (cellDim.x * cellDim.y);
     }
 
