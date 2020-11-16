@@ -609,6 +609,247 @@ __global__ void indexByCell(int *cellIndices, int *cellOffsets,
     }
 }
 
+__global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
+                                 int *surfaceCellSizes, ivec cellDim) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+         i += gridDim.x * blockDim.x) {
+        const ivec ci3d = get3DIdxFrom1DIdx(i, cellDim);
+        const int mx = cellDim.x - 1;
+        const int my = cellDim.y - 1;
+        const int mz = cellDim.z - 1;
+        int idx = 0;
+
+        // Add the indices of the surface cells to array
+        if (3 == dConstants->dimensionality) {
+            const int sideTotal =
+                2 * (cellDim.x * cellDim.y + cellDim.x * cellDim.z +
+                     cellDim.y * cellDim.z);
+            const int edgeTotal = 4 * (cellDim.x + cellDim.y + cellDim.z);
+            // Side planes
+            // First x = 0 plane, then x = max plane, then the same for y
+            // and z
+            // x
+            if (0 == ci3d.x) {
+                idx = ci3d.y * cellDim.z + ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x) {
+                idx = cellDim.y * cellDim.z + ci3d.y * cellDim.z + ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // y
+            if (0 == ci3d.y) {
+                idx = 2 * cellDim.y * cellDim.z + ci3d.z * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (my == ci3d.y) {
+                idx = 2 * cellDim.y * cellDim.z + cellDim.x * cellDim.z +
+                      ci3d.z * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // z
+            if (0 == ci3d.z) {
+                idx = 2 * (cellDim.y * cellDim.z + cellDim.x * cellDim.z) +
+                      ci3d.y * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mz == ci3d.z) {
+                idx = 2 * (cellDim.y * cellDim.z + cellDim.x * cellDim.z) +
+                      cellDim.x * cellDim.y + ci3d.y * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // Edges of the box
+            // First use x as the rotation axis, then y, then z. In other
+            // words, the first 4 edges are the one with x as the free
+            // parameter, then y, then z. Sweeps start from the edge that
+            // contains the (0, 0, 0) vertex.
+
+            // x-sweep
+            if (0 == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (my == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + 2 * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (my == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + 3 * cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // y-sweep
+            if (0 == ci3d.x && 0 == ci3d.z) {
+                idx = sideTotal + 4 * cellDim.x + ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && 0 == ci3d.z) {
+                idx = sideTotal + 4 * cellDim.x + cellDim.y + ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && mz == ci3d.z) {
+                idx = sideTotal + 4 * cellDim.x + 2 * cellDim.y + ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.x && mz == ci3d.z) {
+                idx = sideTotal + 4 * cellDim.x + 3 * cellDim.y + ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // z-sweep
+            if (0 == ci3d.x && 0 == ci3d.y) {
+                idx = sideTotal + 4 * (cellDim.x + cellDim.y) + ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && 0 == ci3d.y) {
+                idx = sideTotal + 4 * (cellDim.x + cellDim.y) + cellDim.z +
+                      ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && my == ci3d.y) {
+                idx = sideTotal + 4 * (cellDim.x + cellDim.y) + 2 * cellDim.z +
+                      ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.x && my == ci3d.y) {
+                idx = sideTotal + 4 * (cellDim.x + cellDim.y) + 3 * cellDim.z +
+                      ci3d.z;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+
+            // Corners of the box
+            // Start from the corners on the y = 0 plane from (0, 0, 0)
+            // corner and rotating to positive direction. After the last
+            // corner of the lower plane, go to the vertex above and do the
+            // same for upper plane corners.
+            if (0 == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + edgeTotal;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + edgeTotal + 1;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + edgeTotal + 2;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + edgeTotal + 3;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.x && my == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + edgeTotal + 4;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (0 == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + edgeTotal + 5;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
+                idx = sideTotal + edgeTotal + 6;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+            if (mx == ci3d.x && my == ci3d.y && mz == ci3d.z) {
+                idx = sideTotal + edgeTotal + 7;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+        } else {
+            if (0 == ci3d.x) {
+                idx = ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+                if (0 == ci3d.y) {
+                    idx = 2 * (cellDim.x + cellDim.y);
+                    surfaceCells[idx] = i;
+                    surfaceCellSizes[idx] = cellSizes[i];
+                } else if (my == ci3d.y) {
+                    idx = 2 * (cellDim.x + cellDim.y) + 3;
+                    surfaceCells[idx] = i;
+                    surfaceCellSizes[idx] = cellSizes[i];
+                }
+            } else if (mx == ci3d.x) {
+                idx = cellDim.y + ci3d.y;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+                if (0 == ci3d.y) {
+                    idx = 2 * (cellDim.x + cellDim.y) + 1;
+                    surfaceCells[idx] = i;
+                    surfaceCellSizes[idx] = cellSizes[i];
+                } else if (my == ci3d.y) {
+                    idx = 2 * (cellDim.x + cellDim.y) + 2;
+                    surfaceCells[idx] = i;
+                    surfaceCellSizes[idx] = cellSizes[i];
+                }
+            }
+
+            if (0 == ci3d.y) {
+                idx = 2 * cellDim.y + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            } else if (my == ci3d.y) {
+                idx = 2 * cellDim.y + cellDim.x + ci3d.x;
+                surfaceCells[idx] = i;
+                surfaceCellSizes[idx] = cellSizes[i];
+            }
+        }
+    }
+}
+
+__global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
+                                     int *surfaceCellOffsets, int *cellSizes,
+                                     int *cellOffsets, Bubbles bubbles) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+         i += gridDim.x * blockDim.x) {
+        const int idx = surfaceCells[i];
+        const int size = cellSizes[idx];
+        const int co = cellOffsets[idx];
+        const int sco = surfaceCellOffsets[i];
+        for (int j = 0; j < size; j++) {
+            const int to = sco + j;
+            const int from = co + j;
+            bubbles.xp[to] = bubbles.x[from];
+            bubbles.yp[to] = bubbles.y[from];
+            bubbles.zp[to] = bubbles.z[from];
+            bubbles.rp[to] = bubbles.r[from];
+            bubbles.numNeighbors[to] = from;
+        }
+    }
+}
+
 __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
                             int *pairJ, Bubbles &bubbles) {
     const double maxDistance =
@@ -686,8 +927,6 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
             DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
 
             comparePair(b1, b2, histogram, pairI, pairJ, bubbles);
-            DEVICE_ASSERT(pairs.stride > dNumPairs,
-                          "Too many neighbor indices!");
         }
     }
 }
@@ -1155,21 +1394,21 @@ __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum) {
         break;
     }
 
-    if (!dConstants->xWall) {
+    if (false == dConstants->xWall) {
         idxVec.x += dim.x;
         idxVec.x %= dim.x;
     } else if (idxVec.x < 0 || idxVec.x >= dim.x) {
         return -1;
     }
 
-    if (!dConstants->yWall) {
+    if (false == dConstants->yWall) {
         idxVec.y += dim.y;
         idxVec.y %= dim.y;
     } else if (idxVec.y < 0 || idxVec.y >= dim.y) {
         return -1;
     }
 
-    if (!dConstants->zWall) {
+    if (false == dConstants->zWall) {
         idxVec.z += dim.z;
         idxVec.z %= dim.z;
     } else if (idxVec.z < 0 || idxVec.z >= dim.z) {

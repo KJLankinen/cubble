@@ -56,14 +56,386 @@ double totalEnergy(Params &params) {
     return total;
 }
 
+void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
+                        int numCells, ivec cellDim) {
+    void *cubPtr = static_cast<void *>(params.pairs.j);
+    uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+
+    int nSurfaceCells = 0;
+    if (3 == params.hostConstants.dimensionality) {
+        nSurfaceCells = 2 * (cellDim.x * cellDim.y + cellDim.x * cellDim.z +
+                             cellDim.y * cellDim.z) +
+                        4 * (cellDim.x + cellDim.y + cellDim.z) + 8;
+    } else {
+        nSurfaceCells = 2 * (cellDim.x + cellDim.y) + 4;
+    }
+
+    // Per surface cell data
+    int *surfaceCells = cellSizes + numCells;
+    int *surfaceCellSizes = surfaceCells + nSurfaceCells;
+    int *surfaceCellOffsets = surfaceCellSizes + nSurfaceCells;
+
+    // Kernel for copying surface cell sizes
+    KERNEL_LAUNCH(findSurfaceCells, params, 0, 0, numCells, surfaceCells,
+                  cellSizes, surfaceCellSizes, cellDim);
+
+    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
+               surfaceCellSizes, surfaceCellOffsets, nSurfaceCells,
+               (cudaStream_t)0, false);
+
+    // Gather the bubble data of the surface bubbles to x, y, z, r and
+    // numNeighbors of the bubble struct. These arrays contain trash right now,
+    // so it's fine to use them as temporary memory.
+    KERNEL_LAUNCH(gatherSurfaceBubbles, params, 0, 0, nSurfaceCells,
+                  surfaceCells, surfaceCellOffsets, cellSizes, cellOffsets,
+                  params.bubbles);
+
+    std::vector<int> cellCounts;
+    std::vector<int> bubbleCounts;
+    std::vector<int> surfaceDataSizes;
+    std::vector<int> surfaceDataOffsets;
+    std::vector<char> surfaceData;
+    std::vector<char> bubbleData;
+    std::vector<int> scs;
+
+    scs.resize(nSurfaceCells);
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(scs.data()),
+                         static_cast<void *>(surfaceCellSizes),
+                         sizeof(int) * nSurfaceCells, cudaMemcpyDefault));
+
+    int nAreas = 8;
+    if (3 == params.hostConstants.dimensionality) {
+        nAreas = 26;
+    }
+    bubbleCounts.resize(nAreas);
+    surfaceDataSizes.resize(nAreas);
+    surfaceDataOffsets.resize(nAreas);
+
+    if (3 == params.hostConstants.dimensionality) {
+        cellCounts.push_back(cellDim.y * cellDim.z);
+        cellCounts.push_back(cellDim.y * cellDim.z);
+        cellCounts.push_back(cellDim.x * cellDim.z);
+        cellCounts.push_back(cellDim.x * cellDim.z);
+        cellCounts.push_back(cellDim.x * cellDim.y);
+        cellCounts.push_back(cellDim.x * cellDim.y);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.z);
+        cellCounts.push_back(cellDim.z);
+        cellCounts.push_back(cellDim.z);
+        cellCounts.push_back(cellDim.z);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+    } else {
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.y);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(cellDim.x);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+        cellCounts.push_back(1);
+    }
+
+#ifndef NDEBUG
+    int sum = 0;
+    for (auto it : cellCounts) {
+        sum += it;
+    }
+    assert(sum == nSurfaceCells);
+#endif
+
+    int nBubbles = 0;
+    int padding = 0;
+    int start = 0;
+    int end = 0;
+    for (int i = 0; i < nAreas; i++) {
+        end += cellCounts[i];
+
+        int sum = 0;
+        for (int j = start; j < end; j++) {
+            // assert(scs[j] != 0);
+            sum += scs[j];
+        }
+        nBubbles += sum;
+        bubbleCounts[i] = sum;
+        padding += (0x1 & (cellCounts[i] + sum)) * sizeof(int);
+        assert(padding % 4 == 0);
+        start = end;
+    }
+
+#ifndef NDEBUG
+    // printf("%d, %d, %d\n", nSurfaceCells, nBubbles, padding);
+    assert(((nSurfaceCells + nBubbles) * sizeof(int) + padding) % 8 == 0);
+#endif
+    uint32_t bytes = sizeof(int) * (nSurfaceCells + nBubbles) +
+                     sizeof(double) * 4 * nBubbles + padding;
+    surfaceData.resize(bytes);
+
+    // Copy data of surface bubbles
+    bubbleData.resize((4 * sizeof(double) + sizeof(int)) * nBubbles);
+    // x, y, z, r and idx (see gatherSurfaceBubbles kernel)
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(bubbleData.data()),
+                         params.bubbles.xp, sizeof(double) * nBubbles,
+                         cudaMemcpyDefault));
+    CUDA_CALL(cudaMemcpy(
+        static_cast<void *>(bubbleData.data() + sizeof(double) * nBubbles),
+        params.bubbles.yp, sizeof(double) * nBubbles, cudaMemcpyDefault));
+    CUDA_CALL(cudaMemcpy(
+        static_cast<void *>(bubbleData.data() + sizeof(double) * 2 * nBubbles),
+        params.bubbles.zp, sizeof(double) * nBubbles, cudaMemcpyDefault));
+    CUDA_CALL(cudaMemcpy(
+        static_cast<void *>(bubbleData.data() + sizeof(double) * 3 * nBubbles),
+        params.bubbles.rp, sizeof(double) * nBubbles, cudaMemcpyDefault));
+    CUDA_CALL(cudaMemcpy(
+        static_cast<void *>(bubbleData.data() + sizeof(double) * 4 * nBubbles),
+        params.bubbles.numNeighbors, sizeof(int) * nBubbles,
+        cudaMemcpyDefault));
+
+    auto getPaddingBytes = [&cellCounts, &bubbleCounts](int i) {
+        int padding = ((cellCounts[i] + bubbleCounts[i]) & 0x1) * sizeof(int);
+        assert(0 == padding || 4 == padding);
+        return padding;
+    };
+
+#ifndef NDEBUG
+    std::vector<int> ranges;
+#endif
+
+    // cell sizes
+    char *dst = surfaceData.data();
+    char *src = reinterpret_cast<char *>(scs.data());
+    int offset = 0;
+    int cumulativeOffset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        dst += offset;
+        src += bytes;
+
+        bytes = sizeof(int) * cellCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes + (4 * sizeof(double) + sizeof(int)) * bubbleCounts[i] +
+                 padding;
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+
+        surfaceDataOffsets[i] = cumulativeOffset;
+        surfaceDataSizes[i] = offset;
+        cumulativeOffset += offset;
+    }
+
+    // idx
+    src = bubbleData.data() + sizeof(double) * 4 * nBubbles;
+    dst = surfaceData.data();
+    offset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        offset += sizeof(int) * cellCounts[i];
+        src += bytes;
+        dst += offset;
+
+        bytes = sizeof(int) * bubbleCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes + 4 * sizeof(double) * bubbleCounts[i] + padding;
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+    }
+
+    // x
+    src = bubbleData.data();
+    dst = surfaceData.data();
+    offset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        offset += sizeof(int) * (cellCounts[i] + bubbleCounts[i]) + padding;
+        src += bytes;
+        dst += offset;
+
+        bytes = sizeof(double) * bubbleCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes + 3 * sizeof(double) * bubbleCounts[i];
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+    }
+
+    // y
+    src = bubbleData.data() + sizeof(double) * nBubbles;
+    dst = surfaceData.data();
+    offset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        offset += sizeof(int) * cellCounts[i] +
+                  (sizeof(int) + sizeof(double)) * bubbleCounts[i] + padding;
+        src += bytes;
+        dst += offset;
+
+        bytes = sizeof(double) * bubbleCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes + 2 * sizeof(double) * bubbleCounts[i];
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+    }
+
+    // z
+    src = bubbleData.data() + sizeof(double) * 2 * nBubbles;
+    dst = surfaceData.data();
+    offset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        offset += sizeof(int) * cellCounts[i] +
+                  (sizeof(int) + 2 * sizeof(double)) * bubbleCounts[i] +
+                  padding;
+        src += bytes;
+        dst += offset;
+
+        bytes = sizeof(double) * bubbleCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes + sizeof(double) * bubbleCounts[i];
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+    }
+
+    // r
+    src = bubbleData.data() + sizeof(double) * 3 * nBubbles;
+    dst = surfaceData.data();
+    offset = 0;
+    bytes = 0;
+    for (int i = 0; i < nAreas; i++) {
+        padding = getPaddingBytes(i);
+        offset += sizeof(int) * cellCounts[i] +
+                  (sizeof(int) + 3 * sizeof(double)) * bubbleCounts[i] +
+                  padding;
+        src += bytes;
+        dst += offset;
+
+        bytes = sizeof(double) * bubbleCounts[i];
+#ifndef NDEBUG
+        ranges.push_back(dst - surfaceData.data());
+        ranges.push_back(bytes);
+#endif
+        offset = bytes;
+        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+    }
+
+    // All the surface data is now in order in surfaceData, and the starting
+    // offsets to that array for each area and the sizes of each area are now in
+    // surfaceDataOffsets and -Sizes, respectively.
+    // Given a number 'n' for the desired area, the data can be accessed like so
+    // void *src = static_cast<void *>(surfaceData.data() +
+    // surfaceDataOffsets[n]); bytes = surfaceDataSizes[n];
+
+#ifndef NDEBUG
+    if (20 == params.hostData.numNeighborsSearched) {
+        std::ofstream file("ranges.csv", std::ios::out);
+        if (file.is_open()) {
+            for (uint64_t i = 0; i < ranges.size() / 2; ++i) {
+                file << ranges[i * 2];
+                file << ",";
+                file << ranges[i * 2 + 1];
+                file << "\n";
+            }
+        }
+
+        for (int n = 0; n < nAreas; n++) {
+            printf("printing area %d to file.\n", n);
+            std::vector<char> byteData;
+            byteData.resize(surfaceDataSizes[n]);
+            memcpy(
+                static_cast<void *>(byteData.data()),
+                static_cast<void *>(surfaceData.data() + surfaceDataOffsets[n]),
+                surfaceDataSizes[n]);
+
+            std::vector<int> sizes;
+            sizes.resize(cellCounts[n]);
+            memcpy(static_cast<void *>(sizes.data()),
+                   static_cast<void *>(byteData.data()),
+                   sizeof(int) * cellCounts[n]);
+
+            int total = 0;
+            for (auto it : sizes) {
+                total += it;
+            }
+
+            uint32_t offset = sizes.size() + total;
+            offset += offset & 0x1;
+            offset *= sizeof(int);
+            assert(offset % 8 == 0);
+            std::vector<double> data;
+            data.resize(total * 4);
+            memcpy(static_cast<void *>(data.data()),
+                   static_cast<void *>(byteData.data() + offset),
+                   sizeof(double) * 4 * total);
+
+            std::stringstream ss;
+            ss << "area_data_" << n << ".csv";
+            std::ofstream file(ss.str().c_str(), std::ios::out);
+            if (file.is_open()) {
+                int totalSize = sizes[0];
+                int j = 0;
+                file << "x,y,z,r,ci\n";
+                for (uint64_t i = 0; i < total; ++i) {
+                    file << data[i];
+                    file << ",";
+                    file << data[i + total];
+                    file << ",";
+                    file << data[i + 2 * total];
+                    file << ",";
+                    file << data[i + 3 * total];
+                    file << ",";
+                    if (i >= totalSize) {
+                        totalSize += sizes[++j];
+                    }
+                    file << j;
+                    file << "\n";
+                }
+            }
+        }
+    }
+#endif
+}
+
 void searchNeighbors(Params &params) {
     nvtxRangePush("Neighbors");
     params.hostData.numNeighborsSearched++;
 
+    // TODO
+    // This must be handled
     KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, 0, params.bubbles);
 
+    // Reset memory
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0,
                               params.pairs.getMemReq(), 0));
+    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.tempI), 0,
+                              sizeof(int) * params.bubbles.stride, 0));
+    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.tempD1), 0,
+                              sizeof(int) * 2 * params.bubbles.stride, 0));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
     ivec cellDim = (params.hostConstants.interval /
@@ -74,13 +446,16 @@ void searchNeighbors(Params &params) {
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
     const int numCells = cellDim.x * cellDim.y * cellDim.z;
 
-    // Note that these pointers alias memory, that is used by this function.
-    // Don't fiddle with these, unless you know what you're doing.
+    // Per cell data
     int *cellOffsets = params.pairs.i;
     int *cellSizes = cellOffsets + numCells;
-    int *cellIndices = cellSizes + numCells;
-    int *bubbleIndices = cellIndices + params.bubbles.stride;
+
+    // Per bubble data
+    assert(2 * sizeof(int) == sizeof(double));
+    int *cellIndices = params.tempI;
+    int *bubbleIndices = reinterpret_cast<int *>(params.tempD1);
     int *histogram = bubbleIndices + params.bubbles.stride;
+
     void *cubPtr = static_cast<void *>(params.pairs.j);
     uint64_t maxCubMem = params.pairs.getMemReq() / 2;
 
@@ -146,12 +521,14 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
+    prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
+
     int zero = 0;
     CUDA_CALL(
         cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
 
     int numCellsToSearch = 5;
-    if (params.hostConstants.dimensionality == 3) {
+    if (3 == params.hostConstants.dimensionality) {
         numCellsToSearch = 14;
     }
 
