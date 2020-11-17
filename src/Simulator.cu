@@ -90,14 +90,7 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
                   surfaceCells, surfaceCellOffsets, cellSizes, cellOffsets,
                   params.bubbles);
 
-    std::vector<int> cellCounts;
-    std::vector<int> bubbleCounts;
-    std::vector<int> surfaceDataSizes;
-    std::vector<int> surfaceDataOffsets;
-    std::vector<char> surfaceData;
-    std::vector<char> bubbleData;
     std::vector<int> scs;
-
     scs.resize(nSurfaceCells);
     CUDA_CALL(cudaMemcpy(static_cast<void *>(scs.data()),
                          static_cast<void *>(surfaceCellSizes),
@@ -107,85 +100,71 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
     if (3 == params.hostConstants.dimensionality) {
         nAreas = 26;
     }
-    bubbleCounts.resize(nAreas);
-    surfaceDataSizes.resize(nAreas);
-    surfaceDataOffsets.resize(nAreas);
 
     if (3 == params.hostConstants.dimensionality) {
-        cellCounts.push_back(cellDim.y * cellDim.z);
-        cellCounts.push_back(cellDim.y * cellDim.z);
-        cellCounts.push_back(cellDim.x * cellDim.z);
-        cellCounts.push_back(cellDim.x * cellDim.z);
-        cellCounts.push_back(cellDim.x * cellDim.y);
-        cellCounts.push_back(cellDim.x * cellDim.y);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.z);
-        cellCounts.push_back(cellDim.z);
-        cellCounts.push_back(cellDim.z);
-        cellCounts.push_back(cellDim.z);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
+        params.surfaceData.cellCounts[0] = cellDim.y * cellDim.z;
+        params.surfaceData.cellCounts[1] = cellDim.y * cellDim.z;
+        params.surfaceData.cellCounts[2] = cellDim.x * cellDim.z;
+        params.surfaceData.cellCounts[3] = cellDim.x * cellDim.z;
+        params.surfaceData.cellCounts[4] = cellDim.x * cellDim.y;
+        params.surfaceData.cellCounts[5] = cellDim.x * cellDim.y;
+        params.surfaceData.cellCounts[6] = cellDim.x;
+        params.surfaceData.cellCounts[7] = cellDim.x;
+        params.surfaceData.cellCounts[8] = cellDim.x;
+        params.surfaceData.cellCounts[9] = cellDim.x;
+        params.surfaceData.cellCounts[10] = cellDim.y;
+        params.surfaceData.cellCounts[11] = cellDim.y;
+        params.surfaceData.cellCounts[12] = cellDim.y;
+        params.surfaceData.cellCounts[13] = cellDim.y;
+        params.surfaceData.cellCounts[14] = cellDim.z;
+        params.surfaceData.cellCounts[15] = cellDim.z;
+        params.surfaceData.cellCounts[16] = cellDim.z;
+        params.surfaceData.cellCounts[17] = cellDim.z;
+        params.surfaceData.cellCounts[18] = 1;
+        params.surfaceData.cellCounts[19] = 1;
+        params.surfaceData.cellCounts[20] = 1;
+        params.surfaceData.cellCounts[21] = 1;
+        params.surfaceData.cellCounts[22] = 1;
+        params.surfaceData.cellCounts[23] = 1;
+        params.surfaceData.cellCounts[24] = 1;
+        params.surfaceData.cellCounts[25] = 1;
     } else {
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.y);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(cellDim.x);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
-        cellCounts.push_back(1);
+        params.surfaceData.cellCounts[0] = cellDim.y;
+        params.surfaceData.cellCounts[1] = cellDim.y;
+        params.surfaceData.cellCounts[2] = cellDim.x;
+        params.surfaceData.cellCounts[3] = cellDim.x;
+        params.surfaceData.cellCounts[4] = 1;
+        params.surfaceData.cellCounts[5] = 1;
+        params.surfaceData.cellCounts[6] = 1;
+        params.surfaceData.cellCounts[7] = 1;
     }
-
-#ifndef NDEBUG
-    int sum = 0;
-    for (auto it : cellCounts) {
-        sum += it;
-    }
-    assert(sum == nSurfaceCells);
-#endif
 
     int nBubbles = 0;
     int padding = 0;
     int start = 0;
     int end = 0;
     for (int i = 0; i < nAreas; i++) {
-        end += cellCounts[i];
+        end += params.surfaceData.cellCounts[i];
 
         int sum = 0;
         for (int j = start; j < end; j++) {
-            // assert(scs[j] != 0);
             sum += scs[j];
         }
         nBubbles += sum;
-        bubbleCounts[i] = sum;
-        padding += (0x1 & (cellCounts[i] + sum)) * sizeof(int);
+        params.surfaceData.bubbleCounts[i] = sum;
+        padding +=
+            (0x1 & (params.surfaceData.cellCounts[i] + sum)) * sizeof(int);
         assert(padding % 4 == 0);
         start = end;
     }
 
-#ifndef NDEBUG
-    // printf("%d, %d, %d\n", nSurfaceCells, nBubbles, padding);
-    assert(((nSurfaceCells + nBubbles) * sizeof(int) + padding) % 8 == 0);
-#endif
     uint32_t bytes = sizeof(int) * (nSurfaceCells + nBubbles) +
                      sizeof(double) * 4 * nBubbles + padding +
                      2 * nAreas * sizeof(int);
-    surfaceData.resize(bytes);
+    params.surfaceData.data.resize(bytes);
 
     // Copy data of surface bubbles
+    std::vector<char> bubbleData;
     bubbleData.resize((4 * sizeof(double) + sizeof(int)) * nBubbles);
     // x, y, z, r and idx (see gatherSurfaceBubbles kernel)
     CUDA_CALL(cudaMemcpy(static_cast<void *>(bubbleData.data()),
@@ -215,22 +194,24 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
                         bubbleData.data() + sizeof(double) * 1 * nBubbles,
                         bubbleData.data() + sizeof(double) * 2 * nBubbles,
                         bubbleData.data() + sizeof(double) * 3 * nBubbles};
-    char *dst = surfaceData.data();
+    char *dst = params.surfaceData.data.data();
     int offset = 0;
     for (int i = 0; i < nAreas; i++) {
-        auto getPaddingBytes = [&cellCounts, &bubbleCounts](int i) {
-            int padding =
-                ((cellCounts[i] + bubbleCounts[i]) & 0x1) * sizeof(int);
+        auto getPaddingBytes = [&params](int i) {
+            int padding = ((params.surfaceData.cellCounts[i] +
+                            params.surfaceData.bubbleCounts[i]) &
+                           0x1) *
+                          sizeof(int);
             assert(0 == padding || 4 == padding);
             return padding;
         };
 
-        auto getNumBytes = [&cellCounts, &bubbleCounts](int i, int j) {
+        auto getNumBytes = [&params](int i, int j) {
             int *ptr = nullptr;
             if (0 == j) {
-                ptr = cellCounts.data();
+                ptr = params.surfaceData.cellCounts.data();
             } else {
-                ptr = bubbleCounts.data();
+                ptr = params.surfaceData.bubbleCounts.data();
             }
 
             int mul = 0;
@@ -246,10 +227,12 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
         char *oldDst = dst;
 
         // First some metadata
-        memcpy(static_cast<void *>(dst), static_cast<void *>(&cellCounts[i]),
+        memcpy(static_cast<void *>(dst),
+               static_cast<void *>(&params.surfaceData.cellCounts[i]),
                sizeof(int));
         dst += sizeof(int);
-        memcpy(static_cast<void *>(dst), static_cast<void *>(&bubbleCounts[i]),
+        memcpy(static_cast<void *>(dst),
+               static_cast<void *>(&params.surfaceData.bubbleCounts[i]),
                sizeof(int));
         dst += sizeof(int);
 
@@ -264,28 +247,29 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
             sources[j] += bytes;
         }
 
-        surfaceDataOffsets[i] = offset;
-        surfaceDataSizes[i] = dst - oldDst;
-        offset = dst - surfaceData.data();
+        params.surfaceData.offsets[i] = offset;
+        params.surfaceData.sizes[i] = dst - oldDst;
+        offset = dst - params.surfaceData.data.data();
     }
 
     // All the surface data is now in order in surfaceData, and the starting
     // offsets to that array for each area and the sizes of each area are now in
-    // surfaceDataOffsets and -Sizes, respectively.
+    // params.surfaceData.offsets and .sizes, respectively.
     // Given a number 'n' for the desired area, the data can be accessed like so
-    // void *src = static_cast<void *>(surfaceData.data() +
-    // surfaceDataOffsets[n]); bytes = surfaceDataSizes[n];
+    // void *src = static_cast<void *>(surfaceData.data.data() +
+    // params.surfaceData.offsets[n]); bytes = params.surfaceData.sizes[n];
 
 #ifndef NDEBUG
+    // if (false) {
     if (20 == params.hostData.numNeighborsSearched) {
         std::vector<char> byteData;
         for (int n = 0; n < nAreas; n++) {
             printf("printing area %d to file.\n", n);
-            byteData.resize(surfaceDataSizes[n]);
-            memcpy(
-                static_cast<void *>(byteData.data()),
-                static_cast<void *>(surfaceData.data() + surfaceDataOffsets[n]),
-                surfaceDataSizes[n]);
+            byteData.resize(params.surfaceData.sizes[n]);
+            memcpy(static_cast<void *>(byteData.data()),
+                   static_cast<void *>(params.surfaceData.data.data() +
+                                       params.surfaceData.offsets[n]),
+                   params.surfaceData.sizes[n]);
 
             // Number of cells and bubbles are stored at the start of the data
             int nc = 0;
@@ -440,9 +424,9 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
-    if (params.hostData.searchBetweenProcessors) {
-        prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
-    }
+    // if (params.hostData.searchBetweenProcessors) {
+    prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
+    //}
 
     int zero = 0;
     CUDA_CALL(

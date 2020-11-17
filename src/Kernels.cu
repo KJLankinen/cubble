@@ -701,8 +701,8 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (mx == ci3d.x && 0 == ci3d.z) {
-                idx = sideTotal + 4 * cellDim.x + cellDim.y + ci3d.y;
+            if (0 == ci3d.x && mz == ci3d.z) {
+                idx = sideTotal + 4 * cellDim.x + 1 * cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
@@ -711,7 +711,7 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (0 == ci3d.x && mz == ci3d.z) {
+            if (mx == ci3d.x && 0 == ci3d.z) {
                 idx = sideTotal + 4 * cellDim.x + 3 * cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
@@ -752,7 +752,7 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (mx == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
+            if (0 == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 1;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
@@ -762,12 +762,12 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (0 == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
+            if (mx == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal + 3;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (0 == ci3d.x && my == ci3d.y && mz == ci3d.z) {
+            if (mx == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal + 4;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
@@ -777,7 +777,7 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];
             }
-            if (mx == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
+            if (0 == ci3d.x && my == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 6;
                 surfaceCells[idx] = i;
                 surfaceCellSizes[idx] = cellSizes[i];

@@ -302,6 +302,14 @@ struct SnapshotParams {
     cudaEvent_t event;
 };
 
+struct SurfaceData {
+    std::array<int, 26> cellCounts;
+    std::array<int, 26> bubbleCounts;
+    std::array<int, 26> sizes;
+    std::array<int, 26> offsets;
+    std::vector<char> data;
+};
+
 struct Params {
     int rank = 0;
     int nProcs = 1;
@@ -309,6 +317,7 @@ struct Params {
     Constants *deviceConstants = nullptr;
     HostData hostData;
     SnapshotParams snapshotParams;
+    SurfaceData surfaceData;
 
     Bubbles bubbles;
     Pairs pairs;
