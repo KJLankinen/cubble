@@ -181,7 +181,8 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
     assert(((nSurfaceCells + nBubbles) * sizeof(int) + padding) % 8 == 0);
 #endif
     uint32_t bytes = sizeof(int) * (nSurfaceCells + nBubbles) +
-                     sizeof(double) * 4 * nBubbles + padding;
+                     sizeof(double) * 4 * nBubbles + padding +
+                     2 * nAreas * sizeof(int);
     surfaceData.resize(bytes);
 
     // Copy data of surface bubbles
@@ -204,144 +205,68 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
         params.bubbles.numNeighbors, sizeof(int) * nBubbles,
         cudaMemcpyDefault));
 
-    auto getPaddingBytes = [&cellCounts, &bubbleCounts](int i) {
-        int padding = ((cellCounts[i] + bubbleCounts[i]) & 0x1) * sizeof(int);
-        assert(0 == padding || 4 == padding);
-        return padding;
-    };
-
-#ifndef NDEBUG
-    std::vector<int> ranges;
-#endif
-
-    // cell sizes
+    // The data for each area (surface, edge and corner) is collected to a
+    // continuous blob. In other words, after these loops are done, all the data
+    // for area 1 is first, then all the data for area 2 and so on. The order of
+    // the data is [cellSizes, idx, x, y, z, r] for each area.
+    char *sources[6] = {reinterpret_cast<char *>(scs.data()),
+                        bubbleData.data() + sizeof(double) * 4 * nBubbles,
+                        bubbleData.data() + sizeof(double) * 0 * nBubbles,
+                        bubbleData.data() + sizeof(double) * 1 * nBubbles,
+                        bubbleData.data() + sizeof(double) * 2 * nBubbles,
+                        bubbleData.data() + sizeof(double) * 3 * nBubbles};
     char *dst = surfaceData.data();
-    char *src = reinterpret_cast<char *>(scs.data());
     int offset = 0;
-    int cumulativeOffset = 0;
-    bytes = 0;
     for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        dst += offset;
-        src += bytes;
+        auto getPaddingBytes = [&cellCounts, &bubbleCounts](int i) {
+            int padding =
+                ((cellCounts[i] + bubbleCounts[i]) & 0x1) * sizeof(int);
+            assert(0 == padding || 4 == padding);
+            return padding;
+        };
 
-        bytes = sizeof(int) * cellCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes + (4 * sizeof(double) + sizeof(int)) * bubbleCounts[i] +
-                 padding;
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+        auto getNumBytes = [&cellCounts, &bubbleCounts](int i, int j) {
+            int *ptr = nullptr;
+            if (0 == j) {
+                ptr = cellCounts.data();
+            } else {
+                ptr = bubbleCounts.data();
+            }
 
-        surfaceDataOffsets[i] = cumulativeOffset;
-        surfaceDataSizes[i] = offset;
-        cumulativeOffset += offset;
-    }
+            int mul = 0;
+            if (2 > j) {
+                mul = sizeof(int);
+            } else {
+                mul = sizeof(double);
+            }
 
-    // idx
-    src = bubbleData.data() + sizeof(double) * 4 * nBubbles;
-    dst = surfaceData.data();
-    offset = 0;
-    bytes = 0;
-    for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        offset += sizeof(int) * cellCounts[i];
-        src += bytes;
-        dst += offset;
+            return ptr[i] * mul;
+        };
 
-        bytes = sizeof(int) * bubbleCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes + 4 * sizeof(double) * bubbleCounts[i] + padding;
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
-    }
+        char *oldDst = dst;
 
-    // x
-    src = bubbleData.data();
-    dst = surfaceData.data();
-    offset = 0;
-    bytes = 0;
-    for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        offset += sizeof(int) * (cellCounts[i] + bubbleCounts[i]) + padding;
-        src += bytes;
-        dst += offset;
+        // First some metadata
+        memcpy(static_cast<void *>(dst), static_cast<void *>(&cellCounts[i]),
+               sizeof(int));
+        dst += sizeof(int);
+        memcpy(static_cast<void *>(dst), static_cast<void *>(&bubbleCounts[i]),
+               sizeof(int));
+        dst += sizeof(int);
 
-        bytes = sizeof(double) * bubbleCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes + 3 * sizeof(double) * bubbleCounts[i];
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
-    }
+        for (int j = 0; j < 6; j++) {
+            bytes = getNumBytes(i, j);
+            memcpy(static_cast<void *>(dst), static_cast<void *>(sources[j]),
+                   bytes);
+            dst += bytes;
+            if (1 == j) {
+                dst += getPaddingBytes(i);
+            }
+            sources[j] += bytes;
+        }
 
-    // y
-    src = bubbleData.data() + sizeof(double) * nBubbles;
-    dst = surfaceData.data();
-    offset = 0;
-    bytes = 0;
-    for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        offset += sizeof(int) * cellCounts[i] +
-                  (sizeof(int) + sizeof(double)) * bubbleCounts[i] + padding;
-        src += bytes;
-        dst += offset;
-
-        bytes = sizeof(double) * bubbleCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes + 2 * sizeof(double) * bubbleCounts[i];
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
-    }
-
-    // z
-    src = bubbleData.data() + sizeof(double) * 2 * nBubbles;
-    dst = surfaceData.data();
-    offset = 0;
-    bytes = 0;
-    for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        offset += sizeof(int) * cellCounts[i] +
-                  (sizeof(int) + 2 * sizeof(double)) * bubbleCounts[i] +
-                  padding;
-        src += bytes;
-        dst += offset;
-
-        bytes = sizeof(double) * bubbleCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes + sizeof(double) * bubbleCounts[i];
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
-    }
-
-    // r
-    src = bubbleData.data() + sizeof(double) * 3 * nBubbles;
-    dst = surfaceData.data();
-    offset = 0;
-    bytes = 0;
-    for (int i = 0; i < nAreas; i++) {
-        padding = getPaddingBytes(i);
-        offset += sizeof(int) * cellCounts[i] +
-                  (sizeof(int) + 3 * sizeof(double)) * bubbleCounts[i] +
-                  padding;
-        src += bytes;
-        dst += offset;
-
-        bytes = sizeof(double) * bubbleCounts[i];
-#ifndef NDEBUG
-        ranges.push_back(dst - surfaceData.data());
-        ranges.push_back(bytes);
-#endif
-        offset = bytes;
-        memcpy(static_cast<void *>(dst), static_cast<void *>(src), bytes);
+        surfaceDataOffsets[i] = offset;
+        surfaceDataSizes[i] = dst - oldDst;
+        offset = dst - surfaceData.data();
     }
 
     // All the surface data is now in order in surfaceData, and the starting
@@ -353,45 +278,39 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
 
 #ifndef NDEBUG
     if (20 == params.hostData.numNeighborsSearched) {
-        std::ofstream file("ranges.csv", std::ios::out);
-        if (file.is_open()) {
-            for (uint64_t i = 0; i < ranges.size() / 2; ++i) {
-                file << ranges[i * 2];
-                file << ",";
-                file << ranges[i * 2 + 1];
-                file << "\n";
-            }
-        }
-
+        std::vector<char> byteData;
         for (int n = 0; n < nAreas; n++) {
             printf("printing area %d to file.\n", n);
-            std::vector<char> byteData;
             byteData.resize(surfaceDataSizes[n]);
             memcpy(
                 static_cast<void *>(byteData.data()),
                 static_cast<void *>(surfaceData.data() + surfaceDataOffsets[n]),
                 surfaceDataSizes[n]);
 
+            // Number of cells and bubbles are stored at the start of the data
+            int nc = 0;
+            int nb = 0;
+            memcpy(static_cast<void *>(&nc),
+                   static_cast<void *>(byteData.data()), sizeof(int));
+            memcpy(static_cast<void *>(&nb),
+                   static_cast<void *>(byteData.data() + sizeof(int)),
+                   sizeof(int));
+
             std::vector<int> sizes;
-            sizes.resize(cellCounts[n]);
+            sizes.resize(nc);
             memcpy(static_cast<void *>(sizes.data()),
-                   static_cast<void *>(byteData.data()),
-                   sizeof(int) * cellCounts[n]);
+                   static_cast<void *>(byteData.data() + 2 * sizeof(int)),
+                   sizeof(int) * nc);
 
-            int total = 0;
-            for (auto it : sizes) {
-                total += it;
-            }
-
-            uint32_t offset = sizes.size() + total;
+            uint32_t offset = 2 + nc + nb;
             offset += offset & 0x1;
             offset *= sizeof(int);
             assert(offset % 8 == 0);
             std::vector<double> data;
-            data.resize(total * 4);
+            data.resize(nb * 4);
             memcpy(static_cast<void *>(data.data()),
                    static_cast<void *>(byteData.data() + offset),
-                   sizeof(double) * 4 * total);
+                   sizeof(double) * 4 * nb);
 
             std::stringstream ss;
             ss << "area_data_" << n << ".csv";
@@ -400,14 +319,14 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
                 int totalSize = sizes[0];
                 int j = 0;
                 file << "x,y,z,r,ci\n";
-                for (uint64_t i = 0; i < total; ++i) {
+                for (uint64_t i = 0; i < nb; ++i) {
                     file << data[i];
                     file << ",";
-                    file << data[i + total];
+                    file << data[i + nb];
                     file << ",";
-                    file << data[i + 2 * total];
+                    file << data[i + 2 * nb];
                     file << ",";
-                    file << data[i + 3 * total];
+                    file << data[i + 3 * nb];
                     file << ",";
                     if (i >= totalSize) {
                         totalSize += sizes[++j];
@@ -521,7 +440,9 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
-    prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
+    if (params.hostData.searchBetweenProcessors) {
+        prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
+    }
 
     int zero = 0;
     CUDA_CALL(
@@ -700,9 +621,8 @@ void integrate(Params &params, IntegrationParams &ip) {
     if (ip.maxExpansion >= 0.5 * params.hostConstants.skinRadius) {
         searchNeighbors(params);
         if (false == ip.useGasExchange) {
-            // After searchNeighbors r is correct,
-            // but rp is trash. pairwiseInteraction always uses
-            // predicted values, so copy r to rp
+            // After search r is correct, but rp is trash.
+            // pairwiseInteraction always uses predicted values, so copy r to rp
             uint64_t bytes = params.bubbles.stride * sizeof(double);
             CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                                       static_cast<void *>(params.bubbles.r),
@@ -1135,9 +1055,9 @@ void init(const char *inputFileName, Params &params) {
     printf("First neighbor search\n");
     searchNeighbors(params);
 
-    // After searchNeighbors x, y, z, r are correct,
-    // but all predicted are trash. pairwiseInteraction always uses
-    // predicted values, so copy currents to predicteds
+    // After search x, y, z, r are correct, but all predicted are trash.
+    // pairwiseInteraction always uses predicted values, so copy currents to
+    // predicteds
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
                               static_cast<void *>(params.bubbles.x), bytes,
@@ -1258,9 +1178,8 @@ void init(const char *inputFileName, Params &params) {
     // Still local neighbors
     printf("Neighbor search after scaling\n");
     searchNeighbors(params);
-    // After searchNeighbors r is correct,
-    // but rp is trash. pairwiseInteraction always uses
-    // predicted values, so copy r to rp
+    // After search r is correct, but rp is trash.
+    // pairwiseInteraction always uses predicted values, so copy r to rp
     bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                               static_cast<void *>(params.bubbles.r), bytes,
@@ -1274,6 +1193,7 @@ void init(const char *inputFileName, Params &params) {
     // Begin global stabilization, i.e. processors search neighbors from other
     // processes and calculate values between processor
     printf("\n=============\nStabilization\n=============\n");
+    params.hostData.searchBetweenProcessors = params.nProcs > 1;
     params.hostData.numNeighborsSearched = 0;
     int numSteps = 0;
     const int failsafe = 500;

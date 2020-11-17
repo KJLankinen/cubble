@@ -259,6 +259,7 @@ struct HostData {
     uint32_t numSnapshots = 0;
 
     bool addFlow = false;
+    bool searchBetweenProcessors = false;
 
     void print() {
         printf("\terror tolerance: %g", errorTolerance);
