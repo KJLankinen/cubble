@@ -260,8 +260,8 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
     // params.surfaceData.offsets[n]); bytes = params.surfaceData.sizes[n];
 
 #ifndef NDEBUG
-    // if (false) {
-    if (20 == params.hostData.numNeighborsSearched) {
+    if (false) {
+        // if (20 == params.hostData.numNeighborsSearched) {
         std::vector<char> byteData;
         for (int n = 0; n < nAreas; n++) {
             printf("printing area %d to file.\n", n);
@@ -424,9 +424,9 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
-    // if (params.hostData.searchBetweenProcessors) {
-    prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
-    //}
+    if (params.hostData.searchBetweenProcessors) {
+        prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
+    }
 
     int zero = 0;
     CUDA_CALL(
