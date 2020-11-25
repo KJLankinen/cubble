@@ -33,7 +33,7 @@ def main():
                                  root_dir.path,
                                  os.path.join("data", datetime.datetime.now().strftime("%d_%m_%Y")),
                                  True)
-    make_file =             File("makefile", root_dir.path, "final", False, True)
+    make_file =             File("makefile", root_dir.path, None, False, True)
     default_input =         File("input_parameters.json", root_dir.path, None, False, True)
     arr_params =            File("array.params", root_dir.path, None, False, True)
     executable =            File("cubble", data_dir.path)
@@ -93,7 +93,7 @@ def main():
 TEMP_DIR=$SLURM_JOB_ID\n\
 module load " + sb_modules + "\n\
 mkdir " + temp_dir.path + "\n\
-srun make -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=-I" + incl_dir.path + "\n\
+srun make final -C " + data_dir.path + " SRC_PATH=" + src_dir.path + " BIN_PATH=" + temp_dir.path + " INCL=-I" + incl_dir.path + "\n\
 cp " + temp_dir.path + "/" + executable.name + " " + data_dir.path
     
     print("Launching process for compiling the binary.")
