@@ -83,7 +83,7 @@ void prepareSurfaceData(Params &params, int *cellSizes, int *cellOffsets,
                surfaceCellSizes, surfaceCellOffsets, nSurfaceCells,
                (cudaStream_t)0, false);
 
-    // Gather the bubble data of the surface bubbles to x, y, z, r and
+    // Gather the bubble data of the surface bubbles to xp, yp, zp, rp and
     // numNeighbors of the bubble struct. These arrays contain trash right now,
     // so it's fine to use them as temporary memory.
     KERNEL_LAUNCH(gatherSurfaceBubbles, params, 0, 0, nSurfaceCells,
@@ -427,6 +427,15 @@ void searchNeighbors(Params &params) {
     if (params.hostData.searchBetweenProcessors) {
         prepareSurfaceData(params, cellSizes, cellOffsets, numCells, cellDim);
     }
+    // Now all our own data is in surfaceData struct. We must communicate with
+    // each neigboring processor to receive their data and to send our own. We
+    // receive data from each neighboring processor s.t. the data will be
+    // ordered like [meta, cellSize, idx, x, y, z, r] for each area/processor.
+    // This needs to be converted s.t. the data is linearly in memory, i.e.
+    // meta: [m0, m1, m2...], idx: [i0, i1, i2, ...], x: [x0, x1, x2, ...] etc.
+    // cellSizes should be put in order as well and offsets counted with
+    // exclusive sum from this. Once these are done, surface/external neighbor
+    // search can begin with the data.
 
     int zero = 0;
     CUDA_CALL(
@@ -466,6 +475,16 @@ void removeBubbles(Params &params, int numToBeDeleted) {
 
     KERNEL_LAUNCH(addVolumeFixPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempI);
+
+    // External deletion: just set the both of the pairs to -1, if either of
+    // them is to be deleted. Before perfoming "deletion" for external pairs,
+    // communicate the bubbles to be deleted accross all neigboring processors.
+    // When checking for the external to-be-deleteds, compare both the idx and
+    // the processor number, since indices overlap. Then, as the pairwise
+    // interactions are performed, just skip the pair, if the indices are -1.
+    // After each processor has done internal deletion, must communicate the
+    // swapped indices. Then the external indices are swapped:
+    // if (procIsSame && old is in the external pairs list) {swap old to new}
 
     params.bubbles.count -= numToBeDeleted;
     nvtxRangePop();

@@ -62,8 +62,6 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
 __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      int *surfaceCellOffsets, int *cellSizes,
                                      int *cellOffsets, Bubbles bubbles);
-__device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
                                int *pairI, int *pairJ, Bubbles bubbles);
@@ -86,6 +84,11 @@ __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2);
+__device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
+                                     bool internalSearch,
+                                     bool &isInternalIndex);
+__device__ bool isOutOfBounds(ivec a, ivec dim, ivec &oobVec);
+__device__ ivec neighborNumToRelativeCoords(int nn);
 __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
 __device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);

@@ -262,11 +262,13 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                     r2 = 1.0 / r2;
 
                     // total overlap area, offset = (dim + 1) * BLOCK_SIZE
+                    // with external bubbles only add once
                     offset += BLOCK_SIZE;
                     sbuf[threadIdx.x + offset] += 2.0 * overlapArea;
 
                     // total overlap area per radius,
                     // offset = (dim + 2) * BLOCK_SIZE
+                    // with external bubbles only add once
                     offset += BLOCK_SIZE;
                     sbuf[threadIdx.x + offset] += overlapArea * (r1 + r2);
 
@@ -850,40 +852,28 @@ __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
     }
 }
 
-__device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles) {
-    const double maxDistance =
-        bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
-    if (wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
-                          bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
-            .getSquaredLength() < maxDistance * maxDistance) {
-        // Set the smaller idx to idx1 and larger to idx2
-        int id = idx1 > idx2 ? idx1 : idx2;
-        idx1 = idx1 < idx2 ? idx1 : idx2;
-        idx2 = id;
-
-        atomicAdd(&histogram[idx1], 1);
-        id = atomicAdd(&dNumPairs, 1);
-        pairI[id] = idx1;
-        pairJ[id] = idx2;
-    }
-}
-
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
                                int *pairI, int *pairJ, Bubbles bubbles) {
     // Loop over each cell pair in the simulation box
     for (int i = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
          i < numCells * numNeighborCells; i += (blockDim.x * gridDim.x) / 32) {
+        // cellIdx = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, ...,
+        // 99, 99, 99, 99, 99], with numCells = 100, numNeighborCells = 5
         const int cellIdx = i / numNeighborCells;
         const int s1 = sizes[cellIdx];
         if (0 == s1) {
             continue;
         }
 
+        //
         // j goes over each neighbor-cell-to-consider
+        // j = [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4, ...,
+        // 0, 1, 2, 3, 4], with numCells = 100, numNeighborCells = 5
+        bool isInternalIndex = false;
         const int j = i % numNeighborCells;
-        const int neighborCellIdx = getNeighborCellIndex(cellIdx, cellDim, j);
+        const int neighborCellIdx =
+            findNeighborCellIndex(cellIdx, cellDim, j, true, isInternalIndex);
         if (neighborCellIdx < 0) {
             continue;
         }
@@ -901,6 +891,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
         }
 
         // Loop over each possible pair of bubbles in the cells
+        // The whole warp has the same values for cellIdx and j
         for (int k = threadIdx.x % 32; k < numPairs; k += 32) {
             int b1 = 0;
             int b2 = 0;
@@ -922,11 +913,24 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                 b2 = o2 + k % s2;
             }
 
-            DEVICE_ASSERT(b1 < bubbles.count, "Invalid bubble index!");
-            DEVICE_ASSERT(b2 < bubbles.count, "Invalid bubble index!");
-            DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
+            const double maxDistance =
+                bubbles.r[b1] + bubbles.r[b2] + dConstants->skinRadius;
+            if (wrappedDifference(bubbles.x[b1], bubbles.y[b1], bubbles.z[b1],
+                                  bubbles.x[b2], bubbles.y[b2], bubbles.z[b2])
+                    .getSquaredLength() < maxDistance * maxDistance) {
+                // Set the smaller idx to b1 and larger to b2
+                int id = b1 > b2 ? b1 : b2;
+                b1 = b1 < b2 ? b1 : b2;
+                b2 = id;
 
-            comparePair(b1, b2, histogram, pairI, pairJ, bubbles);
+                // In the second pass, build the histogram over the processor
+                // number of the external bubble
+                // Also instead of b2, store externaIdx[b2] in pairsJ
+                atomicAdd(&histogram[b1], 1);
+                id = atomicAdd(&dNumPairs, 1);
+                pairI[id] = b1;
+                pairJ[id] = b2;
+            }
         }
     }
 }
@@ -1344,78 +1348,456 @@ __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
     return d2;
 }
 
-__device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum) {
+__device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
+                                     bool internalSearch,
+                                     bool &isInternalIndex) {
     ivec idxVec = get3DIdxFrom1DIdx(cellIdx, dim);
-    switch (neighborNum) {
-    case 0:
-        // self
-        break;
-    case 1:
-        idxVec += ivec(-1, 1, 0);
-        break;
-    case 2:
-        idxVec += ivec(-1, 0, 0);
-        break;
-    case 3:
-        idxVec += ivec(-1, -1, 0);
-        break;
-    case 4:
-        idxVec += ivec(0, -1, 0);
-        break;
-    case 5:
-        idxVec += ivec(-1, 1, -1);
-        break;
-    case 6:
-        idxVec += ivec(-1, 0, -1);
-        break;
-    case 7:
-        idxVec += ivec(-1, -1, -1);
-        break;
-    case 8:
-        idxVec += ivec(0, 1, -1);
-        break;
-    case 9:
-        idxVec += ivec(0, 0, -1);
-        break;
-    case 10:
-        idxVec += ivec(0, -1, -1);
-        break;
-    case 11:
-        idxVec += ivec(1, 1, -1);
-        break;
-    case 12:
-        idxVec += ivec(1, 0, -1);
-        break;
-    case 13:
-        idxVec += ivec(1, -1, -1);
-        break;
-    default:
-        printf("Should never end up here!\n");
-        break;
+    ivec relVec = neighborNumToRelativeCoords(nn);
+    ivec oobVec = ivec(0, 0, 0);
+    const bool oob = isOutOfBounds(idxVec + relVec, dim, oobVec);
+    if (internalSearch) {
+        if (oob) {
+            return -1;
+        } else {
+            return get1DIdxFrom3DIdx(idxVec + relVec, dim);
+        }
+    } else {
+        if (false == oob) {
+            // A comparison to a cell that was already covered by the internal
+            // search
+            return -1;
+        }
+        isInternalIndex = true;
+        dvec glbb = dConstants->globalLbb;
+        dvec gtfr = dConstants->globalTfr;
+        dvec ginterval = dConstants->globalInterval;
+        dvec lbb = dConstants->lbb;
+        dvec tfr = dConstants->tfr;
+        dvec interval = dConstants->interval;
+
+        // Is the neighbor over the global x border?
+        if ((oobVec.x < 0 && lbb.x - 1.0 < glbb.x && lbb.x + 1.0 > glbb.x) ||
+            (oobVec.x > 0 && tfr.x - 1.0 < gtfr.x && tfr.x + 1.0 > gtfr.x)) {
+            if (dConstants->xWall) {
+                return -1;
+            } else {
+                // A global border and no wall. See if the local simulation
+                // box spans the entire global box in this dimension. If
+                // yes, wrap the coordinate.
+                if (interval.x - 1.0 < ginterval.x &&
+                    interval.x + 1.0 > ginterval.x) {
+                    idxVec.x += relVec.x + dim.x;
+                    idxVec.x %= dim.x;
+                    relVec.x = 0;
+                }
+            }
+        }
+
+        // Is the neighbor over the global y border?
+        if ((oobVec.y < 0 && lbb.y - 1.0 < glbb.y && lbb.y + 1.0 > glbb.y) ||
+            (oobVec.y > 0 && tfr.y - 1.0 < gtfr.y && tfr.y + 1.0 > gtfr.y)) {
+            if (dConstants->yWall) {
+                return -1;
+            } else {
+                // A global border and no wall. See if the local simulation
+                // box spans the entire global box in this dimension. If
+                // yes, wrap the coordinate.
+                if (interval.y - 1.0 < ginterval.y &&
+                    interval.y + 1.0 > ginterval.y) {
+                    idxVec.y += relVec.y + dim.y;
+                    idxVec.y %= dim.y;
+                    relVec.y = 0;
+                }
+            }
+        }
+
+        if (3 == dConstants->dimensionality) {
+            // Is the neighbor over the global z border?
+            if ((oobVec.z < 0 && lbb.z - 1.0 < glbb.z &&
+                 lbb.z + 1.0 > glbb.z) ||
+                (oobVec.z > 0 && tfr.z - 1.0 < gtfr.z &&
+                 tfr.z + 1.0 > gtfr.z)) {
+                if (dConstants->zWall) {
+                    return -1;
+                } else {
+                    // A global border and no wall. See if the local simulation
+                    // box spans the entire global box in this dimension. If
+                    // yes, wrap the coordinate.
+                    if (interval.z - 1.0 < ginterval.z &&
+                        interval.z + 1.0 > ginterval.z) {
+                        idxVec.z += relVec.z + dim.z;
+                        idxVec.z %= dim.z;
+                        relVec.z = 0;
+                    }
+                }
+            }
+        }
+
+        bool allZero = relVec.x == 0;
+        allZero &= relVec.y == 0;
+        allZero &= relVec.z == 0;
+        if (allZero) {
+            // The idxVec should be wrapped to the correct 3D cell idx.
+            // The neigboring cell is in the same local box.
+            // Skip redundant cells
+            if (3 == dConstants->dimensionality && 13 < nn) {
+                return -1;
+            } else if (2 == dConstants->dimensionality && 4 < nn) {
+                return -1;
+            }
+
+            return get1DIdxFrom3DIdx(idxVec + relVec, dim);
+        } else {
+            // The neigboring cell belongs to some other processor.
+            isInternalIndex = false;
+
+            if (3 == dConstants->dimensionality) {
+                // 3D case, 26 cases in total
+                if (relVec.x < 0) {
+                    // 9 different possibilities
+                    if (relVec.y < 0) {
+                        if (relVec.z < 0) {
+                            // Corner (-1, -1, -1)
+                            return 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else if (relVec.z > 0) {
+                            // Corner (-1, -1, 1)
+                            return 1 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else {
+                            // Edge (-1, -1, z)
+                            return idxVec.z + 4 * (dim.x + dim.y) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        }
+                    } else if (relVec.y > 0) {
+                        if (relVec.z < 0) {
+                            // Corner (-1, 1, -1)
+                            return 5 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else if (relVec.z > 0) {
+                            // Corner (-1, 1, 1)
+                            return 6 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else {
+                            // Edge (-1, 1, z)
+                            return idxVec.z + 3 * dim.z + 4 * (dim.x + dim.y) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        }
+                    } else if (relVec.z < 0) {
+                        // Edge (-1, y, -1)
+                        return idxVec.y + 4 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else if (relVec.z > 0) {
+                        // Edge (-1, y, 1)
+                        return idxVec.y + dim.y + 4 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else {
+                        // Plane (-1, y, z)
+                        return idxVec.y * dim.z + idxVec.z;
+                    }
+                } else if (relVec.x > 0) {
+                    // 9 different possibilities
+                    if (relVec.y < 0) {
+                        if (relVec.z < 0) {
+                            // Corner (1, -1, -1)
+                            return 3 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else if (relVec.z > 0) {
+                            // Corner (1, -1, 1)
+                            return 2 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else {
+                            // Edge (1, -1, z)
+                            return idxVec.z + dim.z + 4 * (dim.x + dim.y) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        }
+                    } else if (relVec.y > 0) {
+                        if (relVec.z < 0) {
+                            // Corner (1, 1, -1)
+                            return 4 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else if (relVec.z > 0) {
+                            // Corner (1, 1, 1)
+                            return 7 + 4 * (dim.x + dim.y + dim.z) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        } else {
+                            // Edge (1, 1, z)
+                            return idxVec.z + 2 * dim.z + 4 * (dim.x + dim.y) +
+                                   2 * (dim.z * dim.y + dim.z * dim.x +
+                                        dim.x * dim.y);
+                        }
+                    } else if (relVec.z < 0) {
+                        // Edge (1, y, -1)
+                        return idxVec.y + 3 * dim.y + 4 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else if (relVec.z > 0) {
+                        // Edge (1, y, 1)
+                        return idxVec.y + 2 * dim.y + 4 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else {
+                        // Plane (1, y, z)
+                        return idxVec.y * dim.z + idxVec.z + dim.z * dim.y;
+                    }
+                } else if (relVec.y < 0) {
+                    // 3 possibilities
+                    if (relVec.z < 0) {
+                        // Edge (x, -1, -1)
+                        return idxVec.x + 2 * (dim.z * dim.y + dim.z * dim.x +
+                                               dim.x * dim.y);
+                    } else if (relVec.z > 0) {
+                        // Edge (x, -1, 1)
+                        return idxVec.x + 3 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else {
+                        // Plane (x, -1, z)
+                        return idxVec.z * dim.x + idxVec.x + 2 * dim.z * dim.y;
+                    }
+                } else if (relVec.y > 0) {
+                    // 3 possibilities
+                    if (relVec.z < 0) {
+                        // Edge (x, 1, -1)
+                        return idxVec.x + dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else if (relVec.z > 0) {
+                        // Edge (x, 1, 1)
+                        return idxVec.x + 2 * dim.x +
+                               2 * (dim.z * dim.y + dim.z * dim.x +
+                                    dim.x * dim.y);
+                    } else {
+                        // Plane (x, 1, z)
+                        return idxVec.z * dim.x + idxVec.x + 2 * dim.z * dim.y +
+                               dim.z * dim.x;
+                    }
+                } else if (relVec.z < 0) {
+                    // Plane (x, y, -1)
+                    return idxVec.y * dim.x + idxVec.x +
+                           2 * (dim.z * dim.y + dim.z * dim.x);
+                } else if (relVec.z > 0) {
+                    // Plane (x, y, 1)
+                    return idxVec.y * dim.x + idxVec.x + dim.x * dim.y +
+                           2 * (dim.z * dim.y + dim.z * dim.x);
+                } else {
+                    printf("Should never end up here!\n");
+                }
+            } else {
+                // 2D case, 8 cases in total
+                if (relVec.x < 0) {
+                    // 3 cases
+                    if (relVec.y < 0) {
+                        // Corner (-1, -1)
+                        return 2 * (dim.x + dim.y);
+                    } else if (relVec.y > 0) {
+                        // Corner (-1, 1)
+                        return 3 + 2 * (dim.x + dim.y);
+                    } else {
+                        // Edge (-1, y)
+                        return idxVec.x;
+                    }
+                } else if (relVec.x > 0) {
+                    // 3 cases
+                    if (relVec.y < 0) {
+                        // Corner (1, -1)
+                        return 1 + 2 * (dim.x + dim.y);
+                    } else if (relVec.y > 0) {
+                        // Corner (1, 1)
+                        return 2 + 2 * (dim.x + dim.y);
+                    } else {
+                        // Edge (1, y)
+                        return idxVec.x + dim.x;
+                    }
+                } else if (relVec.y < 0) {
+                    // Edge (x, -1)
+                    return idxVec.y + 2 * dim.x;
+                } else if (relVec.y > 0) {
+                    // Edge (x, 1)
+                    return idxVec.y + dim.y + 2 * dim.x;
+                } else {
+                    printf("Should never end up here!\n");
+                }
+            }
+        }
     }
 
-    if (false == dConstants->xWall) {
-        idxVec.x += dim.x;
-        idxVec.x %= dim.x;
-    } else if (idxVec.x < 0 || idxVec.x >= dim.x) {
-        return -1;
+    printf("Should never end up here!\n");
+    return -1;
+}
+
+__device__ bool isOutOfBounds(ivec a, ivec dim, ivec &oobVec) {
+    oobVec = ivec(0, 0, 0);
+    bool oob = false;
+
+    // x
+    if (a.x < 0) {
+        oobVec.x = -1;
+        oob = true;
+    } else if (a.x > dim.x) {
+        oobVec.x = 1;
+        oob = true;
     }
 
-    if (false == dConstants->yWall) {
-        idxVec.y += dim.y;
-        idxVec.y %= dim.y;
-    } else if (idxVec.y < 0 || idxVec.y >= dim.y) {
-        return -1;
+    // y
+    if (a.y < 0) {
+        oobVec.y = -1;
+        oob = true;
+    } else if (a.y > dim.y) {
+        oobVec.y = 1;
+        oob = true;
     }
 
-    if (false == dConstants->zWall) {
-        idxVec.z += dim.z;
-        idxVec.z %= dim.z;
-    } else if (idxVec.z < 0 || idxVec.z >= dim.z) {
-        return -1;
+    // z
+    if (a.z < 0) {
+        oobVec.z = -1;
+        oob = true;
+    } else if (a.z > dim.z) {
+        oobVec.z = 1;
+        oob = true;
     }
 
-    return get1DIdxFrom3DIdx(idxVec, dim);
+    return oob;
+}
+
+__device__ ivec neighborNumToRelativeCoords(int nn) {
+    ivec idxVec = ivec(0, 0, 0);
+    if (3 == dConstants->dimensionality) {
+        switch (nn) {
+        case 0:
+            idxVec = ivec(0, 0, 0);
+            break;
+        case 1:
+            idxVec = ivec(-1, 0, 0);
+            break;
+        case 2:
+            idxVec = ivec(-1, 0, 1);
+            break;
+        case 3:
+            idxVec = ivec(0, 0, 1);
+            break;
+        case 4:
+            idxVec = ivec(1, 0, 1);
+            break;
+        case 5:
+            idxVec = ivec(1, -1, 1);
+            break;
+        case 6:
+            idxVec = ivec(0, -1, 1);
+            break;
+        case 7:
+            idxVec = ivec(-1, -1, 1);
+            break;
+        case 8:
+            idxVec = ivec(-1, -1, 0);
+            break;
+        case 9:
+            idxVec = ivec(0, -1, 0);
+            break;
+        case 10:
+            idxVec = ivec(1, -1, 0);
+            break;
+        case 11:
+            idxVec = ivec(1, -1, -1);
+            break;
+        case 12:
+            idxVec = ivec(0, -1, -1);
+            break;
+        case 13:
+            idxVec = ivec(-1, -1, -1);
+            break;
+        case 14:
+            idxVec = ivec(-1, 0, -1);
+            break;
+        case 15:
+            idxVec = ivec(0, 0, -1);
+            break;
+        case 16:
+            idxVec = ivec(1, 0, -1);
+            break;
+        case 17:
+            idxVec = ivec(1, 0, 0);
+            break;
+        case 18:
+            idxVec = ivec(1, 1, 0);
+            break;
+        case 19:
+            idxVec = ivec(1, 1, -1);
+            break;
+        case 20:
+            idxVec = ivec(0, 1, -1);
+            break;
+        case 21:
+            idxVec = ivec(-1, 1, -1);
+            break;
+        case 22:
+            idxVec = ivec(-1, 1, 0);
+            break;
+        case 23:
+            idxVec = ivec(-1, 1, 1);
+            break;
+        case 24:
+            idxVec = ivec(0, 1, 1);
+            break;
+        case 25:
+            idxVec = ivec(1, 1, 1);
+            break;
+        case 26:
+            idxVec = ivec(0, 1, 0);
+            break;
+        default:
+            printf("Should never end up here!\n");
+            break;
+        }
+    } else {
+        switch (nn) {
+        case 0:
+            idxVec = ivec(0, 0, 0);
+            break;
+        case 1:
+            idxVec = ivec(-1, 0, 0);
+            break;
+        case 2:
+            idxVec = ivec(-1, -1, 0);
+            break;
+        case 3:
+            idxVec = ivec(0, -1, 0);
+            break;
+        case 4:
+            idxVec = ivec(1, -1, 0);
+            break;
+        case 5:
+            idxVec = ivec(1, 0, 0);
+            break;
+        case 6:
+            idxVec = ivec(1, 1, 0);
+            break;
+        case 7:
+            idxVec = ivec(0, 1, 0);
+            break;
+        case 8:
+            idxVec = ivec(-1, 1, 0);
+            break;
+        default:
+            printf("Should never end up here!\n");
+            break;
+        }
+    }
+
+    return idxVec;
 }
 
 __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
