@@ -58,10 +58,15 @@ __global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
 __global__ void indexByCell(int *cellIndices, int *cellOffsets,
                             int *bubbleIndices, int count);
 __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
-                                 int *surfaceCellSizes, ivec cellDim);
+                                 int *surfaceCellSizes, int *bubbleCountPerArea,
+                                 ivec cellDim);
 __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      int *surfaceCellOffsets, int *cellSizes,
-                                     int *cellOffsets, Bubbles bubbles);
+                                     int *cellOffsets, int *bubbleCounts,
+                                     char **outData, Bubbles bubbles,
+                                     ivec cellDim);
+__global__ void scatterSurfaceBubbles(int count, char **inData,
+                                      SurfaceData::Data outData);
 __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                                int *offsets, int *sizes, int *histogram,
                                int *pairI, int *pairJ, Bubbles bubbles);

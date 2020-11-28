@@ -303,11 +303,31 @@ struct SnapshotParams {
 };
 
 struct SurfaceData {
-    std::array<int, 26> cellCounts;
-    std::array<int, 26> bubbleCounts;
-    std::array<int, 26> sizes;
-    std::array<int, 26> offsets;
-    std::vector<char> data;
+    void *memory = nullptr;
+
+    char *outData[26] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr};
+    char *inData[26] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr};
+
+    uint64_t outBytes = 0;
+    uint64_t totalBytes = 0;
+    uint64_t inBytes = 0;
+    struct Data {
+        double *x = nullptr;
+        double *y = nullptr;
+        double *z = nullptr;
+        double *r = nullptr;
+        int *idx = nullptr;
+        int *cellSizes = nullptr;
+        int *cellOffsets = nullptr;
+    } data;
 };
 
 struct Params {

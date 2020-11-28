@@ -500,33 +500,17 @@ __device__ void addFlowVelocity(Bubbles &bubbles, int i) {
     multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
     const double xi = bubbles.xp[i];
     const double yi = bubbles.yp[i];
-    double riSq = bubbles.rp[i];
-    riSq *= riSq;
+    double ri = bubbles.rp[i];
 
-    int inside =
-        (int)((xi < dConstants->flowTfr.x && xi > dConstants->flowLbb.x) ||
-              ((dConstants->flowLbb.x - xi) * (dConstants->flowLbb.x - xi) <=
-               riSq) ||
-              ((dConstants->flowTfr.x - xi) * (dConstants->flowTfr.x - xi) <=
-               riSq));
-
-    inside *=
-        (int)((yi < dConstants->flowTfr.y && yi > dConstants->flowLbb.y) ||
-              ((dConstants->flowLbb.y - yi) * (dConstants->flowLbb.y - yi) <=
-               riSq) ||
-              ((dConstants->flowTfr.y - yi) * (dConstants->flowTfr.y - yi) <=
-               riSq));
+    int inside = (int)(xi + ri > dConstants->flowLbb.x &&
+                       xi - ri < dConstants->flowTfr.x);
+    inside *= (int)(yi + ri > dConstants->flowLbb.y &&
+                    yi - ri < dConstants->flowTfr.y);
 
     if (3 == dConstants->dimensionality) {
         const double zi = bubbles.zp[i];
-        inside *=
-            (int)((zi < dConstants->flowTfr.z && zi > dConstants->flowLbb.z) ||
-                  ((dConstants->flowLbb.z - zi) *
-                       (dConstants->flowLbb.z - zi) <=
-                   riSq) ||
-                  ((dConstants->flowTfr.z - zi) *
-                       (dConstants->flowTfr.z - zi) <=
-                   riSq));
+        inside *= (int)(zi + ri > dConstants->flowLbb.z &&
+                        zi - ri < dConstants->flowTfr.z);
 
         bubbles.dzdtp[i] += !inside * multiplier * bubbles.flowVz[i] +
                             dConstants->flowVel.z * inside;
@@ -563,8 +547,8 @@ __device__ void addWallVelocity(Bubbles &bubbles, int i) {
     };
 
     velocity = 0.0;
-    if (dConstants->xWall &&
-        touchesWall(bubbles.xp[i], dConstants->lbb.x, dConstants->tfr.x)) {
+    if (dConstants->xWall && touchesWall(bubbles.xp[i], dConstants->globalLbb.x,
+                                         dConstants->globalTfr.x)) {
         bubbles.dxdtp[i] += velocity;
         bubbles.dydtp[i] *= drag;
         bubbles.dzdtp[i] *= drag;
@@ -572,8 +556,8 @@ __device__ void addWallVelocity(Bubbles &bubbles, int i) {
     }
 
     velocity = 0.0;
-    if (dConstants->yWall &&
-        touchesWall(bubbles.yp[i], dConstants->lbb.y, dConstants->tfr.y)) {
+    if (dConstants->yWall && touchesWall(bubbles.yp[i], dConstants->globalLbb.y,
+                                         dConstants->globalTfr.y)) {
         bubbles.dxdtp[i] *= drag;
         bubbles.dydtp[i] += velocity * xDrag;
         bubbles.dzdtp[i] *= drag;
@@ -581,8 +565,8 @@ __device__ void addWallVelocity(Bubbles &bubbles, int i) {
     }
 
     velocity = 0.0;
-    if (dConstants->zWall &&
-        touchesWall(bubbles.zp[i], dConstants->lbb.z, dConstants->tfr.z)) {
+    if (dConstants->zWall && touchesWall(bubbles.zp[i], dConstants->globalLbb.z,
+                                         dConstants->globalTfr.z)) {
         bubbles.dxdtp[i] *= drag;
         bubbles.dydtp[i] *= drag;
         bubbles.dzdtp[i] += velocity * xDrag * yDrag;
@@ -612,7 +596,8 @@ __global__ void indexByCell(int *cellIndices, int *cellOffsets,
 }
 
 __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
-                                 int *surfaceCellSizes, ivec cellDim) {
+                                 int *surfaceCellSizes, int *bubbleCountPerArea,
+                                 ivec cellDim) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
          i += gridDim.x * blockDim.x) {
         const ivec ci3d = get3DIdxFrom1DIdx(i, cellDim);
@@ -620,6 +605,7 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
         const int my = cellDim.y - 1;
         const int mz = cellDim.z - 1;
         int idx = 0;
+        const int size = cellSizes[i];
 
         // Add the indices of the surface cells to array
         if (3 == dConstants->dimensionality) {
@@ -634,25 +620,33 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
             if (0 == ci3d.x) {
                 idx = ci3d.y * cellDim.z + ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[0], size);
             }
             if (mx == ci3d.x) {
                 idx = cellDim.y * cellDim.z + ci3d.y * cellDim.z + ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[1], size);
             }
 
             // y
             if (0 == ci3d.y) {
                 idx = 2 * cellDim.y * cellDim.z + ci3d.z * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[2], size);
             }
             if (my == ci3d.y) {
                 idx = 2 * cellDim.y * cellDim.z + cellDim.x * cellDim.z +
                       ci3d.z * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[3], size);
             }
 
             // z
@@ -660,13 +654,17 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                 idx = 2 * (cellDim.y * cellDim.z + cellDim.x * cellDim.z) +
                       ci3d.y * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[4], size);
             }
             if (mz == ci3d.z) {
                 idx = 2 * (cellDim.y * cellDim.z + cellDim.x * cellDim.z) +
                       cellDim.x * cellDim.y + ci3d.y * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[5], size);
             }
 
             // Edges of the box
@@ -679,69 +677,93 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
             if (0 == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[6], size);
             }
             if (0 == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[7], size);
             }
             if (my == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + 2 * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[8], size);
             }
             if (my == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + 3 * cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[9], size);
             }
 
             // y-sweep
             if (0 == ci3d.x && 0 == ci3d.z) {
                 idx = sideTotal + 4 * cellDim.x + ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[10], size);
             }
             if (0 == ci3d.x && mz == ci3d.z) {
                 idx = sideTotal + 4 * cellDim.x + 1 * cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[11], size);
             }
             if (mx == ci3d.x && mz == ci3d.z) {
                 idx = sideTotal + 4 * cellDim.x + 2 * cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[12], size);
             }
             if (mx == ci3d.x && 0 == ci3d.z) {
                 idx = sideTotal + 4 * cellDim.x + 3 * cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[13], size);
             }
 
             // z-sweep
             if (0 == ci3d.x && 0 == ci3d.y) {
                 idx = sideTotal + 4 * (cellDim.x + cellDim.y) + ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[14], size);
             }
             if (mx == ci3d.x && 0 == ci3d.y) {
                 idx = sideTotal + 4 * (cellDim.x + cellDim.y) + cellDim.z +
                       ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[15], size);
             }
             if (mx == ci3d.x && my == ci3d.y) {
                 idx = sideTotal + 4 * (cellDim.x + cellDim.y) + 2 * cellDim.z +
                       ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[16], size);
             }
             if (0 == ci3d.x && my == ci3d.y) {
                 idx = sideTotal + 4 * (cellDim.x + cellDim.y) + 3 * cellDim.z +
                       ci3d.z;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[17], size);
             }
 
             // Corners of the box
@@ -752,80 +774,112 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
             if (0 == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[18], size);
             }
             if (0 == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 1;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[19], size);
             }
             if (mx == ci3d.x && 0 == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 2;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[20], size);
             }
             if (mx == ci3d.x && 0 == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal + 3;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[21], size);
             }
             if (mx == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal + 4;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[22], size);
             }
             if (0 == ci3d.x && my == ci3d.y && 0 == ci3d.z) {
                 idx = sideTotal + edgeTotal + 5;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[23], size);
             }
             if (0 == ci3d.x && my == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 6;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[24], size);
             }
             if (mx == ci3d.x && my == ci3d.y && mz == ci3d.z) {
                 idx = sideTotal + edgeTotal + 7;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[25], size);
             }
         } else {
             if (0 == ci3d.x) {
                 idx = ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[0], size);
                 if (0 == ci3d.y) {
                     idx = 2 * (cellDim.x + cellDim.y);
                     surfaceCells[idx] = i;
-                    surfaceCellSizes[idx] = cellSizes[i];
+                    surfaceCellSizes[idx] = size;
+                    atomicAdd(&bubbleCountPerArea[26], size);
+                    atomicAdd(&bubbleCountPerArea[4], size);
                 } else if (my == ci3d.y) {
                     idx = 2 * (cellDim.x + cellDim.y) + 3;
                     surfaceCells[idx] = i;
-                    surfaceCellSizes[idx] = cellSizes[i];
+                    surfaceCellSizes[idx] = size;
+                    atomicAdd(&bubbleCountPerArea[26], size);
+                    atomicAdd(&bubbleCountPerArea[7], size);
                 }
             } else if (mx == ci3d.x) {
                 idx = cellDim.y + ci3d.y;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[1], size);
                 if (0 == ci3d.y) {
                     idx = 2 * (cellDim.x + cellDim.y) + 1;
                     surfaceCells[idx] = i;
-                    surfaceCellSizes[idx] = cellSizes[i];
+                    surfaceCellSizes[idx] = size;
+                    atomicAdd(&bubbleCountPerArea[26], size);
+                    atomicAdd(&bubbleCountPerArea[5], size);
                 } else if (my == ci3d.y) {
                     idx = 2 * (cellDim.x + cellDim.y) + 2;
                     surfaceCells[idx] = i;
-                    surfaceCellSizes[idx] = cellSizes[i];
+                    surfaceCellSizes[idx] = size;
+                    atomicAdd(&bubbleCountPerArea[26], size);
+                    atomicAdd(&bubbleCountPerArea[6], size);
                 }
             }
 
             if (0 == ci3d.y) {
                 idx = 2 * cellDim.y + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[2], size);
             } else if (my == ci3d.y) {
                 idx = 2 * cellDim.y + cellDim.x + ci3d.x;
                 surfaceCells[idx] = i;
-                surfaceCellSizes[idx] = cellSizes[i];
+                surfaceCellSizes[idx] = size;
+                atomicAdd(&bubbleCountPerArea[26], size);
+                atomicAdd(&bubbleCountPerArea[3], size);
             }
         }
     }
@@ -833,21 +887,210 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
 
 __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      int *surfaceCellOffsets, int *cellSizes,
-                                     int *cellOffsets, Bubbles bubbles) {
+                                     int *cellOffsets, int *bubbleCounts,
+                                     char **outData, Bubbles bubbles,
+                                     ivec cellDim) {
+    auto getNumCellsInArea = [&cellDim](int nArea) {
+        int numCells = 0;
+        if (3 == dConstants->dimensionality) {
+            switch (nArea) {
+            case 0:
+            case 1:
+                numCells = cellDim.y * cellDim.z;
+                break;
+            case 2:
+            case 3:
+                numCells = cellDim.x * cellDim.z;
+                break;
+            case 4:
+            case 5:
+                numCells = cellDim.x * cellDim.y;
+                break;
+            case 6:
+            case 7:
+            case 8:
+            case 9:
+                numCells = cellDim.x;
+                break;
+            case 10:
+            case 11:
+            case 12:
+            case 13:
+                numCells = cellDim.y;
+                break;
+            case 14:
+            case 15:
+            case 16:
+            case 17:
+                numCells = cellDim.z;
+                break;
+            case 18:
+            case 19:
+            case 20:
+            case 21:
+            case 22:
+            case 23:
+            case 24:
+            case 25:
+                numCells = 1;
+                break;
+            default:
+                printf("Should never end up here at %s:%d\n", __FILE__,
+                       __LINE__);
+                break;
+            }
+        } else {
+            switch (nArea) {
+            case 0:
+            case 1:
+                numCells = cellDim.y;
+                break;
+            case 2:
+            case 3:
+                numCells = cellDim.x;
+                break;
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                numCells = 1;
+                break;
+            default:
+                printf("Should never end up here at %s:%d\n", __FILE__,
+                       __LINE__);
+                break;
+            }
+        }
+        return numCells;
+    };
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
          i += gridDim.x * blockDim.x) {
-        const int idx = surfaceCells[i];
-        const int size = cellSizes[idx];
-        const int co = cellOffsets[idx];
-        const int sco = surfaceCellOffsets[i];
+        int indexOfFirstCellOfArea = 0;
+        auto getAreaIndex = [&i, &indexOfFirstCellOfArea,
+                             &getNumCellsInArea]() {
+            int n = 0;
+            int total = getNumCellsInArea(0);
+            while (i >= total) {
+                total += getNumCellsInArea(++n);
+            }
+
+            indexOfFirstCellOfArea = total - getNumCellsInArea(n);
+
+            return n;
+        };
+
+        const int ai = getAreaIndex();
+        const int nb = bubbleCounts[ai];
+        char *dst = outData[ai];
+        if (i == indexOfFirstCellOfArea) {
+            // Add two pieces of metadata at the start
+            reinterpret_cast<int *>(dst)[0] = getNumCellsInArea(ai);
+            reinterpret_cast<int *>(dst)[1] = bubbleCounts[ai];
+        }
+        dst += 2 * sizeof(int);
+
+        const int ci = surfaceCells[i];
+        const int size = cellSizes[ci];
+        const int co = cellOffsets[ci];
+        // sco starts from 0 for each area
+        const int sco =
+            surfaceCellOffsets[i] - surfaceCellOffsets[indexOfFirstCellOfArea];
+
         for (int j = 0; j < size; j++) {
-            const int to = sco + j;
-            const int from = co + j;
-            bubbles.xp[to] = bubbles.x[from];
-            bubbles.yp[to] = bubbles.y[from];
-            bubbles.zp[to] = bubbles.z[from];
-            bubbles.rp[to] = bubbles.r[from];
-            bubbles.numNeighbors[to] = from;
+            const int bi = co + j;
+            const int sbi = sco + j;
+            int to = sbi;
+            reinterpret_cast<double *>(dst)[to] = bubbles.x[bi];
+            to = nb + sbi;
+            reinterpret_cast<double *>(dst)[to] = bubbles.y[bi];
+            to = 2 * nb + sbi;
+            reinterpret_cast<double *>(dst)[to] = bubbles.z[bi];
+            to = 3 * nb + sbi;
+            reinterpret_cast<double *>(dst)[to] = bubbles.r[bi];
+            // doubles take twice the amount of bytes cmp to int,
+            // so double the base offset from 4 to 8
+            to = 8 * nb + sbi;
+            reinterpret_cast<int *>(dst)[to] = bi;
+        }
+        int to = 9 * nb + i - indexOfFirstCellOfArea;
+        reinterpret_cast<int *>(dst)[to] = size;
+    }
+}
+
+__global__ void scatterSurfaceBubbles(int count, char **inData,
+                                      SurfaceData::Data outData) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+         i += gridDim.x * blockDim.x) {
+        int indexOfFirstBubbleOfArea = 0;
+        int externalCellIndex = 0;
+        int indexOfFirstBubbleOfCell = 0;
+        auto getAreaIndex = [&i, &indexOfFirstBubbleOfArea, &inData]() {
+            int n = 0;
+            int total = reinterpret_cast<int *>(inData[n])[1];
+            while (i >= total) {
+                total += reinterpret_cast<int *>(inData[++n])[1];
+            }
+
+            indexOfFirstBubbleOfArea =
+                total - reinterpret_cast<int *>(inData[n])[1];
+
+            return n;
+        };
+
+        auto getCellIndex = [&i, &inData, &externalCellIndex,
+                             &indexOfFirstBubbleOfCell](int ai, int nb) {
+            int *cellSizes = reinterpret_cast<int *>(
+                inData[ai] + nb * (sizeof(double) * 4 + sizeof(int)));
+
+            // First count the number of cells and bubbles in the areas before
+            // the area this bubble belongs to
+            indexOfFirstBubbleOfCell = 0;
+            externalCellIndex = 0;
+            for (int j = 0; j < ai; j++) {
+                externalCellIndex += reinterpret_cast<int *>(inData[j])[0];
+                indexOfFirstBubbleOfCell +=
+                    reinterpret_cast<int *>(inData[j])[1];
+            }
+
+            // Then loop over each cell that belongs to this area
+            int ci = 0;
+            indexOfFirstBubbleOfCell += cellSizes[ci];
+            while (i >= indexOfFirstBubbleOfCell) {
+                indexOfFirstBubbleOfCell += cellSizes[++ci];
+            }
+            indexOfFirstBubbleOfCell -= cellSizes[ci];
+
+            return ci;
+        };
+
+        const int ai = getAreaIndex();
+        const int bi = i - indexOfFirstBubbleOfArea;
+        const int nb = reinterpret_cast<int *>(inData[ai])[1];
+        const int ci = getCellIndex(ai, nb);
+        void *src = static_cast<void *>(inData[ai] + sizeof(int) * 2);
+
+        int from = bi;
+        outData.x[i] = static_cast<double *>(src)[from];
+
+        from = bi + nb;
+        outData.y[i] = static_cast<double *>(src)[from];
+
+        from = bi + 2 * nb;
+        outData.z[i] = static_cast<double *>(src)[from];
+
+        from = bi + 3 * nb;
+        outData.r[i] = static_cast<double *>(src)[from];
+
+        from = bi + 8 * nb;
+        outData.idx[i] = static_cast<int *>(src)[from];
+
+        // If this is the first bubble in this cell, store the size of the cell
+        // in the array
+        if (i == indexOfFirstBubbleOfCell) {
+            from = ci + 9 * nb;
+            outData.cellSizes[ci + externalCellIndex] =
+                static_cast<int *>(src)[from];
         }
     }
 }
