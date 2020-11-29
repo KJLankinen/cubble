@@ -270,6 +270,7 @@ struct HostData {
     }
 };
 
+// Data strucst defined for different situations
 struct SnapshotParams {
     uint64_t count = 0;
     uint32_t indexOffset = 0;
@@ -304,6 +305,9 @@ struct SnapshotParams {
 
 struct SurfaceData {
     void *memory = nullptr;
+    uint64_t totalBytes = 0;
+    uint64_t outBytes = 0;
+    uint64_t inBytes = 0;
 
     char *outData[26] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                          nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
@@ -316,9 +320,6 @@ struct SurfaceData {
                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                         nullptr, nullptr};
 
-    uint64_t outBytes = 0;
-    uint64_t totalBytes = 0;
-    uint64_t inBytes = 0;
     struct Data {
         double *x = nullptr;
         double *y = nullptr;
@@ -330,14 +331,46 @@ struct SurfaceData {
     } data;
 };
 
+struct ExternalBubbles {
+    void *memory = nullptr;
+    uint64_t totalBytes = 0;
+
+    struct Data {
+        double *x = nullptr;
+        double *y = nullptr;
+        double *z = nullptr;
+        double *r = nullptr;
+        double *vx = nullptr;
+        double *vy = nullptr;
+        double *vz = nullptr;
+        int *internalIdx = nullptr;
+        int *externalIdx = nullptr;
+        int *procNum = nullptr;
+    } data;
+
+    std::vector<int> pairsPerProc;
+    std::vector<int> offsetsPerProc;
+};
+
+struct NeighborSearchData {
+    ivec cellDim = ivec(0, 0, 0);
+    int numCells = 0;
+    int *cellOffsets = nullptr;
+    int *cellSizes = nullptr;
+};
+
 struct Params {
     int rank = 0;
     int nProcs = 1;
+
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
     HostData hostData;
     SnapshotParams snapshotParams;
     SurfaceData surfaceData;
+    ExternalBubbles incomingBubbles;
+    ExternalBubbles outgoingBubbles;
+    NeighborSearchData neighborSearchData;
 
     Bubbles bubbles;
     Pairs pairs;

@@ -35,6 +35,8 @@ extern __device__ double dTotalVolumeNew;
 extern __device__ double dMaxRadius;
 extern __device__ bool dErrorEncountered;
 extern __device__ int dNumPairs;
+extern __device__ int dNumIncomingExternalPairs;
+extern __device__ int dNumOutgoingExternalPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
 }; // namespace cubble
@@ -67,10 +69,16 @@ __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      ivec cellDim);
 __global__ void scatterSurfaceBubbles(int count, char **inData,
                                       SurfaceData::Data outData);
-__global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
-                               int *offsets, int *sizes, int *histogram,
-                               int *pairI, int *pairJ, Bubbles bubbles);
+__global__ void neighborSearch(int numCells, bool internalSearch,
+                               int numNeighborCells, ivec cellDim, int *offsets,
+                               int *sizes, int *histogram, int *pairI,
+                               int *pairJ, Bubbles bubbles,
+                               ExternalBubbles::Data externalBubbles,
+                               SurfaceData::Data surfaceData, int *surfaceCells,
+                               int *areaToProcessor);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
+__global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
+                                  ExternalBubbles::Data externalBubbles);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
@@ -90,8 +98,7 @@ __device__ void logError(bool condition, const char *statement,
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2);
 __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
-                                     bool internalSearch,
-                                     bool &isInternalIndex);
+                                     int &areaIndex, bool internalSearch);
 __device__ bool isOutOfBounds(ivec a, ivec dim, ivec &oobVec);
 __device__ ivec neighborNumToRelativeCoords(int nn);
 __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
