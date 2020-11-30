@@ -1462,6 +1462,48 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
     }
 }
 
+__global__ void swapExternalIndices(bool isFirstPass,
+                                    ExternalBubbles::Data outgoingBubbles,
+                                    ExternalBubbles::Data incomingBubbles,
+                                    int *toBeDeleted) {
+    int n = dNumIncomingExternalPairs > dNumOutgoingExternalPairs
+                ? dNumIncomingExternalPairs
+                : dNumOutgoingExternalPairs;
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < n;
+         i += gridDim.x * blockDim.x) {
+        for (int j = 0; j < dNumToBeDeleted; j++) {
+            if (i < dNumIncomingExternalPairs) {
+                if (isFirstPass) {
+                    // During first pass set the deleted bubbles to -1
+                    if (incomingBubbles.internalIdx[i] == toBeDeleted[j]) {
+                        incomingBubbles.internalIdx[i] = -1;
+                    }
+                } else {
+                    // During second pass swap any indices that were moved by
+                    // the bubble deletion performed before this kernel
+                    if (incomingBubbles.internalIdx[i] ==
+                        toBeDeleted[dNumToBeDeleted + j]) {
+                        incomingBubbles.internalIdx[i] = toBeDeleted[j];
+                    }
+                }
+            }
+
+            if (i < dNumOutgoingExternalPairs) {
+                if (isFirstPass) {
+                    if (outgoingBubbles.internalIdx[i] == toBeDeleted[j]) {
+                        outgoingBubbles.internalIdx[i] = -1;
+                    }
+                } else {
+                    if (outgoingBubbles.internalIdx[i] ==
+                        toBeDeleted[dNumToBeDeleted + j]) {
+                        outgoingBubbles.internalIdx[i] = toBeDeleted[j];
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ==============================================
 // Miscellaneous
 // ==============================================
@@ -1622,13 +1664,12 @@ __device__ void logError(bool condition, const char *statement,
 
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2) {
-    // TODO for global box
     dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
     if (3 == dConstants->dimensionality) {
         d1.z = z1 - z2;
     }
     dvec d2 = d1;
-    dvec temp = dConstants->interval - d1.getAbsolute();
+    dvec temp = dConstants->globalInterval - d1.getAbsolute();
     if (!dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }

@@ -325,7 +325,7 @@ void externalNeighborSearch(Params &params) {
         // Communicate to each processor externalBubbles.data.externalIndex
         // according to eb.pairsPerProc and eb.offsetsPerProc
         // Store incoming index data temporarily to the pointers stored in
-        // outgoingIndices. Once we know full size, copy allocate memory for the
+        // outgoingIndices. Once we know full size, allocate memory for the
         // entire struct and copy the indices to
         // outgoingBubbles.data.internalIndex
         // TODO does MPI_SendRecv() require the exact value for sent and
@@ -357,8 +357,6 @@ void externalNeighborSearch(Params &params) {
     CUDA_CALL(cudaMemcpyToSymbol(dNumOutgoingExternalPairs,
                                  static_cast<void *>(&totalOutgoingPairs),
                                  sizeof(int)));
-
-    // TODO numneighbors must be added
 }
 
 void searchNeighbors(Params &params) {
@@ -513,15 +511,19 @@ void removeBubbles(Params &params, int numToBeDeleted) {
     KERNEL_LAUNCH(addVolumeFixPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempI);
 
-    // External deletion: just set the both of the pairs to -1, if either of
-    // them is to be deleted. Before perfoming "deletion" for external pairs,
-    // communicate the bubbles to be deleted accross all neigboring processors.
-    // When checking for the external to-be-deleteds, compare both the idx and
-    // the processor number, since indices overlap. Then, as the pairwise
-    // interactions are performed, just skip the pair, if the indices are -1.
-    // After each processor has done internal deletion, must communicate the
-    // swapped indices. Then the external indices are swapped:
-    // if (procIsSame && old is in the external pairs list) {swap old to new}
+    if (params.nProcs > 1) {
+        // External deletion is very simple: First all the to-be-deleted bubbles
+        // found in the interlanIdx list of incoming and outgoing bubbles are
+        // set to -1. Then the indices of those bubbles that were swapped with
+        // the now deleted bubbles are replaced with the new indices.
+        KERNEL_LAUNCH(swapExternalIndices, params, 0, 0, true,
+                      params.incomingBubbles.data, params.outgoingBubbles.data,
+                      params.tempI);
+
+        KERNEL_LAUNCH(swapExternalIndices, params, 0, 0, false,
+                      params.incomingBubbles.data, params.outgoingBubbles.data,
+                      params.tempI);
+    }
 
     params.bubbles.count -= numToBeDeleted;
     nvtxRangePop();
@@ -539,6 +541,9 @@ void step(Params &params, IntegrationParams &ip) {
         (params.hostConstants.dimensionality + ip.useGasExchange * 4 +
          ip.useFlow * params.hostConstants.dimensionality) *
         BLOCK_SIZE * sizeof(double);
+    // TODO
+    // If we receive data with -1, i.e. the bubble has been deleted externally,
+    // reduce the internal bubble's numNeighbors by one
     KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
                   params.bubbles, params.pairs, params.tempD1,
                   ip.useGasExchange, ip.useFlow);
