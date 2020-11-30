@@ -105,7 +105,7 @@ void externalNeighborSearch(Params &params) {
     for (int i = 0; i < nAreas; i++) {
         temp += bubbleCounts[i];
     }
-    assert(temp == bubbleCounts[26], "Bubblecount totals don't match.");
+    assert(temp == bubbleCounts[26] && "Bubblecount totals don't match.");
 #endif
 
     std::array<int, 26> cellCounts;
@@ -250,9 +250,9 @@ void externalNeighborSearch(Params &params) {
         eb.data.vx = eb.data.r + stride;
         eb.data.vy = eb.data.vx + stride;
         eb.data.vz = eb.data.vy + stride;
-        eb.data.internalIndex = reinterpret_cast<int *>(eb.data.vz + stride);
-        eb.data.externalIndex = eb.data.internalIndex + stride;
-        eb.data.procNum = eb.data.externalIndex + stride;
+        eb.data.internalIdx = reinterpret_cast<int *>(eb.data.vz + stride);
+        eb.data.externalIdx = eb.data.internalIdx + stride;
+        eb.data.procNum = eb.data.externalIdx + stride;
     }
 
     int zero = 0;
@@ -473,11 +473,14 @@ void searchNeighbors(Params &params) {
         numCellsToSearch = 14;
     }
 
+    // HACK
+    // This passes two addresses to a host variable as (int *) arguments, which
+    // are not needed in this instance of the kernel launch
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, true,
                   numCellsToSearch, cellDim, cellOffsets, cellSizes, histogram,
                   params.tempPair1, params.tempPair2, params.bubbles,
-                  params.incomingBubbles.data, params.surfaceData.data, NULL,
-                  NULL);
+                  params.incomingBubbles.data, params.surfaceData.data, &zero,
+                  &zero);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
                                    dNumPairs, sizeof(int)));

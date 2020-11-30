@@ -1228,12 +1228,12 @@ __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
 
 __global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
                                   ExternalBubbles::Data externalBubbles) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumExternalPairs;
-         i += gridDim.x * blockDim.x) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < dNumIncomingExternalPairs; i += gridDim.x * blockDim.x) {
         const int id =
             atomicSub(&procOffsets[externalBubbles.procNum[i]], 1) - 1;
-        externalBubbles.internalIndex[id] = pairI[i];
-        externalBubbles.externalIndex[id] = pairJ[i];
+        externalBubbles.internalIdx[id] = pairI[i];
+        externalBubbles.externalIdx[id] = pairJ[i];
     }
 }
 
@@ -1647,7 +1647,7 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
     ivec oobVec = ivec(0, 0, 0);
     const bool oob = isOutOfBounds(idxVec + relVec, dim, oobVec);
 
-    auto wrap = [&oob, &oobVec, &idxVec, &relVec]() {
+    auto wrap = [&oob, &oobVec, &idxVec, &relVec, &dim]() {
         dvec glbb = dConstants->globalLbb;
         dvec gtfr = dConstants->globalTfr;
         dvec ginterval = dConstants->globalInterval;
