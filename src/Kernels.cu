@@ -1468,6 +1468,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
+        // TODO external pairs
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
         double e =
@@ -1517,6 +1518,7 @@ __global__ void transformPositions(bool normalize, Bubbles bubbles) {
 }
 
 __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
+    // TODO global box
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
@@ -1620,6 +1622,7 @@ __device__ void logError(bool condition, const char *statement,
 
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2) {
+    // TODO for global box
     dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
     if (3 == dConstants->dimensionality) {
         d1.z = z1 - z2;
@@ -1647,7 +1650,7 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
     ivec oobVec = ivec(0, 0, 0);
     const bool oob = isOutOfBounds(idxVec + relVec, dim, oobVec);
 
-    auto wrap = [&oob, &oobVec, &idxVec, &relVec, &dim]() {
+    auto wrap = [&oobVec, &idxVec, &relVec, &dim]() {
         dvec glbb = dConstants->globalLbb;
         dvec gtfr = dConstants->globalTfr;
         dvec ginterval = dConstants->globalInterval;
@@ -1668,6 +1671,7 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
                     interval.x + 1.0 > ginterval.x) {
                     idxVec.x += relVec.x + dim.x;
                     idxVec.x %= dim.x;
+                    oobVec.x = 0;
                     relVec.x = 0;
                 }
             }
@@ -1686,6 +1690,7 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
                     interval.y + 1.0 > ginterval.y) {
                     idxVec.y += relVec.y + dim.y;
                     idxVec.y %= dim.y;
+                    oobVec.y = 0;
                     relVec.y = 0;
                 }
             }
@@ -1707,6 +1712,7 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
                         interval.z + 1.0 > ginterval.z) {
                         idxVec.z += relVec.z + dim.z;
                         idxVec.z %= dim.z;
+                        oobVec.z = 0;
                         relVec.z = 0;
                     }
                 }
@@ -1723,15 +1729,15 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
         }
 
         // Was the cell wrapped over all the walls it went out of bounds for?
-        bool allZero = relVec.x == 0;
-        allZero &= relVec.y == 0;
-        allZero &= relVec.z == 0;
+        bool allZero = oobVec.x == 0;
+        allZero &= oobVec.y == 0;
+        allZero &= oobVec.z == 0;
 
         if (allZero) {
             // If it wrapped over all walls and we're doing internal search,
             // everything is ok, return the index of the wrapped cell
             if (internalSearch) {
-                return get1DIdxFrom3DIdx(idxVec, dim);
+                return get1DIdxFrom3DIdx(idxVec + relVec, dim);
             } else {
                 // Already taken care of by the internal search
                 return -1;
@@ -1986,7 +1992,7 @@ __device__ bool isOutOfBounds(ivec a, ivec dim, ivec &oobVec) {
     if (a.x < 0) {
         oobVec.x = -1;
         oob = true;
-    } else if (a.x > dim.x) {
+    } else if (a.x >= dim.x) {
         oobVec.x = 1;
         oob = true;
     }
@@ -1995,18 +2001,20 @@ __device__ bool isOutOfBounds(ivec a, ivec dim, ivec &oobVec) {
     if (a.y < 0) {
         oobVec.y = -1;
         oob = true;
-    } else if (a.y > dim.y) {
+    } else if (a.y >= dim.y) {
         oobVec.y = 1;
         oob = true;
     }
 
     // z
-    if (a.z < 0) {
-        oobVec.z = -1;
-        oob = true;
-    } else if (a.z > dim.z) {
-        oobVec.z = 1;
-        oob = true;
+    if (3 == dConstants->dimensionality) {
+        if (a.z < 0) {
+            oobVec.z = -1;
+            oob = true;
+        } else if (a.z >= dim.z) {
+            oobVec.z = 1;
+            oob = true;
+        }
     }
 
     return oob;

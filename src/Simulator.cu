@@ -91,7 +91,7 @@ void externalNeighborSearch(Params &params) {
     KERNEL_LAUNCH(findSurfaceCells, params, 0, 0, numCells, surfaceCells,
                   cellSizes, surfaceCellSizes, bubbleCountPerArea, cellDim);
 
-    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem,
+    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
                surfaceCellSizes, surfaceCellOffsets, nSurfaceCells,
                (cudaStream_t)0, false);
 
@@ -228,7 +228,7 @@ void externalNeighborSearch(Params &params) {
     KERNEL_LAUNCH(scatterSurfaceBubbles, params, 0, 0, externalBubbleCounts[26],
                   sd.inData, sd.data);
 
-    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem,
+    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
                sd.data.cellSizes, sd.data.cellOffsets, nSurfaceCells,
                (cudaStream_t)0, false);
 
@@ -282,7 +282,7 @@ void externalNeighborSearch(Params &params) {
                   params.incomingBubbles.data, sd.data, surfaceCells,
                   areaToProcessor);
 
-    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
+    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem,
                processorSizes, processorOffsets, params.nProcs, (cudaStream_t)0,
                false);
 
@@ -942,12 +942,12 @@ void init(const char *inputFileName, Params &params) {
     auto computeLocalDimensions = [&params]() {
         // Calculate the local dimensions from the global using the rank
         if (1 < params.nProcs) {
+            // TODO
             params.hostConstants.tfr = dvec(0, 0, 0);
             params.hostConstants.lbb = dvec(0, 0, 0);
-            // TODO
         } else {
-            params.hostConstants.tfr = params.hostConstants.globalInterval;
-            params.hostConstants.lbb = dvec(0, 0, 0);
+            params.hostConstants.tfr = params.hostConstants.globalTfr;
+            params.hostConstants.lbb = params.hostConstants.globalLbb;
         }
 
         params.hostConstants.interval =
