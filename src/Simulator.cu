@@ -388,6 +388,9 @@ void searchNeighbors(Params &params) {
 
         void *movedData = nullptr;
         void *receivedData = nullptr;
+        // This is just a wild guess
+        uint64_t maxReceivedBytes = params.bubbles.count / 10 * bytesPerBubble;
+        CUDA_ASSERT(cudaMalloc(&receivedData, maxReceivedBytes));
         std::vector<int> sizes(params.nProcs);
         std::vector<int> offsets(params.nProcs);
         if (numToMove > 0) {
@@ -431,18 +434,35 @@ void searchNeighbors(Params &params) {
 
         std::vector<int> receivedProcNums;
         int numReceivedBubbles = 0;
+        uint64_t totalBytesReceived = 0;
         char *src = static_cast<char *>(movedData);
-        // TODO allocate memory for receiving data
         char *dst = static_cast<char *>(receivedData);
         for (uint32_t i = 0; i < params.nProcs; i++) {
             uint64_t bytesToSend = bytesPerBubble * sizes[i];
             uint64_t bytesReceived = 0;
 
             // MPI_Probe();
+            if (bytesReceived + totalBytesReceived > maxReceivedBytes) {
+                // If the data were receiving is more than we have allocated
+                // memory for, allocate double the old size
+                std::vector<char> tempData(totalBytesReceived);
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(tempData.data()),
+                                     receivedData, tempData.size(),
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaFree(receivedData));
+                maxReceivedBytes *= 2;
+                CUDA_ASSERT(cudaMalloc(&receivedData, maxReceivedBytes));
+                CUDA_CALL(cudaMemcpy(receivedData,
+                                     static_cast<void *>(tempData.data()),
+                                     tempData.size(), cudaMemcpyDefault));
+                // Reset the destination pointer
+                dst = static_cast<char *>(receivedData) + totalBytesReceived;
+            }
             // MPI_SendRecv();
 
             src += bytesToSend;
             dst += bytesReceived;
+            totalBytesReceived += bytesReceived;
             sizes[i] = static_cast<int>(bytesReceived / bytesPerBubble);
             if (i > 0) {
                 offsets[i] = sizes[i - 1] + offsets[i - 1];
