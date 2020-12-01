@@ -32,6 +32,7 @@ __device__ int dNumIncomingExternalPairs;
 __device__ int dNumOutgoingExternalPairs;
 __device__ int dNumPairsNew;
 __device__ int dNumToBeDeleted;
+__device__ __constant__ int dAreaToProcessorMap[26];
 }; // namespace cubble
 
 namespace cubble {
@@ -1102,8 +1103,8 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
                                ExternalBubbles::Data externalBubbles,
-                               SurfaceData::Data surfaceData, int *surfaceCells,
-                               int *areaToProcessor) {
+                               SurfaceData::Data surfaceData,
+                               int *surfaceCells) {
     // Loop over each cell pair in the simulation box
     for (int i = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
          i < numCells * numNeighborCells; i += (blockDim.x * gridDim.x) / 32) {
@@ -1202,7 +1203,7 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                     int id = atomicAdd(&dNumIncomingExternalPairs, 1);
                     DEVICE_ASSERT(areaIndex > -1,
                                   "areaIndex is not a valid value.");
-                    int pn = areaToProcessor[areaIndex];
+                    int pn = dAreaToProcessorMap[areaIndex];
                     atomicAdd(&histogram[pn], 1);
                     pairI[id] = b1;
                     pairJ[id] = surfaceData.idx[b2];
@@ -1559,25 +1560,302 @@ __global__ void transformPositions(bool normalize, Bubbles bubbles) {
     }
 }
 
-__global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
-    // TODO global box
+__global__ void wrapOverPeriodicBoundaries(Bubbles bubbles, int *indices,
+                                           int *procNums, int *procSizes) {
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
+    const dvec gInterval = dConstants->globalInterval;
+
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        auto wrap = [&i](double *p, int *wc, double x, double low,
-                         double high) {
-            int mult = x < low ? 1 : (x > high ? -1 : 0);
-            p[i] = x + (high - low) * (double)mult;
-            wc[i] -= mult;
+        bool addId = false;
+        ivec direction = ivec(0, 0, 0);
+
+        auto wrap = [&addId, &i](double low, double high, double gInterval,
+                                 double x, double *p, int *wc) {
+            if (x < low || x > high) {
+                // Bubble is outside the local box. Does the local box span the
+                // global box in this dimension?
+                const double interval = high - low;
+                if (interval - 1.0 < gInterval && interval + 1.0 > gInterval) {
+                    // In this coordinate the bubble should wrap back around to
+                    // our box
+                    const int mult = x < low ? 1 : -1;
+                    p[i] = x + interval * mult;
+                    wc[i] -= mult;
+                } else {
+                    addId = true;
+                    if (x < low) {
+                        return -1;
+                    } else if (x > high) {
+                        return 1;
+                    }
+                }
+            }
+
+            return 0;
         };
 
-        if (!dConstants->xWall)
-            wrap(bubbles.x, bubbles.wrapCountX, bubbles.x[i], lbb.x, tfr.x);
-        if (!dConstants->yWall)
-            wrap(bubbles.y, bubbles.wrapCountY, bubbles.y[i], lbb.y, tfr.y);
-        if (!dConstants->zWall)
-            wrap(bubbles.z, bubbles.wrapCountZ, bubbles.z[i], lbb.z, tfr.z);
+        auto getAreaNum = [&direction]() {
+            // This follows the same order as findSurfaceCells
+            if (3 == dConstants->dimensionality) {
+                if (direction.x == -1) {
+                    if (direction.y == -1) {
+                        if (direction.z == -1) {
+                            return 18;
+                        } else if (direction.z == 0) {
+                            return 14;
+                        } else if (direction.z == 1) {
+                            return 19;
+                        }
+                    } else if (direction.y == 0) {
+                        if (direction.z == -1) {
+                            return 10;
+                        } else if (direction.z == 0) {
+                            return 0;
+                        } else if (direction.z == 1) {
+                            return 11;
+                        }
+                    } else if (direction.y == 1) {
+                        if (direction.z == -1) {
+                            return 23;
+                        } else if (direction.z == 0) {
+                            return 17;
+                        } else if (direction.z == 1) {
+                            return 24;
+                        }
+                    }
+                } else if (direction.x == 0) {
+                    if (direction.y == -1) {
+                        if (direction.z == -1) {
+                            return 6;
+                        } else if (direction.z == 0) {
+                            return 2;
+                        } else if (direction.z == 1) {
+                            return 9;
+                        }
+                    } else if (direction.y == 0) {
+                        if (direction.z == -1) {
+                            return 4;
+                        } else if (direction.z == 0) {
+                            printf("Should never end up here, at %s:%d\n",
+                                   __FILE__, __LINE__);
+                            return -1;
+                        } else if (direction.z == 1) {
+                            return 5;
+                        }
+                    } else if (direction.y == 1) {
+                        if (direction.z == -1) {
+                            return 7;
+                        } else if (direction.z == 0) {
+                            return 3;
+                        } else if (direction.z == 1) {
+                            return 8;
+                        }
+                    }
+                } else if (direction.x == 1) {
+                    if (direction.y == -1) {
+                        if (direction.z == -1) {
+                            return 21;
+                        } else if (direction.z == 0) {
+                            return 15;
+                        } else if (direction.z == 1) {
+                            return 20;
+                        }
+                    } else if (direction.y == 0) {
+                        if (direction.z == -1) {
+                            return 13;
+                        } else if (direction.z == 0) {
+                            return 1;
+                        } else if (direction.z == 1) {
+                            return 12;
+                        }
+                    } else if (direction.y == 1) {
+                        if (direction.z == -1) {
+                            return 22;
+                        } else if (direction.z == 0) {
+                            return 16;
+                        } else if (direction.z == 1) {
+                            return 25;
+                        }
+                    }
+                }
+            } else {
+                if (direction.x == -1) {
+                    if (direction.y == -1) {
+                        return 4;
+                    } else if (direction.y == 0) {
+                        return 0;
+                    } else if (direction.y == 1) {
+                        return 7;
+                    }
+                } else if (direction.x == 0) {
+                    if (direction.y == -1) {
+                        return 2;
+                    } else if (direction.y == 0) {
+                        printf("Should never end up here, at %s:%d\n", __FILE__,
+                               __LINE__);
+                        return -1;
+                    } else if (direction.y == 1) {
+                        return 3;
+                    }
+                } else if (direction.x == 1) {
+                    if (direction.y == -1) {
+                        return 5;
+                    } else if (direction.y == 0) {
+                        return 1;
+                    } else if (direction.y == 1) {
+                        return 6;
+                    }
+                }
+            }
+
+            return -1;
+        };
+
+        if (!dConstants->xWall) {
+            direction.x = wrap(lbb.x, tfr.x, gInterval.x, bubbles.x[i],
+                               bubbles.x, bubbles.wrapCountX);
+        }
+
+        if (!dConstants->yWall) {
+            direction.y = wrap(lbb.y, tfr.y, gInterval.y, bubbles.y[i],
+                               bubbles.y, bubbles.wrapCountY);
+        }
+
+        if (3 == dConstants->dimensionality && !dConstants->zWall) {
+            direction.z = wrap(lbb.z, tfr.z, gInterval.z, bubbles.z[i],
+                               bubbles.z, bubbles.wrapCountZ);
+        }
+
+        if (addId) {
+            const int procNum = dAreaToProcessorMap[getAreaNum()];
+            atomicAdd(&procSizes[procNum], 1);
+            int id = atomicAdd(&dNumToBeDeleted, 1);
+            indices[id] = i;
+            procNums[id] = procNum;
+        }
+    }
+}
+
+__global__ void gatherAndDeleteMovedBubbles(int numToMove, int bytesPerBubble,
+                                            Bubbles bubbles, int *sizes,
+                                            int *globalOffsets,
+                                            int *localOffsets, int *indices,
+                                            int *procs, char *data) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numToMove;
+         i += gridDim.x * blockDim.x) {
+        const int idx = indices[i];
+        const int pn = procs[i];
+        const int ps = sizes[pn];
+        const int gof = globalOffsets[pn];
+        const int lof = atomicSub(&localOffsets[pn], 1) - 1;
+
+        double *ddst = reinterpret_cast<double *>(data + bytesPerBubble * gof);
+        ddst[lof + 0 * ps] = bubbles.x[idx];
+        ddst[lof + 1 * ps] = bubbles.y[idx];
+        ddst[lof + 2 * ps] = bubbles.z[idx];
+        ddst[lof + 3 * ps] = bubbles.r[idx];
+        ddst[lof + 4 * ps] = bubbles.dxdt[idx];
+        ddst[lof + 5 * ps] = bubbles.dydt[idx];
+        ddst[lof + 6 * ps] = bubbles.dzdt[idx];
+        ddst[lof + 7 * ps] = bubbles.drdt[idx];
+        ddst[lof + 8 * ps] = bubbles.dxdto[idx];
+        ddst[lof + 9 * ps] = bubbles.dydto[idx];
+        ddst[lof + 10 * ps] = bubbles.dzdto[idx];
+        ddst[lof + 11 * ps] = bubbles.drdto[idx];
+        ddst[lof + 12 * ps] = bubbles.path[idx];
+        ddst[lof + 13 * ps] = bubbles.error[idx];
+
+        int *idst = reinterpret_cast<int *>(&ddst[14 * ps]);
+        idst[lof + 0 * ps] = bubbles.wrapCountX[idx];
+        idst[lof + 1 * ps] = bubbles.wrapCountY[idx];
+        idst[lof + 2 * ps] = bubbles.wrapCountZ[idx];
+
+        // If the bubble that is moved to another processor is inside the
+        // range of bubbles left for this processor, replace that bubble with a
+        // bubble from the back of the list. This way the remaining bubbles will
+        // remain inside the range and the moved are outside
+        if (idx < bubbles.count - numToMove) {
+            // Each thread finds a bubble from the back of the bubble array,
+            // which is not one of the moved bubbles. The thread with n == 0
+            // takes the first from the back that is not moved, the thread with
+            // n == 1 takes the second and so on. At the end, from is the index
+            // of the bubble that replaces the moved bubble.
+            const int n = atomicAdd(&dNumToBeDeleted, 1);
+            int j = 0;
+            int from = bubbles.count;
+            bool replacementFound = false;
+            while (!replacementFound) {
+                from -= 1;
+                replacementFound = true;
+                for (int k = 0; k < numToMove; k++) {
+                    if (from == indices[k]) {
+                        replacementFound = false;
+                        break;
+                    }
+                }
+
+                if (replacementFound && j < n) {
+                    replacementFound = false;
+                    j++;
+                }
+            }
+
+            // Replace the data
+            bubbles.x[idx] = bubbles.x[from];
+            bubbles.y[idx] = bubbles.y[from];
+            bubbles.z[idx] = bubbles.z[from];
+            bubbles.r[idx] = bubbles.r[from];
+            bubbles.dxdt[idx] = bubbles.dxdt[from];
+            bubbles.dydt[idx] = bubbles.dydt[from];
+            bubbles.dzdt[idx] = bubbles.dzdt[from];
+            bubbles.drdt[idx] = bubbles.drdt[from];
+            bubbles.dxdto[idx] = bubbles.dxdto[from];
+            bubbles.dydto[idx] = bubbles.dydto[from];
+            bubbles.dzdto[idx] = bubbles.dzdto[from];
+            bubbles.drdto[idx] = bubbles.drdto[from];
+            bubbles.path[idx] = bubbles.path[from];
+            bubbles.error[idx] = bubbles.error[from];
+            bubbles.wrapCountX[idx] = bubbles.wrapCountX[from];
+            bubbles.wrapCountY[idx] = bubbles.wrapCountY[from];
+            bubbles.wrapCountZ[idx] = bubbles.wrapCountZ[from];
+        }
+    }
+}
+
+__global__ void distributeReceivedBubbles(int numReceived, int bytesPerBubble,
+                                          Bubbles bubbles, int *sizes,
+                                          int *globalOffsets, int *localOffsets,
+                                          int *procs, char *data) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numReceived;
+         i += gridDim.x * blockDim.x) {
+        const int idx = bubbles.count + atomicAdd(&dNumToBeDeleted, 1);
+        const int pn = procs[i];
+        const int ps = sizes[pn];
+        const int gof = globalOffsets[pn];
+        const int lof = atomicSub(&localOffsets[pn], 1) - 1;
+
+        double *dsrc = reinterpret_cast<double *>(data + bytesPerBubble * gof);
+        bubbles.x[idx] = dsrc[lof + 0 * ps];
+        bubbles.y[idx] = dsrc[lof + 1 * ps];
+        bubbles.z[idx] = dsrc[lof + 2 * ps];
+        bubbles.r[idx] = dsrc[lof + 3 * ps];
+        bubbles.dxdt[idx] = dsrc[lof + 4 * ps];
+        bubbles.dydt[idx] = dsrc[lof + 5 * ps];
+        bubbles.dzdt[idx] = dsrc[lof + 6 * ps];
+        bubbles.drdt[idx] = dsrc[lof + 7 * ps];
+        bubbles.dxdto[idx] = dsrc[lof + 8 * ps];
+        bubbles.dydto[idx] = dsrc[lof + 9 * ps];
+        bubbles.dzdto[idx] = dsrc[lof + 10 * ps];
+        bubbles.drdto[idx] = dsrc[lof + 11 * ps];
+        bubbles.path[idx] = dsrc[lof + 12 * ps];
+        bubbles.error[idx] = dsrc[lof + 13 * ps];
+
+        int *isrc = reinterpret_cast<int *>(&dsrc[14 * ps]);
+        bubbles.wrapCountX[idx] = isrc[lof + 0 * ps];
+        bubbles.wrapCountY[idx] = isrc[lof + 1 * ps];
+        bubbles.wrapCountZ[idx] = isrc[lof + 2 * ps];
     }
 }
 

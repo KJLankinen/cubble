@@ -39,6 +39,7 @@ extern __device__ int dNumIncomingExternalPairs;
 extern __device__ int dNumOutgoingExternalPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
+extern __device__ __constant__ int dAreaToProcessorMap[26];
 }; // namespace cubble
 
 namespace cubble {
@@ -74,8 +75,8 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
                                ExternalBubbles::Data externalBubbles,
-                               SurfaceData::Data surfaceData, int *surfaceCells,
-                               int *areaToProcessor);
+                               SurfaceData::Data surfaceData,
+                               int *surfaceCells);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
                                   ExternalBubbles::Data externalBubbles);
@@ -92,7 +93,17 @@ __global__ void swapExternalIndices(bool isFirstPass,
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
 __global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);
-__global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
+__global__ void wrapOverPeriodicBoundaries(Bubbles bubbles, int *indices,
+                                           int *procNums, int *procSizes);
+__global__ void gatherAndDeleteMovedBubbles(int numToMove, int bytesPerBubble,
+                                            Bubbles bubbles, int *sizes,
+                                            int *globalOffsets,
+                                            int *localOffsets, int *indices,
+                                            int *procs, char *data);
+__global__ void distributeReceivedBubbles(int numReceived, int bytesPerBubble,
+                                          Bubbles bubbles, int *sizes,
+                                          int *globalOffsets, int *localOffsets,
+                                          int *procs, char *data);
 __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
