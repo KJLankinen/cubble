@@ -20,7 +20,6 @@
 
 #include "Util.h"
 #include "Vec.h"
-#include "cub/cub/cub.cuh"
 #include <array>
 #include <string>
 #include <thread>
@@ -148,7 +147,7 @@ struct Bubbles {
         return static_cast<void *>(prevI);
     }
 
-    void print() { printf("\t#bubbles: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#bubbles: %d, stride: %ld\n", count, stride); }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 
@@ -173,7 +172,7 @@ struct Pairs {
         return static_cast<void *>(prev);
     }
 
-    void print() { printf("\t#pairs: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#pairs: %d, stride: %ld\n", count, stride); }
 };
 static_assert(sizeof(Pairs) % 8 == 0);
 

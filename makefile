@@ -21,7 +21,7 @@ OBJS = $(addprefix $(BIN_PATH)/, $(OBJ_NAMES))
 # Overlap with the objects above is totally fine.
 # These are only related to linking, compiling is done automatically
 # based on the file extension (.cpp vs. .cu)
-GPU_OBJ_NAMES := Simulator.o Kernels.o
+GPU_OBJ_NAMES := Kernels.o
 GPU_OBJS = $(addprefix $(BIN_PATH)/, $(GPU_OBJ_NAMES))
 
 # Find all headers in source dir.

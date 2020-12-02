@@ -40,9 +40,7 @@ extern __device__ int dNumOutgoingExternalPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
 extern __device__ __constant__ int dAreaToProcessorMap[26];
-}; // namespace cubble
 
-namespace cubble {
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,

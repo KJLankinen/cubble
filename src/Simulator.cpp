@@ -17,10 +17,9 @@
  */
 
 #include "DataDefinitions.h"
-#include "Kernels.cuh"
+#include "KernelWrapper.h"
 #include "Util.h"
 #include "Vec.h"
-#include "cub/cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cuda_profiler_api.h>
@@ -35,31 +34,7 @@
 
 namespace {
 using namespace cubble;
-double totalEnergy(Params &params) {
-    nvtxRangePush("Energy");
-    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-                  params.tempD1);
-    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
-                  params.tempD1);
-
-    void *cubPtr = static_cast<void *>(params.tempPair2);
-    double total = 0.0;
-    void *cubOutput = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
-               params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
-                                   sizeof(double)));
-    nvtxRangePop();
-
-    return total;
-}
-
 void externalNeighborSearch(Params &params) {
-    void *cubPtr = static_cast<void *>(params.tempPair2);
-    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
-
     ivec cellDim = params.neighborSearchData.cellDim;
     const int numCells = params.neighborSearchData.numCells;
     int nAreas = 8;
@@ -87,13 +62,13 @@ void externalNeighborSearch(Params &params) {
     int *cellOffsets = params.neighborSearchData.cellOffsets;
     int *cellSizes = params.neighborSearchData.cellSizes;
 
-    // Kernel for copying surface cell sizes
-    KERNEL_LAUNCH(findSurfaceCells, params, 0, 0, numCells, surfaceCells,
-                  cellSizes, surfaceCellSizes, bubbleCountPerArea, cellDim);
+    launchFindSurfaceCells(params, numCells, surfaceCells, cellSizes,
+                           surfaceCellSizes, bubbleCountPerArea, cellDim);
 
-    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
-               surfaceCellSizes, surfaceCellOffsets, nSurfaceCells,
-               (cudaStream_t)0, false);
+    void *cubPtr = static_cast<void *>(params.tempPair2);
+    const uint64_t maxCubMem = params.pairs.getMemReq() / 2;
+    cubExclusiveSum(cubPtr, maxCubMem, surfaceCellSizes, surfaceCellOffsets,
+                    nSurfaceCells, 0, false);
 
     std::array<int, 27> bubbleCounts;
     CUDA_CALL(cudaMemcpy(static_cast<void *>(bubbleCounts.data()),
@@ -172,7 +147,7 @@ void externalNeighborSearch(Params &params) {
 
     char *outPtr = static_cast<char *>(sd.memory);
     char *inPtr = outPtr + sd.outBytes;
-    for (uint32_t i = 0; i < nAreas; i++) {
+    for (int i = 0; i < nAreas; i++) {
         sd.outData[i] = outPtr;
         sd.inData[i] = inPtr;
 
@@ -181,7 +156,7 @@ void externalNeighborSearch(Params &params) {
         uint64_t incr = bci * (4 * sizeof(double) + sizeof(int));
         incr += ci * sizeof(int);
         // Add padding if the ints don't sum to an even number
-        if ((ci + bci) & 0x1 == 1) {
+        if (((ci + bci) & 0x1) == 1) {
             incr += sizeof(int);
         }
         outPtr += incr;
@@ -190,15 +165,15 @@ void externalNeighborSearch(Params &params) {
         inPtr += 2 * incr;
     }
 
-    KERNEL_LAUNCH(gatherSurfaceBubbles, params, 0, 0, nSurfaceCells,
-                  surfaceCells, surfaceCellOffsets, cellSizes, cellOffsets,
-                  bubbleCountPerArea, sd.outData, params.bubbles, cellDim);
+    launchGatherSurfaceBubbles(params, nSurfaceCells, surfaceCells,
+                               surfaceCellOffsets, cellSizes, cellOffsets,
+                               bubbleCountPerArea, sd.outData, cellDim);
 
     // sd.outData contains pointers to memory, where the data for each surface
     // area is stored at. Swap these data with neigboring processors.
     std::array<int, 27> externalBubbleCounts;
     externalBubbleCounts[26] = 0;
-    for (uint32_t i = 0; i < nAreas; i++) {
+    for (int i = 0; i < nAreas; i++) {
         uint64_t bytes = bubbleCounts[i] * (4 * sizeof(double) + sizeof(int));
         bytes += cellCounts[i] * sizeof(int);
         bytes += 2 * sizeof(int);
@@ -225,12 +200,10 @@ void externalNeighborSearch(Params &params) {
         reinterpret_cast<int *>(sd.data.r + externalBubbleCounts[26]);
     sd.data.cellOffsets = sd.data.cellSizes + nSurfaceCells;
 
-    KERNEL_LAUNCH(scatterSurfaceBubbles, params, 0, 0, externalBubbleCounts[26],
-                  sd.inData, sd.data);
-
-    CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
-               sd.data.cellSizes, sd.data.cellOffsets, nSurfaceCells,
-               (cudaStream_t)0, false);
+    launchScatterSurfaceBubbles(params, externalBubbleCounts[26], sd.inData,
+                                sd.data);
+    cubExclusiveSum(cubPtr, maxCubMem, sd.data.cellSizes, sd.data.cellOffsets,
+                    nSurfaceCells, 0, false);
 
     // An estimate of the total memory needed by the external bubble pairs
     uint64_t stride = externalBubbleCounts[26] * 11;
@@ -255,9 +228,7 @@ void externalNeighborSearch(Params &params) {
         eb.data.procNum = eb.data.externalIdx + stride;
     }
 
-    int zero = 0;
-    CUDA_CALL(cudaMemcpyToSymbol(dNumIncomingExternalPairs,
-                                 static_cast<void *>(&zero), sizeof(int)));
+    setIncomingExternalPairsToZero();
 
     // Memset collectively
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(eb.data.x), 0,
@@ -267,21 +238,19 @@ void externalNeighborSearch(Params &params) {
     int *tempPair2 = tempPair1 + stride;
     int *processorSizes = tempPair2 + stride;
     int *processorOffsets = processorSizes + params.nProcs;
+    launchNeighborSearch(params, nSurfaceCells, false, numCellsToSearch,
+                         cellDim, cellOffsets, cellSizes, processorSizes,
+                         tempPair1, tempPair2, params.incomingBubbles.data,
+                         sd.data, surfaceCells);
 
-    KERNEL_LAUNCH(neighborSearch, params, 0, 0, nSurfaceCells, false,
-                  numCellsToSearch, cellDim, cellOffsets, cellSizes,
-                  processorSizes, tempPair1, tempPair2, params.bubbles,
-                  params.incomingBubbles.data, sd.data, surfaceCells);
+    cubInclusiveSum(cubPtr, maxCubMem, processorSizes, processorOffsets,
+                    params.nProcs, 0, false);
 
-    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem,
-               processorSizes, processorOffsets, params.nProcs, (cudaStream_t)0,
-               false);
+    launchSortExternalPairs(params, tempPair1, tempPair2, processorOffsets,
+                            eb.data);
 
-    KERNEL_LAUNCH(sortExternalPairs, params, 0, 0, tempPair1, tempPair2,
-                  processorOffsets, eb.data);
-
-    if (eb.pairsPerProc.size() < params.nProcs ||
-        eb.offsetsPerProc.size() < params.nProcs) {
+    const uint32_t nProcs = params.nProcs;
+    if (eb.pairsPerProc.size() < nProcs || eb.offsetsPerProc.size() < nProcs) {
         eb.pairsPerProc.resize(params.nProcs);
         eb.offsetsPerProc.resize(params.nProcs);
     }
@@ -311,7 +280,7 @@ void externalNeighborSearch(Params &params) {
     ExternalBubbles &ob = params.outgoingBubbles;
     ob.pairsPerProc.resize(params.nProcs);
     ob.offsetsPerProc.resize(params.nProcs);
-    for (uint32_t i = 0; i < params.nProcs; i++) {
+    for (int i = 0; i < params.nProcs; i++) {
         // TODO
         // Communicate to each processor externalBubbles.data.externalIndex
         // according to eb.pairsPerProc and eb.offsetsPerProc
@@ -337,7 +306,7 @@ void externalNeighborSearch(Params &params) {
     }
 
     int *dst = ob.data.internalIdx;
-    for (uint32_t i = 0; i < params.nProcs; i++) {
+    for (int i = 0; i < params.nProcs; i++) {
         const int n = ob.pairsPerProc[i];
         CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
                              static_cast<void *>(outgoingIndices[i]),
@@ -345,9 +314,8 @@ void externalNeighborSearch(Params &params) {
         dst += n;
     }
 
-    CUDA_CALL(cudaMemcpyToSymbol(dNumOutgoingExternalPairs,
-                                 static_cast<void *>(&totalOutgoingPairs),
-                                 sizeof(int)));
+    setOutgoingExternalPairs(static_cast<void *>(&totalOutgoingPairs),
+                             sizeof(int));
 }
 
 void searchNeighbors(Params &params) {
@@ -357,9 +325,7 @@ void searchNeighbors(Params &params) {
     void *cubPtr = static_cast<void *>(params.pairs.j);
     uint64_t maxCubMem = params.pairs.getMemReq() / 2;
 
-    int zero = 0;
-    CUDA_CALL(cudaMemcpyToSymbol(dNumToBeDeleted, static_cast<void *>(&zero),
-                                 sizeof(int)));
+    setNumToBeDeletedToZero();
 
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.pairs.i), 0,
                               params.pairs.getMemReq(), 0));
@@ -370,8 +336,7 @@ void searchNeighbors(Params &params) {
     int *movedIndices = procLocalOffsets + params.nProcs;
     int *procNums = movedIndices + params.bubbles.stride;
 
-    KERNEL_LAUNCH(wrapOverPeriodicBoundaries, params, 0, 0, params.bubbles,
-                  movedIndices, procNums, procSizes);
+    launchWrapOverPeriodicBoundaries(params, movedIndices, procNums, procSizes);
 
     if (params.hostData.searchBetweenProcessors) {
         // position and current & old velocity for x, y, z & r
@@ -383,8 +348,7 @@ void searchNeighbors(Params &params) {
         const int bytesPerBubble = 14 * sizeof(double) + 4 * sizeof(int);
 
         int numToMove = 0;
-        CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&numToMove),
-                                       dNumToBeDeleted, sizeof(int)));
+        getNumToBeDeleted(static_cast<void *>(&numToMove), sizeof(int), false);
 
         void *movedData = nullptr;
         void *receivedData = nullptr;
@@ -394,9 +358,8 @@ void searchNeighbors(Params &params) {
         std::vector<int> sizes(params.nProcs);
         std::vector<int> offsets(params.nProcs);
         if (numToMove > 0) {
-            CUB_LAUNCH(&cub::DeviceScan::ExclusiveSum, cubPtr, maxCubMem,
-                       procSizes, procGlobalOffsets, params.nProcs,
-                       (cudaStream_t)0, false);
+            cubExclusiveSum(cubPtr, maxCubMem, procSizes, procGlobalOffsets,
+                            params.nProcs, 0, false);
             CUDA_CALL(cudaMemcpy(static_cast<void *>(procLocalOffsets),
                                  static_cast<void *>(procSizes),
                                  sizeof(int) * params.nProcs,
@@ -404,14 +367,12 @@ void searchNeighbors(Params &params) {
 
             CUDA_ASSERT(cudaMalloc(&movedData, numToMove * bytesPerBubble));
 
-            // We'll use this global value in the kernel
-            CUDA_CALL(cudaMemcpyToSymbol(
-                dNumToBeDeleted, static_cast<void *>(&zero), sizeof(int)));
+            setNumToBeDeletedToZero();
 
-            KERNEL_LAUNCH(gatherAndDeleteMovedBubbles, params, 0, 0, numToMove,
-                          bytesPerBubble, params.bubbles, procSizes,
-                          procGlobalOffsets, procLocalOffsets, movedIndices,
-                          procNums, static_cast<char *>(movedData));
+            launchGatherAndDeleteMovedBubbles(
+                params, numToMove, bytesPerBubble, procSizes, procGlobalOffsets,
+                procLocalOffsets, movedIndices, procNums,
+                static_cast<char *>(movedData));
 
             params.bubbles.count -= numToMove;
 
@@ -426,7 +387,7 @@ void searchNeighbors(Params &params) {
                                  cudaMemcpyDefault));
         } else {
             // Make sure these contain zeros
-            for (uint32_t i = 0; i < params.nProcs; i++) {
+            for (int i = 0; i < params.nProcs; i++) {
                 sizes[i] = 0;
                 offsets[i] = 0;
             }
@@ -437,7 +398,7 @@ void searchNeighbors(Params &params) {
         uint64_t totalBytesReceived = 0;
         char *src = static_cast<char *>(movedData);
         char *dst = static_cast<char *>(receivedData);
-        for (uint32_t i = 0; i < params.nProcs; i++) {
+        for (int i = 0; i < params.nProcs; i++) {
             uint64_t bytesToSend = bytesPerBubble * sizes[i];
             uint64_t bytesReceived = 0;
 
@@ -471,7 +432,7 @@ void searchNeighbors(Params &params) {
             }
             numReceivedBubbles += sizes[i];
 
-            for (uint32_t j = 0; j < sizes[i]; j++) {
+            for (int j = 0; j < sizes[i]; j++) {
                 receivedProcNums.push_back(i);
             }
         }
@@ -499,13 +460,11 @@ void searchNeighbors(Params &params) {
                                  sizeof(int) * receivedProcNums.size(),
                                  cudaMemcpyDefault));
 
-            CUDA_CALL(cudaMemcpyToSymbol(
-                dNumToBeDeleted, static_cast<void *>(&zero), sizeof(int)));
+            setNumToBeDeletedToZero();
 
-            KERNEL_LAUNCH(distributeReceivedBubbles, params, 0, 0,
-                          numReceivedBubbles, bytesPerBubble, params.bubbles,
-                          procSizes, procGlobalOffsets, procLocalOffsets,
-                          procNums, dst);
+            launchDistributeReceivedBubbles(
+                params, numReceivedBubbles, bytesPerBubble, procSizes,
+                procGlobalOffsets, procLocalOffsets, procNums, dst);
 
             params.bubbles.count += numReceivedBubbles;
         }
@@ -549,18 +508,15 @@ void searchNeighbors(Params &params) {
     int *bubbleIndices = cellIndices + params.bubbles.stride;
     int *histogram = bubbleIndices + params.bubbles.stride;
 
-    KERNEL_LAUNCH(cellByPosition, params, 0, 0, cellIndices, cellSizes, cellDim,
-                  params.bubbles);
+    launchCellByPosition(params, cellIndices, cellSizes, cellDim);
+    cubInclusiveSum(cubPtr, maxCubMem, cellSizes, cellOffsets, numCells, 0,
+                    false);
 
-    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, cellSizes,
-               cellOffsets, numCells, (cudaStream_t)0, false);
-
-    KERNEL_LAUNCH(indexByCell, params, 0, 0, cellIndices, cellOffsets,
-                  bubbleIndices, params.bubbles.count);
+    launchIndexByCell(params, cellIndices, cellOffsets, bubbleIndices,
+                      params.bubbles.count);
 
     {
-        KERNEL_LAUNCH(reorganizeByIndex, params, 0, 0, params.bubbles,
-                      const_cast<const int *>(bubbleIndices));
+        launchReorganizeByIndex(params, const_cast<const int *>(bubbleIndices));
         double *swapper = params.bubbles.xp;
         params.bubbles.xp = params.bubbles.x;
         params.bubbles.x = swapper;
@@ -611,37 +567,29 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
-    CUDA_CALL(
-        cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
+    setNumPairsToZero();
 
     int numCellsToSearch = 5;
     if (3 == params.hostConstants.dimensionality) {
         numCellsToSearch = 14;
     }
 
-    // HACK
-    // This passes an address to a host variable as (int *) argument, which
-    // is not needed in this instance of the kernel launch
-    KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, true,
-                  numCellsToSearch, cellDim, cellOffsets, cellSizes, histogram,
-                  params.tempPair1, params.tempPair2, params.bubbles,
-                  params.incomingBubbles.data, params.surfaceData.data, &zero);
+    launchNeighborSearch(params, numCells, true, numCellsToSearch, cellDim,
+                         cellOffsets, cellSizes, histogram, params.tempPair1,
+                         params.tempPair2, params.incomingBubbles.data,
+                         params.surfaceData.data, cellOffsets);
 
-    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
-                                   dNumPairs, sizeof(int)));
+    getNumPairs(static_cast<void *>(&params.pairs.count), sizeof(int));
 
-    CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, histogram,
-               params.bubbles.numNeighbors, params.bubbles.count,
-               (cudaStream_t)0, false);
+    cubInclusiveSum(cubPtr, maxCubMem, histogram, params.bubbles.numNeighbors,
+                    params.bubbles.count, 0, false);
 
-    KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
-                  params.tempPair1, params.tempPair2);
+    launchSortPairs(params);
 
     CUDA_CALL(cudaMemset(static_cast<void *>(params.bubbles.numNeighbors), 0,
                          params.bubbles.count * sizeof(int)));
 
-    KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
-                  params.pairs);
+    launchCountNumNeighbors(params);
 
     if (params.hostData.searchBetweenProcessors) {
         externalNeighborSearch(params);
@@ -650,40 +598,12 @@ void searchNeighbors(Params &params) {
     nvtxRangePop();
 }
 
-void removeBubbles(Params &params, int numToBeDeleted) {
-    nvtxRangePush("Removal");
-    KERNEL_LAUNCH(swapDataCountPairs, params, 0, 0, params.bubbles,
-                  params.pairs, params.tempI);
-
-    KERNEL_LAUNCH(addVolumeFixPairs, params, 0, 0, params.bubbles, params.pairs,
-                  params.tempI);
-
-    if (params.nProcs > 1) {
-        // External deletion is very simple: First all the to-be-deleted bubbles
-        // found in the interlanIdx list of incoming and outgoing bubbles are
-        // set to -1. Then the indices of those bubbles that were swapped with
-        // the now deleted bubbles are replaced with the new indices.
-        KERNEL_LAUNCH(swapExternalIndices, params, 0, 0, true,
-                      params.incomingBubbles.data, params.outgoingBubbles.data,
-                      params.tempI);
-
-        KERNEL_LAUNCH(swapExternalIndices, params, 0, 0, false,
-                      params.incomingBubbles.data, params.outgoingBubbles.data,
-                      params.tempI);
-    }
-
-    params.bubbles.count -= numToBeDeleted;
-    nvtxRangePop();
-}
-
 void step(Params &params, IntegrationParams &ip) {
     nvtxRangePush("Integration step");
 
-    double &ts = params.hostData.timeStep;
+    launchInitGlobals(params);
+    launchPreIntegrate(params, ip);
 
-    KERNEL_LAUNCH(initGlobals, params, 0, 0);
-    KERNEL_LAUNCH(preIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  params.bubbles, params.tempD1);
     const uint32_t dynSharedMemBytes =
         (params.hostConstants.dimensionality + ip.useGasExchange * 4 +
          ip.useFlow * params.hostConstants.dimensionality) *
@@ -691,19 +611,13 @@ void step(Params &params, IntegrationParams &ip) {
     // TODO
     // If we receive data with -1, i.e. the bubble has been deleted externally,
     // reduce the internal bubble's numNeighbors by one
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1,
-                  ip.useGasExchange, ip.useFlow);
-    KERNEL_LAUNCH(postIntegrate, params, 0, 0, ts, ip.useGasExchange,
-                  ip.incrementPath, ip.useFlow, params.bubbles, params.blockMax,
-                  params.tempD1, params.tempI);
+    launchPairwiseInteraction(params, ip, dynSharedMemBytes);
+    launchPostIntegrate(params, ip);
 
     if (ip.useGasExchange) {
         assert(nullptr != ip.hNumToBeDeleted && "Given pointer is nullptr");
-        // Copy numToBeDeleted
-        CUDA_CALL(cudaMemcpyFromSymbolAsync(
-            static_cast<void *>(ip.hNumToBeDeleted), dNumToBeDeleted,
-            sizeof(int), 0, cudaMemcpyDefault, 0));
+        getNumToBeDeleted(static_cast<void *>(ip.hNumToBeDeleted), sizeof(int),
+                          true);
     }
 
     void *memStart = static_cast<void *>(params.maximums.data());
@@ -721,11 +635,12 @@ void step(Params &params, IntegrationParams &ip) {
     }
     double *p = static_cast<double *>(memStart);
     for (uint32_t i = 0; i < n; i++) {
-        ip.maxError = max(ip.maxError, p[i]);
-        ip.maxRadius = max(ip.maxRadius, p[i + GRID_SIZE]);
-        ip.maxExpansion = max(ip.maxExpansion, p[i + 2 * GRID_SIZE]);
+        ip.maxError = std::max(ip.maxError, p[i]);
+        ip.maxRadius = std::max(ip.maxRadius, p[i + GRID_SIZE]);
+        ip.maxExpansion = std::max(ip.maxExpansion, p[i + 2 * GRID_SIZE]);
     }
 
+    double &ts = params.hostData.timeStep;
     ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
     const bool increaseTs =
         ip.maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
@@ -848,25 +763,6 @@ void stabilize(Params &params, int numStepsToRelax) {
     nvtxRangePop();
 }
 
-double totalVolume(Params &params) {
-    nvtxRangePush("Volume");
-    KERNEL_LAUNCH(calculateVolumes, params, 0, 0, params.bubbles,
-                  params.tempD1);
-
-    void *cubPtr = static_cast<void *>(params.tempPair2);
-    double total = 0.0;
-    void *cubOutput = nullptr;
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
-               params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
-                                   sizeof(double)));
-    nvtxRangePop();
-
-    return total;
-}
-
 double boxVolume(Params &params) {
     dvec temp = params.hostConstants.globalInterval;
     return (params.hostConstants.dimensionality == 3) ? temp.x * temp.y * temp.z
@@ -875,11 +771,8 @@ double boxVolume(Params &params) {
 
 void saveSnapshot(Params &params) {
     // Calculate energies of bubbles to tempD1, but don't reduce.
-    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-                  params.tempD1);
-    KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
-                  params.tempD1);
-
+    launchResetArray(params, params.bubbles.count, false, 0.0, params.tempD1);
+    launchPotentialEnergy(params);
     // Make sure the thread is not working
     if (params.ioThread.joinable()) {
         params.ioThread.join();
@@ -1108,9 +1001,9 @@ void init(const char *inputFileName, Params &params) {
 
     // TODO areaToProcessorMap
     std::array<int, 26> areaToProcessorMap;
-    CUDA_CALL(cudaMemcpyToSymbol(dAreaToProcessorMap,
-                                 static_cast<void *>(areaToProcessorMap.data()),
-                                 sizeof(int) * areaToProcessorMap.size()));
+    setAreaToProcessorMap(static_cast<void *>(areaToProcessorMap.data()),
+                          sizeof(int) * areaToProcessorMap.size());
+
     computeGlobalBox();
     computeLocalDimensions();
     ivec bubblesPerDim =
@@ -1156,19 +1049,16 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemcpy(static_cast<void *>(params.deviceConstants),
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyDefault));
-    CUDA_CALL(cudaMemcpyToSymbol(dConstants,
-                                 static_cast<void *>(&params.deviceConstants),
-                                 sizeof(Constants *)));
+    setConstants(static_cast<void *>(&params.deviceConstants),
+                 sizeof(Constants *));
 
     CUDA_CALL(
         cudaEventCreate(&params.snapshotParams.event, cudaEventDisableTiming));
     printRelevantInfoOfCurrentDevice();
 
     // Set device globals to zero
-    int zero = 0;
-    CUDA_CALL(
-        cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
-    KERNEL_LAUNCH(initGlobals, params, 0, 0);
+    setNumPairsToZero();
+    launchInitGlobals(params);
 
     printf("Reserving device memory\n");
     CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
@@ -1204,8 +1094,8 @@ void init(const char *inputFileName, Params &params) {
     const uint64_t megs = bytes / (1024 * 1024);
     const uint64_t kilos = (bytes - megs * 1024 * 1024) / 1024;
     bytes = (bytes - megs * 1024 * 1024 - kilos * 1024);
-    printf("Allocated %d MB %d KB %d B of global device memory.\n", megs, kilos,
-           bytes);
+    printf("Allocated %ld MB %ld KB %ld B of global device memory.\n", megs,
+           kilos, bytes);
 
     printf("Generating starting data\n");
     curandGenerator_t generator;
@@ -1227,24 +1117,17 @@ void init(const char *inputFileName, Params &params) {
         params.hostData.avgRad, bubbles["radius"]["std"]));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0, bubblesPerDim,
-                  params.hostData.avgRad, params.bubbles);
+    launchAssignDataToBubbles(params, bubblesPerDim);
 
     // Get the average input surface area and maximum bubble radius
     void *cubPtr = static_cast<void *>(params.tempPair2);
-    void *cubOutput = nullptr;
     void *out = static_cast<void *>(&params.hostConstants.averageSurfaceAreaIn);
-    CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-    CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
-               params.bubbles.rp, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
+    cubSum(cubPtr, params.pairs.getMemReq() / 2, params.bubbles.rp, out,
+           params.bubbles.count, (cudaStream_t)0, false);
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
-    CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, params.pairs.getMemReq() / 2,
-               params.bubbles.r, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
-    CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
+    cubMax(cubPtr, params.pairs.getMemReq() / 2, params.bubbles.r, out,
+           params.bubbles.count, (cudaStream_t)0, false);
 
     if (1 < params.nProcs) {
         // TODO: MPI communication of the average surface area and max radius
@@ -1273,17 +1156,34 @@ void init(const char *inputFileName, Params &params) {
                               cudaMemcpyDefault, 0));
 
     printf("Calculating initial velocities for Adams-Bashforth-Moulton\n");
-    KERNEL_LAUNCH(
-        resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-        params.bubbles.dxdto, params.bubbles.dydto, params.bubbles.dzdto,
-        params.bubbles.drdto, params.bubbles.dxdtp, params.bubbles.dydtp,
-        params.bubbles.dzdtp, params.bubbles.drdtp, params.bubbles.path);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dxdto);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dydto);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dzdto);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.drdto);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dxdtp);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dydtp);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.dzdtp);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.drdtp);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.path);
+
     const uint32_t dynSharedMemBytes =
         params.hostConstants.dimensionality * BLOCK_SIZE * sizeof(double);
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1, false, false);
-    KERNEL_LAUNCH(euler, params, 0, 0, params.hostData.timeStep,
-                  params.bubbles);
+
+    IntegrationParams ip;
+    ip.useGasExchange = false;
+    ip.useFlow = false;
+
+    launchPairwiseInteraction(params, ip, dynSharedMemBytes);
+    launchEuler(params);
 
     // pairwiseInteraction calculates to predicteds by accumulating values
     // using atomicAdd. They would have to be reset to zero after every
@@ -1300,8 +1200,7 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
-                  params.bubbles, params.pairs, params.tempD1, false, false);
+    launchPairwiseInteraction(params, ip, dynSharedMemBytes);
 
     // The whole point of this part was to get integrated values into
     // dxdto & y & z, so swap again so that predicteds are in olds.
@@ -1331,7 +1230,7 @@ void init(const char *inputFileName, Params &params) {
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubbleVolume / boxVolume(params), phi);
 
-    KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
+    launchTransformPositions(params, true);
 
     dvec relDim = box["relativeDimensions"];
     double t = bubbleVolume / (phi * relDim.x * relDim.y);
@@ -1370,7 +1269,7 @@ void init(const char *inputFileName, Params &params) {
                          static_cast<void *>(&params.hostConstants),
                          sizeof(Constants), cudaMemcpyDefault));
 
-    KERNEL_LAUNCH(transformPositions, params, 0, 0, false, params.bubbles);
+    launchTransformPositions(params, false);
 
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubbleVolume / boxVolume(params), phi);
@@ -1438,7 +1337,7 @@ void init(const char *inputFileName, Params &params) {
                 printf("%-9.5e ", de);
                 printf("%-9.5e ", e1);
                 printf("%-9.5e ", e2);
-                printf("%-9d\n", params.hostData.numNeighborsSearched);
+                printf("%-9ld\n", params.hostData.numNeighborsSearched);
                 params.hostData.numNeighborsSearched = 0;
             }
 
@@ -1473,7 +1372,7 @@ void init(const char *inputFileName, Params &params) {
                              sizeof(int) * params.bubbles.count,
                              cudaMemcpyDefault));
 
-        for (uint64_t i = 0; i < params.bubbles.count; i++) {
+        for (int i = 0; i < params.bubbles.count; i++) {
             const int ind = index[i];
             params.snapshotParams.x0[ind] = params.previousX[i];
             params.snapshotParams.y0[ind] = params.previousY[i];
@@ -1499,8 +1398,8 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountZ, 0, bytes));
 
     // Reset errors since integration starts after this
-    KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
-                  params.bubbles.error);
+    launchResetArray(params, params.bubbles.count, false, 0.0,
+                     params.bubbles.error);
 
     params.hostData.energy1 = totalEnergy(params);
     // TODO
@@ -1626,34 +1525,18 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         }
 
         if (print) {
-            // Define lambda for calculating averages of some values
-            auto getSum = [&params](double *p) -> double {
-                void *cubPtr = static_cast<void *>(params.tempPair2);
-                void *cubOutput = nullptr;
-                double total = 0.0;
-                CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
-                CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr,
-                           params.pairs.getMemReq() / 2, p,
-                           static_cast<double *>(cubOutput),
-                           params.bubbles.count, (cudaStream_t)0, false);
-                CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
-                                               dMaxRadius, sizeof(double)));
-
-                return total;
-            };
-
             uint32_t nBubbles = params.bubbles.count;
             double energy = totalEnergy(params);
             double bubbleVolume = totalVolume(params);
-            double relRad = getSum(params.bubbles.r);
-            double avgVx = getSum(params.bubbles.dxdt);
-            double avgVy = getSum(params.bubbles.dydt);
+            double relRad = getSum(params, params.bubbles.r);
+            double avgVx = getSum(params, params.bubbles.dxdt);
+            double avgVy = getSum(params, params.bubbles.dydt);
             double avgVz = 0.0;
             if (3 == params.hostConstants.dimensionality) {
-                avgVz = getSum(params.bubbles.dzdt);
+                avgVz = getSum(params, params.bubbles.dzdt);
             }
-            double avgVr = getSum(params.bubbles.drdt);
-            double avgPath = getSum(params.bubbles.path);
+            double avgVr = getSum(params, params.bubbles.drdt);
+            double avgPath = getSum(params, params.bubbles.path);
             // TODO
             // Communicate the totals across all processes
 
@@ -1693,8 +1576,8 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
                 printf("%-9.5e ", de);
                 printf("%9d ", params.bubbles.count);
                 printf("%10d ", params.pairs.count);
-                printf("%6d ", params.hostData.numStepsInTimeStep);
-                printf("%-9d ", params.hostData.numNeighborsSearched);
+                printf("%6ld ", params.hostData.numStepsInTimeStep);
+                printf("%-9ld ", params.hostData.numNeighborsSearched);
                 printf("%-9.5e ", minTimestep);
                 printf("%-9.5e ", maxTimestep);
                 printf("%-9.5e \n",
@@ -1717,8 +1600,8 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         }
 
         if (resetErrors) {
-            KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
-                          false, params.bubbles.error);
+            launchResetArray(params, params.bubbles.count, false, 0.0,
+                             params.bubbles.error);
             resetErrors = false;
         }
 
