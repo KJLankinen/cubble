@@ -344,7 +344,6 @@ struct ExternalBubbles {
         double *vz = nullptr;
         int *internalIdx = nullptr;
         int *externalIdx = nullptr;
-        int *procNum = nullptr;
     } data;
 
     std::vector<int> pairsPerProc;

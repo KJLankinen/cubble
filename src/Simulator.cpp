@@ -39,14 +39,13 @@ void externalNeighborSearch(Params &params) {
     const int numCells = params.neighborSearchData.numCells;
     int nAreas = 8;
     int nSurfaceCells = 2 * (cellDim.x + cellDim.y) + 4;
-    int numCellsToSearch = 9;
     if (3 == params.hostConstants.dimensionality) {
         nSurfaceCells = 2 * (cellDim.x * cellDim.y + cellDim.x * cellDim.z +
                              cellDim.y * cellDim.z) +
                         4 * (cellDim.x + cellDim.y + cellDim.z) + 8;
         nAreas = 26;
-        numCellsToSearch = 27;
     }
+    const int numCellsToSearch = nAreas + 1;
 
     // Per surface cell data
     CUDA_CALL(cudaMemsetAsync(static_cast<void *>(params.tempPair1), 0,
@@ -127,10 +126,15 @@ void externalNeighborSearch(Params &params) {
     // 1 int for each cell (cellSize)
     // 2 ints of metadata for each area (#cells & #bubbles )
     // possible padding int for each area (mixing doubles and ints in memory)
+    const uint64_t bytesPerBubble = 4 * sizeof(double) + sizeof(int);
+    const uint64_t bytesPerCell = sizeof(int);
+    const uint64_t bytesOfMetadata = 2 * sizeof(int);
+
     SurfaceData &sd = params.surfaceData;
-    uint64_t bytes = bubbleCounts[26] * (4 * sizeof(double) + sizeof(int));
-    bytes += nSurfaceCells * sizeof(int);
-    bytes += 3 * nAreas * sizeof(int);
+    uint64_t bytes = bubbleCounts[26] * bytesPerBubble;
+    bytes += nSurfaceCells * bytesPerCell;
+    bytes += nAreas * bytesOfMetadata;
+    bytes += nAreas * sizeof(int);
     if (sd.memory == nullptr || sd.outBytes < bytes) {
         if (sd.memory != nullptr) {
             CUDA_CALL(cudaFree(sd.memory));
@@ -153,8 +157,8 @@ void externalNeighborSearch(Params &params) {
 
         const int bci = bubbleCounts[i];
         const int ci = cellCounts[i];
-        uint64_t incr = bci * (4 * sizeof(double) + sizeof(int));
-        incr += ci * sizeof(int);
+        uint64_t incr = bci * bytesPerBubble;
+        incr += ci * bytesPerCell;
         // Add padding if the ints don't sum to an even number
         if (((ci + bci) & 0x1) == 1) {
             incr += sizeof(int);
@@ -171,131 +175,135 @@ void externalNeighborSearch(Params &params) {
 
     // sd.outData contains pointers to memory, where the data for each surface
     // area is stored at. Swap these data with neigboring processors.
-    std::array<int, 27> externalBubbleCounts;
-    externalBubbleCounts[26] = 0;
+    int externalBubbleCounts = 0;
     for (int i = 0; i < nAreas; i++) {
-        uint64_t bytes = bubbleCounts[i] * (4 * sizeof(double) + sizeof(int));
-        bytes += cellCounts[i] * sizeof(int);
-        bytes += 2 * sizeof(int);
+        uint64_t bytes = bubbleCounts[i] * bytesPerBubble;
+        bytes += cellCounts[i] * bytesPerCell;
+        bytes += bytesOfMetadata;
+
+        uint64_t receivedBytes = 0;
+        // TODO MPI_SendRecv through host memory
+        // use area to proc map
         // send bytes from sd.outData[i]
         // receive some amount of bytes to sd.inData[i]
-        CUDA_CALL(cudaMemcpy(
-            static_cast<void *>(&externalBubbleCounts[i]),
-            static_cast<void *>(&reinterpret_cast<int *>(sd.inData[i])[1]),
-            sizeof(int), cudaMemcpyDefault));
-        if (i > 0) {
-            externalBubbleCounts[i] += externalBubbleCounts[i - 1];
-        }
+        const uint64_t numReceivedBubbles =
+            (receivedBytes - bytesOfMetadata - cellCounts[i] * bytesPerCell) /
+            bytesPerBubble;
+        externalBubbleCounts += numReceivedBubbles;
     }
-    externalBubbleCounts[26] = externalBubbleCounts[nAreas - 1];
 
-    // externalBubbleCounts[26] contains the total number of bubbles received
-    // and at each index is the exclusive sum of bubble counts before that index
     sd.data.x = reinterpret_cast<double *>(static_cast<char *>(sd.memory) +
                                            3 * sd.outBytes);
-    sd.data.y = sd.data.x + externalBubbleCounts[26];
-    sd.data.z = sd.data.y + externalBubbleCounts[26];
-    sd.data.r = sd.data.z + externalBubbleCounts[26];
-    sd.data.cellSizes =
-        reinterpret_cast<int *>(sd.data.r + externalBubbleCounts[26]);
+    sd.data.y = sd.data.x + externalBubbleCounts;
+    sd.data.z = sd.data.y + externalBubbleCounts;
+    sd.data.r = sd.data.z + externalBubbleCounts;
+    sd.data.idx = reinterpret_cast<int *>(sd.data.r + externalBubbleCounts);
+    sd.data.cellSizes = sd.data.idx + externalBubbleCounts;
     sd.data.cellOffsets = sd.data.cellSizes + nSurfaceCells;
 
-    launchScatterSurfaceBubbles(params, externalBubbleCounts[26], sd.inData,
+    launchScatterSurfaceBubbles(params, externalBubbleCounts, sd.inData,
                                 sd.data);
     cubExclusiveSum(cubPtr, maxCubMem, sd.data.cellSizes, sd.data.cellOffsets,
                     nSurfaceCells, 0, false);
 
-    // An estimate of the total memory needed by the external bubble pairs
-    uint64_t stride = externalBubbleCounts[26] * 11;
-    uint64_t totalBytes = (7 * sizeof(double) + 3 * sizeof(int)) * stride;
-    ExternalBubbles &eb = params.incomingBubbles;
-    if (eb.totalBytes < totalBytes || eb.memory == nullptr) {
-        if (eb.memory != nullptr) {
-            CUDA_CALL(cudaFree(eb.memory));
-        }
-        CUDA_ASSERT(cudaMalloc(&eb.memory, totalBytes));
-        eb.totalBytes = totalBytes;
-
-        eb.data.x = static_cast<double *>(eb.memory);
-        eb.data.y = eb.data.x + stride;
-        eb.data.z = eb.data.y + stride;
-        eb.data.r = eb.data.z + stride;
-        eb.data.vx = eb.data.r + stride;
-        eb.data.vy = eb.data.vx + stride;
-        eb.data.vz = eb.data.vy + stride;
-        eb.data.internalIdx = reinterpret_cast<int *>(eb.data.vz + stride);
-        eb.data.externalIdx = eb.data.internalIdx + stride;
-        eb.data.procNum = eb.data.externalIdx + stride;
-    }
-
     setIncomingExternalPairsToZero();
 
-    // Memset collectively
-    CUDA_CALL(cudaMemsetAsync(static_cast<void *>(eb.data.x), 0,
-                              7 * stride * sizeof(double), 0));
+    // Allocate an estimate amount of temp memory for the bubble neigbors
+    int stride = 11 * externalBubbleCounts;
+    void *tempMemory = nullptr;
+    const uint64_t tempMemSize = stride * sizeof(int) * 5;
+    CUDA_ASSERT(cudaMalloc(&tempMemory, tempMemSize));
+    CUDA_CALL(cudaMemset(tempMemory, 0, tempMemSize));
 
-    int *tempPair1 = reinterpret_cast<int *>(eb.data.x);
+    int *tempPair1 = reinterpret_cast<int *>(tempMemory);
     int *tempPair2 = tempPair1 + stride;
-    int *processorSizes = tempPair2 + stride;
+    int *procNum = tempPair2 + stride;
+    int *processorSizes = procNum + stride;
     int *processorOffsets = processorSizes + params.nProcs;
+
     launchNeighborSearch(params, nSurfaceCells, false, numCellsToSearch,
                          cellDim, cellOffsets, cellSizes, processorSizes,
-                         tempPair1, tempPair2, params.incomingBubbles.data,
-                         sd.data, surfaceCells);
+                         tempPair1, tempPair2, sd.data, surfaceCells, procNum);
+
+    stride = 0;
+    getIncomingExternalPairs(static_cast<void *>(&stride), sizeof(int));
+    ExternalBubbles &ib = params.incomingBubbles;
+    const uint64_t totalBytes = (7 * sizeof(double) + 2 * sizeof(int)) * stride;
+    if (ib.totalBytes < totalBytes || ib.memory == nullptr) {
+        if (ib.memory != nullptr) {
+            CUDA_CALL(cudaFree(ib.memory));
+        }
+        CUDA_ASSERT(cudaMalloc(&ib.memory, totalBytes));
+        ib.totalBytes = totalBytes;
+
+        ib.data.x = static_cast<double *>(ib.memory);
+        ib.data.y = ib.data.x + stride;
+        ib.data.z = ib.data.y + stride;
+        ib.data.r = ib.data.z + stride;
+        ib.data.vx = ib.data.r + stride;
+        ib.data.vy = ib.data.vx + stride;
+        ib.data.vz = ib.data.vy + stride;
+        ib.data.internalIdx = reinterpret_cast<int *>(ib.data.vz + stride);
+        ib.data.externalIdx = ib.data.internalIdx + stride;
+    }
 
     cubInclusiveSum(cubPtr, maxCubMem, processorSizes, processorOffsets,
                     params.nProcs, 0, false);
 
     launchSortExternalPairs(params, tempPair1, tempPair2, processorOffsets,
-                            eb.data);
+                            procNum, ib.data);
 
     const uint32_t nProcs = params.nProcs;
-    if (eb.pairsPerProc.size() < nProcs || eb.offsetsPerProc.size() < nProcs) {
-        eb.pairsPerProc.resize(params.nProcs);
-        eb.offsetsPerProc.resize(params.nProcs);
+    if (ib.pairsPerProc.size() < nProcs || ib.offsetsPerProc.size() < nProcs) {
+        ib.pairsPerProc.resize(params.nProcs);
+        ib.offsetsPerProc.resize(params.nProcs);
     }
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(eb.offsetsPerProc.data()),
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.offsetsPerProc.data()),
                          static_cast<void *>(processorOffsets),
-                         sizeof(int) * eb.offsetsPerProc.size(),
+                         sizeof(int) * ib.offsetsPerProc.size(),
                          cudaMemcpyDefault));
-    CUDA_CALL(cudaMemcpy(static_cast<void *>(eb.pairsPerProc.data()),
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.pairsPerProc.data()),
                          static_cast<void *>(processorSizes),
-                         sizeof(int) * eb.pairsPerProc.size(),
+                         sizeof(int) * ib.pairsPerProc.size(),
                          cudaMemcpyDefault));
 
-    std::vector<int *> outgoingIndices;
-    outgoingIndices.resize(eb.pairsPerProc.size());
-    int *ptr = reinterpret_cast<int *>(eb.data.x);
-    for (uint32_t i = 0; i < outgoingIndices.size(); i++) {
-        outgoingIndices[i] = ptr;
-        // The exact number is unknown but correlates with our size, so double
-        // it, as there is enough memory anyway (in theory the exact size might
-        // actually be exactly the same as ours, but I haven't thought that
-        // through)
-        ptr += eb.pairsPerProc[i] * 2;
-    }
-
-    int totalOutgoingPairs = 0;
-    uint64_t outgoingBytes = 0;
+    std::vector<char> rcvBuffer(stride * sizeof(int));
+    std::vector<char> sendBuffer(ib.pairsPerProc[0] * sizeof(int));
+    int totalPairs = 0;
+    uint64_t totalIncomingBytes = 0;
     ExternalBubbles &ob = params.outgoingBubbles;
     ob.pairsPerProc.resize(params.nProcs);
     ob.offsetsPerProc.resize(params.nProcs);
     for (int i = 0; i < params.nProcs; i++) {
-        // TODO
-        // Communicate to each processor externalBubbles.data.externalIndex
-        // according to eb.pairsPerProc and eb.offsetsPerProc
-        // Store incoming index data temporarily to the pointers stored in
-        // outgoingIndices. Once we know full size, allocate memory for the
-        // entire struct and copy the indices to
-        // outgoingBubbles.data.internalIndex
-        // TODO does MPI_SendRecv() require the exact value for sent and
-        // received bytes/values?
+        // Get num incoming bytes
+        uint64_t incomingBytes = 0;
+        // MPI_Probe();
+        if (rcvBuffer.size() < incomingBytes + totalIncomingBytes) {
+            rcvBuffer.resize(2 * rcvBuffer.size());
+        }
 
-        // Fill ob.pairsPerProc and ob.offsetPerProc with the sizes
+        const uint64_t bytesToSend = ib.pairsPerProc[i] * sizeof(int);
+        if (sendBuffer.size() < bytesToSend) {
+            sendBuffer.resize(2 * bytesToSend);
+        }
+        CUDA_CALL(cudaMemcpy(
+            static_cast<void *>(sendBuffer.data()),
+            static_cast<void *>(ib.data.externalIdx + ib.offsetsPerProc[i]),
+            bytesToSend, cudaMemcpyDefault));
+
+        // Receive to rcvBuffer.data() + totalIncomingBytes, send sendBuffer
+        // MPI_SendRecv();
+
+        totalIncomingBytes += incomingBytes;
+        const int numPairs = static_cast<int>(incomingBytes / sizeof(int));
+        ob.pairsPerProc[i] = numPairs;
+        ob.offsetsPerProc[i] = totalPairs;
+        totalPairs += numPairs;
     }
 
-    // Assumed we know now the total amount of received indices. Allocate memory
-    // to hold the outgoingBubbles.data
+    // Allocate memory to hold the outgoingBubbles.data
+    const uint64_t outgoingBytes =
+        (7 * sizeof(double) + 2 * sizeof(int)) * totalPairs;
     if (ob.totalBytes < outgoingBytes || ob.memory == nullptr) {
         if (ob.memory != nullptr) {
             CUDA_CALL(cudaFree(ob.memory));
@@ -303,19 +311,25 @@ void externalNeighborSearch(Params &params) {
 
         CUDA_ASSERT(cudaMalloc(&ob.memory, outgoingBytes));
         ob.totalBytes = outgoingBytes;
+
+        ob.data.x = static_cast<double *>(ob.memory);
+        ob.data.y = ob.data.x + totalPairs;
+        ob.data.z = ob.data.y + totalPairs;
+        ob.data.r = ob.data.z + totalPairs;
+        ob.data.vx = ob.data.r + totalPairs;
+        ob.data.vy = ob.data.vx + totalPairs;
+        ob.data.vz = ob.data.vy + totalPairs;
+        ob.data.internalIdx = reinterpret_cast<int *>(ob.data.vz + totalPairs);
+        ob.data.externalIdx = ob.data.internalIdx + totalPairs;
     }
 
-    int *dst = ob.data.internalIdx;
-    for (int i = 0; i < params.nProcs; i++) {
-        const int n = ob.pairsPerProc[i];
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
-                             static_cast<void *>(outgoingIndices[i]),
-                             sizeof(int) * n, cudaMemcpyDefault));
-        dst += n;
-    }
+    // Copy the received data to internalIdx
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(ob.data.internalIdx),
+                         static_cast<void *>(rcvBuffer.data()),
+                         sizeof(int) * totalPairs, cudaMemcpyDefault));
 
-    setOutgoingExternalPairs(static_cast<void *>(&totalOutgoingPairs),
-                             sizeof(int));
+    setOutgoingExternalPairs(static_cast<void *>(&totalPairs), sizeof(int));
+    CUDA_CALL(cudaFree(tempMemory));
 }
 
 void searchNeighbors(Params &params) {
@@ -492,7 +506,9 @@ void searchNeighbors(Params &params) {
                           params.hostConstants.skinRadius)))
                        .getFloor()
                        .asType<int>();
-    cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
+    cellDim.x = std::max(cellDim.x, 1);
+    cellDim.y = std::max(cellDim.y, 1);
+    cellDim.z = std::max(cellDim.z, 1);
     const int numCells = cellDim.x * cellDim.y * cellDim.z;
     params.neighborSearchData.cellDim = cellDim;
     params.neighborSearchData.numCells = numCells;
@@ -576,8 +592,8 @@ void searchNeighbors(Params &params) {
 
     launchNeighborSearch(params, numCells, true, numCellsToSearch, cellDim,
                          cellOffsets, cellSizes, histogram, params.tempPair1,
-                         params.tempPair2, params.incomingBubbles.data,
-                         params.surfaceData.data, cellOffsets);
+                         params.tempPair2, params.surfaceData.data, cellOffsets,
+                         cellOffsets);
 
     getNumPairs(static_cast<void *>(&params.pairs.count), sizeof(int));
 

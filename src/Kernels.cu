@@ -1105,9 +1105,8 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                                int numNeighborCells, ivec cellDim, int *offsets,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
-                               ExternalBubbles::Data externalBubbles,
-                               SurfaceData::Data surfaceData,
-                               int *surfaceCells) {
+                               SurfaceData::Data surfaceData, int *surfaceCells,
+                               int *procNum) {
     // Loop over each cell pair in the simulation box
     for (int i = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
          i < numCells * numNeighborCells; i += (blockDim.x * gridDim.x) / 32) {
@@ -1210,7 +1209,7 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                     atomicAdd(&histogram[pn], 1);
                     pairI[id] = b1;
                     pairJ[id] = surfaceData.idx[b2];
-                    externalBubbles.procNum[id] = pn;
+                    procNum[id] = pn;
                     // Add the contribution of the external bubble to the number
                     // of neighbors for the local bubble
                     atomicAdd(&bubbles.numNeighbors[b1], 1);
@@ -1231,11 +1230,11 @@ __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
 }
 
 __global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
+                                  int *procNum,
                                   ExternalBubbles::Data externalBubbles) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x;
          i < dNumIncomingExternalPairs; i += gridDim.x * blockDim.x) {
-        const int id =
-            atomicSub(&procOffsets[externalBubbles.procNum[i]], 1) - 1;
+        const int id = atomicSub(&procOffsets[procNum[i]], 1) - 1;
         externalBubbles.internalIdx[id] = pairI[i];
         externalBubbles.externalIdx[id] = pairJ[i];
     }
@@ -2059,6 +2058,31 @@ __device__ int findNeighborCellIndex(int cellIdx, ivec dim, int nn,
             // If it wrapped over all walls and we're doing internal search,
             // everything is ok, return the index of the wrapped cell
             if (internalSearch) {
+                // Check that we don't compare to a cell the same cells twice,
+                // when the local simulation box is small enough to have less
+                // than three cells in some dimension
+                ivec notIdxVec =
+                    (idxVec + 2 * neighborNumToRelativeCoords(nn) + 2 * dim) %
+                    dim;
+                bool thisCell = notIdxVec.x == idxVec.x;
+                thisCell &= notIdxVec.y == idxVec.y;
+                thisCell &= notIdxVec.z == idxVec.z;
+                if (thisCell) {
+                    // The neighboring cell is a cell which will compare itself
+                    // to this cell, because performing the offsetting twice
+                    // from this cell wraps around back into this cell. In other
+                    // words, this is the same relative neigbor to the found
+                    // neigbor as that neigbor is to this cell.
+                    // To clarify, an example: In a 2x2 box with periodic
+                    // boundaries, the lower left cell is the lower left
+                    // neighbor of the upper right cell. Equivalently, the upper
+                    // right cell is the lower left neigbor of the lower left
+                    // cell, due to the periodicity. This check here is for
+                    // figuring out if the "lower left" neigbor of the this
+                    // cell's "lower left" neigbor is this cell.
+                    return -1;
+                }
+
                 return get1DIdxFrom3DIdx(idxVec + relVec, dim);
             } else {
                 // Already taken care of by the internal search
@@ -2674,17 +2698,18 @@ void launchScatterSurfaceBubbles(Params &params, int numExternalBubbles,
 void launchNeighborSearch(Params &params, int numCells, bool internalSearch,
                           int numNeighborCells, ivec cellDim, int *offsets,
                           int *sizes, int *histogram, int *pairI, int *pairJ,
-                          ExternalBubbles::Data &externalBubbles,
-                          SurfaceData::Data &surfaceData, int *surfaceCells) {
+                          SurfaceData::Data &surfaceData, int *surfaceCells,
+                          int *procNum) {
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, internalSearch,
                   numNeighborCells, cellDim, offsets, sizes, histogram, pairI,
-                  pairJ, params.bubbles, externalBubbles, surfaceData,
-                  surfaceCells);
+                  pairJ, params.bubbles, surfaceData, surfaceCells, procNum);
 }
 
 void launchSortExternalPairs(Params &params, int *pair1, int *pair2,
-                             int *offsets, ExternalBubbles::Data &data) {
-    KERNEL_LAUNCH(sortExternalPairs, params, 0, 0, pair1, pair2, offsets, data);
+                             int *offsets, int *procNum,
+                             ExternalBubbles::Data &data) {
+    KERNEL_LAUNCH(sortExternalPairs, params, 0, 0, pair1, pair2, offsets,
+                  procNum, data);
 }
 
 void launchWrapOverPeriodicBoundaries(Params &params, int *indices,
@@ -2775,6 +2800,10 @@ void setIncomingExternalPairsToZero() {
     int zero = 0;
     CUDA_CALL(cudaMemcpyToSymbol(dNumIncomingExternalPairs,
                                  static_cast<void *>(&zero), sizeof(int)));
+}
+
+void getIncomingExternalPairs(void *data, uint32_t bytes) {
+    CUDA_CALL(cudaMemcpyFromSymbol(data, dNumIncomingExternalPairs, bytes));
 }
 
 void setOutgoingExternalPairs(void *data, uint32_t bytes) {

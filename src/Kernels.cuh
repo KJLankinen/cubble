@@ -72,11 +72,11 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                                int numNeighborCells, ivec cellDim, int *offsets,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
-                               ExternalBubbles::Data externalBubbles,
-                               SurfaceData::Data surfaceData,
-                               int *surfaceCells);
+                               SurfaceData::Data surfaceData, int *surfaceCells,
+                               int *procNum);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
+                                  int *procNum,
                                   ExternalBubbles::Data externalBubbles);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
 __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);

@@ -281,13 +281,13 @@ template <typename T> class vec {
     }
 
     // %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %=
-    __host__ __device__ friend void operator%=(vec<T> &t, vec<T> &o) {
+    __host__ __device__ friend void operator%=(vec<T> &t, const vec<T> &o) {
         t.x %= o.x;
         t.y %= o.y;
         t.z %= o.z;
     }
 
-    __host__ __device__ friend void operator%=(vec<T> &t, vec<T> &&o) {
+    __host__ __device__ friend void operator%=(vec<T> &t, const vec<T> &&o) {
         t.x %= o.x;
         t.y %= o.y;
         t.z %= o.z;

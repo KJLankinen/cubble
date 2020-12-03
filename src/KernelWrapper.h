@@ -52,10 +52,11 @@ void launchScatterSurfaceBubbles(Params &params, int numExternalBubbles,
 void launchNeighborSearch(Params &params, int numCells, bool internalSearch,
                           int numNeighborCells, ivec cellDim, int *offsets,
                           int *sizes, int *histogram, int *pairI, int *pairJ,
-                          ExternalBubbles::Data &externalBubbles,
-                          SurfaceData::Data &surfaceData, int *surfaceCells);
+                          SurfaceData::Data &surfaceData, int *surfaceCells,
+                          int *procNum);
 void launchSortExternalPairs(Params &params, int *pair1, int *pair2,
-                             int *offsets, ExternalBubbles::Data &data);
+                             int *offsets, int *procNum,
+                             ExternalBubbles::Data &data);
 void launchWrapOverPeriodicBoundaries(Params &params, int *indices,
                                       int *procNums, int *procSizes);
 void launchGatherAndDeleteMovedBubbles(Params &params, int numToMove,
@@ -83,6 +84,7 @@ void launchResetArray(Params &params, int n, bool resetGlobals, double val,
 void setNumPairsToZero();
 void setNumToBeDeletedToZero();
 void setIncomingExternalPairsToZero();
+void getIncomingExternalPairs(void *data, uint32_t bytes);
 void setOutgoingExternalPairs(void *data, uint32_t bytes);
 void setAreaToProcessorMap(void *data, uint32_t bytes);
 void setConstants(void *data, uint32_t bytes);
