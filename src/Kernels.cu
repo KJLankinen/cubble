@@ -174,6 +174,135 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
     }
 }
 
+__global__ void gatherOutgoingBubbles(Bubbles bubbles,
+                                      ExternalBubbles::Data data) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < dNumOutgoingExternalPairs; i += blockDim.x * gridDim.x) {
+        const int idx = data.internalIdx[i];
+        if (idx == -1) {
+            // The local bubble of this bubble pair has been deleted from the
+            // simulation. Signify this by setting the radius to -1.0. The
+            // receiving end will skip the pair, if the radius is negative.
+            data.r[i] = -1.0;
+            continue;
+        }
+        data.x[i] = bubbles.xp[idx];
+        data.y[i] = bubbles.yp[idx];
+        data.z[i] = bubbles.zp[idx];
+        data.r[i] = bubbles.rp[idx];
+        data.vx[i] = bubbles.dxdt[idx];
+        data.vy[i] = bubbles.dydt[idx];
+        data.vz[i] = bubbles.dzdt[idx];
+    }
+}
+
+__global__ void externalPairwiseInteraction(Bubbles bubbles,
+                                            ExternalBubbles::Data ebd,
+                                            double *overlap,
+                                            bool useGasExchange, bool useFlow) {
+    __shared__ double toa[BLOCK_SIZE];
+    __shared__ double toapr[BLOCK_SIZE];
+    toa[threadIdx.x] = 0.0;
+    toapr[threadIdx.x] = 0.0;
+
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < dNumIncomingExternalPairs; i += gridDim.x * blockDim.x) {
+        const int idx1 = ebd.internalIdx[i];
+        const int idx2 = i;
+
+        if (idx1 == -1) {
+            continue;
+        }
+
+        double r2 = ebd.r[idx2];
+        if (r2 == -1.0) {
+            // See gatherOutgoingBubbles
+            ebd.internalIdx[i] = -1;
+            atomicSub(&bubbles.numNeighbors[idx1], 1);
+            continue;
+        }
+
+        if (useFlow) {
+            atomicAdd(&bubbles.flowVx[idx1], ebd.vx[idx2]);
+            atomicAdd(&bubbles.flowVy[idx1], ebd.vy[idx2]);
+            if (3 == dConstants->dimensionality) {
+                atomicAdd(&bubbles.flowVz[idx1], ebd.vz[idx2]);
+            }
+        }
+
+        double r1 = bubbles.rp[idx1];
+        const double radii = r1 + r2;
+        dvec distances = wrappedDifference(bubbles.xp[idx1], bubbles.yp[idx1],
+                                           bubbles.zp[idx1], ebd.x[idx2],
+                                           ebd.y[idx2], ebd.z[idx2]);
+        const double magnitude = distances.getSquaredLength();
+        if (radii * radii >= magnitude) {
+            // Pair velocities
+            distances = distances * dConstants->fZeroPerMuZero *
+                        (rsqrt(magnitude) - 1.0 / radii);
+
+            atomicAdd(&bubbles.dxdtp[idx1], distances.x);
+            atomicAdd(&bubbles.dydtp[idx1], distances.y);
+            if (3 == dConstants->dimensionality) {
+                atomicAdd(&bubbles.dzdtp[idx1], distances.z);
+            }
+
+            // Pairwise gas exchange
+            if (useGasExchange) {
+                const double r1sq = r1 * r1;
+                const double r2sq = r2 * r2;
+                double overlapArea = 0;
+                if (magnitude < r1sq || magnitude < r2sq) {
+                    overlapArea = r1sq < r2sq ? r1sq : r2sq;
+                } else {
+                    overlapArea = 0.5 * (r2sq - r1sq + magnitude);
+                    overlapArea *= overlapArea;
+                    overlapArea /= magnitude;
+                    overlapArea = r2sq - overlapArea;
+                    overlapArea = overlapArea < 0 ? -overlapArea : overlapArea;
+                }
+
+                if (3 == dConstants->dimensionality) {
+                    overlapArea *= CUBBLE_PI;
+                } else {
+                    overlapArea = 2.0 * sqrt(overlapArea);
+                }
+
+                atomicAdd(&overlap[idx1], overlapArea);
+
+                r1 = 1.0 / r1;
+                r2 = 1.0 / r2;
+
+                // total overlap area
+                toa[threadIdx.x] += overlapArea;
+
+                // total overlap area per radius
+                toapr[threadIdx.x] += overlapArea * r1;
+
+                overlapArea *= (r2 - r1);
+                atomicAdd(&bubbles.drdtp[idx1], overlapArea);
+            }
+        }
+    }
+
+    __syncthreads();
+    if (useGasExchange) {
+        const int warpNum = threadIdx.x >> 5;
+        const int wid = threadIdx.x & 31;
+        if (threadIdx.x < 32) {
+            reduce(toa, warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalOverlapArea, toa[threadIdx.x]);
+            }
+        } else if (threadIdx.x < 64) {
+            reduce(toapr, warpNum, &sum);
+            if (0 == wid) {
+                atomicAdd(&dTotalOverlapAreaPerRadius, toapr[threadIdx.x]);
+            }
+        }
+    }
+}
+
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange,
                                     bool useFlow) {
@@ -2610,11 +2739,22 @@ void launchPreIntegrate(Params &params, IntegrationParams &ip) {
                   ip.useGasExchange, params.bubbles, params.tempD1);
 }
 
+void launchGatherOutgoingBubbles(Params &params) {
+    KERNEL_LAUNCH(gatherOutgoingBubbles, params, 0, 0, params.bubbles,
+                  params.outgoingBubbles.data);
+}
+
 void launchPairwiseInteraction(Params &params, IntegrationParams &ip,
                                uint32_t dynSharedMemBytes) {
     KERNEL_LAUNCH(pairwiseInteraction, params, dynSharedMemBytes, 0,
                   params.bubbles, params.pairs, params.tempD1,
                   ip.useGasExchange, ip.useFlow);
+}
+
+void launchExternalPairwiseInteraction(Params &params, IntegrationParams &ip) {
+    KERNEL_LAUNCH(externalPairwiseInteraction, params, 0, 0, params.bubbles,
+                  params.incomingBubbles.data, params.tempD1, ip.useGasExchange,
+                  ip.useFlow);
 }
 
 void launchPostIntegrate(Params &params, IntegrationParams &ip) {
@@ -2833,6 +2973,38 @@ void getNumToBeDeleted(void *data, uint32_t bytes, bool async) {
 
 void getNumPairs(void *data, uint32_t bytes) {
     CUDA_CALL(cudaMemcpyFromSymbol(data, dNumPairs, bytes));
+}
+
+void getAreaTotals(std::array<double, 4> &arr) {
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&arr[0]), dTotalArea,
+                                   sizeof(double)));
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&arr[1]),
+                                   dTotalOverlapArea, sizeof(double)));
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&arr[2]),
+                                   dTotalOverlapAreaPerRadius, sizeof(double)));
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&arr[3]),
+                                   dTotalAreaPerRadius, sizeof(double)));
+}
+
+void setAreaTotals(std::array<double, 4> &arr) {
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalArea, static_cast<void *>(&arr[0]),
+                                 sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalOverlapArea,
+                                 static_cast<void *>(&arr[1]), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalOverlapAreaPerRadius,
+                                 static_cast<void *>(&arr[2]), sizeof(double)));
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalAreaPerRadius,
+                                 static_cast<void *>(&arr[3]), sizeof(double)));
+}
+
+void getTotalVolumeNew(double *data) {
+    CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(data), dTotalVolumeNew,
+                                   sizeof(double)));
+}
+
+void setTotalVolumeNew(double *data) {
+    CUDA_CALL(cudaMemcpyToSymbol(dTotalVolumeNew, static_cast<void *>(data),
+                                 sizeof(double)));
 }
 
 } // namespace cubble

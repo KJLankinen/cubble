@@ -26,9 +26,11 @@ double totalVolume(Params &params);
 void removeBubbles(Params &params, int numToBeDeleted);
 void launchInitGlobals(Params &params);
 void launchPreIntegrate(Params &params, IntegrationParams &ip);
+void launchGatherOutgoingBubbles(Params &params);
 void launchPostIntegrate(Params &params, IntegrationParams &ip);
 void launchPairwiseInteraction(Params &params, IntegrationParams &ip,
                                uint32_t dynSharedMemBytes);
+void launchExternalPairwiseInteraction(Params &params, IntegrationParams &ip);
 void launchPotentialEnergy(Params &params);
 double getSum(Params &params, double *p);
 void launchFindSurfaceCells(Params &params, int numCells, int *surfaceCells,
@@ -91,4 +93,8 @@ void setConstants(void *data, uint32_t bytes);
 void getMaxRadius(void *data, uint32_t bytes);
 void getNumToBeDeleted(void *data, uint32_t bytes, bool async);
 void getNumPairs(void *data, uint32_t bytes);
+void getAreaTotals(std::array<double, 4> &arr);
+void setAreaTotals(std::array<double, 4> &arr);
+void getTotalVolumeNew(double *data);
+void setTotalVolumeNew(double *data);
 } // namespace cubble

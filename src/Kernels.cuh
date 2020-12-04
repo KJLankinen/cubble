@@ -43,6 +43,8 @@ extern __device__ __constant__ int dAreaToProcessorMap[26];
 
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1);
+__global__ void gatherOutgoingBubbles(Bubbles bubbles,
+                                      ExternalBubbles::Data data);
 __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                                     double *overlap, bool useGasExchange,
                                     bool useFlow);
@@ -124,7 +126,7 @@ template <typename T> __device__ T max(T a, T b) { return a > b ? a : b; }
 template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
     // Assumes that addr.length() == BLOCK_SIZE
     const int tid = threadIdx.x;
-    const int wid = (tid & 31);
+    const int wid = tid & 31;
 #pragma unroll
     for (int i = 0; i < BLOCK_SIZE / 32; i++) {
         if (i == warp) {

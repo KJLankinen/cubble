@@ -370,6 +370,9 @@ struct Params {
     ExternalBubbles outgoingBubbles;
     NeighborSearchData neighborSearchData;
 
+    std::vector<char> incomingBubbleData;
+    std::vector<char> outgoingBubbleData;
+
     Bubbles bubbles;
     Pairs pairs;
 

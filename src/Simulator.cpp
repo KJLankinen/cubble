@@ -620,14 +620,142 @@ void step(Params &params, IntegrationParams &ip) {
     launchInitGlobals(params);
     launchPreIntegrate(params, ip);
 
+    if (params.nProcs > 1) {
+        // If the data was packed per processor in the ExternalBubbles (i.e. all
+        // data of proc N first, then all for proc N + 1), instead of packing
+        // all xs for all processors, then all ys and so on, this could be made
+        // more efficient, as there'd be only one memcpy before and after the
+        // MPI_Sendrecv. That would make the gathering and externalPairwise
+        // kernels more complicated, however, so in the interest of development
+        // time, this has been implemented like this.
+        ExternalBubbles &ib = params.incomingBubbles;
+        ExternalBubbles &ob = params.outgoingBubbles;
+        launchGatherOutgoingBubbles(params);
+
+        const uint64_t bytesPerPair = 7 * sizeof(double);
+        const uint64_t totalIncomingBytes =
+            (ib.pairsPerProc.back() + ib.offsetsPerProc.back()) * bytesPerPair;
+
+        if (params.incomingBubbleData.size() < totalIncomingBytes) {
+            params.incomingBubbleData.resize(totalIncomingBytes);
+        }
+
+        const uint64_t totalOutgoingBytes =
+            (ob.pairsPerProc.back() + ob.offsetsPerProc.back()) * bytesPerPair;
+
+        if (params.outgoingBubbleData.size() < totalOutgoingBytes) {
+            params.outgoingBubbleData.resize(totalOutgoingBytes);
+        }
+
+        for (int i = 0; i < params.nProcs; i++) {
+            char *dst = params.incomingBubbleData.data() +
+                        bytesPerPair * ib.offsetsPerProc[i];
+            const uint64_t incomingBytes = bytesPerPair * ib.pairsPerProc[i];
+
+            char *src = params.outgoingBubbleData.data() +
+                        bytesPerPair * ob.offsetsPerProc[i];
+            const uint64_t outgoingBytes = bytesPerPair * ob.pairsPerProc[i];
+
+            // If there's no correspondence at all between these processors,
+            // skip the whole deal (the other processor does that as well,
+            // because it knows the incoming and outgoing amounts as well since
+            // it is performing this same very check).
+            if (outgoingBytes == 0 && incomingBytes == 0) {
+                continue;
+            }
+
+            if (outgoingBytes > 0) {
+                const uint64_t offset = ob.offsetsPerProc[i];
+                const uint64_t bytes = sizeof(double) * ob.pairsPerProc[i];
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src),
+                                     static_cast<void *>(ob.data.x + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + bytes),
+                                     static_cast<void *>(ob.data.y + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + 2 * bytes),
+                                     static_cast<void *>(ob.data.z + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + 3 * bytes),
+                                     static_cast<void *>(ob.data.r + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + 4 * bytes),
+                                     static_cast<void *>(ob.data.vx + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + 5 * bytes),
+                                     static_cast<void *>(ob.data.vy + offset),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(src + 6 * bytes),
+                                     static_cast<void *>(ob.data.vz + offset),
+                                     bytes, cudaMemcpyDefault));
+            }
+
+            // TODO
+            // MPI_Sendrecv();
+
+            if (incomingBytes > 0) {
+                const uint64_t offset = ib.offsetsPerProc[i];
+                const uint64_t bytes = sizeof(double) * ib.pairsPerProc[i];
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.x + offset),
+                                     static_cast<void *>(dst), bytes,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.y + offset),
+                                     static_cast<void *>(dst + bytes), bytes,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.z + offset),
+                                     static_cast<void *>(dst + 2 * bytes),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.r + offset),
+                                     static_cast<void *>(dst + 3 * bytes),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.vx + offset),
+                                     static_cast<void *>(dst + 4 * bytes),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.vy + offset),
+                                     static_cast<void *>(dst + 5 * bytes),
+                                     bytes, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(ib.data.vz + offset),
+                                     static_cast<void *>(dst + 6 * bytes),
+                                     bytes, cudaMemcpyDefault));
+            }
+        }
+    }
     const uint32_t dynSharedMemBytes =
         (params.hostConstants.dimensionality + ip.useGasExchange * 4 +
          ip.useFlow * params.hostConstants.dimensionality) *
         BLOCK_SIZE * sizeof(double);
-    // TODO
-    // If we receive data with -1, i.e. the bubble has been deleted externally,
-    // reduce the internal bubble's numNeighbors by one
     launchPairwiseInteraction(params, ip, dynSharedMemBytes);
+
+    if (params.nProcs > 1) {
+        launchExternalPairwiseInteraction(params, ip);
+        std::array<double, 4> areaTotals;
+        getAreaTotals(areaTotals);
+
+        if (params.rank == 0) {
+            std::array<double, 4> temp;
+            // Receive totals from all other processors
+            for (int i = 1; i < params.nProcs; i++) {
+                // TODO
+                // Receive to temp
+                // MPI_Recv();
+                areaTotals[0] += temp[0];
+                areaTotals[1] += temp[1];
+                areaTotals[2] += temp[2];
+                areaTotals[3] += temp[3];
+            }
+            // TODO
+            // Broadcast areaTotals
+            // MPI_Broadcast();
+        } else {
+            // TODO
+            // Send areaTotals
+            // MPI_Send();
+            // Receive to areaTotals
+            // MPI_Recv();
+        }
+        setAreaTotals(areaTotals);
+    }
+
     launchPostIntegrate(params, ip);
 
     if (ip.useGasExchange) {
@@ -656,14 +784,69 @@ void step(Params &params, IntegrationParams &ip) {
         ip.maxExpansion = std::max(ip.maxExpansion, p[i + 2 * GRID_SIZE]);
     }
 
-    double &ts = params.hostData.timeStep;
-    ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
-    const bool increaseTs =
-        ip.maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
-    if (ip.errorTooLarge) {
-        ts *= 0.37;
-    } else if (increaseTs) {
-        ts *= 1.269;
+    std::array<double, 5> maximums;
+    if (params.nProcs > 1) {
+        getTotalVolumeNew(&maximums[0]);
+        maximums[1] = ip.maxError;
+        maximums[2] = ip.maxRadius;
+        maximums[3] = ip.maxExpansion;
+
+        if (params.rank == 0) {
+            std::array<double, 4> temp;
+            for (int i = 1; i < params.nProcs; i++) {
+                // TODO
+                // Receive to temp
+                // MPI_Recv();
+                maximums[0] += temp[0];
+                maximums[1] = std::max(maximums[1], temp[1]);
+                maximums[2] = std::max(maximums[2], temp[2]);
+                maximums[3] = std::max(maximums[3], temp[3]);
+            }
+        } else {
+            // TODO
+            // Send maximums
+            // MPI_Send();
+        }
+    }
+
+    auto calculateNewTimestep = [&params, &ip]() {
+        double &ts = params.hostData.timeStep;
+        ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
+        const bool increaseTs =
+            ip.maxError < 0.45 * params.hostData.errorTolerance && ts < 10;
+        if (ip.errorTooLarge) {
+            ts *= 0.37;
+        } else if (increaseTs) {
+            ts *= 1.269;
+        }
+    };
+
+    if (params.nProcs > 1) {
+        if (params.rank == 0) {
+            setTotalVolumeNew(&maximums[0]);
+            ip.maxError = maximums[1];
+            ip.maxRadius = maximums[2];
+            ip.maxExpansion = maximums[3];
+
+            calculateNewTimestep();
+
+            maximums[4] = params.hostData.timeStep;
+            // TODO
+            // Broadcast maximums
+            // MPI_Broadcast();
+        } else {
+            // TODO
+            // Receive to maximums
+            // MPI_Recv();
+            setTotalVolumeNew(&maximums[0]);
+            ip.maxError = maximums[1];
+            ip.maxRadius = maximums[2];
+            ip.maxExpansion = maximums[3];
+            ip.errorTooLarge = ip.maxError > params.hostData.errorTolerance;
+            params.hostData.timeStep = maximums[4];
+        }
+    } else {
+        calculateNewTimestep();
     }
 
     nvtxRangePop();
