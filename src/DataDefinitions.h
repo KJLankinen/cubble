@@ -21,6 +21,7 @@
 #include "Util.h"
 #include "Vec.h"
 #include <array>
+#include <mpi.h>
 #include <string>
 #include <thread>
 #include <vector>
@@ -258,7 +259,6 @@ struct HostData {
     uint32_t numSnapshots = 0;
 
     bool addFlow = false;
-    bool searchBetweenProcessors = false;
 
     void print() {
         printf("\terror tolerance: %g", errorTolerance);
@@ -360,6 +360,7 @@ struct NeighborSearchData {
 struct Params {
     int rank = 0;
     int nProcs = 1;
+    MPI_Comm comm;
 
     Constants hostConstants;
     Constants *deviceConstants = nullptr;
@@ -372,6 +373,8 @@ struct Params {
 
     std::vector<char> incomingBubbleData;
     std::vector<char> outgoingBubbleData;
+
+    std::array<int, 26> areaToProcessorMap;
 
     Bubbles bubbles;
     Pairs pairs;

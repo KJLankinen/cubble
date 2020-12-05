@@ -36,7 +36,7 @@ EXEC = $(BIN_PATH)/cubble
 
 # Compilers to use
 # -----------------------------------------------------
-CPU_COMPILER := g++
+CPU_COMPILER := mpic++
 GPU_COMPILER := nvcc
 
 # External libraries to link

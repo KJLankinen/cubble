@@ -2046,7 +2046,7 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
         if (3 == dConstants->dimensionality) {
             area *= 2.0 * rad;
         }
-        w[i] = area / bubbles.count;
+        w[i] = area;
     }
 }
 

@@ -19,6 +19,7 @@
 #include "Util.h"
 #include <cuda.h>
 #include <exception>
+#include <mpi.h>
 #include <stdexcept>
 #include <stdio.h>
 #include <string>
@@ -38,15 +39,30 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    int numGPUs = 0;
-    CUDA_CALL(cudaGetDeviceCount(&numGPUs));
-    if (1 > numGPUs) {
-        printf("No CUDA capable devices found.\n");
+    int rc = 0;
+    rc = MPI_Init(&argc, &argv);
+    if (rc != MPI_SUCCESS) {
+        printf("MPI_Init failed.\n");
         return EXIT_FAILURE;
     }
 
+    int nTasks = 0;
+    int rank = 0;
+    rc = MPI_Comm_size(MPI_COMM_WORLD, &nTasks);
+    rc = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    int numGPUs = 0;
+    CUDA_CALL(cudaGetDeviceCount(&numGPUs));
+    if (numGPUs != nTasks) {
+        if (rank == 0) {
+            printf("Number of GPUs is not equal to number of tasks.\n");
+        }
+        return EXIT_FAILURE;
+    }
+    CUDA_CALL(cudaSetDevice(rank));
+
     try {
-        cubble::run(std::string(argv[1]), 0, 1);
+        cubble::run(std::string(argv[1]), rank, nTasks);
     } catch (const std::exception &e) {
         pExc = std::current_exception();
         cubble::handleException(pExc);
@@ -55,5 +71,6 @@ int main(int argc, char **argv) {
     }
 
     cudaDeviceReset();
+    MPI_Finalize();
     return EXIT_SUCCESS;
 }

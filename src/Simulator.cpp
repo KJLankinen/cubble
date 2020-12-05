@@ -26,6 +26,7 @@
 #include <curand.h>
 #include <fstream>
 #include <functional>
+#include <mpi.h>
 #include <nvToolsExt.h>
 #include <sstream>
 #include <stdio.h>
@@ -175,17 +176,89 @@ void externalNeighborSearch(Params &params) {
 
     // sd.outData contains pointers to memory, where the data for each surface
     // area is stored at. Swap these data with neigboring processors.
+    std::array<int, 26> oppositeAreas;
+    if (3 == params.hostConstants.dimensionality) {
+        oppositeAreas[0] = 1;
+        oppositeAreas[1] = 0;
+        oppositeAreas[2] = 3;
+        oppositeAreas[3] = 2;
+        oppositeAreas[4] = 5;
+        oppositeAreas[5] = 4;
+        oppositeAreas[6] = 8;
+        oppositeAreas[7] = 9;
+        oppositeAreas[8] = 6;
+        oppositeAreas[9] = 7;
+        oppositeAreas[10] = 12;
+        oppositeAreas[11] = 13;
+        oppositeAreas[12] = 10;
+        oppositeAreas[13] = 11;
+        oppositeAreas[14] = 16;
+        oppositeAreas[15] = 17;
+        oppositeAreas[16] = 14;
+        oppositeAreas[17] = 15;
+        oppositeAreas[18] = 25;
+        oppositeAreas[19] = 22;
+        oppositeAreas[20] = 23;
+        oppositeAreas[21] = 24;
+        oppositeAreas[22] = 19;
+        oppositeAreas[23] = 20;
+        oppositeAreas[24] = 21;
+        oppositeAreas[25] = 18;
+    } else {
+        oppositeAreas[0] = 1;
+        oppositeAreas[1] = 0;
+        oppositeAreas[2] = 3;
+        oppositeAreas[3] = 2;
+        oppositeAreas[4] = 6;
+        oppositeAreas[5] = 7;
+        oppositeAreas[6] = 4;
+        oppositeAreas[7] = 5;
+    }
     int externalBubbleCounts = 0;
+    std::vector<char> tempSrc;
+    std::vector<char> tempDst;
     for (int i = 0; i < nAreas; i++) {
         uint64_t bytes = bubbleCounts[i] * bytesPerBubble;
         bytes += cellCounts[i] * bytesPerCell;
         bytes += bytesOfMetadata;
+        if (tempSrc.size() < bytes) {
+            tempSrc.resize(bytes);
+        }
+
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(tempSrc.data()),
+                             static_cast<void *>(sd.outData[i]), bytes,
+                             cudaMemcpyDefault));
 
         uint64_t receivedBytes = 0;
-        // TODO MPI_SendRecv through host memory
-        // use area to proc map
-        // send bytes from sd.outData[i]
-        // receive some amount of bytes to sd.inData[i]
+        const int oppositeArea = oppositeAreas[i];
+        const int dstProc = params.areaToProcessorMap[i];
+        const int srcProc = params.areaToProcessorMap[oppositeArea];
+        const int tag = 1337;
+        MPI_Status status;
+        int rc =
+            MPI_Sendrecv(static_cast<void *>(&bytes), 1, MPI_UNSIGNED_LONG,
+                         dstProc, tag, static_cast<void *>(&receivedBytes), 1,
+                         MPI_UNSIGNED_LONG, srcProc, tag, params.comm, &status);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+        if (tempDst.size() < receivedBytes) {
+            tempDst.resize(receivedBytes);
+        }
+
+        rc = MPI_Sendrecv(static_cast<void *>(tempSrc.data()), bytes, MPI_CHAR,
+                          dstProc, tag, static_cast<void *>(tempDst.data()),
+                          receivedBytes, MPI_CHAR, srcProc, tag, params.comm,
+                          &status);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(sd.inData[oppositeArea]),
+                             static_cast<void *>(tempDst.data()), bytes,
+                             cudaMemcpyDefault));
         const uint64_t numReceivedBubbles =
             (receivedBytes - bytesOfMetadata - cellCounts[i] * bytesPerCell) /
             bytesPerBubble;
@@ -275,24 +348,44 @@ void externalNeighborSearch(Params &params) {
     ob.pairsPerProc.resize(params.nProcs);
     ob.offsetsPerProc.resize(params.nProcs);
     for (int i = 0; i < params.nProcs; i++) {
+        uint64_t bytesToSend = ib.pairsPerProc[i] * sizeof(int);
+        if (sendBuffer.size() < bytesToSend) {
+            sendBuffer.resize(2 * bytesToSend);
+        }
+
         // Get num incoming bytes
         uint64_t incomingBytes = 0;
-        // MPI_Probe();
+        const int dstProc = i;
+        const int srcProc = i;
+        const int tag = 1337;
+        MPI_Status status;
+        int rc = MPI_Sendrecv(
+            static_cast<void *>(&bytesToSend), 1, MPI_UNSIGNED_LONG, dstProc,
+            tag, static_cast<void *>(&incomingBytes), 1, MPI_UNSIGNED_LONG,
+            srcProc, tag, params.comm, &status);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
         if (rcvBuffer.size() < incomingBytes + totalIncomingBytes) {
             rcvBuffer.resize(2 * rcvBuffer.size());
         }
 
-        const uint64_t bytesToSend = ib.pairsPerProc[i] * sizeof(int);
-        if (sendBuffer.size() < bytesToSend) {
-            sendBuffer.resize(2 * bytesToSend);
-        }
         CUDA_CALL(cudaMemcpy(
             static_cast<void *>(sendBuffer.data()),
             static_cast<void *>(ib.data.externalIdx + ib.offsetsPerProc[i]),
             bytesToSend, cudaMemcpyDefault));
 
-        // Receive to rcvBuffer.data() + totalIncomingBytes, send sendBuffer
-        // MPI_SendRecv();
+        rc = MPI_Sendrecv(
+            static_cast<void *>(sendBuffer.data()), bytesToSend, MPI_CHAR,
+            dstProc, tag,
+            static_cast<void *>(rcvBuffer.data() + totalIncomingBytes),
+            incomingBytes, MPI_CHAR, srcProc, tag, params.comm, &status);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
 
         totalIncomingBytes += incomingBytes;
         const int numPairs = static_cast<int>(incomingBytes / sizeof(int));
@@ -352,7 +445,7 @@ void searchNeighbors(Params &params) {
 
     launchWrapOverPeriodicBoundaries(params, movedIndices, procNums, procSizes);
 
-    if (params.hostData.searchBetweenProcessors) {
+    if (params.nProcs > 1) {
         // position and current & old velocity for x, y, z & r
         // = 3 * 4 = 12 doubles
         // path & error = 2 doubles, totaling 14 doubles
@@ -416,7 +509,19 @@ void searchNeighbors(Params &params) {
             uint64_t bytesToSend = bytesPerBubble * sizes[i];
             uint64_t bytesReceived = 0;
 
-            // MPI_Probe();
+            const int dstProc = i;
+            const int srcProc = i;
+            const int tag = 1337;
+            MPI_Status status;
+            int rc = MPI_Sendrecv(
+                static_cast<void *>(&bytesToSend), 1, MPI_UNSIGNED_LONG,
+                dstProc, tag, static_cast<void *>(&bytesReceived), 1,
+                MPI_UNSIGNED_LONG, srcProc, tag, params.comm, &status);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+
             if (bytesReceived + totalBytesReceived > maxReceivedBytes) {
                 // If the data were receiving is more than we have allocated
                 // memory for, allocate double the old size
@@ -433,7 +538,15 @@ void searchNeighbors(Params &params) {
                 // Reset the destination pointer
                 dst = static_cast<char *>(receivedData) + totalBytesReceived;
             }
-            // MPI_SendRecv();
+
+            rc = MPI_Sendrecv(static_cast<void *>(src), bytesToSend, MPI_CHAR,
+                              dstProc, tag, static_cast<void *>(dst),
+                              bytesReceived, MPI_CHAR, srcProc, tag,
+                              params.comm, &status);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
 
             src += bytesToSend;
             dst += bytesReceived;
@@ -451,7 +564,10 @@ void searchNeighbors(Params &params) {
             }
         }
 
-        // TODO assert bubbles.stride >= bubbles.count + numReceivedBubbles
+        // TODO handle this more gracefully
+        assert((int)params.bubbles.stride >=
+                   params.bubbles.count + numReceivedBubbles &&
+               "Not enough memory to hold all the bubbles");
 
         if (numReceivedBubbles > 0) {
             CUDA_CALL(cudaMemcpy(static_cast<void *>(procSizes),
@@ -607,7 +723,7 @@ void searchNeighbors(Params &params) {
 
     launchCountNumNeighbors(params);
 
-    if (params.hostData.searchBetweenProcessors) {
+    if (params.nProcs > 1) {
         externalNeighborSearch(params);
     }
 
@@ -690,8 +806,18 @@ void step(Params &params, IntegrationParams &ip) {
                                      bytes, cudaMemcpyDefault));
             }
 
-            // TODO
-            // MPI_Sendrecv();
+            const int dstProc = i;
+            const int srcProc = i;
+            const int tag = 1337;
+            MPI_Status status;
+            int rc = MPI_Sendrecv(static_cast<void *>(src), outgoingBytes,
+                                  MPI_CHAR, dstProc, tag,
+                                  static_cast<void *>(dst), incomingBytes,
+                                  MPI_CHAR, srcProc, tag, params.comm, &status);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
 
             if (incomingBytes > 0) {
                 const uint64_t offset = ib.offsetsPerProc[i];
@@ -735,24 +861,36 @@ void step(Params &params, IntegrationParams &ip) {
             std::array<double, 4> temp;
             // Receive totals from all other processors
             for (int i = 1; i < params.nProcs; i++) {
-                // TODO
-                // Receive to temp
-                // MPI_Recv();
+                const int tag = 1337;
+                MPI_Status status;
+                int rc = MPI_Recv(static_cast<void *>(temp.data()), 4,
+                                  MPI_DOUBLE, i, tag, params.comm, &status);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
                 areaTotals[0] += temp[0];
                 areaTotals[1] += temp[1];
                 areaTotals[2] += temp[2];
                 areaTotals[3] += temp[3];
             }
-            // TODO
-            // Broadcast areaTotals
-            // MPI_Broadcast();
         } else {
-            // TODO
-            // Send areaTotals
-            // MPI_Send();
-            // Receive to areaTotals
-            // MPI_Recv();
+            const int tag = 1337;
+            int rc = MPI_Send(static_cast<void *>(areaTotals.data()), 4,
+                              MPI_DOUBLE, 0, tag, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
         }
+
+        int rc = MPI_Bcast(static_cast<void *>(areaTotals.data()), 4,
+                           MPI_DOUBLE, 0, params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
         setAreaTotals(areaTotals);
     }
 
@@ -794,18 +932,27 @@ void step(Params &params, IntegrationParams &ip) {
         if (params.rank == 0) {
             std::array<double, 4> temp;
             for (int i = 1; i < params.nProcs; i++) {
-                // TODO
-                // Receive to temp
-                // MPI_Recv();
+                const int tag = 1337;
+                MPI_Status status;
+                int rc = MPI_Recv(static_cast<void *>(temp.data()), 4,
+                                  MPI_DOUBLE, i, tag, params.comm, &status);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
                 maximums[0] += temp[0];
                 maximums[1] = std::max(maximums[1], temp[1]);
                 maximums[2] = std::max(maximums[2], temp[2]);
                 maximums[3] = std::max(maximums[3], temp[3]);
             }
         } else {
-            // TODO
-            // Send maximums
-            // MPI_Send();
+            const int tag = 1337;
+            int rc = MPI_Send(static_cast<void *>(maximums.data()), 4,
+                              MPI_DOUBLE, 0, tag, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
         }
     }
 
@@ -831,13 +978,17 @@ void step(Params &params, IntegrationParams &ip) {
             calculateNewTimestep();
 
             maximums[4] = params.hostData.timeStep;
-            // TODO
-            // Broadcast maximums
-            // MPI_Broadcast();
-        } else {
-            // TODO
-            // Receive to maximums
-            // MPI_Recv();
+        }
+
+        // Bcast
+        int rc = MPI_Bcast(static_cast<void *>(maximums.data()), 5, MPI_DOUBLE,
+                           0, params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
+        if (params.rank != 0) {
             setTotalVolumeNew(&maximums[0]);
             ip.maxError = maximums[1];
             ip.maxRadius = maximums[2];
@@ -1011,7 +1162,6 @@ void saveSnapshot(Params &params) {
 
     params.snapshotParams.count = params.bubbles.count;
 
-    // TODO: add distance from start
     auto writeSnapshot = [](const SnapshotParams &snapshotParams,
                             uint32_t snapshotNum, double *xPrev, double *yPrev,
                             double *zPrev) {
@@ -1093,7 +1243,9 @@ void saveSnapshot(Params &params) {
 }
 
 void end(Params &params) {
-    printf("Cleaning up...\n");
+    if (params.rank == 0) {
+        printf("Cleaning up...\n");
+    }
     if (params.ioThread.joinable()) {
         params.ioThread.join();
     }
@@ -1109,8 +1261,10 @@ void end(Params &params) {
 }
 
 void init(const char *inputFileName, Params &params) {
-    printf("==============\nInitialization\n==============\n");
-    printf("Reading inputs from %s\n", inputFileName);
+    if (params.rank == 0) {
+        printf("==============\nInitialization\n==============\n");
+        printf("Reading inputs from %s\n", inputFileName);
+    }
     nlohmann::json inputJson;
     std::fstream file(inputFileName, std::ios::in);
     if (file.is_open()) {
@@ -1150,9 +1304,10 @@ void init(const char *inputFileName, Params &params) {
 
     params.hostData.errorTolerance = inputJson["errorTolerance"]["value"];
     params.hostData.snapshotFrequency = inputJson["snapShot"]["frequency"];
-    // TODO
-    // add process number to each snapshot name
-    params.snapshotParams.name = inputJson["snapShot"]["filename"];
+    std::stringstream ss;
+    ss << inputJson["snapShot"]["filename"];
+    ss << "r" << params.rank;
+    params.snapshotParams.name = ss.str();
 
     params.hostConstants.wallDragStrength = wall["drag"];
     params.hostConstants.xWall = 1 == wall["x"];
@@ -1199,26 +1354,26 @@ void init(const char *inputFileName, Params &params) {
     };
 
     // TODO areaToProcessorMap
-    std::array<int, 26> areaToProcessorMap;
-    setAreaToProcessorMap(static_cast<void *>(areaToProcessorMap.data()),
-                          sizeof(int) * areaToProcessorMap.size());
+    setAreaToProcessorMap(static_cast<void *>(params.areaToProcessorMap.data()),
+                          sizeof(int) * params.areaToProcessorMap.size());
 
     computeGlobalBox();
     computeLocalDimensions();
+
+    // Local count
     ivec bubblesPerDim =
         (params.hostConstants.interval / (2 * params.hostData.avgRad))
             .getCeil()
             .asType<int>();
-
     params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
     if (params.hostConstants.dimensionality == 3) {
         params.bubbles.count *= bubblesPerDim.z;
     }
 
-    // TODO
-    // Communicate the number of bubbles each process has, so that the correct
-    // offset can be applied to the static indices saved in snapshots. Rank
-    // determines which counts one should sum as the offset.
+    // If one wants to keep the static indices global, one should add
+    // communication here between the processes to send the total number of
+    // bubbles each has and then based on the rank determine which bubbles are
+    // before the bubbles of this rank
     params.snapshotParams.indexOffset = 0;
 
     // Calculate the length of 'rows'.
@@ -1235,12 +1390,14 @@ void init(const char *inputFileName, Params &params) {
         (params.hostConstants.dimensionality == 3) ? 12 : 4;
     params.pairs.stride = avgNumNeighbors * params.bubbles.stride;
 
-    printf("---------------Starting parameters---------------\n");
-    params.hostConstants.print();
-    params.hostData.print();
-    params.bubbles.print();
-    params.pairs.print();
-    printf("-------------------------------------------------\n");
+    if (params.rank == 0) {
+        printf("---------------Starting parameters---------------\n");
+        params.hostConstants.print();
+        params.hostData.print();
+        params.bubbles.print();
+        params.pairs.print();
+        printf("-------------------------------------------------\n");
+    }
 
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.deviceConstants),
@@ -1259,7 +1416,9 @@ void init(const char *inputFileName, Params &params) {
     setNumPairsToZero();
     launchInitGlobals(params);
 
-    printf("Reserving device memory\n");
+    if (params.rank == 0) {
+        printf("Reserving device memory\n");
+    }
     CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
 
     // Total memory: memory for bubble data, memory for pair data and memory for
@@ -1293,10 +1452,13 @@ void init(const char *inputFileName, Params &params) {
     const uint64_t megs = bytes / (1024 * 1024);
     const uint64_t kilos = (bytes - megs * 1024 * 1024) / 1024;
     bytes = (bytes - megs * 1024 * 1024 - kilos * 1024);
-    printf("Allocated %ld MB %ld KB %ld B of global device memory.\n", megs,
-           kilos, bytes);
 
-    printf("Generating starting data\n");
+    if (params.rank == 0) {
+        printf("Allocated %ld MB %ld KB %ld B of global device memory.\n", megs,
+               kilos, bytes);
+        printf("Generating starting data\n");
+    }
+
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(
@@ -1329,12 +1491,51 @@ void init(const char *inputFileName, Params &params) {
            params.bubbles.count, (cudaStream_t)0, false);
 
     if (1 < params.nProcs) {
-        // TODO: MPI communication of the average surface area and max radius
+        std::array<double, 3> radArea;
+        radArea[0] = params.hostData.maxBubbleRadius;
+        radArea[1] = params.hostConstants.averageSurfaceAreaIn;
+        radArea[2] = (double)params.bubbles.count;
+        const int tag = 1337;
+        MPI_Status status;
+        if (params.rank == 0) {
+            std::array<double, 3> temp;
+            for (int i = 1; i < params.nProcs; i++) {
+                int rc = MPI_Recv(static_cast<void *>(temp.data()), 3,
+                                  MPI_DOUBLE, i, tag, params.comm, &status);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
+                radArea[0] = std::max(temp[0], radArea[0]);
+                radArea[1] += temp[1];
+                radArea[2] += temp[2];
+            }
+            radArea[1] /= radArea[2];
+        } else {
+            int rc = MPI_Send(static_cast<void *>(radArea.data()), 3,
+                              MPI_DOUBLE, 0, tag, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+        }
+
+        int rc = MPI_Bcast(static_cast<void *>(radArea.data()), 3, MPI_DOUBLE,
+                           0, params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
+        params.hostData.maxBubbleRadius = radArea[0];
+        params.hostConstants.averageSurfaceAreaIn = radArea[1];
+    } else {
+        params.hostConstants.averageSurfaceAreaIn /= params.bubbles.count;
     }
 
-    // Perform a local neighbor search, don't bother with the other processes
-    // yet
-    printf("First neighbor search\n");
+    if (params.rank == 0) {
+        printf("First neighbor search\n");
+    }
     searchNeighbors(params);
 
     // After search x, y, z, r are correct, but all predicted are trash.
@@ -1354,7 +1555,9 @@ void init(const char *inputFileName, Params &params) {
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDefault, 0));
 
-    printf("Calculating initial velocities for Adams-Bashforth-Moulton\n");
+    if (params.rank == 0) {
+        printf("Calculating initial velocities for Adams-Bashforth-Moulton\n");
+    }
     launchResetArray(params, params.bubbles.count, false, 0.0,
                      params.bubbles.dxdto);
     launchResetArray(params, params.bubbles.count, false, 0.0,
@@ -1415,19 +1618,51 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
 
-    // Stabilize locally with concrete walls in all dimensions
-    printf("Stabilizing a few rounds after creation\n");
+    if (params.rank == 0) {
+        printf("Stabilizing a few rounds after creation\n");
+    }
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
-    printf("Scaling the simulation box\n");
+    if (params.rank == 0) {
+        printf("Scaling the simulation box\n");
+    }
     double bubbleVolume = totalVolume(params);
     if (1 < params.nProcs) {
-        // TODO: Communicate the total volume between processes
+        const int tag = 1337;
+        MPI_Status status;
+        if (params.rank == 0) {
+            double temp = 0;
+            for (int i = 1; i < params.nProcs; i++) {
+                int rc = MPI_Recv(static_cast<void *>(&temp), 1, MPI_DOUBLE, i,
+                                  tag, params.comm, &status);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
+                bubbleVolume += temp;
+            }
+        } else {
+            int rc = MPI_Send(static_cast<void *>(&bubbleVolume), 1, MPI_DOUBLE,
+                              0, tag, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+        }
+
+        int rc = MPI_Bcast(static_cast<void *>(&bubbleVolume), 1, MPI_DOUBLE, 0,
+                           params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
     }
 
-    printf("Current phi: %.9g, target phi: %.9g\n",
-           bubbleVolume / boxVolume(params), phi);
+    if (params.rank == 0) {
+        printf("Current phi: %.9g, target phi: %.9g\n",
+               bubbleVolume / boxVolume(params), phi);
+    }
 
     launchTransformPositions(params, true);
 
@@ -1470,11 +1705,15 @@ void init(const char *inputFileName, Params &params) {
 
     launchTransformPositions(params, false);
 
-    printf("Current phi: %.9g, target phi: %.9g\n",
-           bubbleVolume / boxVolume(params), phi);
+    if (params.rank == 0) {
+        printf("Current phi: %.9g, target phi: %.9g\n",
+               bubbleVolume / boxVolume(params), phi);
+    }
 
-    // Still local neighbors
-    printf("Neighbor search after scaling\n");
+    if (params.rank == 0) {
+        printf("Neighbor search after scaling\n");
+    }
+
     searchNeighbors(params);
     // After search r is correct, but rp is trash.
     // pairwiseInteraction always uses predicted values, so copy r to rp
@@ -1483,21 +1722,23 @@ void init(const char *inputFileName, Params &params) {
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDefault, 0));
 
-    // Still local stabilization with concrete walls
-    printf("Stabilizing a few rounds after scaling\n");
+    if (params.rank == 0) {
+        printf("Stabilizing a few rounds after scaling\n");
+    }
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilizationSteps);
 
-    // Begin global stabilization, i.e. processors search neighbors from other
-    // processes and calculate values between processor
-    printf("\n=============\nStabilization\n=============\n");
-    params.hostData.searchBetweenProcessors = params.nProcs > 1;
+    if (params.rank == 0) {
+        printf("\n=============\nStabilization\n=============\n");
+    }
     params.hostData.numNeighborsSearched = 0;
     int numSteps = 0;
     const int failsafe = 500;
 
-    printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
-           "#searches");
+    if (params.rank == 0) {
+        printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
+               "#searches");
+    }
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;
     bool stop = false;
@@ -1539,15 +1780,17 @@ void init(const char *inputFileName, Params &params) {
                 printf("%-9ld\n", params.hostData.numNeighborsSearched);
                 params.hostData.numNeighborsSearched = 0;
             }
-
-            // TODO
-            // Communicate the value of stop to others
-
             ++numSteps;
-        } else {
-            // TODO
-            // Ask from rank 0 if we should stop or continue stabilization
         }
+
+        int intStop = stop ? 1 : 0;
+        int rc = MPI_Bcast(static_cast<void *>(&intStop), 1, MPI_INT, 0,
+                           params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+        stop = (bool)intStop;
     }
 
     if (0.0 < params.hostData.snapshotFrequency) {
@@ -1601,8 +1844,36 @@ void init(const char *inputFileName, Params &params) {
                      params.bubbles.error);
 
     params.hostData.energy1 = totalEnergy(params);
-    // TODO
-    // communicate the total energy between processes
+    if (params.nProcs > 1) {
+        const int tag = 1337;
+        MPI_Status status;
+        if (params.rank == 0) {
+            double temp = 0;
+            for (int i = 1; i < params.nProcs; i++) {
+                int rc = MPI_Recv(static_cast<void *>(&temp), 1, MPI_DOUBLE, i,
+                                  tag, params.comm, &status);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
+                params.hostData.energy1 += temp;
+            }
+        } else {
+            int rc = MPI_Send(static_cast<void *>(&params.hostData.energy1), 1,
+                              MPI_DOUBLE, 0, tag, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+        }
+
+        int rc = MPI_Bcast(static_cast<void *>(&params.hostData.energy1), 1,
+                           MPI_DOUBLE, 0, params.comm);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+    }
     params.hostData.timeInteger = 0;
     params.hostData.timeFraction = 0.0;
     params.hostData.timesPrinted = 1;
@@ -1615,6 +1886,7 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
     Params params;
     params.rank = rank;
     params.nProcs = nProcs;
+    params.comm = MPI_COMM_WORLD;
     init(inputFileName.c_str(), params);
 
     if (params.hostData.snapshotFrequency > 0.0) {
@@ -1663,6 +1935,8 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
 
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;
+    int totalBubbleCount = params.bubbles.count;
+    int totalPairCount = params.pairs.count;
 
     while (continueSimulation) {
         CUBBLE_PROFILE(false);
@@ -1671,60 +1945,92 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         bool isSnapshotTime = false;
         bool print = false;
         bool resetErrors = false;
-        if (0 == params.rank) {
-            // Continue if there are more than the specified minimum number of
-            // bubbles left in the simulation and if the largest bubble is
-            // smaller than the simulation box in every dimension
 
-            // TODO figure this out with multiple processes
-            continueSimulation =
-                params.bubbles.count > params.hostData.minNumBubbles &&
-                params.hostData.maxBubbleRadius < minInterval;
+        totalBubbleCount = params.bubbles.count;
+        totalPairCount = params.pairs.count;
+        if (params.nProcs > 1) {
+            const int tag = 1337;
+            MPI_Status status;
 
-            // Track timestep
-            minTimestep = ts < minTimestep ? ts : minTimestep;
-            maxTimestep = ts > maxTimestep ? ts : maxTimestep;
-            avgTimestep += ts;
+            std::array<int, 2> totals;
+            totals[0] = totalBubbleCount;
+            totals[1] = totalPairCount;
+            if (params.rank == 0) {
+                std::array<int, 2> temp;
+                for (int i = 1; i < params.nProcs; i++) {
+                    int rc = MPI_Recv(static_cast<void *>(temp.data()),
+                                      totals.size(), MPI_INT, i, tag,
+                                      params.comm, &status);
+                    if (rc != MPI_SUCCESS) {
+                        printf("Error sendrecving an MPI message at %s:%d\n",
+                               __FILE__, __LINE__);
+                    }
 
-            // Here we compare potentially very large integers (> 10e6) to each
-            // other and small doubles (<= 1.0) to each other to preserve
-            // precision.
-            const double nextPrintTime = params.hostData.timesPrinted /
-                                         params.hostData.timeScalingFactor;
-            const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
-            const double nextPrintTimeFraction =
-                nextPrintTime - nextPrintTimeInteger;
-
-            // Print stuff to stdout at the earliest possible moment
-            // when simulation time is larger than scaled time
-            print = params.hostData.timeInteger > nextPrintTimeInteger ||
-                    (params.hostData.timeInteger == nextPrintTimeInteger &&
-                     params.hostData.timeFraction >= nextPrintTimeFraction);
-
-            if (params.hostData.snapshotFrequency > 0.0) {
-                const double nextSnapshotTime =
-                    params.hostData.numSnapshots /
-                    (params.hostData.snapshotFrequency *
-                     params.hostData.timeScalingFactor);
-                const uint64_t nextSnapshotTimeInteger =
-                    (uint64_t)nextSnapshotTime;
-                const double nextSnapshotTimeFraction =
-                    nextSnapshotTime - nextSnapshotTimeInteger;
-
-                isSnapshotTime =
-                    params.hostData.timeInteger > nextSnapshotTimeInteger ||
-                    (params.hostData.timeInteger == nextSnapshotTimeInteger &&
-                     params.hostData.timeFraction >= nextSnapshotTimeFraction);
+                    for (uint32_t j = 0; j < totals.size(); j++) {
+                        totals[j] += temp[j];
+                    }
+                }
+            } else {
+                int rc = MPI_Send(static_cast<void *>(totals.data()),
+                                  totals.size(), MPI_INT, 0, tag, params.comm);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
             }
-            // TODO
-            // Communicate print & snapshottime & continueSimulation to others
-        } else {
-            // TODO
-            // Get print & snapshottime & continueSimulation from rank 0
+
+            int rc = MPI_Bcast(static_cast<void *>(totals.data()),
+                               totals.size(), MPI_INT, 0, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+
+            totalBubbleCount = totals[0];
+            totalPairCount = totals[1];
+        }
+
+        // Continue if there are more than the specified minimum number of
+        // bubbles left in the simulation and if the largest bubble is
+        // smaller than the simulation box in every dimension
+        continueSimulation = totalBubbleCount > params.hostData.minNumBubbles &&
+                             params.hostData.maxBubbleRadius < minInterval;
+
+        // Track timestep
+        minTimestep = ts < minTimestep ? ts : minTimestep;
+        maxTimestep = ts > maxTimestep ? ts : maxTimestep;
+        avgTimestep += ts;
+
+        // Here we compare potentially very large integers (> 10e6) to each
+        // other and small doubles (<= 1.0) to each other to preserve
+        // precision.
+        const double nextPrintTime =
+            params.hostData.timesPrinted / params.hostData.timeScalingFactor;
+        const uint64_t nextPrintTimeInteger = (uint64_t)nextPrintTime;
+        const double nextPrintTimeFraction =
+            nextPrintTime - nextPrintTimeInteger;
+
+        // Print stuff to stdout at the earliest possible moment
+        // when simulation time is larger than scaled time
+        print = params.hostData.timeInteger > nextPrintTimeInteger ||
+                (params.hostData.timeInteger == nextPrintTimeInteger &&
+                 params.hostData.timeFraction >= nextPrintTimeFraction);
+
+        if (params.hostData.snapshotFrequency > 0.0) {
+            const double nextSnapshotTime = params.hostData.numSnapshots /
+                                            (params.hostData.snapshotFrequency *
+                                             params.hostData.timeScalingFactor);
+            const uint64_t nextSnapshotTimeInteger = (uint64_t)nextSnapshotTime;
+            const double nextSnapshotTimeFraction =
+                nextSnapshotTime - nextSnapshotTimeInteger;
+
+            isSnapshotTime =
+                params.hostData.timeInteger > nextSnapshotTimeInteger ||
+                (params.hostData.timeInteger == nextSnapshotTimeInteger &&
+                 params.hostData.timeFraction >= nextSnapshotTimeFraction);
         }
 
         if (print) {
-            uint32_t nBubbles = params.bubbles.count;
             double energy = totalEnergy(params);
             double bubbleVolume = totalVolume(params);
             double relRad = getSum(params, params.bubbles.r);
@@ -1736,61 +2042,113 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
             }
             double avgVr = getSum(params, params.bubbles.drdt);
             double avgPath = getSum(params, params.bubbles.path);
-            // TODO
-            // Communicate the totals across all processes
 
+            if (params.nProcs > 1) {
+                const int tag = 1337;
+                MPI_Status status;
+
+                std::array<double, 8> totals;
+                totals[0] = energy;
+                totals[1] = bubbleVolume;
+                totals[2] = relRad;
+                totals[3] = avgVx;
+                totals[4] = avgVy;
+                totals[5] = avgVz;
+                totals[6] = avgVr;
+                totals[7] = avgPath;
+                if (params.rank == 0) {
+                    std::array<double, 8> temp;
+                    for (int i = 1; i < params.nProcs; i++) {
+                        int rc = MPI_Recv(static_cast<void *>(temp.data()),
+                                          temp.size(), MPI_DOUBLE, i, tag,
+                                          params.comm, &status);
+                        if (rc != MPI_SUCCESS) {
+                            printf(
+                                "Error sendrecving an MPI message at %s:%d\n",
+                                __FILE__, __LINE__);
+                        }
+
+                        for (uint32_t j = 0; j < totals.size(); j++) {
+                            totals[j] += temp[j];
+                        }
+                    }
+                } else {
+                    int rc = MPI_Send(static_cast<void *>(totals.data()),
+                                      totals.size(), MPI_DOUBLE, 0, tag,
+                                      params.comm);
+                    if (rc != MPI_SUCCESS) {
+                        printf("Error sendrecving an MPI message at %s:%d\n",
+                               __FILE__, __LINE__);
+                    }
+                }
+
+                int rc = MPI_Bcast(static_cast<void *>(totals.data()),
+                                   totals.size(), MPI_DOUBLE, 0, params.comm);
+                if (rc != MPI_SUCCESS) {
+                    printf("Error sendrecving an MPI message at %s:%d\n",
+                           __FILE__, __LINE__);
+                }
+
+                energy = totals[0];
+                bubbleVolume = totals[1];
+                relRad = totals[2];
+                avgVx = totals[3];
+                avgVy = totals[4];
+                avgVz = totals[5];
+                avgVr = totals[6];
+                avgPath = totals[7];
+            }
+
+            params.hostData.energy2 = energy;
             if (0 == rank) {
-                params.hostData.energy2 = energy;
                 double de = std::abs(e2 - e1);
                 if (de > 0.0) {
                     de *= 2.0 / (e2 + e1);
                 }
 
-                relRad /= params.hostData.avgRad * nBubbles;
-                avgVx /= nBubbles;
-                avgVy /= nBubbles;
-                avgVz /= nBubbles;
-                avgVr /= nBubbles;
-                avgPath /= nBubbles;
+                relRad /= params.hostData.avgRad * totalBubbleCount;
+                avgVx /= totalBubbleCount;
+                avgVy /= totalBubbleCount;
+                avgVz /= totalBubbleCount;
+                avgVr /= totalBubbleCount;
+                avgPath /= totalBubbleCount;
 
                 // Add values to data stream
                 std::ofstream resultFile("results.dat", std::ios_base::app);
                 if (resultFile.is_open()) {
                     resultFile
                         << params.hostData.timesPrinted << " " << relRad << " "
-                        << nBubbles << " " << avgPath << " "
+                        << totalBubbleCount << " " << avgPath << " "
                         << params.hostData.energy2 << " " << de << " " << avgVx
                         << " " << avgVy << " " << avgVz << " "
                         << sqrt(avgVx * avgVx + avgVy * avgVy + avgVz * avgVz)
                         << " " << avgVr << "\n";
                 } else {
-                    printf("Couldn't open file stream to append results to!\n");
+                    printf("Couldn't open file stream to append results "
+                           "to!\n");
                 }
-
                 const double phi = bubbleVolume / boxVolume(params);
-
                 printf("%-5d ", params.hostData.timesPrinted);
                 printf("%-#8.6g ", phi);
                 printf("%-#6.4g ", relRad);
                 printf("%-9.5e ", de);
-                printf("%9d ", params.bubbles.count);
-                printf("%10d ", params.pairs.count);
+                printf("%9d ", totalBubbleCount);
+                printf("%10d ", totalPairCount);
                 printf("%6ld ", params.hostData.numStepsInTimeStep);
                 printf("%-9ld ", params.hostData.numNeighborsSearched);
                 printf("%-9.5e ", minTimestep);
                 printf("%-9.5e ", maxTimestep);
                 printf("%-9.5e \n",
                        avgTimestep / params.hostData.numStepsInTimeStep);
-
-                ++params.hostData.timesPrinted;
-                params.hostData.numStepsInTimeStep = 0;
-                params.hostData.energy1 = params.hostData.energy2;
-                params.hostData.numNeighborsSearched = 0;
-                minTimestep = 9999999.9;
-                maxTimestep = -1.0;
-                avgTimestep = 0.0;
             }
 
+            ++params.hostData.timesPrinted;
+            params.hostData.numStepsInTimeStep = 0;
+            params.hostData.energy1 = params.hostData.energy2;
+            params.hostData.numNeighborsSearched = 0;
+            minTimestep = 9999999.9;
+            maxTimestep = -1.0;
+            avgTimestep = 0.0;
             resetErrors = true;
         }
 
@@ -1807,21 +2165,23 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
         ++params.hostData.numStepsInTimeStep;
     }
 
-    // TODO
-    // Figure out how stopping would work with multiple processes. Do the other
-    // processes give their data to rank 0 once the total number is e.g. < 10^5?
-    if (params.bubbles.count <= params.hostData.minNumBubbles) {
-        printf("Stopping simulation, since the number of bubbles left in the "
-               "simulation (%d) is less than or equal to the specified minimum "
-               "(%d)\n",
-               params.bubbles.count, params.hostData.minNumBubbles);
-    } else if (params.hostData.maxBubbleRadius > minInterval) {
-        dvec temp = params.hostConstants.globalInterval;
-        printf("Stopping simulation, since the radius of the largest bubble "
-               "(%g) is greater than the simulation box (%g, %g, %g)\n",
-               params.hostData.maxBubbleRadius, temp.x, temp.y, temp.z);
-    } else {
-        printf("Stopping simulation for an unknown reason...\n");
+    if (params.rank == 0) {
+        if (totalBubbleCount <= params.hostData.minNumBubbles) {
+            printf(
+                "Stopping simulation, since the number of bubbles left in the "
+                "simulation (%d) is less than or equal to the specified "
+                "minimum "
+                "(%d)\n",
+                totalBubbleCount, params.hostData.minNumBubbles);
+        } else if (params.hostData.maxBubbleRadius > minInterval) {
+            dvec temp = params.hostConstants.globalInterval;
+            printf(
+                "Stopping simulation, since the radius of the largest bubble "
+                "(%g) is greater than the simulation box (%g, %g, %g)\n",
+                params.hostData.maxBubbleRadius, temp.x, temp.y, temp.z);
+        } else {
+            printf("Stopping simulation for an unknown reason...\n");
+        }
     }
 
     if (params.hostData.snapshotFrequency > 0.0) {
@@ -1829,6 +2189,8 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
     }
 
     end(params);
-    printf("Done\n");
+    if (params.rank == 0) {
+        printf("Done\n");
+    }
 }
 } // namespace cubble
