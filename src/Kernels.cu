@@ -35,7 +35,7 @@ __device__ int dNumIncomingExternalPairs;
 __device__ int dNumOutgoingExternalPairs;
 __device__ int dNumPairsNew;
 __device__ int dNumToBeDeleted;
-__device__ __constant__ int dAreaToProcessorMap[26];
+__device__ int dAreaToProcessorMap[26];
 }; // namespace cubble
 
 namespace cubble {
@@ -1022,211 +1022,26 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
 
 __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      int *surfaceCellOffsets, int *cellSizes,
-                                     int *cellOffsets, int *bubbleCounts,
-                                     char **outData, Bubbles bubbles,
-                                     ivec cellDim) {
-    auto getNumCellsInArea = [&cellDim](int nArea) {
-        int numCells = 0;
-        if (3 == dConstants->dimensionality) {
-            switch (nArea) {
-            case 0:
-            case 1:
-                numCells = cellDim.y * cellDim.z;
-                break;
-            case 2:
-            case 3:
-                numCells = cellDim.x * cellDim.z;
-                break;
-            case 4:
-            case 5:
-                numCells = cellDim.x * cellDim.y;
-                break;
-            case 6:
-            case 7:
-            case 8:
-            case 9:
-                numCells = cellDim.x;
-                break;
-            case 10:
-            case 11:
-            case 12:
-            case 13:
-                numCells = cellDim.y;
-                break;
-            case 14:
-            case 15:
-            case 16:
-            case 17:
-                numCells = cellDim.z;
-                break;
-            case 18:
-            case 19:
-            case 20:
-            case 21:
-            case 22:
-            case 23:
-            case 24:
-            case 25:
-                numCells = 1;
-                break;
-            default:
-                printf("Should never end up here at %s:%d\n", __FILE__,
-                       __LINE__);
-                break;
-            }
-        } else {
-            switch (nArea) {
-            case 0:
-            case 1:
-                numCells = cellDim.y;
-                break;
-            case 2:
-            case 3:
-                numCells = cellDim.x;
-                break;
-            case 4:
-            case 5:
-            case 6:
-            case 7:
-                numCells = 1;
-                break;
-            default:
-                printf("Should never end up here at %s:%d\n", __FILE__,
-                       __LINE__);
-                break;
-            }
-        }
-        return numCells;
-    };
-
+                                     int *cellOffsets, Bubbles bubbles,
+                                     double *x, double *y, double *z, double *r,
+                                     int *idx, int *sizes) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
          i += gridDim.x * blockDim.x) {
-        int indexOfFirstCellOfArea = 0;
-        auto getAreaIndex = [&i, &indexOfFirstCellOfArea,
-                             &getNumCellsInArea]() {
-            int n = 0;
-            int total = getNumCellsInArea(0);
-            while (i >= total) {
-                total += getNumCellsInArea(++n);
-            }
-
-            indexOfFirstCellOfArea = total - getNumCellsInArea(n);
-
-            return n;
-        };
-
-        const int ai = getAreaIndex();
-        const int nb = bubbleCounts[ai];
-        char *dst = outData[ai];
-        if (i == indexOfFirstCellOfArea) {
-            // Add two pieces of metadata at the start
-            reinterpret_cast<int *>(dst)[0] = getNumCellsInArea(ai);
-            reinterpret_cast<int *>(dst)[1] = nb;
-        }
-        dst += 2 * sizeof(int);
-
         const int ci = surfaceCells[i];
         const int size = cellSizes[ci];
         const int co = cellOffsets[ci];
-        // sco starts from 0 for each area
-        const int sco =
-            surfaceCellOffsets[i] - surfaceCellOffsets[indexOfFirstCellOfArea];
+        const int sco = surfaceCellOffsets[i];
 
         for (int j = 0; j < size; j++) {
             const int bi = co + j;
             const int sbi = sco + j;
-            int to = sbi;
-            reinterpret_cast<double *>(dst)[to] = bubbles.x[bi];
-            to = nb + sbi;
-            reinterpret_cast<double *>(dst)[to] = bubbles.y[bi];
-            to = 2 * nb + sbi;
-            reinterpret_cast<double *>(dst)[to] = bubbles.z[bi];
-            to = 3 * nb + sbi;
-            reinterpret_cast<double *>(dst)[to] = bubbles.r[bi];
-            // doubles take twice the amount of bytes cmp to int,
-            // so double the base offset from 4 to 8
-            to = 8 * nb + sbi;
-            reinterpret_cast<int *>(dst)[to] = bi;
+            x[sbi] = bubbles.x[bi];
+            y[sbi] = bubbles.y[bi];
+            z[sbi] = bubbles.z[bi];
+            r[sbi] = bubbles.r[bi];
+            idx[sbi] = bi;
         }
-        int to = 9 * nb + i - indexOfFirstCellOfArea;
-        reinterpret_cast<int *>(dst)[to] = size;
-    }
-}
-
-__global__ void scatterSurfaceBubbles(int count, char **inData,
-                                      SurfaceData::Data outData) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
-         i += gridDim.x * blockDim.x) {
-        int indexOfFirstBubbleOfArea = 0;
-        int externalCellIndex = 0;
-        int indexOfFirstBubbleOfCell = 0;
-        auto getAreaIndex = [&i, &indexOfFirstBubbleOfArea, &inData]() {
-            int n = 0;
-            int total = reinterpret_cast<int *>(inData[n])[1];
-            while (i >= total) {
-                total += reinterpret_cast<int *>(inData[++n])[1];
-            }
-
-            indexOfFirstBubbleOfArea =
-                total - reinterpret_cast<int *>(inData[n])[1];
-
-            return n;
-        };
-
-        auto getCellIndex = [&i, &inData, &externalCellIndex,
-                             &indexOfFirstBubbleOfCell](int ai, int nb) {
-            int *cellSizes = reinterpret_cast<int *>(
-                inData[ai] + nb * (sizeof(double) * 4 + sizeof(int)));
-
-            // First count the number of cells and bubbles in the areas before
-            // the area this bubble belongs to
-            indexOfFirstBubbleOfCell = 0;
-            externalCellIndex = 0;
-            for (int j = 0; j < ai; j++) {
-                externalCellIndex += reinterpret_cast<int *>(inData[j])[0];
-                indexOfFirstBubbleOfCell +=
-                    reinterpret_cast<int *>(inData[j])[1];
-            }
-
-            // Then loop over each cell that belongs to this area
-            int ci = 0;
-            indexOfFirstBubbleOfCell += cellSizes[ci];
-            while (i >= indexOfFirstBubbleOfCell) {
-                indexOfFirstBubbleOfCell += cellSizes[++ci];
-            }
-            indexOfFirstBubbleOfCell -= cellSizes[ci];
-
-            return ci;
-        };
-
-        const int ai = getAreaIndex();
-        const int bi = i - indexOfFirstBubbleOfArea;
-        const int nb = reinterpret_cast<int *>(inData[ai])[1];
-        const int ci = getCellIndex(ai, nb);
-        void *src = static_cast<void *>(inData[ai] + sizeof(int) * 2);
-
-        int from = bi;
-        outData.x[i] = static_cast<double *>(src)[from];
-
-        from = bi + nb;
-        outData.y[i] = static_cast<double *>(src)[from];
-
-        from = bi + 2 * nb;
-        outData.z[i] = static_cast<double *>(src)[from];
-
-        from = bi + 3 * nb;
-        outData.r[i] = static_cast<double *>(src)[from];
-
-        from = bi + 8 * nb;
-        outData.idx[i] = static_cast<int *>(src)[from];
-
-        // If this is the first bubble in this cell, store the size of the cell
-        // in the array
-        if (i == indexOfFirstBubbleOfCell) {
-            from = ci + 9 * nb;
-            outData.cellSizes[ci + externalCellIndex] =
-                static_cast<int *>(src)[from];
-        }
+        sizes[i] = size;
     }
 }
 
@@ -1234,7 +1049,7 @@ __global__ void neighborSearch(int numCells, bool internalSearch,
                                int numNeighborCells, ivec cellDim, int *offsets,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
-                               SurfaceData::Data surfaceData, int *surfaceCells,
+                               SurfaceData surfaceData, int *surfaceCells,
                                int *procNum) {
     // Loop over each cell pair in the simulation box
     for (int i = (threadIdx.x + blockIdx.x * blockDim.x) / 32;
@@ -2821,24 +2636,18 @@ void cubMax(void *tempMem, uint64_t maxCubMem, double *src, void *dst, int n,
 
 void launchGatherSurfaceBubbles(Params &params, int nSurfaceCells,
                                 int *surfaceCells, int *surfaceCellOffsets,
-                                int *cellSizes, int *cellOffsets,
-                                int *bubbleCountPerArea, char **outData,
-                                ivec cellDim) {
+                                int *cellSizes, int *cellOffsets, double *x,
+                                double *y, double *z, double *r, int *idx,
+                                int *sizes) {
     KERNEL_LAUNCH(gatherSurfaceBubbles, params, 0, 0, nSurfaceCells,
                   surfaceCells, surfaceCellOffsets, cellSizes, cellOffsets,
-                  bubbleCountPerArea, outData, params.bubbles, cellDim);
-}
-
-void launchScatterSurfaceBubbles(Params &params, int numExternalBubbles,
-                                 char **inData, SurfaceData::Data &data) {
-    KERNEL_LAUNCH(scatterSurfaceBubbles, params, 0, 0, numExternalBubbles,
-                  inData, data);
+                  params.bubbles, x, y, z, r, idx, sizes);
 }
 
 void launchNeighborSearch(Params &params, int numCells, bool internalSearch,
                           int numNeighborCells, ivec cellDim, int *offsets,
                           int *sizes, int *histogram, int *pairI, int *pairJ,
-                          SurfaceData::Data &surfaceData, int *surfaceCells,
+                          SurfaceData &surfaceData, int *surfaceCells,
                           int *procNum) {
     KERNEL_LAUNCH(neighborSearch, params, 0, 0, numCells, internalSearch,
                   numNeighborCells, cellDim, offsets, sizes, histogram, pairI,

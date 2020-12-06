@@ -36,6 +36,45 @@
 namespace {
 using namespace cubble;
 void externalNeighborSearch(Params &params) {
+    std::array<int, 26> oppositeAreas;
+    if (3 == params.hostConstants.dimensionality) {
+        oppositeAreas[0] = 1;
+        oppositeAreas[1] = 0;
+        oppositeAreas[2] = 3;
+        oppositeAreas[3] = 2;
+        oppositeAreas[4] = 5;
+        oppositeAreas[5] = 4;
+        oppositeAreas[6] = 8;
+        oppositeAreas[7] = 9;
+        oppositeAreas[8] = 6;
+        oppositeAreas[9] = 7;
+        oppositeAreas[10] = 12;
+        oppositeAreas[11] = 13;
+        oppositeAreas[12] = 10;
+        oppositeAreas[13] = 11;
+        oppositeAreas[14] = 16;
+        oppositeAreas[15] = 17;
+        oppositeAreas[16] = 14;
+        oppositeAreas[17] = 15;
+        oppositeAreas[18] = 25;
+        oppositeAreas[19] = 22;
+        oppositeAreas[20] = 23;
+        oppositeAreas[21] = 24;
+        oppositeAreas[22] = 19;
+        oppositeAreas[23] = 20;
+        oppositeAreas[24] = 21;
+        oppositeAreas[25] = 18;
+    } else {
+        oppositeAreas[0] = 1;
+        oppositeAreas[1] = 0;
+        oppositeAreas[2] = 3;
+        oppositeAreas[3] = 2;
+        oppositeAreas[4] = 6;
+        oppositeAreas[5] = 7;
+        oppositeAreas[6] = 4;
+        oppositeAreas[7] = 5;
+    }
+
     ivec cellDim = params.neighborSearchData.cellDim;
     const int numCells = params.neighborSearchData.numCells;
     int nAreas = 8;
@@ -62,6 +101,11 @@ void externalNeighborSearch(Params &params) {
     int *cellOffsets = params.neighborSearchData.cellOffsets;
     int *cellSizes = params.neighborSearchData.cellSizes;
 
+#ifndef NDEBUG
+    if (0 == params.rank) {
+        printf("bef find sur\n");
+    }
+#endif
     launchFindSurfaceCells(params, numCells, surfaceCells, cellSizes,
                            surfaceCellSizes, bubbleCountPerArea, cellDim);
 
@@ -122,167 +166,183 @@ void externalNeighborSearch(Params &params) {
         cellCounts[7] = 1;
     }
 
-    // Total bytes taken by our surface data:
-    // 4 doubles and 1 int for each bubble (x, y, z, r, idx)
-    // 1 int for each cell (cellSize)
-    // 2 ints of metadata for each area (#cells & #bubbles )
-    // possible padding int for each area (mixing doubles and ints in memory)
-    const uint64_t bytesPerBubble = 4 * sizeof(double) + sizeof(int);
-    const uint64_t bytesPerCell = sizeof(int);
-    const uint64_t bytesOfMetadata = 2 * sizeof(int);
-
-    SurfaceData &sd = params.surfaceData;
-    uint64_t bytes = bubbleCounts[26] * bytesPerBubble;
-    bytes += nSurfaceCells * bytesPerCell;
-    bytes += nAreas * bytesOfMetadata;
-    bytes += nAreas * sizeof(int);
-    if (sd.memory == nullptr || sd.outBytes < bytes) {
-        if (sd.memory != nullptr) {
-            CUDA_CALL(cudaFree(sd.memory));
-        }
-
-        // Reserve memory. Assumption is, that the surface data we receive from
-        // neighbors is at most twice the data of our own surface bubbles.
-        // Additionally, reserve memory for surfaceCellOffsets.
-        uint64_t totalBytes = 5 * bytes + sizeof(int) * nSurfaceCells;
-        CUDA_ASSERT(cudaMalloc(&sd.memory, totalBytes));
-        sd.outBytes = bytes;
-        sd.totalBytes = totalBytes;
-    }
-
-    char *outPtr = static_cast<char *>(sd.memory);
-    char *inPtr = outPtr + sd.outBytes;
+    std::array<int, 27> incomingBubbleCounts;
+    incomingBubbleCounts[26] = 0;
     for (int i = 0; i < nAreas; i++) {
-        sd.outData[i] = outPtr;
-        sd.inData[i] = inPtr;
-
-        const int bci = bubbleCounts[i];
-        const int ci = cellCounts[i];
-        uint64_t incr = bci * bytesPerBubble;
-        incr += ci * bytesPerCell;
-        // Add padding if the ints don't sum to an even number
-        if (((ci + bci) & 0x1) == 1) {
-            incr += sizeof(int);
-        }
-        outPtr += incr;
-        // We don't know the size of the incoming data, but we assume it's at
-        // most twice the size of our own outgoing data
-        inPtr += 2 * incr;
-    }
-
-    launchGatherSurfaceBubbles(params, nSurfaceCells, surfaceCells,
-                               surfaceCellOffsets, cellSizes, cellOffsets,
-                               bubbleCountPerArea, sd.outData, cellDim);
-
-    // sd.outData contains pointers to memory, where the data for each surface
-    // area is stored at. Swap these data with neigboring processors.
-    std::array<int, 26> oppositeAreas;
-    if (3 == params.hostConstants.dimensionality) {
-        oppositeAreas[0] = 1;
-        oppositeAreas[1] = 0;
-        oppositeAreas[2] = 3;
-        oppositeAreas[3] = 2;
-        oppositeAreas[4] = 5;
-        oppositeAreas[5] = 4;
-        oppositeAreas[6] = 8;
-        oppositeAreas[7] = 9;
-        oppositeAreas[8] = 6;
-        oppositeAreas[9] = 7;
-        oppositeAreas[10] = 12;
-        oppositeAreas[11] = 13;
-        oppositeAreas[12] = 10;
-        oppositeAreas[13] = 11;
-        oppositeAreas[14] = 16;
-        oppositeAreas[15] = 17;
-        oppositeAreas[16] = 14;
-        oppositeAreas[17] = 15;
-        oppositeAreas[18] = 25;
-        oppositeAreas[19] = 22;
-        oppositeAreas[20] = 23;
-        oppositeAreas[21] = 24;
-        oppositeAreas[22] = 19;
-        oppositeAreas[23] = 20;
-        oppositeAreas[24] = 21;
-        oppositeAreas[25] = 18;
-    } else {
-        oppositeAreas[0] = 1;
-        oppositeAreas[1] = 0;
-        oppositeAreas[2] = 3;
-        oppositeAreas[3] = 2;
-        oppositeAreas[4] = 6;
-        oppositeAreas[5] = 7;
-        oppositeAreas[6] = 4;
-        oppositeAreas[7] = 5;
-    }
-    int externalBubbleCounts = 0;
-    std::vector<char> tempSrc;
-    std::vector<char> tempDst;
-    for (int i = 0; i < nAreas; i++) {
-        uint64_t bytes = bubbleCounts[i] * bytesPerBubble;
-        bytes += cellCounts[i] * bytesPerCell;
-        bytes += bytesOfMetadata;
-        if (tempSrc.size() < bytes) {
-            tempSrc.resize(bytes);
-        }
-
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(tempSrc.data()),
-                             static_cast<void *>(sd.outData[i]), bytes,
-                             cudaMemcpyDefault));
-
-        uint64_t receivedBytes = 0;
         const int oppositeArea = oppositeAreas[i];
         const int dstProc = params.areaToProcessorMap[i];
         const int srcProc = params.areaToProcessorMap[oppositeArea];
         const int tag = 1337;
         MPI_Status status;
-        int rc =
-            MPI_Sendrecv(static_cast<void *>(&bytes), 1, MPI_UNSIGNED_LONG,
-                         dstProc, tag, static_cast<void *>(&receivedBytes), 1,
-                         MPI_UNSIGNED_LONG, srcProc, tag, params.comm, &status);
+        int rc = MPI_Sendrecv(
+            static_cast<void *>(&bubbleCounts[i]), 1, MPI_INT, dstProc, tag,
+            static_cast<void *>(&incomingBubbleCounts[oppositeArea]), 1,
+            MPI_INT, srcProc, tag, params.comm, &status);
         if (rc != MPI_SUCCESS) {
             printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
                    __LINE__);
         }
-        if (tempDst.size() < receivedBytes) {
-            tempDst.resize(receivedBytes);
-        }
-
-        rc = MPI_Sendrecv(static_cast<void *>(tempSrc.data()), bytes, MPI_CHAR,
-                          dstProc, tag, static_cast<void *>(tempDst.data()),
-                          receivedBytes, MPI_CHAR, srcProc, tag, params.comm,
-                          &status);
-        if (rc != MPI_SUCCESS) {
-            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
-                   __LINE__);
-        }
-
-        CUDA_CALL(cudaMemcpy(static_cast<void *>(sd.inData[oppositeArea]),
-                             static_cast<void *>(tempDst.data()), bytes,
-                             cudaMemcpyDefault));
-        const uint64_t numReceivedBubbles =
-            (receivedBytes - bytesOfMetadata - cellCounts[i] * bytesPerCell) /
-            bytesPerBubble;
-        externalBubbleCounts += numReceivedBubbles;
+        incomingBubbleCounts[26] += incomingBubbleCounts[oppositeArea];
     }
 
-    sd.data.x = reinterpret_cast<double *>(static_cast<char *>(sd.memory) +
-                                           3 * sd.outBytes);
-    sd.data.y = sd.data.x + externalBubbleCounts;
-    sd.data.z = sd.data.y + externalBubbleCounts;
-    sd.data.r = sd.data.z + externalBubbleCounts;
-    sd.data.idx = reinterpret_cast<int *>(sd.data.r + externalBubbleCounts);
-    sd.data.cellSizes = sd.data.idx + externalBubbleCounts;
-    sd.data.cellOffsets = sd.data.cellSizes + nSurfaceCells;
+    std::vector<double> incomingX(incomingBubbleCounts[26]);
+    std::vector<double> incomingY(incomingBubbleCounts[26]);
+    std::vector<double> incomingZ(incomingBubbleCounts[26]);
+    std::vector<double> incomingR(incomingBubbleCounts[26]);
+    std::vector<int> incomingIdx(incomingBubbleCounts[26]);
+    std::vector<int> incomingSize(nSurfaceCells);
 
-    launchScatterSurfaceBubbles(params, externalBubbleCounts, sd.inData,
-                                sd.data);
-    cubExclusiveSum(cubPtr, maxCubMem, sd.data.cellSizes, sd.data.cellOffsets,
-                    nSurfaceCells, 0, false);
+    uint64_t bytes = (4 * sizeof(double) + sizeof(int)) * bubbleCounts[26] +
+                     sizeof(int) * nSurfaceCells;
+    void *outgoingMem = nullptr;
+    CUDA_ASSERT(cudaMalloc(&outgoingMem, bytes));
+    double *x = static_cast<double *>(outgoingMem);
+    double *y = x + bubbleCounts[26];
+    double *z = y + bubbleCounts[26];
+    double *r = z + bubbleCounts[26];
+    int *idx = reinterpret_cast<int *>(r + bubbleCounts[26]);
+    int *sizes = idx + bubbleCounts[26];
+
+    launchGatherSurfaceBubbles(params, nSurfaceCells, surfaceCells,
+                               surfaceCellOffsets, cellSizes, cellOffsets, x, y,
+                               z, r, idx, sizes);
+
+    int outBubOffset = 0;
+    int outCellOffset = 0;
+    int inBubOffset = 0;
+    int inCellOffset = 0;
+    std::vector<char> outData;
+    std::vector<char> inData;
+    for (int i = 0; i < nAreas; i++) {
+        const int oppositeArea = oppositeAreas[i];
+        const int dstProc = params.areaToProcessorMap[i];
+        const int srcProc = params.areaToProcessorMap[oppositeArea];
+        const int tag = 1337;
+        MPI_Status status;
+
+        const int outBubCount = bubbleCounts[i];
+        const int inBubCount = incomingBubbleCounts[oppositeArea];
+        const int bytesPerBubble = 4 * sizeof(double) + sizeof(int);
+        const int outBytes =
+            bytesPerBubble * outBubCount + cellCounts[i] * sizeof(int);
+        const int inBytes = bytesPerBubble * inBubCount +
+                            cellCounts[oppositeArea] * sizeof(int);
+
+        if (outData.size() < (uint32_t)outBytes) {
+            outData.resize(outBytes);
+        }
+
+        if (inData.size() < (uint32_t)inBytes) {
+            inData.resize(inBytes);
+        }
+
+        char *dst = outData.data();
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(x + outBubOffset),
+                             sizeof(double) * outBubCount, cudaMemcpyDefault));
+        dst += sizeof(double) * outBubCount;
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(y + outBubOffset),
+                             sizeof(double) * outBubCount, cudaMemcpyDefault));
+        dst += sizeof(double) * outBubCount;
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(z + outBubOffset),
+                             sizeof(double) * outBubCount, cudaMemcpyDefault));
+        dst += sizeof(double) * outBubCount;
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(r + outBubOffset),
+                             sizeof(double) * outBubCount, cudaMemcpyDefault));
+        dst += sizeof(double) * outBubCount;
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(idx + outBubOffset),
+                             sizeof(int) * outBubCount, cudaMemcpyDefault));
+        dst += sizeof(int) * outBubCount;
+        CUDA_CALL(cudaMemcpy(static_cast<void *>(dst),
+                             static_cast<void *>(sizes + outCellOffset),
+                             sizeof(int) * cellCounts[i], cudaMemcpyDefault));
+
+        outBubOffset += outBubCount;
+        outCellOffset += cellCounts[i];
+
+        int rc = MPI_Sendrecv(static_cast<void *>(outData.data()), outBytes,
+                              MPI_CHAR, dstProc, tag,
+                              static_cast<void *>(inData.data()), inBytes,
+                              MPI_CHAR, srcProc, tag, params.comm, &status);
+        if (rc != MPI_SUCCESS) {
+            printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                   __LINE__);
+        }
+
+        char *src = inData.data();
+        memcpy(static_cast<void *>(&incomingX[inBubOffset]),
+               static_cast<void *>(src), sizeof(double) * inBubCount);
+        src += sizeof(double) * inBubCount;
+        memcpy(static_cast<void *>(&incomingY[inBubOffset]),
+               static_cast<void *>(src), sizeof(double) * inBubCount);
+        src += sizeof(double) * inBubCount;
+        memcpy(static_cast<void *>(&incomingZ[inBubOffset]),
+               static_cast<void *>(src), sizeof(double) * inBubCount);
+        src += sizeof(double) * inBubCount;
+        memcpy(static_cast<void *>(&incomingR[inBubOffset]),
+               static_cast<void *>(src), sizeof(double) * inBubCount);
+        src += sizeof(double) * inBubCount;
+        memcpy(static_cast<void *>(&incomingIdx[inBubOffset]),
+               static_cast<void *>(src), sizeof(int) * inBubCount);
+        src += sizeof(int) * inBubCount;
+        memcpy(static_cast<void *>(&incomingSize[inCellOffset]),
+               static_cast<void *>(src),
+               sizeof(int) * cellCounts[oppositeArea]);
+
+        inBubOffset += inBubCount;
+        inCellOffset += cellCounts[oppositeArea];
+    }
+
+    bytes = (4 * sizeof(double) + sizeof(int)) * incomingBubbleCounts[26] +
+            2 * sizeof(int) * nSurfaceCells;
+    void *surfaceMem = nullptr;
+    CUDA_ASSERT(cudaMalloc(&surfaceMem, bytes));
+
+    SurfaceData surfaceData;
+    surfaceData.x = static_cast<double *>(surfaceMem);
+    surfaceData.y = surfaceData.x + incomingBubbleCounts[26];
+    surfaceData.z = surfaceData.y + incomingBubbleCounts[26];
+    surfaceData.r = surfaceData.z + incomingBubbleCounts[26];
+    surfaceData.idx =
+        reinterpret_cast<int *>(surfaceData.r + incomingBubbleCounts[26]);
+    surfaceData.cellSizes = surfaceData.idx + incomingBubbleCounts[26];
+    surfaceData.cellOffsets = surfaceData.cellSizes + nSurfaceCells;
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.x),
+                         static_cast<void *>(incomingX.data()),
+                         sizeof(double) * incomingX.size(), cudaMemcpyDefault));
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.y),
+                         static_cast<void *>(incomingY.data()),
+                         sizeof(double) * incomingY.size(), cudaMemcpyDefault));
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.z),
+                         static_cast<void *>(incomingZ.data()),
+                         sizeof(double) * incomingZ.size(), cudaMemcpyDefault));
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.r),
+                         static_cast<void *>(incomingR.data()),
+                         sizeof(double) * incomingR.size(), cudaMemcpyDefault));
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.idx),
+                         static_cast<void *>(incomingIdx.data()),
+                         sizeof(int) * incomingIdx.size(), cudaMemcpyDefault));
+
+    CUDA_CALL(cudaMemcpy(static_cast<void *>(surfaceData.cellSizes),
+                         static_cast<void *>(incomingSize.data()),
+                         sizeof(int) * incomingSize.size(), cudaMemcpyDefault));
+
+    cubExclusiveSum(cubPtr, maxCubMem, surfaceData.cellSizes,
+                    surfaceData.cellOffsets, nSurfaceCells, 0, false);
 
     setIncomingExternalPairsToZero();
 
     // Allocate an estimate amount of temp memory for the bubble neigbors
-    int stride = 11 * externalBubbleCounts;
+    int stride = 11 * incomingBubbleCounts[26];
     void *tempMemory = nullptr;
     const uint64_t tempMemSize = stride * sizeof(int) * 5;
     CUDA_ASSERT(cudaMalloc(&tempMemory, tempMemSize));
@@ -293,10 +353,16 @@ void externalNeighborSearch(Params &params) {
     int *procNum = tempPair2 + stride;
     int *processorSizes = procNum + stride;
     int *processorOffsets = processorSizes + params.nProcs;
+#ifndef NDEBUG
+    if (0 == params.rank) {
+        printf("bef neig\n");
+    }
+#endif
 
     launchNeighborSearch(params, nSurfaceCells, false, numCellsToSearch,
                          cellDim, cellOffsets, cellSizes, processorSizes,
-                         tempPair1, tempPair2, sd.data, surfaceCells, procNum);
+                         tempPair1, tempPair2, surfaceData, surfaceCells,
+                         procNum);
 
     stride = 0;
     getIncomingExternalPairs(static_cast<void *>(&stride), sizeof(int));
@@ -323,6 +389,11 @@ void externalNeighborSearch(Params &params) {
     cubInclusiveSum(cubPtr, maxCubMem, processorSizes, processorOffsets,
                     params.nProcs, 0, false);
 
+#ifndef NDEBUG
+    if (0 == params.rank) {
+        printf("bef sort\n");
+    }
+#endif
     launchSortExternalPairs(params, tempPair1, tempPair2, processorOffsets,
                             procNum, ib.data);
 
@@ -423,6 +494,8 @@ void externalNeighborSearch(Params &params) {
 
     setOutgoingExternalPairs(static_cast<void *>(&totalPairs), sizeof(int));
     CUDA_CALL(cudaFree(tempMemory));
+    CUDA_CALL(cudaFree(outgoingMem));
+    CUDA_CALL(cudaFree(surfaceMem));
 }
 
 void searchNeighbors(Params &params) {
@@ -476,6 +549,11 @@ void searchNeighbors(Params &params) {
 
             setNumToBeDeletedToZero();
 
+#ifndef NDEBUG
+            if (0 == params.rank) {
+                printf("Before gather\n");
+            }
+#endif
             launchGatherAndDeleteMovedBubbles(
                 params, numToMove, bytesPerBubble, procSizes, procGlobalOffsets,
                 procLocalOffsets, movedIndices, procNums,
@@ -643,10 +721,8 @@ void searchNeighbors(Params &params) {
     launchCellByPosition(params, cellIndices, cellSizes, cellDim);
     cubInclusiveSum(cubPtr, maxCubMem, cellSizes, cellOffsets, numCells, 0,
                     false);
-
     launchIndexByCell(params, cellIndices, cellOffsets, bubbleIndices,
                       params.bubbles.count);
-
     {
         launchReorganizeByIndex(params, const_cast<const int *>(bubbleIndices));
         double *swapper = params.bubbles.xp;
@@ -706,9 +782,10 @@ void searchNeighbors(Params &params) {
         numCellsToSearch = 14;
     }
 
+    SurfaceData surfaceData;
     launchNeighborSearch(params, numCells, true, numCellsToSearch, cellDim,
                          cellOffsets, cellSizes, histogram, params.tempPair1,
-                         params.tempPair2, params.surfaceData.data, cellOffsets,
+                         params.tempPair2, surfaceData, cellOffsets,
                          cellOffsets);
 
     getNumPairs(static_cast<void *>(&params.pairs.count), sizeof(int));
@@ -1255,7 +1332,6 @@ void end(Params &params) {
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedMemory)));
-    CUDA_CALL(cudaFree(params.surfaceData.memory));
     CUDA_CALL(cudaFree(params.outgoingBubbles.memory));
     CUDA_CALL(cudaFree(params.incomingBubbles.memory));
 }
@@ -1338,50 +1414,51 @@ void init(const char *inputFileName, Params &params) {
         params.hostConstants.globalLbb = dvec(0, 0, 0);
     };
 
-    auto computeLocalDimensions = [&params]() {
+    auto computeLocalDimensions = [&params](int nProcs, int rank) {
         // Calculate the local dimensions from the global using the rank
         dvec &tfr = params.hostConstants.tfr;
         dvec &lbb = params.hostConstants.lbb;
         dvec &interval = params.hostConstants.interval;
         const dvec &gi = params.hostConstants.globalInterval;
 
-        if (1 < params.nProcs) {
+        if (1 < nProcs) {
             // What follows is a dirty and hacky way to decompose the domain
 
-            const bool twoProcs = params.nProcs == 2;
-            const bool uneven = (params.nProcs & 1) == 0x1;
+            const bool twoProcs = nProcs == 2;
+            const bool uneven = (nProcs & 1) == 0x1;
             const bool twoByTwo = params.hostConstants.dimensionality == 2 &&
-                                  gi.x == gi.y && params.nProcs == 4;
+                                  gi.x == gi.y && nProcs == 4;
             const bool twoByTwoByTwo =
                 params.hostConstants.dimensionality == 3 && gi.x == gi.y &&
-                gi.x == gi.z && params.nProcs == 8;
+                gi.x == gi.z && nProcs == 8;
 
-            auto divideEvenly = [&tfr, &lbb, &params, &gi]() {
+            auto divideEvenly = [&tfr, &lbb, &params, &gi, &rank, &nProcs]() {
                 // Just divide the largest dimension equally to the GPUs
                 tfr = params.hostConstants.globalTfr;
                 lbb = params.hostConstants.globalLbb;
 
                 if (gi.x >= gi.y && gi.x >= gi.z) {
-                    tfr.x = gi.x / params.nProcs * (params.rank + 1);
-                    lbb.x = gi.x / params.nProcs * params.rank;
+                    tfr.x = gi.x / nProcs * (rank + 1);
+                    lbb.x = gi.x / nProcs * rank;
                 } else if (gi.y >= gi.x && gi.y >= gi.z) {
-                    tfr.y = gi.y / params.nProcs * (params.rank + 1);
-                    lbb.y = gi.y / params.nProcs * params.rank;
+                    tfr.y = gi.y / nProcs * (rank + 1);
+                    lbb.y = gi.y / nProcs * rank;
                 } else {
-                    tfr.z = gi.z / params.nProcs * (params.rank + 1);
-                    lbb.z = gi.z / params.nProcs * params.rank;
+                    tfr.z = gi.z / nProcs * (rank + 1);
+                    lbb.z = gi.z / nProcs * rank;
                 }
             };
 
-            auto middleInHalfMaxInNPer2Parts = [&tfr, &lbb, &params, &gi]() {
+            auto middleInHalfMaxInNPer2Parts = [&tfr, &lbb, &params, &gi, &rank,
+                                                &nProcs]() {
                 // Divide the middle dimension in half and the
                 // larger into nprocs/2 parts
                 tfr = params.hostConstants.globalTfr;
                 lbb = params.hostConstants.globalLbb;
 
-                const int n = params.nProcs / 2;
-                const int temp = params.rank % n;
-                const int temp2 = params.rank / n;
+                const int n = nProcs / 2;
+                const int temp = rank % n;
+                const int temp2 = rank / n;
 
                 if (gi.x >= gi.y && gi.x >= gi.z) {
                     tfr.x = gi.x / n * (temp + 1);
@@ -1416,13 +1493,12 @@ void init(const char *inputFileName, Params &params) {
                 }
             };
 
-            auto cubeIntoEightEvenParts = [&tfr, &lbb, &params, &gi]() {
-                const int xi = params.rank & 0x1;
-                const int yi = params.rank == 2 || params.rank == 3 ||
-                                       params.rank == 6 || params.rank == 7
-                                   ? 1
-                                   : 0;
-                const int zi = params.rank / 4;
+            auto cubeIntoEightEvenParts = [&tfr, &lbb, &params, &gi, &rank,
+                                           &nProcs]() {
+                const int xi = rank & 0x1;
+                const int yi =
+                    rank == 2 || rank == 3 || rank == 6 || rank == 7 ? 1 : 0;
+                const int zi = rank / 4;
                 const ivec temp = ivec(xi, yi, zi);
                 tfr = gi / 2.0 * (temp + 1).asType<double>();
                 lbb = gi / 2.0 * temp.asType<double>();
@@ -1431,7 +1507,7 @@ void init(const char *inputFileName, Params &params) {
             if (twoProcs || uneven) {
                 divideEvenly();
             } else if (twoByTwo) {
-                const ivec temp = ivec(params.rank & 0x1, params.rank / 2, 0);
+                const ivec temp = ivec(rank & 0x1, rank / 2, 0);
                 tfr = gi / 2.0 * (temp + 1).asType<double>();
                 lbb = gi / 2.0 * temp.asType<double>();
             } else if (twoByTwoByTwo) {
@@ -1453,7 +1529,7 @@ void init(const char *inputFileName, Params &params) {
                         if (gi.getMidComponent() / gi.getMaxComponent() < 0.3) {
                             divideEvenly();
                         } else {
-                            if (params.nProcs == 8) {
+                            if (nProcs == 8) {
                                 cubeIntoEightEvenParts();
                             } else {
                                 middleInHalfMaxInNPer2Parts();
@@ -1503,12 +1579,20 @@ void init(const char *inputFileName, Params &params) {
         }
 
         auto getProcNum = [&lbbs, &tfrs, &params](dvec &&p) {
-            const dvec &gi = params.hostConstants.globalInterval;
-            p = ((gi + p).asType<int>() % gi.asType<int>()).asType<double>();
+            const ivec &gi = params.hostConstants.globalInterval.asType<int>();
+            ivec temp = p.asType<int>() + gi;
+            p.x = static_cast<double>(temp.x % gi.x);
+            p.y = static_cast<double>(temp.y % gi.y);
+            if (3 == params.hostConstants.dimensionality) {
+                p.z = static_cast<double>(temp.z % gi.z);
+            }
+
             for (int i = 0; i < params.nProcs; i++) {
                 bool inside = p.x > lbbs[i].x && p.x < tfrs[i].x;
                 inside &= p.y > lbbs[i].y && p.y < tfrs[i].y;
-                inside &= p.z > lbbs[i].z && p.z < tfrs[i].z;
+                if (3 == params.hostConstants.dimensionality) {
+                    inside &= p.z > lbbs[i].z && p.z < tfrs[i].z;
+                }
                 if (inside) {
                     return i;
                 }
@@ -1602,12 +1686,70 @@ void init(const char *inputFileName, Params &params) {
                 getProcNum(dvec(tfr.x + 1.0, tfr.y + 1.0, 0.0));
             params.areaToProcessorMap[7] =
                 getProcNum(dvec(lbb.x - 1.0, tfr.y + 1.0, 0.0));
+            params.areaToProcessorMap[8] = 0;
+            params.areaToProcessorMap[9] = 0;
+            params.areaToProcessorMap[10] = 0;
+            params.areaToProcessorMap[11] = 0;
+            params.areaToProcessorMap[12] = 0;
+            params.areaToProcessorMap[13] = 0;
+            params.areaToProcessorMap[14] = 0;
+            params.areaToProcessorMap[15] = 0;
+            params.areaToProcessorMap[16] = 0;
+            params.areaToProcessorMap[17] = 0;
+            params.areaToProcessorMap[18] = 0;
+            params.areaToProcessorMap[19] = 0;
+            params.areaToProcessorMap[20] = 0;
+            params.areaToProcessorMap[21] = 0;
+            params.areaToProcessorMap[22] = 0;
+            params.areaToProcessorMap[23] = 0;
+            params.areaToProcessorMap[24] = 0;
+            params.areaToProcessorMap[25] = 0;
         }
     };
 
+    printf("Computing global box\n");
     computeGlobalBox();
-    computeLocalDimensions();
-    findNeighborProcessors();
+    printf("Computing local box\n");
+    computeLocalDimensions(params.nProcs, params.rank);
+    if (1 < params.nProcs) {
+        printf("Finding neigboring processors\n");
+        findNeighborProcessors();
+    }
+
+#ifndef NDEBUG
+    ss.clear();
+    ss.str(std::string());
+    ss << "debug" << params.rank << ".dat";
+    std::ofstream debugFile(ss.str().c_str(), std::ios_base::app);
+    if (debugFile.is_open()) {
+        const dvec &tfr = params.hostConstants.tfr;
+        const dvec &lbb = params.hostConstants.lbb;
+        const dvec &gtfr = params.hostConstants.globalTfr;
+        const dvec &glbb = params.hostConstants.globalLbb;
+        debugFile << params.rank << "\n"
+                  << lbb.x << "," << lbb.y << "," << lbb.z << "\n"
+                  << tfr.x << "," << tfr.y << "," << tfr.z << "\n"
+                  << glbb.x << "," << glbb.y << "," << glbb.z << "\n"
+                  << gtfr.x << "," << gtfr.y << "," << gtfr.z << "\n";
+        for (const auto &it : params.areaToProcessorMap) {
+            debugFile << it << ",";
+        }
+        debugFile << "\n";
+        debugFile << std::flush;
+    } else {
+        printf("Couldn't open file stream to append debug info "
+               "to!\n");
+    }
+
+    int i = 0;
+    for (const auto &it : params.areaToProcessorMap) {
+        if (it == -1) {
+            printf("A bad value in areaToProcessorMap: %d, %d\n", it, i);
+            assert(false);
+        }
+        i++;
+    }
+#endif
 
     setAreaToProcessorMap(static_cast<void *>(params.areaToProcessorMap.data()),
                           sizeof(int) * params.areaToProcessorMap.size());
@@ -1747,6 +1889,12 @@ void init(const char *inputFileName, Params &params) {
         radArea[0] = params.hostData.maxBubbleRadius;
         radArea[1] = params.hostConstants.averageSurfaceAreaIn;
         radArea[2] = (double)params.bubbles.count;
+
+#ifndef NDEBUG
+        printf("maxRad %f, avgSa %f, nb %d\n", params.hostData.maxBubbleRadius,
+               params.hostConstants.averageSurfaceAreaIn, params.bubbles.count);
+#endif
+
         const int tag = 1337;
         MPI_Status status;
         if (params.rank == 0) {
@@ -1793,9 +1941,11 @@ void init(const char *inputFileName, Params &params) {
 #ifndef NDEBUG
     // Just for testing.
     if (params.rank == 0) {
+        printf("maxRad %f, avgSa %f\n", params.hostData.maxBubbleRadius,
+               params.hostConstants.averageSurfaceAreaIn);
         printf("Quitting after first neighbor search.\n");
     }
-    // Maybe save a snapshot?
+    saveSnapshot(params);
     return;
 #endif
 
@@ -1949,7 +2099,7 @@ void init(const char *inputFileName, Params &params) {
     params.snapshotParams.interval = params.hostConstants.globalInterval;
 
     // Update local dimensions
-    computeLocalDimensions();
+    computeLocalDimensions(params.nProcs, params.rank);
 
     double mult = phi * boxVolume(params) / CUBBLE_PI;
     if (params.hostConstants.dimensionality == 3) {
@@ -2144,6 +2294,7 @@ void init(const char *inputFileName, Params &params) {
 
 namespace cubble {
 void run(std::string &&inputFileName, int rank, int nProcs) {
+    setbuf(stdout, NULL);
     Params params;
     params.rank = rank;
     params.nProcs = nProcs;

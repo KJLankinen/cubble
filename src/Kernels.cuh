@@ -39,7 +39,7 @@ extern __device__ int dNumIncomingExternalPairs;
 extern __device__ int dNumOutgoingExternalPairs;
 extern __device__ int dNumPairsNew;
 extern __device__ int dNumToBeDeleted;
-extern __device__ __constant__ int dAreaToProcessorMap[26];
+extern __device__ int dAreaToProcessorMap[26];
 
 __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
                              double *temp1);
@@ -65,16 +65,14 @@ __global__ void findSurfaceCells(int count, int *surfaceCells, int *cellSizes,
                                  ivec cellDim);
 __global__ void gatherSurfaceBubbles(int count, int *surfaceCells,
                                      int *surfaceCellOffsets, int *cellSizes,
-                                     int *cellOffsets, int *bubbleCounts,
-                                     char **outData, Bubbles bubbles,
-                                     ivec cellDim);
-__global__ void scatterSurfaceBubbles(int count, char **inData,
-                                      SurfaceData::Data outData);
+                                     int *cellOffsets, Bubbles bubbles,
+                                     double *x, double *y, double *z, double *r,
+                                     int *idx, int *sizes);
 __global__ void neighborSearch(int numCells, bool internalSearch,
                                int numNeighborCells, ivec cellDim, int *offsets,
                                int *sizes, int *histogram, int *pairI,
                                int *pairJ, Bubbles bubbles,
-                               SurfaceData::Data surfaceData, int *surfaceCells,
+                               SurfaceData surfaceData, int *surfaceCells,
                                int *procNum);
 __global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
 __global__ void sortExternalPairs(int *pairI, int *pairJ, int *procOffsets,
@@ -195,7 +193,11 @@ template <typename... Args, typename T>
 __device__ void warpReduceAtomicAddMatching(unsigned int active, int matchOn,
                                             T (*f)(T, T), T *baseAddr,
                                             Args... args) {
+#if (__CUDA_ARCH__ == 620 || __CUDA_ARCH__ == 610 || __CUDA_ARCH__ == 600)
+    const unsigned int matches = 0;
+#else
     const unsigned int matches = __match_any_sync(active, matchOn);
+#endif
     const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
     const unsigned int rank = __popc(matches & lanemask_lt);
     const int flt = 32 * (threadIdx.x >> 5);

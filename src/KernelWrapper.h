@@ -46,15 +46,13 @@ void cubMax(void *tempMem, uint64_t maxCubMem, double *src, void *dst, int n,
             cudaStream_t stream, bool debug);
 void launchGatherSurfaceBubbles(Params &params, int nSurfaceCells,
                                 int *surfaceCells, int *surfaceCellOffsets,
-                                int *cellSizes, int *cellOffsets,
-                                int *bubbleCountPerArea, char **outData,
-                                ivec cellDim);
-void launchScatterSurfaceBubbles(Params &params, int numExternalBubbles,
-                                 char **inData, SurfaceData::Data &data);
+                                int *cellSizes, int *cellOffsets, double *x,
+                                double *y, double *z, double *r, int *idx,
+                                int *sizes);
 void launchNeighborSearch(Params &params, int numCells, bool internalSearch,
                           int numNeighborCells, ivec cellDim, int *offsets,
                           int *sizes, int *histogram, int *pairI, int *pairJ,
-                          SurfaceData::Data &surfaceData, int *surfaceCells,
+                          SurfaceData &surfaceData, int *surfaceCells,
                           int *procNum);
 void launchSortExternalPairs(Params &params, int *pair1, int *pair2,
                              int *offsets, int *procNum,

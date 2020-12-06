@@ -303,31 +303,13 @@ struct SnapshotParams {
 };
 
 struct SurfaceData {
-    void *memory = nullptr;
-    uint64_t totalBytes = 0;
-    uint64_t outBytes = 0;
-    uint64_t inBytes = 0;
-
-    char *outData[26] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr};
-    char *inData[26] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                        nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-                        nullptr, nullptr};
-
-    struct Data {
-        double *x = nullptr;
-        double *y = nullptr;
-        double *z = nullptr;
-        double *r = nullptr;
-        int *idx = nullptr;
-        int *cellSizes = nullptr;
-        int *cellOffsets = nullptr;
-    } data;
+    double *x = nullptr;
+    double *y = nullptr;
+    double *z = nullptr;
+    double *r = nullptr;
+    int *idx = nullptr;
+    int *cellSizes = nullptr;
+    int *cellOffsets = nullptr;
 };
 
 struct ExternalBubbles {
@@ -366,7 +348,6 @@ struct Params {
     Constants *deviceConstants = nullptr;
     HostData hostData;
     SnapshotParams snapshotParams;
-    SurfaceData surfaceData;
     ExternalBubbles incomingBubbles;
     ExternalBubbles outgoingBubbles;
     NeighborSearchData neighborSearchData;
