@@ -101,11 +101,6 @@ void externalNeighborSearch(Params &params) {
     int *cellOffsets = params.neighborSearchData.cellOffsets;
     int *cellSizes = params.neighborSearchData.cellSizes;
 
-#ifndef NDEBUG
-    if (0 == params.rank) {
-        printf("bef find sur\n");
-    }
-#endif
     launchFindSurfaceCells(params, numCells, surfaceCells, cellSizes,
                            surfaceCellSizes, bubbleCountPerArea, cellDim);
 
@@ -353,11 +348,6 @@ void externalNeighborSearch(Params &params) {
     int *procNum = tempPair2 + stride;
     int *processorSizes = procNum + stride;
     int *processorOffsets = processorSizes + params.nProcs;
-#ifndef NDEBUG
-    if (0 == params.rank) {
-        printf("bef neig\n");
-    }
-#endif
 
     launchNeighborSearch(params, nSurfaceCells, false, numCellsToSearch,
                          cellDim, cellOffsets, cellSizes, processorSizes,
@@ -389,11 +379,6 @@ void externalNeighborSearch(Params &params) {
     cubInclusiveSum(cubPtr, maxCubMem, processorSizes, processorOffsets,
                     params.nProcs, 0, false);
 
-#ifndef NDEBUG
-    if (0 == params.rank) {
-        printf("bef sort\n");
-    }
-#endif
     launchSortExternalPairs(params, tempPair1, tempPair2, processorOffsets,
                             procNum, ib.data);
 
@@ -549,11 +534,6 @@ void searchNeighbors(Params &params) {
 
             setNumToBeDeletedToZero();
 
-#ifndef NDEBUG
-            if (0 == params.rank) {
-                printf("Before gather\n");
-            }
-#endif
             launchGatherAndDeleteMovedBubbles(
                 params, numToMove, bytesPerBubble, procSizes, procGlobalOffsets,
                 procLocalOffsets, movedIndices, procNums,
@@ -1890,11 +1870,6 @@ void init(const char *inputFileName, Params &params) {
         radArea[1] = params.hostConstants.averageSurfaceAreaIn;
         radArea[2] = (double)params.bubbles.count;
 
-#ifndef NDEBUG
-        printf("maxRad %f, avgSa %f, nb %d\n", params.hostData.maxBubbleRadius,
-               params.hostConstants.averageSurfaceAreaIn, params.bubbles.count);
-#endif
-
         const int tag = 1337;
         MPI_Status status;
         if (params.rank == 0) {
@@ -1937,17 +1912,6 @@ void init(const char *inputFileName, Params &params) {
         printf("First neighbor search\n");
     }
     searchNeighbors(params);
-
-#ifndef NDEBUG
-    // Just for testing.
-    if (params.rank == 0) {
-        printf("maxRad %f, avgSa %f\n", params.hostData.maxBubbleRadius,
-               params.hostConstants.averageSurfaceAreaIn);
-        printf("Quitting after first neighbor search.\n");
-    }
-    saveSnapshot(params);
-    return;
-#endif
 
     // After search x, y, z, r are correct, but all predicted are trash.
     // pairwiseInteraction always uses predicted values, so copy currents to
@@ -2032,8 +1996,17 @@ void init(const char *inputFileName, Params &params) {
     if (params.rank == 0) {
         printf("Stabilizing a few rounds after creation\n");
     }
-    for (uint32_t i = 0; i < 5; ++i)
+    for (uint32_t i = 0; i < 5; ++i) {
         stabilize(params, stabilizationSteps);
+#ifndef NDEBUG
+        // Just for testing.
+        if (params.rank == 0) {
+            printf("Quitting after first stabilization.\n");
+        }
+        saveSnapshot(params);
+        return;
+#endif
+    }
 
     if (params.rank == 0) {
         printf("Scaling the simulation box\n");

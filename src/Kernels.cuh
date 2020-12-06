@@ -193,11 +193,7 @@ template <typename... Args, typename T>
 __device__ void warpReduceAtomicAddMatching(unsigned int active, int matchOn,
                                             T (*f)(T, T), T *baseAddr,
                                             Args... args) {
-#if (__CUDA_ARCH__ == 620 || __CUDA_ARCH__ == 610 || __CUDA_ARCH__ == 600)
-    const unsigned int matches = 0;
-#else
     const unsigned int matches = __match_any_sync(active, matchOn);
-#endif
     const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
     const unsigned int rank = __popc(matches & lanemask_lt);
     const int flt = 32 * (threadIdx.x >> 5);
