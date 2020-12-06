@@ -1340,25 +1340,277 @@ void init(const char *inputFileName, Params &params) {
 
     auto computeLocalDimensions = [&params]() {
         // Calculate the local dimensions from the global using the rank
+        dvec &tfr = params.hostConstants.tfr;
+        dvec &lbb = params.hostConstants.lbb;
+        dvec &interval = params.hostConstants.interval;
+        const dvec &gi = params.hostConstants.globalInterval;
+
         if (1 < params.nProcs) {
-            // TODO
-            params.hostConstants.tfr = dvec(0, 0, 0);
-            params.hostConstants.lbb = dvec(0, 0, 0);
+            // What follows is a dirty and hacky way to decompose the domain
+
+            const bool twoProcs = params.nProcs == 2;
+            const bool uneven = (params.nProcs & 1) == 0x1;
+            const bool twoByTwo = params.hostConstants.dimensionality == 2 &&
+                                  gi.x == gi.y && params.nProcs == 4;
+            const bool twoByTwoByTwo =
+                params.hostConstants.dimensionality == 3 && gi.x == gi.y &&
+                gi.x == gi.z && params.nProcs == 8;
+
+            auto divideEvenly = [&tfr, &lbb, &params, &gi]() {
+                // Just divide the largest dimension equally to the GPUs
+                tfr = params.hostConstants.globalTfr;
+                lbb = params.hostConstants.globalLbb;
+
+                if (gi.x >= gi.y && gi.x >= gi.z) {
+                    tfr.x = gi.x / params.nProcs * (params.rank + 1);
+                    lbb.x = gi.x / params.nProcs * params.rank;
+                } else if (gi.y >= gi.x && gi.y >= gi.z) {
+                    tfr.y = gi.y / params.nProcs * (params.rank + 1);
+                    lbb.y = gi.y / params.nProcs * params.rank;
+                } else {
+                    tfr.z = gi.z / params.nProcs * (params.rank + 1);
+                    lbb.z = gi.z / params.nProcs * params.rank;
+                }
+            };
+
+            auto middleInHalfMaxInNPer2Parts = [&tfr, &lbb, &params, &gi]() {
+                // Divide the middle dimension in half and the
+                // larger into nprocs/2 parts
+                tfr = params.hostConstants.globalTfr;
+                lbb = params.hostConstants.globalLbb;
+
+                const int n = params.nProcs / 2;
+                const int temp = params.rank % n;
+                const int temp2 = params.rank / n;
+
+                if (gi.x >= gi.y && gi.x >= gi.z) {
+                    tfr.x = gi.x / n * (temp + 1);
+                    lbb.x = gi.x / n * temp;
+                    if (gi.y >= gi.z) {
+                        tfr.y = gi.y / 2.0 * (temp2 + 1);
+                        lbb.y = gi.y / 2.0 * temp2;
+                    } else {
+                        tfr.z = gi.z / 2.0 * (temp2 + 1);
+                        lbb.z = gi.z / 2.0 * temp2;
+                    }
+                } else if (gi.y >= gi.x && gi.y >= gi.z) {
+                    tfr.y = gi.y / n * (temp + 1);
+                    lbb.y = gi.y / n * temp;
+                    if (gi.x >= gi.z) {
+                        tfr.x = gi.x / 2.0 * (temp2 + 1);
+                        lbb.x = gi.x / 2.0 * temp2;
+                    } else {
+                        tfr.z = gi.z / 2.0 * (temp2 + 1);
+                        lbb.z = gi.z / 2.0 * temp2;
+                    }
+                } else {
+                    tfr.z = gi.z / n * (temp + 1);
+                    lbb.z = gi.z / n * temp;
+                    if (gi.x >= gi.y) {
+                        tfr.x = gi.x / 2.0 * (temp2 + 1);
+                        lbb.x = gi.x / 2.0 * temp2;
+                    } else {
+                        tfr.y = gi.y / 2.0 * (temp2 + 1);
+                        lbb.y = gi.y / 2.0 * temp2;
+                    }
+                }
+            };
+
+            auto cubeIntoEightEvenParts = [&tfr, &lbb, &params, &gi]() {
+                const int xi = params.rank & 0x1;
+                const int yi = params.rank == 2 || params.rank == 3 ||
+                                       params.rank == 6 || params.rank == 7
+                                   ? 1
+                                   : 0;
+                const int zi = params.rank / 4;
+                const ivec temp = ivec(xi, yi, zi);
+                tfr = gi / 2.0 * (temp + 1).asType<double>();
+                lbb = gi / 2.0 * temp.asType<double>();
+            };
+
+            if (twoProcs || uneven) {
+                divideEvenly();
+            } else if (twoByTwo) {
+                const ivec temp = ivec(params.rank & 0x1, params.rank / 2, 0);
+                tfr = gi / 2.0 * (temp + 1).asType<double>();
+                lbb = gi / 2.0 * temp.asType<double>();
+            } else if (twoByTwoByTwo) {
+                cubeIntoEightEvenParts();
+            } else {
+                if (3 == params.hostConstants.dimensionality) {
+                    if (gi.getMinComponent() / gi.getMidComponent() < 0.3) {
+                        // The smallest dimension is less than third of the
+                        // second smallest. Treat the box essentially as two
+                        // dimensional.
+                        if (gi.getMidComponent() / gi.getMaxComponent() < 0.3) {
+                            // The box is long, but thin in two dimensions
+                            divideEvenly();
+                        } else {
+                            middleInHalfMaxInNPer2Parts();
+                        }
+                    } else {
+                        // Minimum is at least 1/3 of the middle dimension
+                        if (gi.getMidComponent() / gi.getMaxComponent() < 0.3) {
+                            divideEvenly();
+                        } else {
+                            if (params.nProcs == 8) {
+                                cubeIntoEightEvenParts();
+                            } else {
+                                middleInHalfMaxInNPer2Parts();
+                            }
+                        }
+                    }
+                } else {
+                    if (gi.getMidComponent() / gi.getMaxComponent() < 0.3) {
+                        divideEvenly();
+                    } else {
+                        middleInHalfMaxInNPer2Parts();
+                    }
+                }
+            }
         } else {
-            params.hostConstants.tfr = params.hostConstants.globalTfr;
-            params.hostConstants.lbb = params.hostConstants.globalLbb;
+            tfr = params.hostConstants.globalTfr;
+            lbb = params.hostConstants.globalLbb;
         }
 
-        params.hostConstants.interval =
-            params.hostConstants.tfr - params.hostConstants.lbb;
+        interval = tfr - lbb;
     };
 
-    // TODO areaToProcessorMap
-    setAreaToProcessorMap(static_cast<void *>(params.areaToProcessorMap.data()),
-                          sizeof(int) * params.areaToProcessorMap.size());
+    auto findNeighborProcessors = [&params]() {
+        const dvec &tfr = params.hostConstants.tfr;
+        const dvec &lbb = params.hostConstants.lbb;
+
+        std::vector<dvec> lbbs(params.nProcs);
+        std::vector<dvec> tfrs(params.nProcs);
+
+        std::vector<double> data(params.nProcs * 6);
+        data[params.rank * 6 + 0] = lbb.x;
+        data[params.rank * 6 + 1] = lbb.y;
+        data[params.rank * 6 + 2] = lbb.z;
+        data[params.rank * 6 + 3] = tfr.x;
+        data[params.rank * 6 + 4] = tfr.y;
+        data[params.rank * 6 + 5] = tfr.z;
+
+        for (int i = 0; i < params.nProcs; i++) {
+            int rc = MPI_Bcast(static_cast<void *>(&data[6 * i]), 6, MPI_DOUBLE,
+                               i, params.comm);
+            if (rc != MPI_SUCCESS) {
+                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
+                       __LINE__);
+            }
+            lbbs[i] = dvec(data[6 * i + 0], data[6 * i + 1], data[6 * i + 2]);
+            tfrs[i] = dvec(data[6 * i + 3], data[6 * i + 4], data[6 * i + 5]);
+        }
+
+        auto getProcNum = [&lbbs, &tfrs, &params](dvec &&p) {
+            const dvec &gi = params.hostConstants.globalInterval;
+            p = ((gi + p).asType<int>() % gi.asType<int>()).asType<double>();
+            for (int i = 0; i < params.nProcs; i++) {
+                bool inside = p.x > lbbs[i].x && p.x < tfrs[i].x;
+                inside &= p.y > lbbs[i].y && p.y < tfrs[i].y;
+                inside &= p.z > lbbs[i].z && p.z < tfrs[i].z;
+                if (inside) {
+                    return i;
+                }
+            }
+
+            return -1;
+        };
+
+        if (3 == params.hostConstants.dimensionality) {
+            params.areaToProcessorMap[0] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y + 1.0, lbb.z + 1.0));
+            params.areaToProcessorMap[1] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y + 1.0, lbb.z + 1.0));
+
+            params.areaToProcessorMap[2] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y - 1.0, lbb.z + 1.0));
+            params.areaToProcessorMap[3] =
+                getProcNum(dvec(lbb.x + 1.0, tfr.y + 1.0, lbb.z + 1.0));
+
+            params.areaToProcessorMap[4] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y + 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[5] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y + 1.0, tfr.z + 1.0));
+
+            // x is free
+            params.areaToProcessorMap[6] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y - 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[7] =
+                getProcNum(dvec(lbb.x + 1.0, tfr.y + 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[8] =
+                getProcNum(dvec(lbb.x + 1.0, tfr.y + 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[9] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y - 1.0, tfr.z + 1.0));
+
+            // y is free
+            params.areaToProcessorMap[10] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y + 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[11] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y + 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[12] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y + 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[13] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y + 1.0, lbb.z - 1.0));
+
+            // z is free
+            params.areaToProcessorMap[14] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y - 1.0, lbb.z + 1.0));
+            params.areaToProcessorMap[15] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y - 1.0, lbb.z + 1.0));
+            params.areaToProcessorMap[16] =
+                getProcNum(dvec(tfr.x + 1.0, tfr.y + 1.0, lbb.z + 1.0));
+            params.areaToProcessorMap[17] =
+                getProcNum(dvec(lbb.x - 1.0, tfr.y + 1.0, lbb.z + 1.0));
+
+            // eight corners
+            params.areaToProcessorMap[18] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y - 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[19] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y - 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[20] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y - 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[21] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y - 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[22] =
+                getProcNum(dvec(tfr.x + 1.0, tfr.y + 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[23] =
+                getProcNum(dvec(lbb.x - 1.0, tfr.y + 1.0, lbb.z - 1.0));
+            params.areaToProcessorMap[24] =
+                getProcNum(dvec(lbb.x - 1.0, tfr.y + 1.0, tfr.z + 1.0));
+            params.areaToProcessorMap[25] =
+                getProcNum(dvec(tfr.x + 1.0, tfr.y + 1.0, tfr.z + 1.0));
+        } else {
+            // y is free
+            params.areaToProcessorMap[0] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y + 1.0, 0.0));
+            params.areaToProcessorMap[1] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y + 1.0, 0.0));
+
+            // x is free
+            params.areaToProcessorMap[2] =
+                getProcNum(dvec(lbb.x + 1.0, lbb.y - 1.0, 0.0));
+            params.areaToProcessorMap[3] =
+                getProcNum(dvec(lbb.x + 1.0, tfr.y + 1.0, 0.0));
+
+            // four corners
+            params.areaToProcessorMap[4] =
+                getProcNum(dvec(lbb.x - 1.0, lbb.y - 1.0, 0.0));
+            params.areaToProcessorMap[5] =
+                getProcNum(dvec(tfr.x + 1.0, lbb.y - 1.0, 0.0));
+            params.areaToProcessorMap[6] =
+                getProcNum(dvec(tfr.x + 1.0, tfr.y + 1.0, 0.0));
+            params.areaToProcessorMap[7] =
+                getProcNum(dvec(lbb.x - 1.0, tfr.y + 1.0, 0.0));
+        }
+    };
 
     computeGlobalBox();
     computeLocalDimensions();
+    findNeighborProcessors();
+
+    setAreaToProcessorMap(static_cast<void *>(params.areaToProcessorMap.data()),
+                          sizeof(int) * params.areaToProcessorMap.size());
 
     // Local count
     ivec bubblesPerDim =
@@ -1537,6 +1789,15 @@ void init(const char *inputFileName, Params &params) {
         printf("First neighbor search\n");
     }
     searchNeighbors(params);
+
+#ifndef NDEBUG
+    // Just for testing.
+    if (params.rank == 0) {
+        printf("Quitting after first neighbor search.\n");
+    }
+    // Maybe save a snapshot?
+    return;
+#endif
 
     // After search x, y, z, r are correct, but all predicted are trash.
     // pairwiseInteraction always uses predicted values, so copy currents to
@@ -1888,6 +2149,12 @@ void run(std::string &&inputFileName, int rank, int nProcs) {
     params.nProcs = nProcs;
     params.comm = MPI_COMM_WORLD;
     init(inputFileName.c_str(), params);
+
+#ifndef NDEBUG
+    // This is here just for testing and quitting early
+    end(params);
+    return;
+#endif
 
     if (params.hostData.snapshotFrequency > 0.0) {
         saveSnapshot(params);

@@ -82,6 +82,11 @@ template <typename T> class vec {
         return x < y ? (x < z ? x : z) : (y < z ? y : z);
     }
 
+    __host__ __device__ T getMidComponent() const {
+        return x > y ? (x > z ? (z > y ? z : y) : x)
+                     : (y > z ? (x > z ? x : z) : y);
+    }
+
     template <typename T2> __host__ __device__ vec<T2> asType() const {
         vec<T2> v(*this);
 
