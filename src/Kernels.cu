@@ -1457,7 +1457,6 @@ __global__ void swapExternalIndices(bool isFirstPass,
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        // TODO external pairs
         const int idx1 = pairs.i[i];
         const int idx2 = pairs.j[i];
         double e =
@@ -1469,6 +1468,35 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
             e *= e;
             atomicAdd(&energy[idx1], e);
             atomicAdd(&energy[idx2], e);
+        }
+    }
+}
+
+__global__ void externalPotentialEnergy(Bubbles bubbles,
+                                        ExternalBubbles::Data ebd,
+                                        double *energy) {
+    for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+         i < dNumIncomingExternalPairs; i += gridDim.x * blockDim.x) {
+        const int idx1 = ebd.internalIdx[i];
+        const int idx2 = i;
+
+        if (idx1 == -1) {
+            continue;
+        }
+
+        double r2 = ebd.r[idx2];
+        if (r2 == -1.0) {
+            continue;
+        }
+
+        double e =
+            bubbles.r[idx1] + r2 -
+            wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
+                              ebd.x[idx2], ebd.y[idx2], ebd.z[idx2])
+                .getLength();
+        if (e > 0) {
+            e *= e;
+            atomicAdd(&energy[idx1], e);
         }
     }
 }
@@ -1684,39 +1712,37 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles, int *indices,
     }
 }
 
-__global__ void gatherAndDeleteMovedBubbles(int numToMove, int bytesPerBubble,
-                                            Bubbles bubbles, int *sizes,
-                                            int *globalOffsets,
-                                            int *localOffsets, int *indices,
-                                            int *procs, char *data) {
+__global__ void gatherAndDeleteMovedBubbles(
+    int numToMove, Bubbles bubbles, int *globalOffsets, int *localOffsets,
+    int *indices, int *procs, double *x, double *y, double *z, double *r,
+    double *dxdt, double *dydt, double *dzdt, double *drdt, double *dxdto,
+    double *dydto, double *dzdto, double *drdto, double *path, double *error,
+    int *wcx, int *wcy, int *wcz, int *index) {
     for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numToMove;
          i += gridDim.x * blockDim.x) {
         const int idx = indices[i];
         const int pn = procs[i];
-        const int ps = sizes[pn];
-        const int gof = globalOffsets[pn];
-        const int lof = atomicSub(&localOffsets[pn], 1) - 1;
+        const int offset =
+            globalOffsets[pn] + atomicSub(&localOffsets[pn], 1) - 1;
 
-        double *ddst = reinterpret_cast<double *>(data + bytesPerBubble * gof);
-        ddst[lof + 0 * ps] = bubbles.x[idx];
-        ddst[lof + 1 * ps] = bubbles.y[idx];
-        ddst[lof + 2 * ps] = bubbles.z[idx];
-        ddst[lof + 3 * ps] = bubbles.r[idx];
-        ddst[lof + 4 * ps] = bubbles.dxdt[idx];
-        ddst[lof + 5 * ps] = bubbles.dydt[idx];
-        ddst[lof + 6 * ps] = bubbles.dzdt[idx];
-        ddst[lof + 7 * ps] = bubbles.drdt[idx];
-        ddst[lof + 8 * ps] = bubbles.dxdto[idx];
-        ddst[lof + 9 * ps] = bubbles.dydto[idx];
-        ddst[lof + 10 * ps] = bubbles.dzdto[idx];
-        ddst[lof + 11 * ps] = bubbles.drdto[idx];
-        ddst[lof + 12 * ps] = bubbles.path[idx];
-        ddst[lof + 13 * ps] = bubbles.error[idx];
-
-        int *idst = reinterpret_cast<int *>(&ddst[14 * ps]);
-        idst[lof + 0 * ps] = bubbles.wrapCountX[idx];
-        idst[lof + 1 * ps] = bubbles.wrapCountY[idx];
-        idst[lof + 2 * ps] = bubbles.wrapCountZ[idx];
+        x[offset] = bubbles.x[idx];
+        y[offset] = bubbles.y[idx];
+        z[offset] = bubbles.z[idx];
+        r[offset] = bubbles.r[idx];
+        dxdt[offset] = bubbles.dxdt[idx];
+        dydt[offset] = bubbles.dydt[idx];
+        dzdt[offset] = bubbles.dzdt[idx];
+        drdt[offset] = bubbles.drdt[idx];
+        dxdto[offset] = bubbles.dxdto[idx];
+        dydto[offset] = bubbles.dydto[idx];
+        dzdto[offset] = bubbles.dzdto[idx];
+        drdto[offset] = bubbles.drdto[idx];
+        path[offset] = bubbles.path[idx];
+        error[offset] = bubbles.error[idx];
+        wcx[offset] = bubbles.wrapCountX[idx];
+        wcy[offset] = bubbles.wrapCountY[idx];
+        wcz[offset] = bubbles.wrapCountZ[idx];
+        index[offset] = bubbles.index[idx];
 
         // If the bubble that is moved to another processor is inside the
         // range of bubbles left for this processor, replace that bubble with a
@@ -1766,42 +1792,8 @@ __global__ void gatherAndDeleteMovedBubbles(int numToMove, int bytesPerBubble,
             bubbles.wrapCountX[idx] = bubbles.wrapCountX[from];
             bubbles.wrapCountY[idx] = bubbles.wrapCountY[from];
             bubbles.wrapCountZ[idx] = bubbles.wrapCountZ[from];
+            bubbles.index[idx] = bubbles.index[from];
         }
-    }
-}
-
-__global__ void distributeReceivedBubbles(int numReceived, int bytesPerBubble,
-                                          Bubbles bubbles, int *sizes,
-                                          int *globalOffsets, int *localOffsets,
-                                          int *procs, char *data) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numReceived;
-         i += gridDim.x * blockDim.x) {
-        const int idx = bubbles.count + atomicAdd(&dNumToBeDeleted, 1);
-        const int pn = procs[i];
-        const int ps = sizes[pn];
-        const int gof = globalOffsets[pn];
-        const int lof = atomicSub(&localOffsets[pn], 1) - 1;
-
-        double *dsrc = reinterpret_cast<double *>(data + bytesPerBubble * gof);
-        bubbles.x[idx] = dsrc[lof + 0 * ps];
-        bubbles.y[idx] = dsrc[lof + 1 * ps];
-        bubbles.z[idx] = dsrc[lof + 2 * ps];
-        bubbles.r[idx] = dsrc[lof + 3 * ps];
-        bubbles.dxdt[idx] = dsrc[lof + 4 * ps];
-        bubbles.dydt[idx] = dsrc[lof + 5 * ps];
-        bubbles.dzdt[idx] = dsrc[lof + 6 * ps];
-        bubbles.drdt[idx] = dsrc[lof + 7 * ps];
-        bubbles.dxdto[idx] = dsrc[lof + 8 * ps];
-        bubbles.dydto[idx] = dsrc[lof + 9 * ps];
-        bubbles.dzdto[idx] = dsrc[lof + 10 * ps];
-        bubbles.drdto[idx] = dsrc[lof + 11 * ps];
-        bubbles.path[idx] = dsrc[lof + 12 * ps];
-        bubbles.error[idx] = dsrc[lof + 13 * ps];
-
-        int *isrc = reinterpret_cast<int *>(&dsrc[14 * ps]);
-        bubbles.wrapCountX[idx] = isrc[lof + 0 * ps];
-        bubbles.wrapCountY[idx] = isrc[lof + 1 * ps];
-        bubbles.wrapCountZ[idx] = isrc[lof + 2 * ps];
     }
 }
 
@@ -2486,6 +2478,11 @@ double totalEnergy(Params &params) {
     KERNEL_LAUNCH(potentialEnergy, params, 0, 0, params.bubbles, params.pairs,
                   params.tempD1);
 
+    if (params.nProcs > 1) {
+        KERNEL_LAUNCH(externalPotentialEnergy, params, 0, 0, params.bubbles,
+                      params.incomingBubbles.data, params.tempD1);
+    }
+
     void *cubPtr = static_cast<void *>(params.tempPair2);
     double total = 0.0;
     void *cubOutput = nullptr;
@@ -2667,24 +2664,17 @@ void launchWrapOverPeriodicBoundaries(Params &params, int *indices,
                   indices, procNums, procSizes);
 }
 
-void launchGatherAndDeleteMovedBubbles(Params &params, int numToMove,
-                                       int bytesPerBubble, int *procSizes,
-                                       int *procGlobalOffsets,
-                                       int *procLocalOffsets, int *movedIndices,
-                                       int *procNums, char *data) {
+void launchGatherAndDeleteMovedBubbles(
+    Params &params, int numToMove, int *procGlobalOffsets,
+    int *procLocalOffsets, int *movedIndices, int *procNums, double *x,
+    double *y, double *z, double *r, double *dxdt, double *dydt, double *dzdt,
+    double *drdt, double *dxdto, double *dydto, double *dzdto, double *drdto,
+    double *path, double *error, int *wcx, int *wcy, int *wcz, int *index) {
     KERNEL_LAUNCH(gatherAndDeleteMovedBubbles, params, 0, 0, numToMove,
-                  bytesPerBubble, params.bubbles, procSizes, procGlobalOffsets,
-                  procLocalOffsets, movedIndices, procNums, data);
-}
-
-void launchDistributeReceivedBubbles(Params &params, int numReceivedBubbles,
-                                     int bytesPerBubble, int *procSizes,
-                                     int *procGlobalOffsets,
-                                     int *procLocalOffsets, int *procNums,
-                                     char *dst) {
-    KERNEL_LAUNCH(distributeReceivedBubbles, params, 0, 0, numReceivedBubbles,
-                  bytesPerBubble, params.bubbles, procSizes, procGlobalOffsets,
-                  procLocalOffsets, procNums, dst);
+                  params.bubbles, procGlobalOffsets, procLocalOffsets,
+                  movedIndices, procNums, x, y, z, r, dxdt, dydt, dzdt, drdt,
+                  dxdto, dydto, dzdto, drdto, path, error, wcx, wcy, wcz,
+                  index);
 }
 
 void launchCellByPosition(Params &params, int *cellIndices, int *cellSizes,

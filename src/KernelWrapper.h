@@ -59,16 +59,12 @@ void launchSortExternalPairs(Params &params, int *pair1, int *pair2,
                              ExternalBubbles::Data &data);
 void launchWrapOverPeriodicBoundaries(Params &params, int *indices,
                                       int *procNums, int *procSizes);
-void launchGatherAndDeleteMovedBubbles(Params &params, int numToMove,
-                                       int bytesPerBubble, int *procSizes,
-                                       int *procGlobalOffsets,
-                                       int *procLocalOffsets, int *movedIndices,
-                                       int *procNums, char *data);
-void launchDistributeReceivedBubbles(Params &params, int numReceivedBubbles,
-                                     int bytesPerBubble, int *procSizes,
-                                     int *procGlobalOffsets,
-                                     int *procLocalOffsets, int *procNums,
-                                     char *dst);
+void launchGatherAndDeleteMovedBubbles(
+    Params &params, int numToMove, int *procGlobalOffsets,
+    int *procLocalOffsets, int *movedIndices, int *procNums, double *x,
+    double *y, double *z, double *r, double *dxdt, double *dydt, double *dzdt,
+    double *drdt, double *dxdto, double *dydto, double *dzdto, double *drdto,
+    double *path, double *error, int *wcx, int *wcy, int *wcz, int *index);
 void launchCellByPosition(Params &params, int *cellIndices, int *cellSizes,
                           ivec cellDim);
 void launchIndexByCell(Params &params, int *cellIndices, int *cellOffsets,

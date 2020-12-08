@@ -31,6 +31,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <string>
+#include <type_traits>
 #include <unistd.h>
 #include <vector>
 
@@ -498,51 +499,46 @@ void searchNeighbors(Params &params) {
 
     int *procSizes = params.pairs.i;
     int *procGlobalOffsets = procSizes + params.nProcs;
-    int *procLocalOffsets = procGlobalOffsets + params.nProcs;
-    int *movedIndices = procLocalOffsets + params.nProcs;
+    int *movedIndices = procGlobalOffsets + params.nProcs;
     int *procNums = movedIndices + params.bubbles.stride;
 
     launchWrapOverPeriodicBoundaries(params, movedIndices, procNums, procSizes);
 
     if (params.nProcs > 1) {
-        // position and current & old velocity for x, y, z & r
-        // = 3 * 4 = 12 doubles
-        // path & error = 2 doubles, totaling 14 doubles
-        // wrapcount for x, y & z = 3 ints
-        // ints and doubles are mixed in the array, so add a padding int,
-        // s.t. the byte count is divisible by 8, i.e. sizeof(double)
-        const int bytesPerBubble = 14 * sizeof(double) + 4 * sizeof(int);
+        std::vector<int> incomingSizes(params.nProcs, 0);
+        std::vector<int> sizes(params.nProcs, 0);
+        std::vector<int> offsets(params.nProcs, 0);
 
         int numToMove = 0;
         getNumToBeDeleted(static_cast<void *>(&numToMove), sizeof(int), false);
 
-        void *movedData = nullptr;
-        std::vector<int> sizes(params.nProcs);
-        std::vector<int> offsets(params.nProcs);
-        std::vector<char> hostMovedData;
-        std::vector<char> hostReceivedData(params.bubbles.count / 10 *
-                                           bytesPerBubble);
+        void *movedMem = nullptr;
+        const int bytesPerBubble = 14 * sizeof(double) + 4 * sizeof(int);
+        const uint64_t bytes = numToMove * bytesPerBubble;
+
+        double *x = nullptr;
+        double *y = nullptr;
+        double *z = nullptr;
+        double *r = nullptr;
+        double *dxdt = nullptr;
+        double *dydt = nullptr;
+        double *dzdt = nullptr;
+        double *drdt = nullptr;
+        double *dxdto = nullptr;
+        double *dydto = nullptr;
+        double *dzdto = nullptr;
+        double *drdto = nullptr;
+        double *path = nullptr;
+        double *error = nullptr;
+        int *wcx = nullptr;
+        int *wcy = nullptr;
+        int *wcz = nullptr;
+        int *index = nullptr;
 
         if (numToMove > 0) {
+            CUDA_ASSERT(cudaMalloc(&movedMem, bytes));
             cubExclusiveSum(cubPtr, maxCubMem, procSizes, procGlobalOffsets,
                             params.nProcs, 0, false);
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(procLocalOffsets),
-                                 static_cast<void *>(procSizes),
-                                 sizeof(int) * params.nProcs,
-                                 cudaMemcpyDefault));
-
-            const uint64_t bytes = numToMove * bytesPerBubble;
-            CUDA_ASSERT(cudaMalloc(&movedData, bytes));
-            hostMovedData.resize(bytes);
-
-            setNumToBeDeletedToZero();
-
-            launchGatherAndDeleteMovedBubbles(
-                params, numToMove, bytesPerBubble, procSizes, procGlobalOffsets,
-                procLocalOffsets, movedIndices, procNums,
-                static_cast<char *>(movedData));
-
-            params.bubbles.count -= numToMove;
 
             CUDA_CALL(cudaMemcpy(static_cast<void *>(sizes.data()),
                                  static_cast<void *>(procSizes),
@@ -554,117 +550,249 @@ void searchNeighbors(Params &params) {
                                  sizeof(int) * offsets.size(),
                                  cudaMemcpyDefault));
 
-            // Copy the data to the cpu
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(hostMovedData.data()),
-                                 static_cast<void *>(movedData),
-                                 hostMovedData.size(), cudaMemcpyDefault));
-        } else {
-            // Make sure these contain zeros
-            for (int i = 0; i < params.nProcs; i++) {
-                sizes[i] = 0;
-                offsets[i] = 0;
-            }
+            setNumToBeDeletedToZero();
+
+            x = static_cast<double *>(movedMem);
+            y = x + numToMove;
+            z = y + numToMove;
+            r = z + numToMove;
+            dxdt = r + numToMove;
+            dydt = dxdt + numToMove;
+            dzdt = dydt + numToMove;
+            drdt = dzdt + numToMove;
+            dxdto = drdt + numToMove;
+            dydto = dxdto + numToMove;
+            dzdto = dydto + numToMove;
+            drdto = dzdto + numToMove;
+            path = drdto + numToMove;
+            error = path + numToMove;
+            wcx = reinterpret_cast<int *>(error + numToMove);
+            wcy = wcx + numToMove;
+            wcz = wcy + numToMove;
+            index = wcz + numToMove;
+
+            launchGatherAndDeleteMovedBubbles(
+                params, numToMove, procGlobalOffsets, procSizes, movedIndices,
+                procNums, x, y, z, r, dxdt, dydt, dzdt, drdt, dxdto, dydto,
+                dzdto, drdto, path, error, wcx, wcy, wcz, index);
+
+            params.bubbles.count -= numToMove;
         }
 
-        std::vector<int> receivedProcNums;
-        int numReceivedBubbles = 0;
-        uint64_t totalBytesReceived = 0;
-        char *src = hostMovedData.data();
+        int numToReceive = 0;
         for (int i = 0; i < params.nProcs; i++) {
-            uint64_t bytesToSend = bytesPerBubble * sizes[i];
-            uint64_t bytesReceived = 0;
-
             const int dstProc = i;
             const int srcProc = i;
             const int tag = 1337;
             MPI_Status status;
-            int rc = MPI_Sendrecv(
-                static_cast<void *>(&bytesToSend), 1, MPI_UNSIGNED_LONG,
-                dstProc, tag, static_cast<void *>(&bytesReceived), 1,
-                MPI_UNSIGNED_LONG, srcProc, tag, params.comm, &status);
+            int rc = MPI_Sendrecv(static_cast<void *>(&sizes[i]), 1, MPI_INT,
+                                  dstProc, tag,
+                                  static_cast<void *>(&incomingSizes[i]), 1,
+                                  MPI_INT, srcProc, tag, params.comm, &status);
             if (rc != MPI_SUCCESS) {
                 printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
                        __LINE__);
             }
 
-            if (bytesReceived + totalBytesReceived > hostReceivedData.size()) {
-                hostReceivedData.resize(2 * hostReceivedData.size());
+            numToReceive += incomingSizes[i];
+        }
+
+        if (numToReceive > 0 || numToMove > 0) {
+            std::vector<double> ix(numToReceive);
+            std::vector<double> iy(numToReceive);
+            std::vector<double> iz(numToReceive);
+            std::vector<double> ir(numToReceive);
+            std::vector<double> idxdt(numToReceive);
+            std::vector<double> idydt(numToReceive);
+            std::vector<double> idzdt(numToReceive);
+            std::vector<double> idrdt(numToReceive);
+            std::vector<double> idxdto(numToReceive);
+            std::vector<double> idydto(numToReceive);
+            std::vector<double> idzdto(numToReceive);
+            std::vector<double> idrdto(numToReceive);
+            std::vector<double> ipath(numToReceive);
+            std::vector<double> ierror(numToReceive);
+            std::vector<int> iwcx(numToReceive);
+            std::vector<int> iwcy(numToReceive);
+            std::vector<int> iwcz(numToReceive);
+            std::vector<int> iindex(numToReceive);
+
+            int incomingOffset = 0;
+            int outgoingOffset = 0;
+            std::vector<char> sendBuffer(numToMove * sizeof(double));
+            for (int i = 0; i < params.nProcs; i++) {
+
+                auto mpisendrecv = [&i, &sizes, &incomingSizes, &sendBuffer,
+                                    &outgoingOffset, &incomingOffset,
+                                    &params](auto *deviceSrc, auto *hostDst,
+                                             MPI_Datatype sendRecvType) {
+                    const int dstProc = i;
+                    const int srcProc = i;
+                    const int tag = 1337;
+                    MPI_Status status;
+
+                    if (sendBuffer.size() <
+                        sizes[i] * sizeof(typename std::remove_pointer<decltype(
+                                              deviceSrc)>::type)) {
+                        sendBuffer.resize(sizes[i] *
+                                          sizeof(typename std::remove_pointer<
+                                                 decltype(deviceSrc)>::type));
+                    }
+
+                    if (deviceSrc != nullptr) {
+                        CUDA_CALL(cudaMemcpy(
+                            static_cast<void *>(sendBuffer.data()),
+                            static_cast<void *>(deviceSrc + outgoingOffset),
+                            sizeof(typename std::remove_pointer<decltype(
+                                       deviceSrc)>::type) *
+                                sizes[i],
+                            cudaMemcpyDefault));
+                    }
+
+                    int rc = MPI_Sendrecv(
+                        static_cast<void *>(sendBuffer.data()), sizes[i],
+                        sendRecvType, dstProc, tag,
+                        static_cast<void *>(hostDst + incomingOffset),
+                        incomingSizes[i], sendRecvType, srcProc, tag,
+                        params.comm, &status);
+
+                    if (rc != MPI_SUCCESS) {
+                        printf("Error sendrecving an MPI message at %s:%d\n",
+                               __FILE__, __LINE__);
+                    }
+                };
+
+                if (sizes[i] > 0 || incomingSizes[i] > 0) {
+                    mpisendrecv(x, ix.data(), MPI_DOUBLE);
+                    mpisendrecv(y, iy.data(), MPI_DOUBLE);
+                    mpisendrecv(z, iz.data(), MPI_DOUBLE);
+                    mpisendrecv(r, ir.data(), MPI_DOUBLE);
+                    mpisendrecv(dxdt, idxdt.data(), MPI_DOUBLE);
+                    mpisendrecv(dydt, idydt.data(), MPI_DOUBLE);
+                    mpisendrecv(dzdt, idzdt.data(), MPI_DOUBLE);
+                    mpisendrecv(drdt, idrdt.data(), MPI_DOUBLE);
+                    mpisendrecv(dxdto, idxdto.data(), MPI_DOUBLE);
+                    mpisendrecv(dydto, idydto.data(), MPI_DOUBLE);
+                    mpisendrecv(dzdto, idzdto.data(), MPI_DOUBLE);
+                    mpisendrecv(drdto, idrdto.data(), MPI_DOUBLE);
+                    mpisendrecv(path, ipath.data(), MPI_DOUBLE);
+                    mpisendrecv(error, ierror.data(), MPI_DOUBLE);
+                    mpisendrecv(wcx, iwcx.data(), MPI_INT);
+                    mpisendrecv(wcy, iwcy.data(), MPI_INT);
+                    mpisendrecv(wcz, iwcz.data(), MPI_INT);
+                    mpisendrecv(index, iindex.data(), MPI_INT);
+                }
+
+                outgoingOffset += sizes[i];
+                incomingOffset += incomingSizes[i];
             }
 
-            rc = MPI_Sendrecv(
-                static_cast<void *>(src), bytesToSend, MPI_CHAR, dstProc, tag,
-                static_cast<void *>(hostReceivedData.data() +
-                                    totalBytesReceived),
-                bytesReceived, MPI_CHAR, srcProc, tag, params.comm, &status);
-            if (rc != MPI_SUCCESS) {
-                printf("Error sendrecving an MPI message at %s:%d\n", __FILE__,
-                       __LINE__);
-            }
+            // TODO handle this more gracefully
+            assert((int)params.bubbles.stride >=
+                       params.bubbles.count + numToReceive &&
+                   "Not enough memory to hold all the bubbles");
 
-            src += bytesToSend;
-            totalBytesReceived += bytesReceived;
-            sizes[i] = static_cast<int>(bytesReceived / bytesPerBubble);
-            if (i > 0) {
-                offsets[i] = sizes[i - 1] + offsets[i - 1];
-            } else {
-                offsets[i] = 0;
-            }
-            numReceivedBubbles += sizes[i];
+            if (numToReceive > 0) {
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.x +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(ix.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.y +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(iy.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.z +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(iz.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.r +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(ir.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dxdt +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idxdt.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dydt +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idydt.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dzdt +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idzdt.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.drdt +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idrdt.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dxdto +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idxdto.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dydto +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idydto.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.dzdto +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idzdto.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.drdto +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(idrdto.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.path +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(ipath.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.error +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(ierror.data()),
+                                     sizeof(double) * numToReceive,
+                                     cudaMemcpyDefault));
+                CUDA_CALL(
+                    cudaMemcpy(static_cast<void *>(params.bubbles.wrapCountX +
+                                                   params.bubbles.count),
+                               static_cast<void *>(iwcx.data()),
+                               sizeof(int) * numToReceive, cudaMemcpyDefault));
+                CUDA_CALL(
+                    cudaMemcpy(static_cast<void *>(params.bubbles.wrapCountY +
+                                                   params.bubbles.count),
+                               static_cast<void *>(iwcy.data()),
+                               sizeof(int) * numToReceive, cudaMemcpyDefault));
+                CUDA_CALL(
+                    cudaMemcpy(static_cast<void *>(params.bubbles.wrapCountZ +
+                                                   params.bubbles.count),
+                               static_cast<void *>(iwcz.data()),
+                               sizeof(int) * numToReceive, cudaMemcpyDefault));
+                CUDA_CALL(cudaMemcpy(static_cast<void *>(params.bubbles.index +
+                                                         params.bubbles.count),
+                                     static_cast<void *>(iindex.data()),
+                                     sizeof(int) * numToReceive,
+                                     cudaMemcpyDefault));
 
-            for (int j = 0; j < sizes[i]; j++) {
-                receivedProcNums.push_back(i);
+                params.bubbles.count += numToReceive;
             }
         }
 
-        void *receivedData = nullptr;
-        CUDA_ASSERT(cudaMalloc(&receivedData, totalBytesReceived));
-        CUDA_CALL(cudaMemcpy(receivedData,
-                             static_cast<void *>(hostReceivedData.data()),
-                             totalBytesReceived, cudaMemcpyDefault));
-
-        // TODO handle this more gracefully
-        assert((int)params.bubbles.stride >=
-                   params.bubbles.count + numReceivedBubbles &&
-               "Not enough memory to hold all the bubbles");
-
-        if (numReceivedBubbles > 0) {
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(procSizes),
-                                 static_cast<void *>(sizes.data()),
-                                 sizeof(int) * sizes.size(),
-                                 cudaMemcpyDefault));
-
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(procLocalOffsets),
-                                 static_cast<void *>(sizes.data()),
-                                 sizeof(int) * sizes.size(),
-                                 cudaMemcpyDefault));
-
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(procGlobalOffsets),
-                                 static_cast<void *>(offsets.data()),
-                                 sizeof(int) * offsets.size(),
-                                 cudaMemcpyDefault));
-
-            CUDA_CALL(cudaMemcpy(static_cast<void *>(procNums),
-                                 static_cast<void *>(receivedProcNums.data()),
-                                 sizeof(int) * receivedProcNums.size(),
-                                 cudaMemcpyDefault));
-
-            setNumToBeDeletedToZero();
-
-            launchDistributeReceivedBubbles(
-                params, numReceivedBubbles, bytesPerBubble, procSizes,
-                procGlobalOffsets, procLocalOffsets, procNums,
-                static_cast<char *>(receivedData));
-
-            params.bubbles.count += numReceivedBubbles;
+        if (movedMem != nullptr) {
+            CUDA_CALL(cudaFree(movedMem));
         }
 
-        if (movedData != nullptr) {
-            CUDA_CALL(cudaFree(movedData));
-        }
-
-        if (receivedData != nullptr) {
-            CUDA_CALL(cudaFree(receivedData));
-        }
+        MPI_Barrier(params.comm);
     }
 
     // Reset memory
@@ -1423,7 +1551,7 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.errorTolerance = inputJson["errorTolerance"]["value"];
     params.hostData.snapshotFrequency = inputJson["snapShot"]["frequency"];
     std::stringstream ss;
-    ss << inputJson["snapShot"]["filename"];
+    ss.str() = inputJson["snapShot"]["filename"];
     ss << "r" << params.rank;
     params.snapshotParams.name = ss.str();
 
@@ -2188,6 +2316,11 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.numNeighborsSearched = 0;
     int numSteps = 0;
     const int failsafe = 500;
+
+    // TEMP TEMP TEMP
+    if (params.hostData.snapshotFrequency > 0.0) {
+        saveSnapshot(params);
+    }
 
     if (params.rank == 0) {
         printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
