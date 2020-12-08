@@ -1,0 +1,1 @@
+salloc --nodes=1 --ntasks=2 --mem-per-cpu=32G --constraint=volta --gres=gpu:2 --time=08:00:00
