@@ -1,0 +1,32 @@
+{
+    "mahti": {
+        "dst": "/users/juhanala/Code/",
+        "excluded": [
+            ".git/",
+            ".gitignore",
+            ".nvim_sync_config.json",
+            "__pycache__",
+            "paraview/"
+        ]
+    },
+    "puhti": {
+        "dst": "/users/juhanala/Code/",
+        "excluded": [
+            ".git/",
+            ".gitignore",
+            ".nvim_sync_config.json",
+            "__pycache__",
+            "paraview/"
+        ]
+    },
+    "lumi": {
+        "dst": "/users/juhanala/Code/",
+        "excluded": [
+            ".git/",
+            ".gitignore",
+            ".nvim_sync_config.json",
+            "__pycache__",
+            "paraview/"
+        ]
+    }
+}

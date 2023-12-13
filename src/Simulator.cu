@@ -20,7 +20,7 @@
 #include "Kernels.cuh"
 #include "Util.h"
 #include "Vec.h"
-#include "cub/cub/cub.cuh"
+#include "cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cuda_profiler_api.h>
