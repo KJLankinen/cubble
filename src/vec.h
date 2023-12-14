@@ -24,7 +24,7 @@
 #include <math.h>
 #include <stdio.h>
 
-#include "Util.h"
+#include "util.h"
 
 namespace cubble {
 template <typename T> class vec {
@@ -34,9 +34,9 @@ template <typename T> class vec {
     __host__ __device__ vec(T x) : x(x), y(x), z(x) {}
 
     template <typename T2> __host__ __device__ vec(const vec<T2> &o) {
-        x = (T)o.x;
-        y = (T)o.y;
-        z = (T)o.z;
+        x = static_cast<T>(o.x);
+        y = static_cast<T>(o.y);
+        z = static_cast<T>(o.z);
     }
 
     __host__ __device__ vec(T x, T y, T z) : x(x), y(y), z(z) {}
@@ -88,12 +88,12 @@ template <typename T> class vec {
         return v;
     }
 
-    __host__ vec<int> ceil() const {
-        return vec<int>(std::ceil(x), std::ceil(y), std::ceil(z));
+    __host__ vec<int32_t> ceil() const {
+        return vec<int32_t>(std::ceil(x), std::ceil(y), std::ceil(z));
     }
 
-    __host__ vec<int> floor() const {
-        return vec<int>(std::floor(x), std::floor(y), std::floor(z));
+    __host__ vec<int32_t> floor() const {
+        return vec<int32_t>(std::floor(x), std::floor(y), std::floor(z));
     }
 
     // + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
@@ -296,7 +296,7 @@ template <typename T> class vec {
     // == == == == == == == == == == == == == == == == == == == == == ==
     __host__ __device__ friend bool operator==(const vec<T> &t,
                                                const vec<T> &o) {
-        const T epsilon = (T)(1.0 / 1e6);
+        const T epsilon = static_cast<T>(1.0 / 1e6);
         bool equal = true;
         equal &= t.x - epsilon <= o.x && t.x + epsilon >= o.x;
         equal &= t.y - epsilon <= o.y && t.y + epsilon >= o.y;
@@ -358,6 +358,6 @@ template <typename T> class vec {
 
 typedef vec<float> fvec;
 typedef vec<double> dvec;
-typedef vec<int> ivec;
+typedef vec<int32_t> ivec;
 typedef vec<uint32_t> uvec;
 } // namespace cubble

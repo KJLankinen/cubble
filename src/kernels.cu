@@ -16,7 +16,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Kernels.cuh"
+#include "kernels.cuh"
 
 namespace cubble {
 __device__ Constants *dConstants;
@@ -27,9 +27,9 @@ __device__ double dTotalAreaPerRadius;
 __device__ double dTotalVolumeNew;
 __device__ double dMaxRadius;
 __device__ bool dErrorEncountered;
-__device__ int dNumPairs;
-__device__ int dNumPairsNew;
-__device__ int dNumToBeDeleted;
+__device__ int32_t dNumPairs;
+__device__ int32_t dNumPairsNew;
+__device__ int32_t dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
@@ -48,7 +48,7 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
             return p + 0.5 * ts * (3.0 * v - vo);
         };
 
-        for (int i = threadIdx.x + blockIdx.x * blockDim.x;
+        for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x;
              i < bubbles.count / 2; i += blockDim.x * gridDim.x) {
             // Every thread performs operations for two bubbles
             reinterpret_cast<double2 *>(temp1)[i] = make_double2(0.0, 0.0);
@@ -115,7 +115,7 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
         // If there's an uneven number of bubbles, there's one bubble left after
         // the for loop
         if (0 == threadIdx.x + blockIdx.x && 1 == bubbles.count % 2) {
-            const int i = bubbles.count - 1;
+            const int32_t i = bubbles.count - 1;
             temp1[i] = 0.0;
             bubbles.flowVx[i] = 0.0;
             bubbles.flowVy[i] = 0.0;
@@ -150,8 +150,8 @@ __global__ void preIntegrate(double ts, bool useGasExchange, Bubbles bubbles,
 
         __syncthreads();
         if (useGasExchange) {
-            const int warpNum = threadIdx.x >> 5;
-            const int wid = threadIdx.x & 31;
+            const int32_t warpNum = threadIdx.x >> 5;
+            const int32_t wid = threadIdx.x & 31;
             if (threadIdx.x < 32) {
                 reduce(&sbuf[0 * BLOCK_SIZE], warpNum, &sum);
                 if (0 == wid) {
@@ -176,21 +176,21 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
     if (blockIdx.x * blockDim.x < dNumPairs) {
         extern __shared__ double sbuf[];
         if (useGasExchange) {
-            int offset = BLOCK_SIZE * (dConstants->dimensionality + 1);
+            int32_t offset = BLOCK_SIZE * (dConstants->dimensionality + 1);
             sbuf[threadIdx.x + offset] = 0.0;
             offset += BLOCK_SIZE;
             sbuf[threadIdx.x + offset] = 0.0;
         }
 
-        for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+        for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
              i += gridDim.x * blockDim.x) {
-            const int idx1 = pairs.i[i];
-            const int idx2 = pairs.j[i];
+            const int32_t idx1 = pairs.i[i];
+            const int32_t idx2 = pairs.j[i];
 
             if (useFlow) {
                 // flow vx, offset = (dim + 4 * useGas) * BLOCK_SIZE
-                int offset = BLOCK_SIZE *
-                             (dConstants->dimensionality + 4 * useGasExchange);
+                int32_t offset = BLOCK_SIZE * (dConstants->dimensionality +
+                                               4 * useGasExchange);
                 sbuf[threadIdx.x + offset] = bubbles.dxdt[idx2];
                 atomicAdd(&bubbles.flowVx[idx2], bubbles.dxdt[idx1]);
 
@@ -254,7 +254,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                     }
 
                     // overlap area, offset = dim * BLOCK_SIZE
-                    int offset = dConstants->dimensionality * BLOCK_SIZE;
+                    int32_t offset = dConstants->dimensionality * BLOCK_SIZE;
                     sbuf[threadIdx.x + offset] = overlapArea;
                     atomicAdd(&overlap[idx2], overlapArea);
 
@@ -281,7 +281,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                 continue;
             }
 
-            const unsigned int active = __activemask();
+            const unsigned int32_t active = __activemask();
             __syncwarp(active);
 
             double vx = 0.0;
@@ -292,7 +292,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
             double fvz = 0.0;
             double oa = 0.0;
             double vr = 0.0;
-            const int flowOffset =
+            const int32_t flowOffset =
                 dConstants->dimensionality + 4 * useGasExchange;
             warpReduceAtomicAddMatching(
                 active, idx1, &sum<double>, sbuf, &bubbles.dxdtp[idx1], &vx, 0,
@@ -310,8 +310,8 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
 
         __syncthreads();
         if (useGasExchange) {
-            const int warpNum = threadIdx.x >> 5;
-            const int wid = threadIdx.x & 31;
+            const int32_t warpNum = threadIdx.x >> 5;
+            const int32_t wid = threadIdx.x & 31;
             if (threadIdx.x < 32) {
                 reduce(&sbuf[(dConstants->dimensionality + 1) * BLOCK_SIZE],
                        warpNum, &sum);
@@ -338,7 +338,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
 __global__ void postIntegrate(double ts, bool useGasExchange,
                               bool incrementPath, bool useFlow, Bubbles bubbles,
                               double *blockMax, double *overlap,
-                              int *toBeDeleted) {
+                              int32_t *toBeDeleted) {
     // This kernel applies all per bubble computations that are to be done after
     // the pairwise interactions have been calculated. These include imposed
     // flow velocity, wall velocity and liquid mediated gas exchange. After all
@@ -352,8 +352,8 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
         sbuf[threadIdx.x + 2 * BLOCK_SIZE] = 0.0;
         sbuf[threadIdx.x + 3 * BLOCK_SIZE] = 0.0;
 
-        for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
-             i += blockDim.x * gridDim.x) {
+        for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x;
+             i < bubbles.count; i += blockDim.x * gridDim.x) {
             if (useFlow) {
                 addFlowVelocity(bubbles, i);
             }
@@ -455,8 +455,8 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
         }
 
         __syncthreads();
-        const int warpNum = threadIdx.x >> 5;
-        const int wid = threadIdx.x & 31;
+        const int32_t warpNum = threadIdx.x >> 5;
+        const int32_t wid = threadIdx.x & 31;
         if (threadIdx.x < 32) {
             reduce(&sbuf[0 * BLOCK_SIZE], warpNum, &max);
             if (0 == wid) {
@@ -483,8 +483,8 @@ __global__ void postIntegrate(double ts, bool useGasExchange,
     }
 }
 
-__device__ double correct(int i, double ts, double *pp, double *p, double *v,
-                          double *vp, double *old, double *maxErr) {
+__device__ double correct(int32_t i, double ts, double *pp, double *p,
+                          double *v, double *vp, double *old, double *maxErr) {
     const double predicted = pp[i];
     const double corrected = p[i] + 0.5 * ts * (v[i] + vp[i]);
     pp[i] = corrected;
@@ -493,7 +493,7 @@ __device__ double correct(int i, double ts, double *pp, double *p, double *v,
     return corrected - old[i];
 }
 
-__device__ void addFlowVelocity(Bubbles &bubbles, int i) {
+__device__ void addFlowVelocity(Bubbles &bubbles, int32_t i) {
     double multiplier = bubbles.numNeighbors[i];
     multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
     const double xi = bubbles.xp[i];
@@ -501,30 +501,34 @@ __device__ void addFlowVelocity(Bubbles &bubbles, int i) {
     double riSq = bubbles.rp[i];
     riSq *= riSq;
 
-    int inside =
-        (int)((xi < dConstants->flowTfr.x && xi > dConstants->flowLbb.x) ||
-              ((dConstants->flowLbb.x - xi) * (dConstants->flowLbb.x - xi) <=
-               riSq) ||
-              ((dConstants->flowTfr.x - xi) * (dConstants->flowTfr.x - xi) <=
-               riSq));
+    int32_t inside =
+        (int32_t)((xi < dConstants->flowTfr.x && xi > dConstants->flowLbb.x) ||
+                  ((dConstants->flowLbb.x - xi) *
+                       (dConstants->flowLbb.x - xi) <=
+                   riSq) ||
+                  ((dConstants->flowTfr.x - xi) *
+                       (dConstants->flowTfr.x - xi) <=
+                   riSq));
 
     inside *=
-        (int)((yi < dConstants->flowTfr.y && yi > dConstants->flowLbb.y) ||
-              ((dConstants->flowLbb.y - yi) * (dConstants->flowLbb.y - yi) <=
-               riSq) ||
-              ((dConstants->flowTfr.y - yi) * (dConstants->flowTfr.y - yi) <=
-               riSq));
+        (int32_t)((yi < dConstants->flowTfr.y && yi > dConstants->flowLbb.y) ||
+                  ((dConstants->flowLbb.y - yi) *
+                       (dConstants->flowLbb.y - yi) <=
+                   riSq) ||
+                  ((dConstants->flowTfr.y - yi) *
+                       (dConstants->flowTfr.y - yi) <=
+                   riSq));
 
     if (dConstants->dimensionality == 3) {
         const double zi = bubbles.zp[i];
-        inside *=
-            (int)((zi < dConstants->flowTfr.z && zi > dConstants->flowLbb.z) ||
-                  ((dConstants->flowLbb.z - zi) *
-                       (dConstants->flowLbb.z - zi) <=
-                   riSq) ||
-                  ((dConstants->flowTfr.z - zi) *
-                       (dConstants->flowTfr.z - zi) <=
-                   riSq));
+        inside *= (int32_t)((zi < dConstants->flowTfr.z &&
+                             zi > dConstants->flowLbb.z) ||
+                            ((dConstants->flowLbb.z - zi) *
+                                 (dConstants->flowLbb.z - zi) <=
+                             riSq) ||
+                            ((dConstants->flowTfr.z - zi) *
+                                 (dConstants->flowTfr.z - zi) <=
+                             riSq));
 
         bubbles.dzdtp[i] += !inside * multiplier * bubbles.flowVz[i] +
                             dConstants->flowVel.z * inside;
@@ -538,7 +542,7 @@ __device__ void addFlowVelocity(Bubbles &bubbles, int i) {
                         dConstants->flowVel.y * inside;
 }
 
-__device__ void addWallVelocity(Bubbles &bubbles, int i) {
+__device__ void addWallVelocity(Bubbles &bubbles, int32_t i) {
     const double drag = 1.0 - dConstants->wallDragStrength;
     const double rad = bubbles.rp[i];
     double xDrag = 1.0;
@@ -590,34 +594,34 @@ __device__ void addWallVelocity(Bubbles &bubbles, int i) {
 // ==============================================
 // Neighbor search
 // ==============================================
-__global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
-                               Bubbles bubbles) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+__global__ void cellByPosition(int32_t *cellIndices, int32_t *cellSizes,
+                               ivec cellDim, Bubbles bubbles) {
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        const int ci = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
-                                         bubbles.z[i], cellDim);
+        const int32_t ci = getCellIdxFromPos(bubbles.x[i], bubbles.y[i],
+                                             bubbles.z[i], cellDim);
         cellIndices[i] = ci;
         atomicAdd(&cellSizes[ci], 1);
     }
 }
 
-__global__ void indexByCell(int *cellIndices, int *cellOffsets,
-                            int *bubbleIndices, int count) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
+__global__ void indexByCell(int32_t *cellIndices, int32_t *cellOffsets,
+                            int32_t *bubbleIndices, int32_t count) {
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < count;
          i += gridDim.x * blockDim.x) {
         bubbleIndices[atomicSub(&cellOffsets[cellIndices[i]], 1) - 1] = i;
     }
 }
 
-__device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles) {
+__device__ void comparePair(int32_t idx1, int32_t idx2, int32_t *histogram,
+                            int32_t *pairI, int32_t *pairJ, Bubbles &bubbles) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
     if (wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
                           bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
             .getSquaredLength() < maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
-        int id = idx1 > idx2 ? idx1 : idx2;
+        int32_t id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
@@ -628,40 +632,41 @@ __device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
     }
 }
 
-__global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
-                               int *offsets, int *sizes, int *histogram,
-                               int *pairI, int *pairJ, Bubbles bubbles) {
+__global__ void neighborSearch(int32_t numCells, int32_t numNeighborCells,
+                               ivec cellDim, int32_t *offsets, int32_t *sizes,
+                               int32_t *histogram, int32_t *pairI,
+                               int32_t *pairJ, Bubbles bubbles) {
     DEVICE_ASSERT(blockDim.x >= 32, "Use at least 32 threads.");
     // Loop over each cell in the simulation box
-    for (int i = blockIdx.x; i < numCells; i += gridDim.x) {
-        const int s1 = sizes[i];
+    for (int32_t i = blockIdx.x; i < numCells; i += gridDim.x) {
+        const int32_t s1 = sizes[i];
         if (0 == s1) {
             continue;
         }
         // Loop over each neighbor-cell-to-consider
-        for (int j = threadIdx.x / 32; j < numNeighborCells;
+        for (int32_t j = threadIdx.x / 32; j < numNeighborCells;
              j += blockDim.x / 32) {
-            const int ci = getNeighborCellIndex(i, cellDim, j);
+            const int32_t ci = getNeighborCellIndex(i, cellDim, j);
             if (ci < 0) {
                 continue;
             }
-            const int s2 = sizes[ci];
+            const int32_t s2 = sizes[ci];
             if (0 == s2) {
                 continue;
             }
 
-            const int o1 = offsets[i];
-            const int o2 = offsets[ci];
-            int numPairs = s1 * s2;
+            const int32_t o1 = offsets[i];
+            const int32_t o2 = offsets[ci];
+            int32_t numPairs = s1 * s2;
             if (ci == i) {
                 // Comparing the cell to itself
                 numPairs = (s1 * (s1 - 1)) / 2;
             }
 
             // Loop over each possible pair of bubbles in the cells
-            for (int k = threadIdx.x % 32; k < numPairs; k += 32) {
-                int b1 = 0;
-                int b2 = 0;
+            for (int32_t k = threadIdx.x % 32; k < numPairs; k += 32) {
+                int32_t b1 = 0;
+                int32_t b2 = 0;
 
                 // If we're comparing a cell to itself, only compare the
                 // "upper triangle" of values. Otherwise, compare all bubbles
@@ -671,7 +676,7 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
                 if (ci == i) {
                     b1 =
                         s1 - 2 -
-                        (int)floor(
+                        (int32_t)floor(
                             sqrt(-8.0 * k + 4 * s1 * (s1 - 1) - 7) * 0.5 - 0.5);
                     b2 = o1 + k + b1 + 1 - s1 * (s1 - 1) / 2 +
                          (s1 - b1) * ((s1 - b1) - 1) / 2;
@@ -693,28 +698,28 @@ __global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
     }
 }
 
-__global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI,
-                          int *pairJ) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+__global__ void sortPairs(Bubbles bubbles, Pairs pairs, int32_t *pairI,
+                          int32_t *pairJ) {
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        const int id = atomicSub(&bubbles.numNeighbors[pairI[i]], 1) - 1;
+        const int32_t id = atomicSub(&bubbles.numNeighbors[pairI[i]], 1) - 1;
         pairs.i[id] = pairI[i];
         pairs.j[id] = pairJ[i];
     }
 }
 
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
         atomicAdd(&bubbles.numNeighbors[pairs.i[i]], 1);
         atomicAdd(&bubbles.numNeighbors[pairs.j[i]], 1);
     }
 }
 
-__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+__global__ void reorganizeByIndex(Bubbles bubbles, const int32_t *newIndex) {
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        int j = newIndex[i];
+        int32_t j = newIndex[i];
         // Predicteds become currents and vice versa,
         // saveds just store the currents until next search
         bubbles.xp[i] = bubbles.x[j];
@@ -736,7 +741,7 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
         // flow_vx becomes dxdto becomes dydto
         // becomes dzdto becomes drdto becomes x0 etc.
         bubbles.flowVx[i] = bubbles.dxdto[j];
-        int k = newIndex[j];
+        int32_t k = newIndex[j];
         bubbles.dxdto[j] = bubbles.dydto[k];
         j = newIndex[k];
         bubbles.dydto[k] = bubbles.dzdto[j];
@@ -766,26 +771,26 @@ __global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex) {
 // Bubble deletion
 // ==============================================
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
-                                   int *toBeDeleted) {
+                                   int32_t *toBeDeleted) {
     // Count of pairs to be deleted
-    __shared__ int tbds[BLOCK_SIZE];
+    __shared__ int32_t tbds[BLOCK_SIZE];
     tbds[threadIdx.x] = 0;
 
     // The first 32 threads of the first block swap the data
     if (blockIdx.x == 0 && threadIdx.x < 32) {
-        const int nNew = bubbles.count - dNumToBeDeleted;
-        for (int i = threadIdx.x; i < dNumToBeDeleted; i += 32) {
+        const int32_t nNew = bubbles.count - dNumToBeDeleted;
+        for (int32_t i = threadIdx.x; i < dNumToBeDeleted; i += 32) {
             // If the to-be-deleted index is inside the remaining indices,
             // it will be swapped with one from the back that won't be
             // removed but which is outside the new range (i.e. would be
             // erroneously removed).
-            const int idx1 = toBeDeleted[i];
+            const int32_t idx1 = toBeDeleted[i];
             if (idx1 < nNew) {
                 // Count how many values before this ith value are swapped
                 // from the back. In other words, count how many good values
                 // to skip, before we choose which one to swap with idx1.
-                int fromBack = i;
-                int j = 0;
+                int32_t fromBack = i;
+                int32_t j = 0;
                 while (j < i) {
                     if (toBeDeleted[j] >= nNew) {
                         fromBack -= 1;
@@ -797,7 +802,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
                 // value from the back, which still lies outside the new
                 // range.
                 j = 0;
-                int idx2 = bubbles.count - 1;
+                int32_t idx2 = bubbles.count - 1;
                 while (idx2 >= nNew && (bubbles.r[idx2] < dConstants->minRad ||
                                         j != fromBack)) {
                     if (bubbles.r[idx2] >= dConstants->minRad) {
@@ -825,11 +830,11 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
     }
 
     // All threads check how many pairs are to be deleted
-    for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairs;
+    for (int32_t i = threadIdx.x + blockDim.x * blockIdx.x; i < dNumPairs;
          i += blockDim.x * gridDim.x) {
-        int j = 0;
+        int32_t j = 0;
         while (j < dNumToBeDeleted) {
-            const int tbd = toBeDeleted[j];
+            const int32_t tbd = toBeDeleted[j];
             if (pairs.i[i] == tbd || pairs.j[i] == tbd) {
                 tbds[threadIdx.x] += 1;
             }
@@ -839,8 +844,8 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 
     __syncthreads();
 
-    const int warpNum = threadIdx.x >> 5;
-    const int wid = threadIdx.x & 31;
+    const int32_t warpNum = threadIdx.x >> 5;
+    const int32_t wid = threadIdx.x & 31;
     if (threadIdx.x < 32) {
         reduce(tbds, warpNum, &sum);
         if (0 == wid) {
@@ -850,7 +855,7 @@ __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
 }
 
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
-                                  int *toBeDeleted) {
+                                  int32_t *toBeDeleted) {
     double volMul = dTotalVolumeNew;
     if (dConstants->dimensionality == 3) {
         volMul = rcbrt(volMul);
@@ -861,30 +866,30 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
     // If phi is very small, there could be zero pairs, but this loop is assumed
     // to run at least bubbles.count - dNumToBeDeleted times for adding the
     // volume
-    const int bcn = bubbles.count - dNumToBeDeleted;
-    const int n = dNumPairsNew > bcn ? dNumPairsNew : bcn;
-    for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < n;
+    const int32_t bcn = bubbles.count - dNumToBeDeleted;
+    const int32_t n = dNumPairsNew > bcn ? dNumPairsNew : bcn;
+    for (int32_t i = threadIdx.x + blockDim.x * blockIdx.x; i < n;
          i += blockDim.x * gridDim.x) {
         if (i < dNumPairsNew) {
             // Check if either of the indices of this pair is any of the
             // to-be-deleted indices. If so, delete the pair, i.e.
             // swap a different pair on its place from the back of the list.
-            int idx1 = pairs.i[i];
-            int idx2 = pairs.j[i];
-            int j = 0;
+            int32_t idx1 = pairs.i[i];
+            int32_t idx2 = pairs.j[i];
+            int32_t j = 0;
             while (j < dNumToBeDeleted) {
-                int tbd = toBeDeleted[j];
+                int32_t tbd = toBeDeleted[j];
                 if (idx1 == tbd || idx2 == tbd) {
                     // Start from the back of pair list and go backwards until
                     // neither of the pairs is in the to-be-deleted list.
                     bool pairFound = false;
-                    int swapIdx = 0;
+                    int32_t swapIdx = 0;
                     while (!pairFound) {
                         pairFound = true;
                         swapIdx = atomicAdd(&dNumPairs, -1) - 1;
-                        const int swap1 = pairs.i[swapIdx];
-                        const int swap2 = pairs.j[swapIdx];
-                        int k = 0;
+                        const int32_t swap1 = pairs.i[swapIdx];
+                        const int32_t swap2 = pairs.j[swapIdx];
+                        int32_t k = 0;
                         while (k < dNumToBeDeleted) {
                             tbd = toBeDeleted[k];
                             if (swap1 == tbd || swap2 == tbd) {
@@ -911,7 +916,7 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
             while (j < dNumToBeDeleted) {
                 // The old, swapped indices were stored after the deleted
                 // indices
-                int swapped = toBeDeleted[dNumToBeDeleted + j];
+                int32_t swapped = toBeDeleted[dNumToBeDeleted + j];
                 if (idx1 == swapped) {
                     pairs.i[i] = toBeDeleted[j];
                 } else if (idx2 == swapped) {
@@ -932,10 +937,10 @@ __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
 // Miscellaneous
 // ==============================================
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < dNumPairs;
          i += gridDim.x * blockDim.x) {
-        const int idx1 = pairs.i[i];
-        const int idx2 = pairs.j[i];
+        const int32_t idx1 = pairs.i[i];
+        const int32_t idx2 = pairs.j[i];
         double e =
             bubbles.r[idx1] + bubbles.r[idx2] -
             wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
@@ -951,7 +956,7 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
 
 __global__ void euler(double ts, Bubbles bubbles) {
     // Euler integration
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += blockDim.x * gridDim.x) {
         bubbles.xp[i] += bubbles.dxdtp[i] * ts;
         bubbles.yp[i] += bubbles.dydtp[i] * ts;
@@ -964,7 +969,7 @@ __global__ void euler(double ts, Bubbles bubbles) {
 __global__ void transformPositions(bool normalize, Bubbles bubbles) {
     const dvec lbb = dConstants->lbb;
     const dvec interval = dConstants->interval;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         if (normalize) {
             bubbles.x[i] = (bubbles.x[i] - lbb.x) / interval.x;
@@ -985,11 +990,11 @@ __global__ void transformPositions(bool normalize, Bubbles bubbles) {
 __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
     const dvec lbb = dConstants->lbb;
     const dvec tfr = dConstants->tfr;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
-        auto wrap = [&i](double *p, int *wc, double x, double low,
+        auto wrap = [&i](double *p, int32_t *wc, double x, double low,
                          double high) {
-            int mult = x < low ? 1 : (x > high ? -1 : 0);
+            int32_t mult = x < low ? 1 : (x > high ? -1 : 0);
             p[i] = x + (high - low) * (double)mult;
             wc[i] -= mult;
         };
@@ -1004,7 +1009,7 @@ __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles) {
 }
 
 __global__ void calculateVolumes(Bubbles bubbles, double *volumes) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         const double radius = bubbles.r[i];
         double volume = radius * radius * CUBBLE_PI;
@@ -1023,7 +1028,7 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
     const dvec tfr = dConstants->tfr;
     const double minRad = dConstants->minRad;
     double *w = bubbles.rp;
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < bubbles.count;
          i += gridDim.x * blockDim.x) {
         bubbles.index[i] = i;
         dvec pos(0, 0, 0);
@@ -1106,7 +1111,8 @@ __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
     return d2;
 }
 
-__device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum) {
+__device__ int32_t getNeighborCellIndex(int32_t cellIdx, ivec dim,
+                                        int32_t neighborNum) {
     ivec idxVec = get3DIdxFrom1DIdx(cellIdx, dim);
     switch (neighborNum) {
     case 0:
@@ -1180,12 +1186,13 @@ __device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum) {
     return get1DIdxFrom3DIdx(idxVec, dim);
 }
 
-__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
+__device__ int32_t getCellIdxFromPos(double x, double y, double z,
+                                     ivec cellDim) {
     const dvec lbb = dConstants->lbb;
     const dvec interval = dConstants->interval;
-    const int xid = floor(cellDim.x * (x - lbb.x) / interval.x);
-    const int yid = floor(cellDim.y * (y - lbb.y) / interval.y);
-    int zid = 0;
+    const int32_t xid = floor(cellDim.x * (x - lbb.x) / interval.x);
+    const int32_t yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+    int32_t zid = 0;
     if (dConstants->dimensionality == 3) {
         zid = floor(cellDim.z * (z - lbb.z) / interval.z);
     }
@@ -1193,12 +1200,12 @@ __device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim) {
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);
 }
 
-__device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
+__device__ int32_t get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
     // Linear encoding
     return idxVec.z * cellDim.x * cellDim.y + idxVec.y * cellDim.x + idxVec.x;
 }
 
-__device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim) {
+__device__ ivec get3DIdxFrom1DIdx(int32_t idx, ivec cellDim) {
     ivec idxVec(0, 0, 0);
     // Linear decoding
     idxVec.x = idx % cellDim.x;

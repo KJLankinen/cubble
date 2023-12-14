@@ -18,10 +18,12 @@
 
 #pragma once
 
-#include "Util.h"
-#include "Vec.h"
-#include "cub/cub/cub.cuh"
+#include "util.h"
+#include "vec.h"
 #include <array>
+#include <cstdint>
+#include <cub/cub.cuh>
+#include <cuda.cuh>
 #include <string>
 #include <thread>
 #include <vector>
@@ -77,14 +79,14 @@ struct Bubbles {
     double *savedZ = nullptr;
     double *savedR = nullptr;
 
-    int *wrapCountX = nullptr;
-    int *wrapCountY = nullptr;
-    int *wrapCountZ = nullptr;
-    int *index = nullptr;
-    int *numNeighbors = nullptr;
+    int32_t *wrapCountX = nullptr;
+    int32_t *wrapCountY = nullptr;
+    int32_t *wrapCountZ = nullptr;
+    int32_t *index = nullptr;
+    int32_t *numNeighbors = nullptr;
 
     // Count is the total number of bubbles
-    int count = 0;
+    int32_t count = 0;
     // Stride is the "original" length of a row of data.
     // All the double data is saved in one big blob of memory
     // and the (double) pointers defined here are separated by
@@ -96,7 +98,7 @@ struct Bubbles {
     const uint64_t numIP = 5;
 
     uint64_t getMemReq() const {
-        return stride * (sizeof(double) * numDP + sizeof(int) * numIP);
+        return stride * (sizeof(double) * numDP + sizeof(int32_t) * numIP);
     }
 
     void *setupPointers(void *start) {
@@ -134,7 +136,7 @@ struct Bubbles {
         setIncr(&savedZ, &prev, stride);
         setIncr(&savedR, &prev, stride);
 
-        int *prevI = reinterpret_cast<int *>(prev);
+        int32_t *prevI = reinterpret_cast<int32_t *>(prev);
         setIncr(&wrapCountX, &prevI, stride);
         setIncr(&wrapCountY, &prevI, stride);
         setIncr(&wrapCountZ, &prevI, stride);
@@ -142,38 +144,39 @@ struct Bubbles {
         setIncr(&numNeighbors, &prevI, stride);
 
         assert(static_cast<char *>(start) +
-                   stride * (sizeof(double) * numDP + sizeof(int) * numIP) ==
+                   stride *
+                       (sizeof(double) * numDP + sizeof(int32_t) * numIP) ==
                reinterpret_cast<char *>(prevI));
 
         return static_cast<void *>(prevI);
     }
 
-    void print() { printf("\t#bubbles: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#bubbles: %i, stride: %li\n", count, stride); }
 };
 static_assert(sizeof(Bubbles) % 8 == 0);
 
 // Pointers to device memory holding the bubble pair data
 struct Pairs {
-    int *i = nullptr;
-    int *j = nullptr;
+    int32_t *i = nullptr;
+    int32_t *j = nullptr;
 
-    int count = 0;
+    int32_t count = 0;
     uint64_t stride = 0;
 
-    uint64_t getMemReq() const { return sizeof(int) * stride * 2; }
+    uint64_t getMemReq() const { return sizeof(int32_t) * stride * 2; }
 
     void *setupPointers(void *start) {
-        int *prev = static_cast<int *>(start);
+        int32_t *prev = static_cast<int32_t *>(start);
         setIncr(&i, &prev, stride);
         setIncr(&j, &prev, stride);
 
-        assert(static_cast<char *>(start) + stride * sizeof(int) * 2 ==
+        assert(static_cast<char *>(start) + stride * sizeof(int32_t) * 2 ==
                reinterpret_cast<char *>(prev));
 
         return static_cast<void *>(prev);
     }
 
-    void print() { printf("\t#pairs: %d, stride: %d\n", count, stride); }
+    void print() { printf("\t#pairs: %d, stride: %li\n", count, stride); }
 };
 static_assert(sizeof(Pairs) % 8 == 0);
 
@@ -195,7 +198,7 @@ struct Constants {
     double skinRadius = 0.3;
     double bubbleVolumeMultiplier = 0.0;
 
-    int dimensionality = 0;
+    int32_t dimensionality = 0;
 
     bool xWall = false;
     bool yWall = false;
@@ -230,7 +233,7 @@ struct IntegrationParams {
     double maxRadius = 0.0;
     double maxExpansion = 0.0;
     double maxError = 0.0;
-    int *hNumToBeDeleted = nullptr;
+    int32_t *hNumToBeDeleted = nullptr;
 };
 
 // Only accessed by host
@@ -251,7 +254,7 @@ struct HostData {
     double snapshotFrequency = 0.0;
     double avgRad = 0.0;
     double maxBubbleRadius = 0.0;
-    int minNumBubbles = 0;
+    int32_t minNumBubbles = 0;
     uint32_t timesPrinted = 0;
     uint32_t numSnapshots = 0;
 
@@ -280,10 +283,10 @@ struct SnapshotParams {
     double *path = nullptr;
     double *error = nullptr;
     double *energy = nullptr;
-    int *index = nullptr;
-    int *wrapCountX = nullptr;
-    int *wrapCountY = nullptr;
-    int *wrapCountZ = nullptr;
+    int32_t *index = nullptr;
+    int32_t *wrapCountX = nullptr;
+    int32_t *wrapCountY = nullptr;
+    int32_t *wrapCountZ = nullptr;
 
     dvec interval;
 
@@ -316,18 +319,18 @@ struct Params {
 
     double *tempD1 = nullptr;
     double *blockMax = nullptr;
-    int *tempI = nullptr;
-    int *tempPair1 = nullptr;
-    int *tempPair2 = nullptr;
+    int32_t *tempI = nullptr;
+    int32_t *tempPair1 = nullptr;
+    int32_t *tempPair2 = nullptr;
 
     std::vector<double> previousX;
     std::vector<double> previousY;
     std::vector<double> previousZ;
-    std::vector<char> hostMemory;
+    std::vector<uint8_t> hostMemory;
     std::vector<double> maximums;
 
     void setTempPointers(void *ptr) {
-        tempPair1 = static_cast<int *>(ptr);
+        tempPair1 = static_cast<int32_t *>(ptr);
         tempPair2 = tempPair1 + pairs.stride;
         tempI = tempPair2 + pairs.stride;
         tempD1 = reinterpret_cast<double *>(tempI + bubbles.stride);
@@ -335,7 +338,7 @@ struct Params {
     }
 
     uint64_t getTempMemReq() const {
-        return (2 * pairs.stride + bubbles.stride) * sizeof(int) +
+        return (2 * pairs.stride + bubbles.stride) * sizeof(int32_t) +
                (bubbles.stride + 3 * GRID_SIZE) * sizeof(double);
     }
 };

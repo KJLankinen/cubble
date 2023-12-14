@@ -1,0 +1,14 @@
+vec.h:
+    uudelleennimeä vec.cuhiksi
+    muuta "==" operaatio: nyt se kertoo ollaanko lähellä. Uusi funktio, joka tarkistaa "==" ja toinen, joka tarkistaa "close"
+
+CMakeFiles.txt
+    precompiled headers
+
+cub säätö: poistetaanko kokonaan? Väsätäänkö omat toteutukset niiltä osin, kuin tarvetta on?
+
+data_definitions:
+    Laitetaanko käyttämään uutta geneerisempää SoA-rakennetta?
+
+Kernels:
+    Pilkotaanko pienempiin tiedostoihin?

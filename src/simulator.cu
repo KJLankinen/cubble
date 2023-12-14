@@ -16,22 +16,21 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "DataDefinitions.h"
-#include "Kernels.cuh"
-#include "Util.h"
-#include "Vec.h"
+#include "data_definitions.h"
+#include "kernels.cuh"
+#include "util.h"
+#include "vec.h"
+
 #include "cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <fstream>
-#include <functional>
 #include <nvToolsExt.h>
 #include <sstream>
 #include <stdio.h>
 #include <string>
-#include <vector>
 
 namespace {
 using namespace cubble;
@@ -71,15 +70,15 @@ void searchNeighbors(Params &params) {
                           params.hostConstants.skinRadius)))
                        .floor();
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
-    const int numCells = cellDim.x * cellDim.y * cellDim.z;
+    const int32_t numCells = cellDim.x * cellDim.y * cellDim.z;
 
     // Note that these pointers alias memory, that is used by this function.
     // Don't fiddle with these, unless you know what you're doing.
-    int *cellOffsets = params.pairs.i;
-    int *cellSizes = cellOffsets + numCells;
-    int *cellIndices = cellSizes + numCells;
-    int *bubbleIndices = cellIndices + params.bubbles.stride;
-    int *histogram = bubbleIndices + params.bubbles.stride;
+    int32_t *cellOffsets = params.pairs.i;
+    int32_t *cellSizes = cellOffsets + numCells;
+    int32_t *cellIndices = cellSizes + numCells;
+    int32_t *bubbleIndices = cellIndices + params.bubbles.stride;
+    int32_t *histogram = bubbleIndices + params.bubbles.stride;
     void *cubPtr = static_cast<void *>(params.pairs.j);
     uint64_t maxCubMem = params.pairs.getMemReq() / 2;
 
@@ -94,7 +93,7 @@ void searchNeighbors(Params &params) {
 
     {
         KERNEL_LAUNCH(reorganizeByIndex, params, 0, 0, params.bubbles,
-                      const_cast<const int *>(bubbleIndices));
+                      const_cast<const int32_t *>(bubbleIndices));
         double *swapper = params.bubbles.xp;
         params.bubbles.xp = params.bubbles.x;
         params.bubbles.x = swapper;
@@ -137,7 +136,7 @@ void searchNeighbors(Params &params) {
         params.bubbles.dxdto = params.bubbles.flowVx;
         params.bubbles.flowVx = swapper;
 
-        int *swapperI = params.bubbles.index;
+        int32_t *swapperI = params.bubbles.index;
         params.bubbles.index = params.bubbles.wrapCountZ;
         params.bubbles.wrapCountZ = params.bubbles.wrapCountY;
         params.bubbles.wrapCountY = params.bubbles.wrapCountX;
@@ -145,11 +144,11 @@ void searchNeighbors(Params &params) {
         params.bubbles.numNeighbors = swapperI;
     }
 
-    int zero = 0;
-    CUDA_CALL(
-        cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
+    int32_t zero = 0;
+    CUDA_CALL(cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero),
+                                 sizeof(int32_t)));
 
-    int numCellsToSearch = 5;
+    int32_t numCellsToSearch = 5;
     if (params.hostConstants.dimensionality == 3) {
         numCellsToSearch = 14;
     }
@@ -159,7 +158,7 @@ void searchNeighbors(Params &params) {
                   params.tempPair2, params.bubbles);
 
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&params.pairs.count),
-                                   dNumPairs, sizeof(int)));
+                                   dNumPairs, sizeof(int32_t)));
 
     CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, histogram,
                params.bubbles.numNeighbors, params.bubbles.count,
@@ -169,14 +168,14 @@ void searchNeighbors(Params &params) {
                   params.tempPair1, params.tempPair2);
 
     CUDA_CALL(cudaMemset(static_cast<void *>(params.bubbles.numNeighbors), 0,
-                         params.bubbles.count * sizeof(int)));
+                         params.bubbles.count * sizeof(int32_t)));
 
     KERNEL_LAUNCH(countNumNeighbors, params, 0, 0, params.bubbles,
                   params.pairs);
     nvtxRangePop();
 }
 
-void removeBubbles(Params &params, int numToBeDeleted) {
+void removeBubbles(Params &params, int32_t numToBeDeleted) {
     nvtxRangePush("Removal");
     KERNEL_LAUNCH(swapDataCountPairs, params, 0, 0, params.bubbles,
                   params.pairs, params.tempI);
@@ -212,7 +211,7 @@ void step(Params &params, IntegrationParams &ip) {
         // Copy numToBeDeleted
         CUDA_CALL(cudaMemcpyFromSymbolAsync(
             static_cast<void *>(ip.hNumToBeDeleted), dNumToBeDeleted,
-            sizeof(int), 0, cudaMemcpyDefault, 0));
+            sizeof(int32_t), 0, cudaMemcpyDefault, 0));
     }
 
     void *memStart = static_cast<void *>(params.maximums.data());
@@ -335,7 +334,7 @@ void integrate(Params &params, IntegrationParams &ip) {
     nvtxRangePop();
 }
 
-void stabilize(Params &params, int numStepsToRelax) {
+void stabilize(Params &params, int32_t numStepsToRelax) {
     nvtxRangePush("Stabilization");
     params.hostData.energy1 = totalEnergy(params);
 
@@ -349,7 +348,7 @@ void stabilize(Params &params, int numStepsToRelax) {
     ip.maxError = 0.0;
 
     nvtxRangePush("For-loop");
-    for (int i = 0; i < numStepsToRelax; ++i) {
+    for (int32_t i = 0; i < numStepsToRelax; ++i) {
         integrate(params, ip);
     }
     nvtxRangePop();
@@ -442,7 +441,7 @@ void saveSnapshot(Params &params) {
             file << "x,y,z,r,vx,vy,vz,vtot,vr,path,energy,displacement,"
                     "error,index\n";
             for (uint64_t i = 0; i < snapshotParams.count; ++i) {
-                const int ind = snapshotParams.index[i];
+                const int32_t ind = snapshotParams.index[i];
                 const double xi = snapshotParams.x[i];
                 const double yi = snapshotParams.y[i];
                 const double zi = snapshotParams.z[i];
@@ -540,7 +539,7 @@ void init(const char *inputFileName, Params &params) {
     auto wall = box["wall"];
     auto flow = inputJson["flow"];
 
-    const int stabilizationSteps = inputJson["stabilization"]["steps"];
+    const int32_t stabilizationSteps = inputJson["stabilization"]["steps"];
 
     params.hostData.avgRad = bubbles["radius"]["mean"];
     params.hostData.minNumBubbles = bubbles["numEnd"];
@@ -584,17 +583,17 @@ void init(const char *inputFileName, Params &params) {
         const float a = std::cbrt(relDim.x / relDim.y);
         const float b = std::cbrt(relDim.x / relDim.z);
         const float c = std::cbrt(relDim.y / relDim.z);
-        bubblesPerDim.x = (int)std::ceil(n * a * b);
-        bubblesPerDim.y = (int)std::ceil(n * c / a);
-        bubblesPerDim.z = (int)std::ceil(n / (b * c));
+        bubblesPerDim.x = (int32_t)std::ceil(n * a * b);
+        bubblesPerDim.y = (int32_t)std::ceil(n * c / a);
+        bubblesPerDim.z = (int32_t)std::ceil(n / (b * c));
 
         params.bubbles.count =
             bubblesPerDim.x * bubblesPerDim.y * bubblesPerDim.z;
     } else {
         n = std::sqrt(n);
         const float a = std::sqrt(relDim.x / relDim.y);
-        bubblesPerDim.x = (int)std::ceil(n * a);
-        bubblesPerDim.y = (int)std::ceil(n / a);
+        bubblesPerDim.x = (int32_t)std::ceil(n * a);
+        bubblesPerDim.y = (int32_t)std::ceil(n / a);
 
         params.bubbles.count = bubblesPerDim.x * bubblesPerDim.y;
     }
@@ -640,13 +639,13 @@ void init(const char *inputFileName, Params &params) {
     printRelevantInfoOfCurrentDevice();
 
     // Set device globals to zero
-    int zero = 0;
-    CUDA_CALL(
-        cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero), sizeof(int)));
+    int32_t zero = 0;
+    CUDA_CALL(cudaMemcpyToSymbol(dNumPairs, static_cast<void *>(&zero),
+                                 sizeof(int32_t)));
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
 
     printf("Reserving device memory\n");
-    CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int)));
+    CUDA_CALL(cudaMallocHost(&params.pinnedMemory, sizeof(int32_t)));
 
     // Total memory: memory for bubble data, memory for pair data and memory for
     // temporary arrays
@@ -850,8 +849,8 @@ void init(const char *inputFileName, Params &params) {
 
     printf("\n=============\nStabilization\n=============\n");
     params.hostData.numNeighborsSearched = 0;
-    int numSteps = 0;
-    const int failsafe = 500;
+    int32_t numSteps = 0;
+    const int32_t failsafe = 500;
 
     printf("%-7s %-11s %-11s %-11s %-9s\n", "#steps", "dE", "e1", "e2",
            "#searches");
@@ -900,7 +899,7 @@ void init(const char *inputFileName, Params &params) {
     if (0.0 < params.hostData.snapshotFrequency) {
         // Set starting positions.
         // Avoiding batched copy, because the pointers might not be in order
-        int *index = reinterpret_cast<int *>(params.hostMemory.data());
+        int32_t *index = reinterpret_cast<int32_t *>(params.hostMemory.data());
         CUDA_CALL(cudaMemcpy(static_cast<void *>(params.previousX.data()),
                              static_cast<void *>(params.bubbles.x),
                              sizeof(double) * params.bubbles.count,
@@ -915,11 +914,11 @@ void init(const char *inputFileName, Params &params) {
                              cudaMemcpyDefault));
         CUDA_CALL(cudaMemcpy(static_cast<void *>(index),
                              static_cast<void *>(params.bubbles.index),
-                             sizeof(int) * params.bubbles.count,
+                             sizeof(int32_t) * params.bubbles.count,
                              cudaMemcpyDefault));
 
         for (uint64_t i = 0; i < params.bubbles.count; i++) {
-            const int ind = index[i];
+            const int32_t ind = index[i];
             params.snapshotParams.x0[ind] = params.previousX[i];
             params.snapshotParams.y0[ind] = params.previousY[i];
             params.snapshotParams.z0[ind] = params.previousZ[i];
@@ -938,7 +937,7 @@ void init(const char *inputFileName, Params &params) {
 
     // Reset wrap counts to 0
     // Avoiding batched memset, because the pointers might not be in order
-    bytes = sizeof(int) * params.bubbles.stride;
+    bytes = sizeof(int32_t) * params.bubbles.stride;
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountX, 0, bytes));
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountY, 0, bytes));
     CUDA_CALL(cudaMemset(params.bubbles.wrapCountZ, 0, bytes));
@@ -1001,7 +1000,7 @@ void run(std::string &&inputFileName) {
     ip.maxRadius = 0.0;
     ip.maxExpansion = 0.0;
     ip.maxError = 0.0;
-    ip.hNumToBeDeleted = static_cast<int *>(params.pinnedMemory);
+    ip.hNumToBeDeleted = static_cast<int32_t *>(params.pinnedMemory);
 
     const double &e1 = params.hostData.energy1;
     const double &e2 = params.hostData.energy2;

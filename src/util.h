@@ -84,7 +84,7 @@ inline void handleException(const std::exception_ptr pExc) {
 }
 
 inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr,
-                                        const char *file, int line,
+                                        const char *file, int32_t line,
                                         std::basic_ostream<char> &outStream) {
     outStream << "Cuda error encountered."
               << "\n\tType: " << cudaGetErrorName(result)
@@ -94,7 +94,7 @@ inline void getFormattedCudaErrorString(cudaError_t result, const char *callStr,
 }
 
 inline bool cudaCallAndLog(cudaError_t result, const char *callStr,
-                           const char *file, int line) noexcept {
+                           const char *file, int32_t line) noexcept {
     if (result != cudaSuccess) {
         getFormattedCudaErrorString(result, callStr, file, line, std::cerr);
         return false;
@@ -104,7 +104,7 @@ inline bool cudaCallAndLog(cudaError_t result, const char *callStr,
 }
 
 inline void cudaCallAndThrow(cudaError_t result, const char *callStr,
-                             const char *file, int line) {
+                             const char *file, int32_t line) {
     if (result != cudaSuccess) {
         std::stringstream ss;
         getFormattedCudaErrorString(result, callStr, file, line, ss);
@@ -113,7 +113,7 @@ inline void cudaCallAndThrow(cudaError_t result, const char *callStr,
 }
 
 inline bool curandCallAndLog(curandStatus_t result, const char *callStr,
-                             const char *file, int line) noexcept {
+                             const char *file, int32_t line) noexcept {
     if (result != CURAND_STATUS_SUCCESS) {
         std::cerr << "Curand error encountered."
                   << "\n\tType: " << result << "\n\tLocation: " << file << ":"
@@ -125,10 +125,10 @@ inline bool curandCallAndLog(curandStatus_t result, const char *callStr,
     return true;
 }
 
-inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
+inline int32_t getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
 #ifndef NDEBUG
-    int value = 0;
-    int device = 0;
+    int32_t value = 0;
+    int32_t device = 0;
 
     CUDA_ASSERT(cudaDeviceSynchronize());
     CUDA_ASSERT(cudaGetDevice(&device));
@@ -141,9 +141,10 @@ inline int getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
 }
 
 inline void assertMemBelowLimit(const char *kernelStr, const char *file,
-                                int line, int bytes, bool abort = true) {
+                                int32_t line, int32_t bytes,
+                                bool abort = true) {
 #ifndef NDEBUG
-    int value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
+    int32_t value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
 
     if (bytes > value) {
         std::stringstream ss;
@@ -163,7 +164,7 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file,
 }
 
 inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file,
-                                      int line, dim3 blockSize,
+                                      int32_t line, dim3 blockSize,
                                       bool abort = true) {
 #ifndef NDEBUG
     dim3 temp;
@@ -192,7 +193,7 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file,
 }
 
 inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file,
-                                     int line, dim3 gridSize,
+                                     int32_t line, dim3 gridSize,
                                      bool abort = true) {
 #ifndef NDEBUG
     dim3 temp;
@@ -222,7 +223,7 @@ inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file,
 
 inline void printRelevantInfoOfCurrentDevice() {
     cudaDeviceProp prop;
-    int device = 0;
+    int32_t device = 0;
 
     CUDA_ASSERT(cudaDeviceSynchronize());
     CUDA_ASSERT(cudaGetDevice(&device));

@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "DataDefinitions.h"
-#include "Util.h"
-#include "Vec.h"
+#include "data_definitions.h"
+#include "util.h"
+#include "vec.h"
 #include <assert.h>
 #include <cuda_runtime_api.h>
 #include <stdint.h>
@@ -34,9 +34,9 @@ extern __device__ double dTotalAreaPerRadius;
 extern __device__ double dTotalVolumeNew;
 extern __device__ double dMaxRadius;
 extern __device__ bool dErrorEncountered;
-extern __device__ int dNumPairs;
-extern __device__ int dNumPairsNew;
-extern __device__ int dNumToBeDeleted;
+extern __device__ int32_t dNumPairs;
+extern __device__ int32_t dNumPairsNew;
+extern __device__ int32_t dNumToBeDeleted;
 }; // namespace cubble
 
 namespace cubble {
@@ -48,27 +48,29 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
 __global__ void postIntegrate(double ts, bool useGasExchange,
                               bool incrementPath, bool useFlow, Bubbles bubbles,
                               double *blockMax, double *overlap,
-                              int *toBeDeleted);
-__device__ double correct(int i, double ts, double *pp, double *p, double *v,
-                          double *vp, double *old, double *maxErr);
-__device__ void addFlowVelocity(Bubbles &bubbles, int i);
-__device__ void addWallVelocity(Bubbles &bubbles, int i);
-__global__ void cellByPosition(int *cellIndices, int *cellSizes, ivec cellDim,
-                               Bubbles bubbles);
-__global__ void indexByCell(int *cellIndices, int *cellOffsets,
-                            int *bubbleIndices, int count);
-__device__ void comparePair(int idx1, int idx2, int *histogram, int *pairI,
-                            int *pairJ, Bubbles &bubbles);
-__global__ void neighborSearch(int numCells, int numNeighborCells, ivec cellDim,
-                               int *offsets, int *sizes, int *histogram,
-                               int *pairI, int *pairJ, Bubbles bubbles);
-__global__ void sortPairs(Bubbles bubbles, Pairs pairs, int *pairI, int *pairJ);
+                              int32_t *toBeDeleted);
+__device__ double correct(int32_t i, double ts, double *pp, double *p,
+                          double *v, double *vp, double *old, double *maxErr);
+__device__ void addFlowVelocity(Bubbles &bubbles, int32_t i);
+__device__ void addWallVelocity(Bubbles &bubbles, int32_t i);
+__global__ void cellByPosition(int32_t *cellIndices, int32_t *cellSizes,
+                               ivec cellDim, Bubbles bubbles);
+__global__ void indexByCell(int32_t *cellIndices, int32_t *cellOffsets,
+                            int32_t *bubbleIndices, int32_t count);
+__device__ void comparePair(int32_t idx1, int32_t idx2, int32_t *histogram,
+                            int32_t *pairI, int32_t *pairJ, Bubbles &bubbles);
+__global__ void neighborSearch(int32_t numCells, int32_t numNeighborCells,
+                               ivec cellDim, int32_t *offsets, int32_t *sizes,
+                               int32_t *histogram, int32_t *pairI,
+                               int32_t *pairJ, Bubbles bubbles);
+__global__ void sortPairs(Bubbles bubbles, Pairs pairs, int32_t *pairI,
+                          int32_t *pairJ);
 __global__ void countNumNeighbors(Bubbles bubbles, Pairs pairs);
-__global__ void reorganizeByIndex(Bubbles bubbles, const int *newIndex);
+__global__ void reorganizeByIndex(Bubbles bubbles, const int32_t *newIndex);
 __global__ void swapDataCountPairs(Bubbles bubbles, Pairs pairs,
-                                   int *toBeDeleted);
+                                   int32_t *toBeDeleted);
 __global__ void addVolumeFixPairs(Bubbles bubbles, Pairs pairs,
-                                  int *toBeDeleted);
+                                  int32_t *toBeDeleted);
 __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy);
 __global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);
@@ -81,19 +83,22 @@ __device__ void logError(bool condition, const char *statement,
                          const char *errMsg);
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2);
-__device__ int getNeighborCellIndex(int cellIdx, ivec dim, int neighborNum);
-__device__ int getCellIdxFromPos(double x, double y, double z, ivec cellDim);
-__device__ int get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
-__device__ ivec get3DIdxFrom1DIdx(int idx, ivec cellDim);
+__device__ int32_t getNeighborCellIndex(int32_t cellIdx, ivec dim,
+                                        int32_t neighborNum);
+__device__ int32_t getCellIdxFromPos(double x, double y, double z,
+                                     ivec cellDim);
+__device__ int32_t get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim);
+__device__ ivec get3DIdxFrom1DIdx(int32_t idx, ivec cellDim);
 
 template <typename T> __device__ T sum(T a, T b) { return a + b; }
 template <typename T> __device__ T max(T a, T b) { return a > b ? a : b; }
-template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
+template <typename T>
+__device__ void reduce(T *addr, int32_t warp, T (*f)(T, T)) {
     // Assumes that addr.length() == BLOCK_SIZE
-    const int tid = threadIdx.x;
-    const int wid = (tid & 31);
+    const int32_t tid = threadIdx.x;
+    const int32_t wid = (tid & 31);
 #pragma unroll
-    for (int i = 0; i < BLOCK_SIZE / 32; i++) {
+    for (int32_t i = 0; i < BLOCK_SIZE / 32; i++) {
         if (i == warp) {
             continue;
         }
@@ -128,46 +133,47 @@ template <typename T> __device__ void reduce(T *addr, int warp, T (*f)(T, T)) {
 }
 
 template <typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T *baseAddr, T *, T *to,
-                                int offset, bool flag) {
+__device__ void recursiveReduce(T (*f)(T, T), int32_t idx, T *baseAddr, T *,
+                                T *to, int32_t offset, bool flag) {
     if (flag) {
         *to = f(*to, baseAddr[idx + offset * BLOCK_SIZE]);
     }
 }
 
 template <typename... Args, typename T>
-__device__ void recursiveReduce(T (*f)(T, T), int idx, T *baseAddr, T *temp,
-                                T *to, int offset, bool flag, Args... args) {
+__device__ void recursiveReduce(T (*f)(T, T), int32_t idx, T *baseAddr, T *temp,
+                                T *to, int32_t offset, bool flag,
+                                Args... args) {
     recursiveReduce(f, idx, baseAddr, temp, to, offset, flag);
     recursiveReduce(f, idx, baseAddr, args...);
 }
 
 template <typename T>
-__device__ void recursiveAtomicAdd(T *to, T *val, int, bool flag) {
+__device__ void recursiveAtomicAdd(T *to, T *val, int32_t, bool flag) {
     if (flag) {
         atomicAdd(to, *val);
     }
 }
 
 template <typename... Args, typename T>
-__device__ void recursiveAtomicAdd(T *to, T *val, int, bool flag,
+__device__ void recursiveAtomicAdd(T *to, T *val, int32_t, bool flag,
                                    Args... args) {
     recursiveAtomicAdd(to, val, 0, flag);
     recursiveAtomicAdd(args...);
 }
 
 template <typename... Args, typename T>
-__device__ void warpReduceAtomicAddMatching(unsigned int active, int matchOn,
-                                            T (*f)(T, T), T *baseAddr,
-                                            Args... args) {
-    const unsigned int matches = __match_any_sync(active, matchOn);
-    const unsigned int lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-    const unsigned int rank = __popc(matches & lanemask_lt);
-    const int flt = 32 * (threadIdx.x >> 5);
+__device__ void warpReduceAtomicAddMatching(unsigned int32_t active,
+                                            int32_t matchOn, T (*f)(T, T),
+                                            T *baseAddr, Args... args) {
+    const unsigned int32_t matches = __match_any_sync(active, matchOn);
+    const unsigned int32_t lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+    const unsigned int32_t rank = __popc(matches & lanemask_lt);
+    const int32_t flt = 32 * (threadIdx.x >> 5);
 
     if (0 == rank) {
 #pragma unroll
-        for (int j = 0; j < 32; j++) {
+        for (int32_t j = 0; j < 32; j++) {
             if (!!(matches & 1 << j)) {
                 recursiveReduce(f, j + flt, baseAddr, args...);
             }
@@ -177,7 +183,7 @@ __device__ void warpReduceAtomicAddMatching(unsigned int active, int matchOn,
 }
 
 template <typename... Arguments>
-void cubLaunch(const char *file, int line,
+void cubLaunch(const char *file, int32_t line,
                cudaError_t (*func)(void *, size_t &, Arguments...),
                void *tempMem, uint64_t maxMem, Arguments... args) {
     uint64_t tempMemReq = 0;
@@ -193,7 +199,7 @@ void cubLaunch(const char *file, int line,
 }
 
 template <typename... Arguments>
-void cudaLaunch(const char *kernelNameStr, const char *file, int line,
+void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
                 void (*f)(Arguments...), const Params &params,
                 uint32_t sharedMemBytes, cudaStream_t stream,
                 Arguments... args) {
@@ -226,30 +232,31 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int line,
 #endif
 }
 
-template <typename T> __device__ void swapValues(int from, int to, T *arr) {
+template <typename T>
+__device__ void swapValues(int32_t from, int32_t to, T *arr) {
     arr[to] = arr[from];
 }
 template <typename T, typename... Args>
-__device__ void swapValues(int from, int to, T *arr, Args... args) {
+__device__ void swapValues(int32_t from, int32_t to, T *arr, Args... args) {
     swapValues(from, to, arr);
     swapValues(from, to, args...);
 }
 
 __device__ void resetDeviceGlobals();
 template <typename T>
-__device__ void setArrayToValue(T value, int idx, T *array) {
+__device__ void setArrayToValue(T value, int32_t idx, T *array) {
     array[idx] = value;
 }
 template <typename T, typename... Args>
-__device__ void setArrayToValue(T value, int idx, T *array, Args... args) {
+__device__ void setArrayToValue(T value, int32_t idx, T *array, Args... args) {
     setArrayToValue(value, idx, array);
     setArrayToValue(value, idx, args...);
 }
 
 template <typename T, typename... Args>
-__global__ void resetArrays(T value, int numValues, bool resetGlobals,
+__global__ void resetArrays(T value, int32_t numValues, bool resetGlobals,
                             Args... args) {
-    for (int i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
+    for (int32_t i = threadIdx.x + blockIdx.x * blockDim.x; i < numValues;
          i += gridDim.x * blockDim.x) {
         setArrayToValue(value, i, args...);
     }

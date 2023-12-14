@@ -16,7 +16,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "Util.h"
+#include "util.h"
 #include <cuda.h>
 #include <exception>
 #include <stdexcept>
@@ -27,7 +27,7 @@ namespace cubble {
 void run(std::string &&inputFileName);
 }
 
-int main(int argc, char **argv) {
+int32_t main(int32_t argc, char **argv) {
     std::exception_ptr pExc = nullptr;
 
     if (argc != 2) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    int numGPUs = 0;
+    int32_t numGPUs = 0;
     CUDA_CALL(cudaGetDeviceCount(&numGPUs));
     if (1 > numGPUs) {
         printf("No CUDA capable devices found.\n");
