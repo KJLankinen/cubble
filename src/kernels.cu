@@ -17,6 +17,7 @@
  */
 
 #include "kernels.cuh"
+#include "util.cuh"
 
 namespace cubble {
 __device__ Constants *dConstants;
@@ -281,7 +282,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
                 continue;
             }
 
-            const unsigned int32_t active = __activemask();
+            const uint32_t active = __activemask();
             __syncwarp(active);
 
             double vx = 0.0;

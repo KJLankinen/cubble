@@ -19,10 +19,9 @@
 #pragma once
 
 #include "data_definitions.h"
-#include "util.h"
 #include "vec.h"
-#include <assert.h>
-#include <cuda_runtime_api.h>
+
+#include <cuda_runtime.h>
 #include <stdint.h>
 
 namespace cubble {
@@ -163,12 +162,12 @@ __device__ void recursiveAtomicAdd(T *to, T *val, int32_t, bool flag,
 }
 
 template <typename... Args, typename T>
-__device__ void warpReduceAtomicAddMatching(unsigned int32_t active,
-                                            int32_t matchOn, T (*f)(T, T),
-                                            T *baseAddr, Args... args) {
-    const unsigned int32_t matches = __match_any_sync(active, matchOn);
-    const unsigned int32_t lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
-    const unsigned int32_t rank = __popc(matches & lanemask_lt);
+__device__ void warpReduceAtomicAddMatching(uint32_t active, int32_t matchOn,
+                                            T (*f)(T, T), T *baseAddr,
+                                            Args... args) {
+    const uint32_t matches = __match_any_sync(active, matchOn);
+    const uint32_t lanemask_lt = (1 << (threadIdx.x & 31)) - 1;
+    const uint32_t rank = __popc(matches & lanemask_lt);
     const int32_t flt = 32 * (threadIdx.x >> 5);
 
     if (0 == rank) {
@@ -203,7 +202,7 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
                 void (*f)(Arguments...), const Params &params,
                 uint32_t sharedMemBytes, cudaStream_t stream,
                 Arguments... args) {
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
     assertBlockSizeBelowLimit(kernelNameStr, file, line, params.threadBlock);
     assertGridSizeBelowLimit(kernelNameStr, file, line, params.blockGrid);
@@ -212,7 +211,7 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
     f<<<params.blockGrid, params.threadBlock, sharedMemBytes, stream>>>(
         args...);
 
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     CUDA_ASSERT(cudaDeviceSynchronize());
     CUDA_ASSERT(cudaPeekAtLastError());
 

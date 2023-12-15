@@ -3,22 +3,29 @@ cmake_minimum_required(VERSION 3.17)
 option(REMOVE_ASSERTS "Remove assertions from the code" OFF)
 option(ENABLE_PROFILING "Enable profiling the code" OFF)
 
-configure_file(config.h.in config.h @ONLY)
+#configure_file(config.h.in config.h @ONLY)
 
 add_compile_definitions("$<$<CONFIG:Debug>:CUBBLE_DEBUG>")
 
-set(OBJS cpp_objs)
+set(OBJS objs)
 set(STATIC_LIBRARY ${PROJECT_NAME})
+set(BINARY ${PROJECT_NAME}-cli)
 
 add_library(${STATIC_LIBRARY} STATIC)
 add_library(${OBJS} OBJECT "")
+add_executable(${BINARY})
 
 target_sources(
     ${OBJS}
     PRIVATE
-    main.cpp
     simulator.cu
     kernels.cu
+    )
+
+target_sources(
+    ${BINARY}
+    PRIVATE
+    main.cu
     )
 
 include_directories(PUBLIC "${PROJECT_BINARY_DIR}/src")
@@ -27,16 +34,16 @@ include_directories(SYSTEM PRIVATE
     "${EXTERNAL_INCLUDE}"
     )
 
-# TODO precompiled flags didn't work with cuda, right?
-target_precompile_headers(
-    ${OBJS}
-    PRIVATE
-    )
-# TODO add cuda, check if these are needed
-target_link_libraries(${STATIC_LIBRARY} PUBLIC ${OBJS} cudart curand nvToolsExt pthread)
+set(CUDA_ARCHS 70;72)
+set_target_properties(${OBJS} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
+set_target_properties(${STATIC_LIBRARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
+set_target_properties(${BINARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
+
+target_link_libraries(${STATIC_LIBRARY} PUBLIC ${OBJS} nvToolsExt pthread curand)
+target_link_libraries(${BINARY} PUBLIC ${STATIC_LIBRARY})
 
 install(
-    TARGETS ${STATIC_LIBRARY}
+    TARGETS ${STATIC_LIBRARY} ${BINARY}
     CONFIGURATIONS Release RelWithDebInfo Debug
     ARCHIVE DESTINATION ${PROJECT_INSTALL_DIR}/lib
     LIBRARY DESTINATION ${PROJECT_INSTALL_DIR}/lib

@@ -18,12 +18,9 @@
 
 #pragma once
 
-#include "util.h"
 #include "vec.h"
-#include <array>
 #include <cstdint>
 #include <cub/cub.cuh>
-#include <cuda.cuh>
 #include <string>
 #include <thread>
 #include <vector>

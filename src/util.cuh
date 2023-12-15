@@ -19,8 +19,6 @@
 #pragma once
 
 #include "nlohmann/json.hpp"
-#include <cuda.h>
-#include <cuda_runtime_api.h>
 #include <curand.h>
 #include <exception>
 #include <iostream>
@@ -54,7 +52,7 @@
 #endif
 
 // Macro for device assert.
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
 #define DEVICE_ASSERT(statement, msg)                                          \
     cubble::logError(statement, #statement, msg)
 #else
@@ -126,7 +124,7 @@ inline bool curandCallAndLog(curandStatus_t result, const char *callStr,
 }
 
 inline int32_t getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     int32_t value = 0;
     int32_t device = 0;
 
@@ -143,7 +141,7 @@ inline int32_t getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
 inline void assertMemBelowLimit(const char *kernelStr, const char *file,
                                 int32_t line, int32_t bytes,
                                 bool abort = true) {
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     int32_t value = getCurrentDeviceAttrVal(cudaDevAttrMaxSharedMemoryPerBlock);
 
     if (bytes > value) {
@@ -166,7 +164,7 @@ inline void assertMemBelowLimit(const char *kernelStr, const char *file,
 inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file,
                                       int32_t line, dim3 blockSize,
                                       bool abort = true) {
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     dim3 temp;
     temp.x = getCurrentDeviceAttrVal(cudaDevAttrMaxBlockDimX);
     temp.y = getCurrentDeviceAttrVal(cudaDevAttrMaxBlockDimY);
@@ -195,7 +193,7 @@ inline void assertBlockSizeBelowLimit(const char *kernelStr, const char *file,
 inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file,
                                      int32_t line, dim3 gridSize,
                                      bool abort = true) {
-#ifndef NDEBUG
+#ifdef CUBBLE_DEBUG
     dim3 temp;
     temp.x = getCurrentDeviceAttrVal(cudaDevAttrMaxGridDimX);
     temp.y = getCurrentDeviceAttrVal(cudaDevAttrMaxGridDimY);

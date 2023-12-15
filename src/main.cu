@@ -16,10 +16,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "util.h"
-#include <cuda.h>
+#include "util.cuh"
 #include <exception>
-#include <stdexcept>
 #include <stdio.h>
 #include <string>
 
@@ -27,6 +25,7 @@ namespace cubble {
 void run(std::string &&inputFileName);
 }
 
+// TODO: refactor all cuda stuff away
 int32_t main(int32_t argc, char **argv) {
     std::exception_ptr pExc = nullptr;
 

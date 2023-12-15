@@ -18,10 +18,9 @@
 
 #include "data_definitions.h"
 #include "kernels.cuh"
-#include "util.h"
+#include "util.cuh"
 #include "vec.h"
 
-#include "cub/cub.cuh"
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cuda_profiler_api.h>
@@ -47,7 +46,7 @@ double totalEnergy(Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
+               params.bubbles.count, (cudaStream_t)0);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
     nvtxRangePop();
@@ -86,7 +85,7 @@ void searchNeighbors(Params &params) {
                   params.bubbles);
 
     CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, cellSizes,
-               cellOffsets, numCells, (cudaStream_t)0, false);
+               cellOffsets, numCells, (cudaStream_t)0);
 
     KERNEL_LAUNCH(indexByCell, params, 0, 0, cellIndices, cellOffsets,
                   bubbleIndices, params.bubbles.count);
@@ -162,7 +161,7 @@ void searchNeighbors(Params &params) {
 
     CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, histogram,
                params.bubbles.numNeighbors, params.bubbles.count,
-               (cudaStream_t)0, false);
+               (cudaStream_t)0);
 
     KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempPair1, params.tempPair2);
@@ -368,7 +367,7 @@ double totalVolume(Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
+               params.bubbles.count, (cudaStream_t)0);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
     nvtxRangePop();
@@ -678,8 +677,8 @@ void init(const char *inputFileName, Params &params) {
     const uint64_t megs = bytes / (1024 * 1024);
     const uint64_t kilos = (bytes - megs * 1024 * 1024) / 1024;
     bytes = (bytes - megs * 1024 * 1024 - kilos * 1024);
-    printf("Allocated %d MB %d KB %d B of global device memory.\n", megs, kilos,
-           bytes);
+    printf("Allocated %ld MB %ld KB %ld B of global device memory.\n", megs,
+           kilos, bytes);
 
     printf("Generating starting data\n");
     curandGenerator_t generator;
@@ -710,13 +709,13 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.rp, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
+               params.bubbles.count, (cudaStream_t)0);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
     CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.r, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0, false);
+               params.bubbles.count, (cudaStream_t)0);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     printf("First neighbor search\n");
@@ -889,7 +888,7 @@ void init(const char *inputFileName, Params &params) {
             printf("%-9.5e ", de);
             printf("%-9.5e ", e1);
             printf("%-9.5e ", e2);
-            printf("%-9d\n", params.hostData.numNeighborsSearched);
+            printf("%-9ld\n", params.hostData.numNeighborsSearched);
             params.hostData.numNeighborsSearched = 0;
         }
 
@@ -1046,7 +1045,7 @@ void run(std::string &&inputFileName) {
                 CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr,
                            params.pairs.getMemReq() / 2, p,
                            static_cast<double *>(cubOutput),
-                           params.bubbles.count, (cudaStream_t)0, false);
+                           params.bubbles.count, (cudaStream_t)0);
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
                                                dMaxRadius, sizeof(double)));
 
@@ -1089,8 +1088,8 @@ void run(std::string &&inputFileName) {
             printf("%-9.5e ", de);
             printf("%9d ", params.bubbles.count);
             printf("%10d ", params.pairs.count);
-            printf("%6d ", params.hostData.numStepsInTimeStep);
-            printf("%-9d ", params.hostData.numNeighborsSearched);
+            printf("%6ld ", params.hostData.numStepsInTimeStep);
+            printf("%-9ld ", params.hostData.numNeighborsSearched);
             printf("%-9.5e ", minTimestep);
             printf("%-9.5e ", maxTimestep);
             printf("%-9.5e \n",

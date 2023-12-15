@@ -1,4 +1,7 @@
 # List here project related files that should be ignore by git.
+.cache
+build/
+compile_commands.json
 *.[oa]
 *~
 data/*

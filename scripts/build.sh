@@ -13,7 +13,7 @@ then
 fi
 
 build_type=$1
-base_dir=$2
+base_dir=$(realpath $2)
 
 source_dir=$base_dir
 build_dir=$base_dir/build/$build_type
