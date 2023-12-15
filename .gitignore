@@ -1,6 +1,7 @@
 # List here project related files that should be ignore by git.
 .cache
 build/
+.nvim_sync_config.json
 compile_commands.json
 *.[oa]
 *~
