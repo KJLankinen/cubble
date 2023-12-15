@@ -19,6 +19,7 @@
 #pragma once
 
 #include "data_definitions.h"
+#include "util.cuh"
 #include "vec.h"
 
 #include <cuda_runtime.h>

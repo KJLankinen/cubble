@@ -692,8 +692,9 @@ __global__ void neighborSearch(int32_t numCells, int32_t numNeighborCells,
                 DEVICE_ASSERT(b1 != b2, "Invalid bubble index!");
 
                 comparePair(b1, b2, histogram, pairI, pairJ, bubbles);
-                DEVICE_ASSERT(pairs.stride > dNumPairs,
-                              "Too many neighbor indices!");
+                // Eh? this function doesn't take in pairs...
+                // DEVICE_ASSERT(pairs.stride > dNumPairs,
+                //              "Too many neighbor indices!");
             }
         }
     }
