@@ -16,43 +16,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "util.cuh"
-#include <exception>
-#include <stdio.h>
-#include <string>
-
 namespace cubble {
-void run(std::string &&inputFileName);
+int32_t run(int32_t argc, char **argv);
 }
 
-// TODO: refactor all cuda stuff away
-int32_t main(int32_t argc, char **argv) {
-    std::exception_ptr pExc = nullptr;
-
-    if (argc != 2) {
-        printf("Usage: %s inputFile,\nwhere inputFile is the name of the "
-               "(.json) file containing the simulation input.\n",
-               argv[0]);
-
-        return EXIT_FAILURE;
-    }
-
-    int32_t numGPUs = 0;
-    CUDA_CALL(cudaGetDeviceCount(&numGPUs));
-    if (1 > numGPUs) {
-        printf("No CUDA capable devices found.\n");
-        return EXIT_FAILURE;
-    }
-
-    try {
-        cubble::run(std::string(argv[1]));
-    } catch (const std::exception &e) {
-        pExc = std::current_exception();
-        cubble::handleException(pExc);
-
-        return EXIT_FAILURE;
-    }
-
-    cudaDeviceReset();
-    return EXIT_SUCCESS;
-}
+int32_t main(int32_t argc, char **argv) { return cubble::run(argc, argv); }

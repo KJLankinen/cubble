@@ -28,6 +28,7 @@
 #define BLOCK_SIZE 384
 #define GRID_SIZE 5120
 
+// TODO: use aosoa
 namespace {
 template <typename T> void setIncr(T **p, T **prev, uint64_t stride) {
     *p = *prev;
@@ -178,6 +179,7 @@ struct Pairs {
 static_assert(sizeof(Pairs) % 8 == 0);
 
 // These values never change after init
+// TODO: const
 struct Constants {
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
@@ -285,28 +287,28 @@ struct SnapshotParams {
     int32_t *wrapCountY = nullptr;
     int32_t *wrapCountZ = nullptr;
 
-    dvec interval;
+    dvec interval = {};
 
     // Starting positions
-    std::vector<double> x0;
-    std::vector<double> y0;
-    std::vector<double> z0;
+    std::vector<double> x0 = {};
+    std::vector<double> y0 = {};
+    std::vector<double> z0 = {};
 
-    std::string name;
+    std::string name = {};
 
-    cudaEvent_t event;
+    cudaEvent_t event = {};
 };
 
 struct Params {
-    Constants hostConstants;
+    Constants hostConstants = {};
     Constants *deviceConstants = nullptr;
-    HostData hostData;
-    SnapshotParams snapshotParams;
+    HostData hostData = {};
+    SnapshotParams snapshotParams = {};
 
-    Bubbles bubbles;
-    Pairs pairs;
+    Bubbles bubbles = {};
+    Pairs pairs = {};
 
-    std::thread ioThread;
+    std::thread ioThread = {};
 
     dim3 blockGrid = dim3(GRID_SIZE, 1, 1);
     dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
@@ -320,11 +322,11 @@ struct Params {
     int32_t *tempPair1 = nullptr;
     int32_t *tempPair2 = nullptr;
 
-    std::vector<double> previousX;
-    std::vector<double> previousY;
-    std::vector<double> previousZ;
-    std::vector<uint8_t> hostMemory;
-    std::vector<double> maximums;
+    std::vector<double> previousX = {};
+    std::vector<double> previousY = {};
+    std::vector<double> previousZ = {};
+    std::vector<uint8_t> hostMemory = {};
+    std::vector<double> maximums = {};
 
     void setTempPointers(void *ptr) {
         tempPair1 = static_cast<int32_t *>(ptr);

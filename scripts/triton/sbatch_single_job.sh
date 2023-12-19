@@ -1,14 +1,21 @@
 #!/bin/bash
 
-#SBATCH --mem=1G
-#SBATCH --time=04:00:00						## wallclock time hh:mm:ss
-#SBATCH --gres=gpu:1 --constraint='pascal'		## use K80 or P100
-#SBATCH --mail-user=juhana.lankinen@aalto.fi --mail-type=ALL
+#SBATCH --job-name=cubble
+#SBATCH --account=project_2002078
+#SBATCH --mail-type=ALL
 
-module purge
-module load gcc/6.3.0 cuda/10.0.130
+##SBATCH --mem-per-cpu=16G              ## How much memory per CPU
+#SBATCH --partition=gpu                 ## Use the gpu partition
+#SBATCH --time=04:00:00                 ## Wall clock time, 4h
+#SBATCH --gres=gpu:v100:1               ## One volta
+##SBATCH --gres=nvme:10                 ## 100 GB at $LOCAL_SCRATCH
 
-srun make clean
-srun make final
-##srun --gres=gpu:1 nvprof --profile-from-start off --print-gpu-trace bin/cubble input_parameters.json output_parameters.json
-srun --gres=gpu:1 bin/cubble input_parameters.json output_parameters.json
+module load gcc/11.3.0 cuda/11.7.0 cmake/3.23.1
+
+## Build
+srun cp -r $HOME/Code/cubble /scratch/project_2002078/$USER/
+srun cd /scratch/project_2002078/$USER/cubble
+srun scripts/build.sh Release .
+
+## Run
+srun cubble/v0.1.0.0/Release/bin/cubble-cli input_parameters.json

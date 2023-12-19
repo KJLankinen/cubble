@@ -23,8 +23,10 @@
 
 #include "nlohmann/json.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <cuda_profiler_api.h>
 #include <curand.h>
+#include <exception>
 #include <fstream>
 #include <nvToolsExt.h>
 #include <sstream>
@@ -33,6 +35,7 @@
 
 namespace {
 using namespace cubble;
+
 double totalEnergy(Params &params) {
     nvtxRangePush("Energy");
     KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
@@ -46,7 +49,7 @@ double totalEnergy(Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0);
+               params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
     nvtxRangePop();
@@ -85,7 +88,7 @@ void searchNeighbors(Params &params) {
                   params.bubbles);
 
     CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, cellSizes,
-               cellOffsets, numCells, (cudaStream_t)0);
+               cellOffsets, numCells, (cudaStream_t)0, false);
 
     KERNEL_LAUNCH(indexByCell, params, 0, 0, cellIndices, cellOffsets,
                   bubbleIndices, params.bubbles.count);
@@ -161,7 +164,7 @@ void searchNeighbors(Params &params) {
 
     CUB_LAUNCH(&cub::DeviceScan::InclusiveSum, cubPtr, maxCubMem, histogram,
                params.bubbles.numNeighbors, params.bubbles.count,
-               (cudaStream_t)0);
+               (cudaStream_t)0, false);
 
     KERNEL_LAUNCH(sortPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.tempPair1, params.tempPair2);
@@ -367,7 +370,7 @@ double totalVolume(Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.tempD1, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0);
+               params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total), dMaxRadius,
                                    sizeof(double)));
     nvtxRangePop();
@@ -709,13 +712,13 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaGetSymbolAddress(&cubOutput, dMaxRadius));
     CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.rp, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0);
+               params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     out = static_cast<void *>(&params.hostData.maxBubbleRadius);
     CUB_LAUNCH(&cub::DeviceReduce::Max, cubPtr, params.pairs.getMemReq() / 2,
                params.bubbles.r, static_cast<double *>(cubOutput),
-               params.bubbles.count, (cudaStream_t)0);
+               params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, dMaxRadius, sizeof(double)));
 
     printf("First neighbor search\n");
@@ -951,10 +954,8 @@ void init(const char *inputFileName, Params &params) {
     params.hostData.timesPrinted = 1;
     params.hostData.numIntegrationSteps = 0;
 }
-} // namespace
 
-namespace cubble {
-void run(std::string &&inputFileName) {
+void simulate(std::string &&inputFileName) {
     Params params;
     init(inputFileName.c_str(), params);
 
@@ -1045,7 +1046,7 @@ void run(std::string &&inputFileName) {
                 CUB_LAUNCH(&cub::DeviceReduce::Sum, cubPtr,
                            params.pairs.getMemReq() / 2, p,
                            static_cast<double *>(cubOutput),
-                           params.bubbles.count, (cudaStream_t)0);
+                           params.bubbles.count, (cudaStream_t)0, false);
                 CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
                                                dMaxRadius, sizeof(double)));
 
@@ -1153,5 +1154,34 @@ void run(std::string &&inputFileName) {
 
     end(params);
     printf("Done\n");
+}
+} // namespace
+
+namespace cubble {
+int32_t run(int32_t argc, char **argv) {
+    if (argc != 2) {
+        printf("Usage: %s inputFile\n\twhere inputFile is the name of the "
+               "(.json) file containing the simulation input.\n",
+               argv[0]);
+
+        return EXIT_FAILURE;
+    }
+
+    int32_t numGPUs = 0;
+    CUDA_CALL(cudaGetDeviceCount(&numGPUs));
+    if (numGPUs < 1) {
+        printf("No CUDA capable devices found.\n");
+        return EXIT_FAILURE;
+    }
+
+    try {
+        simulate(std::string(argv[1]));
+    } catch (const std::exception &e) {
+        cubble::handleException(std::current_exception());
+        return EXIT_FAILURE;
+    }
+
+    cudaDeviceReset();
+    return EXIT_SUCCESS;
 }
 } // namespace cubble

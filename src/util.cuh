@@ -65,11 +65,11 @@
 
 namespace cubble {
 inline void handleException(const std::exception_ptr pExc) {
-    using json = nlohmann::json;
     try {
-        if (pExc)
+        if (pExc) {
             std::rethrow_exception(pExc);
-    } catch (const json::exception &e) {
+        }
+    } catch (const nlohmann::json::exception &e) {
         printf("Encountered a json parse error.\nMake sure the .json file is "
                "correct and filenames are correct.\n%s\n",
                e.what());

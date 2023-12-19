@@ -22,6 +22,6 @@ install_dir=$base_dir
 mkdir -p $build_dir
 mkdir -p $install_dir
 
-cmake -G "Ninja" -B $build_dir -S $source_dir -DCMAKE_BUILD_TYPE:STRING=$build_type -DCMAKE_INSTALL_PREFIX:PATH=$install_dir -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -B $build_dir -S $source_dir -DCMAKE_BUILD_TYPE:STRING=$build_type -DCMAKE_INSTALL_PREFIX:PATH=$install_dir -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build $build_dir --config $build_type --target install -j8 #-v
 cp $build_dir/compile_commands.json $source_dir/
