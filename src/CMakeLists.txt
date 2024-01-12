@@ -3,8 +3,6 @@ cmake_minimum_required(VERSION 3.17)
 option(REMOVE_ASSERTS "Remove assertions from the code" OFF)
 option(ENABLE_PROFILING "Enable profiling the code" OFF)
 
-#configure_file(config.h.in config.h @ONLY)
-
 add_compile_definitions("$<$<CONFIG:Debug>:CUBBLE_DEBUG>")
 
 set(OBJS objs)
@@ -25,7 +23,7 @@ target_sources(
 target_sources(
     ${BINARY}
     PRIVATE
-    main.cu
+    main.cpp
     )
 
 include_directories(PUBLIC "${PROJECT_BINARY_DIR}/src")
@@ -37,7 +35,6 @@ include_directories(SYSTEM PRIVATE
 set(CUDA_ARCHS 70;72)
 set_target_properties(${OBJS} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
 set_target_properties(${STATIC_LIBRARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
-set_target_properties(${BINARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
 
 target_link_libraries(${STATIC_LIBRARY} PUBLIC ${OBJS} nvToolsExt pthread curand)
 target_link_libraries(${BINARY} PUBLIC ${STATIC_LIBRARY})
