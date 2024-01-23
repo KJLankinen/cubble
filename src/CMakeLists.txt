@@ -35,6 +35,7 @@ include_directories(SYSTEM PRIVATE
 set(CUDA_ARCHS 70;72)
 set_target_properties(${OBJS} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
 set_target_properties(${STATIC_LIBRARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
+set_target_properties(${BINARY} PROPERTIES CUDA_ARCHITECTURES "${CUDA_ARCHS}")
 
 target_link_libraries(${STATIC_LIBRARY} PUBLIC ${OBJS} nvToolsExt pthread curand)
 target_link_libraries(${BINARY} PUBLIC ${STATIC_LIBRARY})
