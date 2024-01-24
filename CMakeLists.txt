@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.17)
 
 project(cubble LANGUAGES CXX CUDA VERSION 0.1.0.0)
-set(PROJECT_INSTALL_DIR ${PROJECT_NAME}/v${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.${PROJECT_VERSION_TWEAK}/${CMAKE_BUILD_TYPE})
+set(project_install_dir ${PROJECT_NAME}/v${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.${PROJECT_VERSION_TWEAK}/${CMAKE_BUILD_TYPE})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(EXTERNAL_INCLUDE "${PROJECT_SOURCE_DIR}/include/")
+set(external_include "${PROJECT_SOURCE_DIR}/include/")
 
 set(gcc "$<COMPILE_LANG_AND_ID:CXX,ARMClang,AppleClang,Clang,GNU,LCC>")
 
@@ -29,15 +29,15 @@ set(gcc_deb_opt -Og;)
 set(gcc_rel_opt -O3;)
 
 set(nvcc "$<COMPILE_LANG_AND_ID:CUDA,NVIDIA>")
+set(cuda_archs 70;72)
 
 add_compile_options(
     "$<${gcc}:${gcc_warn}>"
     "$<IF:${debug_gcc},${gcc_deb_opt},${gcc_rel_opt}>"
     )
 
-# TODO: add tests
-#option(PACKAGE_TESTS "Build tests" ON)
-#if(PACKAGE_TESTS)
+#option(package_tests "Build tests" ON)
+#if(package_tests)
 #    include(CTest)
 #    add_subdirectory(tests)
 #    enable_testing()
