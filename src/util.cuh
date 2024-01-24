@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include "data_definitions.h"
+
 #include "nlohmann/json.hpp"
+#include <cuda_runtime.h>
 #include <curand.h>
 #include <exception>
 #include <iostream>
@@ -138,7 +141,6 @@ inline int32_t getCurrentDeviceAttrVal(cudaDeviceAttr attr) {
 #endif
 }
 
-// TODO: move launch here from kernels.cuh
 inline void assertMemBelowLimit(const char *kernelStr, const char *file,
                                 int32_t line, int32_t bytes,
                                 bool abort = true) {
@@ -219,4 +221,55 @@ inline void assertGridSizeBelowLimit(const char *kernelStr, const char *file,
     }
 #endif
 }
+
+template <typename... Arguments>
+void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
+                void (*f)(Arguments...), const Params &params,
+                uint32_t sharedMemBytes, cudaStream_t stream,
+                Arguments... args) {
+#ifdef CUBBLE_DEBUG
+    assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
+    assertBlockSizeBelowLimit(kernelNameStr, file, line, params.threadBlock);
+    assertGridSizeBelowLimit(kernelNameStr, file, line, params.blockGrid);
+#endif
+
+    f<<<params.blockGrid, params.threadBlock, sharedMemBytes, stream>>>(
+        args...);
+
+#ifdef CUBBLE_DEBUG
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaPeekAtLastError());
+
+    bool errorEncountered = false;
+    CUDA_ASSERT(cudaMemcpyFromSymbol(static_cast<void *>(&errorEncountered),
+                                     dErrorEncountered, sizeof(bool)));
+
+    if (errorEncountered) {
+        std::stringstream ss;
+        ss << "Error encountered during kernel execution."
+           << "\nError location: '" << kernelNameStr << "' @" << file << ":"
+           << line << "."
+           << "\nSee earlier messages for possible details.";
+
+        throw std::runtime_error(ss.str());
+    }
+#endif
+}
+
+template <typename... Arguments>
+void cubLaunch(const char *file, int32_t line,
+               cudaError_t (*func)(void *, size_t &, Arguments...),
+               void *tempMem, uint64_t maxMem, Arguments... args) {
+    uint64_t tempMemReq = 0;
+    (*func)(NULL, tempMemReq, args...);
+    if (tempMemReq > maxMem) {
+        std::stringstream ss;
+        ss << "Not enough temporary memory for cub function call @" << file
+           << ":" << line << ".\nRequested " << tempMemReq
+           << " bytes, maximum is " << maxMem << " bytes.";
+        throw std::runtime_error(ss.str());
+    }
+    (*func)(tempMem, tempMemReq, args...);
+}
+
 } // namespace cubble

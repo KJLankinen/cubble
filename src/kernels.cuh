@@ -22,7 +22,6 @@
 #include "free_functions.cuh"
 #include "vec.h"
 
-#include <cuda_runtime.h>
 #include <stdint.h>
 
 namespace cubble {
@@ -59,7 +58,6 @@ __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
 __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
 __global__ void initGlobals();
-
 template <typename T, typename... Args>
 __global__ void resetArrays(T value, int32_t numValues, bool resetGlobals,
                             Args... args) {
@@ -71,55 +69,5 @@ __global__ void resetArrays(T value, int32_t numValues, bool resetGlobals,
     if (resetGlobals && threadIdx.x + blockIdx.x == 0) {
         resetDeviceGlobals();
     }
-}
-
-template <typename... Arguments>
-void cubLaunch(const char *file, int32_t line,
-               cudaError_t (*func)(void *, size_t &, Arguments...),
-               void *tempMem, uint64_t maxMem, Arguments... args) {
-    uint64_t tempMemReq = 0;
-    (*func)(NULL, tempMemReq, args...);
-    if (tempMemReq > maxMem) {
-        std::stringstream ss;
-        ss << "Not enough temporary memory for cub function call @" << file
-           << ":" << line << ".\nRequested " << tempMemReq
-           << " bytes, maximum is " << maxMem << " bytes.";
-        throw std::runtime_error(ss.str());
-    }
-    (*func)(tempMem, tempMemReq, args...);
-}
-
-template <typename... Arguments>
-void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
-                void (*f)(Arguments...), const Params &params,
-                uint32_t sharedMemBytes, cudaStream_t stream,
-                Arguments... args) {
-#ifdef CUBBLE_DEBUG
-    assertMemBelowLimit(kernelNameStr, file, line, sharedMemBytes);
-    assertBlockSizeBelowLimit(kernelNameStr, file, line, params.threadBlock);
-    assertGridSizeBelowLimit(kernelNameStr, file, line, params.blockGrid);
-#endif
-
-    f<<<params.blockGrid, params.threadBlock, sharedMemBytes, stream>>>(
-        args...);
-
-#ifdef CUBBLE_DEBUG
-    CUDA_ASSERT(cudaDeviceSynchronize());
-    CUDA_ASSERT(cudaPeekAtLastError());
-
-    bool errorEncountered = false;
-    CUDA_ASSERT(cudaMemcpyFromSymbol(static_cast<void *>(&errorEncountered),
-                                     dErrorEncountered, sizeof(bool)));
-
-    if (errorEncountered) {
-        std::stringstream ss;
-        ss << "Error encountered during kernel execution."
-           << "\nError location: '" << kernelNameStr << "' @" << file << ":"
-           << line << "."
-           << "\nSee earlier messages for possible details.";
-
-        throw std::runtime_error(ss.str());
-    }
-#endif
 }
 } // namespace cubble
