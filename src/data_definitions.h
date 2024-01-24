@@ -20,7 +20,6 @@
 
 #include "vec.h"
 #include <cstdint>
-#include <cub/cub.cuh>
 #include <string>
 #include <thread>
 #include <vector>

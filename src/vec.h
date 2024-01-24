@@ -19,7 +19,6 @@
 #pragma once
 
 #include "nlohmann/json.hpp"
-#include <cuda_runtime.h>
 
 namespace cubble {
 template <typename T> class vec {

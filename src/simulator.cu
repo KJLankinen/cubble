@@ -24,6 +24,7 @@
 #include "nlohmann/json.hpp"
 #include <algorithm>
 #include <cstdint>
+#include <cub/cub.cuh>
 #include <cuda_profiler_api.h>
 #include <curand.h>
 #include <exception>
@@ -522,6 +523,37 @@ void end(Params &params) {
     CUDA_CALL(cudaFree(static_cast<void *>(params.deviceConstants)));
     CUDA_CALL(cudaFree(params.memory));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinnedMemory)));
+}
+
+void printRelevantInfoOfCurrentDevice() {
+    cudaDeviceProp prop;
+    int32_t device = 0;
+
+    CUDA_ASSERT(cudaDeviceSynchronize());
+    CUDA_ASSERT(cudaGetDevice(&device));
+    CUDA_ASSERT(cudaGetDeviceProperties(&prop, device));
+
+    printf("\n---------------Properties of current device----------------");
+    printf("\n\tGeneral\n\t-------");
+    printf("\n\tName: %s", prop.name);
+    printf("\n\tCompute capability: %d.%d", prop.major, prop.minor);
+    printf("\n\n\tMemory\n\t------");
+    printf("\n\tGlobal: %lu B", prop.totalGlobalMem);
+    printf("\n\tShared per block: %lu B", prop.sharedMemPerBlock);
+    printf("\n\tConstant: %lu B", prop.totalConstMem);
+    printf("\n\tRegisters per block: %d", prop.regsPerBlock);
+    printf("\n\n\tWarp, threads, blocks, grid\n\t---------------------------");
+    printf("\n\tWarp size: %d", prop.warpSize);
+    printf("\n\tThreads per block: %d", prop.maxThreadsPerBlock);
+    printf("\n\tBlock size: (%d, %d, %d)", prop.maxThreadsDim[0],
+           prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
+    printf("\n\tGrid size: (%d, %d, %d)", prop.maxGridSize[0],
+           prop.maxGridSize[1], prop.maxGridSize[2]);
+    printf("\n\tMultiprocessor count: %d\n", prop.multiProcessorCount);
+    printf("\nIf you want more info, see %s:%d and"
+           "\n'Device Management' section of the CUDA Runtime API docs."
+           "\n---------------------------------------------------------\n",
+           __FILE__, __LINE__);
 }
 
 void init(const char *inputFileName, Params &params) {
