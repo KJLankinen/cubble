@@ -36,11 +36,11 @@ add_compile_options(
     "$<IF:${debug_gcc},${gcc_deb_opt},${gcc_rel_opt}>"
     )
 
-#option(package_tests "Build tests" ON)
-#if(package_tests)
-#    include(CTest)
-#    add_subdirectory(tests)
-#    enable_testing()
-#endif()
+option(package_tests "Build tests" ON)
+if(package_tests)
+    include(CTest)
+    add_subdirectory(tests)
+    enable_testing()
+endif()
 
 add_subdirectory(src)
