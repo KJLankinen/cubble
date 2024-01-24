@@ -16,8 +16,10 @@ add_executable(${BINARY})
 target_sources(
     ${OBJS}
     PRIVATE
-    simulator.cu
+    device_globals.cu
+    free_functions.cu
     kernels.cu
+    simulator.cu
     )
 
 target_sources(

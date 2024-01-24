@@ -17,6 +17,7 @@
  */
 
 #include "data_definitions.h"
+#include "device_globals.cuh"
 #include "kernels.cuh"
 #include "util.cuh"
 #include "vec.h"
