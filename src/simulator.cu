@@ -69,10 +69,9 @@ void searchNeighbors(Params &params) {
                               params.pairs.getMemReq(), 0));
 
     // Minimum size of cell is twice the sum of the skin and max bubble radius
-    ivec cellDim = (params.hostConstants.interval /
-                    (2 * (params.hostData.maxBubbleRadius +
-                          params.hostConstants.skinRadius)))
-                       .floor();
+    ivec cellDim = ivec(floor(params.hostConstants.interval /
+                              (2 * (params.hostData.maxBubbleRadius +
+                                    params.hostConstants.skinRadius))));
     cellDim.z = cellDim.z > 0 ? cellDim.z : 1;
     const int32_t numCells = cellDim.x * cellDim.y * cellDim.z;
 
@@ -634,7 +633,7 @@ void init(const char *inputFileName, Params &params) {
     }
 
     params.hostConstants.tfr =
-        d * bubblesPerDim.asType<double>() + params.hostConstants.lbb;
+        d * dvec(bubblesPerDim) + params.hostConstants.lbb;
     params.hostConstants.interval =
         params.hostConstants.tfr - params.hostConstants.lbb;
 
@@ -1017,7 +1016,7 @@ void simulate(std::string &&inputFileName) {
     double &ts = params.hostData.timeStep;
     const double minInterval =
         3 == params.hostConstants.dimensionality
-            ? 0.5 * params.hostConstants.interval.getMinComponent()
+            ? 0.5 * minComponent(params.hostConstants.interval)
             : 0.5 * (params.hostConstants.interval.x <
                              params.hostConstants.interval.y
                          ? params.hostConstants.interval.x

@@ -200,7 +200,7 @@ __global__ void pairwiseInteraction(Bubbles bubbles, Pairs pairs,
             dvec distances = wrappedDifference(
                 bubbles.xp[idx1], bubbles.yp[idx1], bubbles.zp[idx1],
                 bubbles.xp[idx2], bubbles.yp[idx2], bubbles.zp[idx2]);
-            const double magnitude = distances.getSquaredLength();
+            const double magnitude = lengthSq(distances);
 
             if (radii * radii >= magnitude) {
                 // Pair velocities
@@ -537,7 +537,7 @@ __global__ void neighborSearch(int32_t numCells, int32_t numNeighborCells,
                 if (ci == i) {
                     b1 =
                         s1 - 2 -
-                        (int32_t)floor(
+                        (int32_t)::floor(
                             sqrt(-8.0 * k + 4 * s1 * (s1 - 1) - 7) * 0.5 - 0.5);
                     b2 = o1 + k + b1 + 1 - s1 * (s1 - 1) / 2 +
                          (s1 - b1) * ((s1 - b1) - 1) / 2;
@@ -803,11 +803,11 @@ __global__ void potentialEnergy(Bubbles bubbles, Pairs pairs, double *energy) {
          i += gridDim.x * blockDim.x) {
         const int32_t idx1 = pairs.i[i];
         const int32_t idx2 = pairs.j[i];
-        double e =
-            bubbles.r[idx1] + bubbles.r[idx2] -
-            wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
-                              bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
-                .getLength();
+        double e = bubbles.r[idx1] + bubbles.r[idx2] -
+                   length(wrappedDifference(bubbles.x[idx1], bubbles.y[idx1],
+                                            bubbles.z[idx1], bubbles.x[idx2],
+                                            bubbles.y[idx2], bubbles.z[idx2]));
+
         if (e > 0) {
             e *= e;
             atomicAdd(&energy[idx1], e);
@@ -905,11 +905,11 @@ __global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
                     (double)bubblesPerDim.z;
         }
         pos *= interval;
-        randomOffset = dvec::normalize(randomOffset) * avgRad * w[i];
+        randomOffset = normalize(randomOffset) * avgRad * w[i];
         pos += randomOffset;
 
         double rad = bubbles.r[i];
-        rad = abs(rad);
+        rad = ::abs(rad);
         rad = rad > minRad ? rad : rad + minRad;
         bubbles.r[i] = rad;
         bubbles.x[i] = pos.x > lbb.x

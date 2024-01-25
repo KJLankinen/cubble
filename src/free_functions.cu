@@ -25,7 +25,8 @@ __device__ double correct(int32_t i, double ts, double *pp, double *p,
     const double predicted = pp[i];
     const double corrected = p[i] + 0.5 * ts * (v[i] + vp[i]);
     pp[i] = corrected;
-    maxErr[threadIdx.x] = fmax(maxErr[threadIdx.x], abs(predicted - corrected));
+    maxErr[threadIdx.x] =
+        fmax(maxErr[threadIdx.x], ::abs(predicted - corrected));
 
     return corrected - old[i];
 }
@@ -132,9 +133,9 @@ __device__ void comparePair(int32_t idx1, int32_t idx2, int32_t *histogram,
                             int32_t *pairI, int32_t *pairJ, Bubbles &bubbles) {
     const double maxDistance =
         bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
-    if (wrappedDifference(bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1],
-                          bubbles.x[idx2], bubbles.y[idx2], bubbles.z[idx2])
-            .getSquaredLength() < maxDistance * maxDistance) {
+    if (lengthSq(wrappedDifference(
+            bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1], bubbles.x[idx2],
+            bubbles.y[idx2], bubbles.z[idx2])) < maxDistance * maxDistance) {
         // Set the smaller idx to idx1 and larger to idx2
         int32_t id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
@@ -169,7 +170,7 @@ __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
         d1.z = z1 - z2;
     }
     dvec d2 = d1;
-    dvec temp = dConstants->interval - d1.getAbsolute();
+    dvec temp = dConstants->interval - abs(d1);
     if (!dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }
@@ -263,11 +264,11 @@ __device__ int32_t getCellIdxFromPos(double x, double y, double z,
                                      ivec cellDim) {
     const dvec lbb = dConstants->lbb;
     const dvec interval = dConstants->interval;
-    const int32_t xid = floor(cellDim.x * (x - lbb.x) / interval.x);
-    const int32_t yid = floor(cellDim.y * (y - lbb.y) / interval.y);
+    const int32_t xid = ::floor(cellDim.x * (x - lbb.x) / interval.x);
+    const int32_t yid = ::floor(cellDim.y * (y - lbb.y) / interval.y);
     int32_t zid = 0;
     if (dConstants->dimensionality == 3) {
-        zid = floor(cellDim.z * (z - lbb.z) / interval.z);
+        zid = ::floor(cellDim.z * (z - lbb.z) / interval.z);
     }
 
     return get1DIdxFrom3DIdx(ivec(xid, yid, zid), cellDim);

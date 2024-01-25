@@ -21,8 +21,11 @@
 #include "nlohmann/json.hpp"
 
 namespace cubble {
-template <typename T> class vec {
-  public:
+template <typename T> struct vec {
+    T x = 0;
+    T y = 0;
+    T z = 0;
+
     __host__ __device__ vec() {}
 
     __host__ __device__ vec(T x) : x(x), y(x), z(x) {}
@@ -36,59 +39,6 @@ template <typename T> class vec {
     __host__ __device__ vec(T x, T y, T z) : x(x), y(y), z(z) {}
 
     __host__ __device__ ~vec() {}
-
-    __host__ __device__ T getSquaredLength() const {
-        T temp = 0;
-
-        temp += x * x;
-        temp += y * y;
-        temp += z * z;
-
-        return temp;
-    }
-
-    __host__ __device__ T getLength() const {
-        return std::sqrt(getSquaredLength());
-    }
-
-    __host__ __device__ vec<T> getAbsolute() const {
-        vec<T> v;
-        v.x = x < 0 ? -x : x;
-        v.y = y < 0 ? -y : y;
-        v.z = z < 0 ? -z : z;
-
-        return v;
-    }
-
-    __host__ __device__ static vec<T> normalize(vec<T> &v) {
-        return v / v.getLength();
-    }
-
-    __host__ __device__ static vec<T> normalize(const vec<T> &v) {
-        return v / v.getLength();
-    }
-
-    __host__ __device__ T getMaxComponent() const {
-        return x > y ? (x > z ? x : z) : (y > z ? y : z);
-    }
-
-    __host__ __device__ T getMinComponent() const {
-        return x < y ? (x < z ? x : z) : (y < z ? y : z);
-    }
-
-    template <typename T2> __host__ __device__ vec<T2> asType() const {
-        vec<T2> v(*this);
-
-        return v;
-    }
-
-    __host__ vec<int32_t> ceil() const {
-        return vec<int32_t>(std::ceil(x), std::ceil(y), std::ceil(z));
-    }
-
-    __host__ vec<int32_t> floor() const {
-        return vec<int32_t>(std::floor(x), std::floor(y), std::floor(z));
-    }
 
     // + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
     __host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &o) {
@@ -312,26 +262,6 @@ template <typename T> class vec {
         return os;
     }
 
-    // min min min min min min min min min min min min min min min min min min
-    __host__ __device__ friend vec<T> min(const vec<T> &v1, const vec<T> &v2) {
-        vec<T> retVec;
-        retVec.x = v1.x < v2.x ? v1.x : v2.x;
-        retVec.y = v1.y < v2.y ? v1.y : v2.y;
-        retVec.z = v1.z < v2.z ? v1.z : v2.z;
-
-        return retVec;
-    }
-
-    // max max max max max max max max max max max max max max max max max max
-    __host__ __device__ friend vec<T> max(const vec<T> &v1, const vec<T> &v2) {
-        vec<T> retVec;
-        retVec.x = v1.x > v2.x ? v1.x : v2.x;
-        retVec.y = v1.y > v2.y ? v1.y : v2.y;
-        retVec.z = v1.z > v2.z ? v1.z : v2.z;
-
-        return retVec;
-    }
-
     // .json .json .json .json .json .json .json .json .json .json .json
     friend void to_json(nlohmann::json &j, const vec<T> &v) {
         j["x"] = v.x;
@@ -344,11 +274,72 @@ template <typename T> class vec {
         v.y = j["y"];
         v.z = j["z"];
     }
-
-    T x = 0;
-    T y = 0;
-    T z = 0;
 };
+
+template <typename T> __host__ __device__ T lengthSq(const vec<T> &lhs) {
+    T temp = 0;
+
+    temp += lhs.x * lhs.x;
+    temp += lhs.y * lhs.y;
+    temp += lhs.z * lhs.z;
+
+    return temp;
+}
+
+template <typename T> __host__ __device__ T length(const vec<T> &lhs) {
+    return sqrt(lengthSq(lhs));
+}
+
+template <typename T> __host__ __device__ vec<T> abs(const vec<T> &lhs) {
+    vec<T> v;
+    v.x = lhs.x < 0 ? -lhs.x : lhs.x;
+    v.y = lhs.y < 0 ? -lhs.y : lhs.y;
+    v.z = lhs.z < 0 ? -lhs.z : lhs.z;
+
+    return v;
+}
+
+template <typename T> __host__ __device__ vec<T> normalize(const vec<T> &v) {
+    return v / length(v);
+}
+
+template <typename T> __host__ __device__ T maxComponent(const vec<T> &lhs) {
+    return lhs.x > lhs.y ? (lhs.x > lhs.z ? lhs.x : lhs.z)
+                         : (lhs.y > lhs.z ? lhs.y : lhs.z);
+}
+
+template <typename T> __host__ __device__ T minComponent(const vec<T> &lhs) {
+    return lhs.x < lhs.y ? (lhs.x < lhs.z ? lhs.x : lhs.z)
+                         : (lhs.y < lhs.z ? lhs.y : lhs.z);
+}
+
+template <typename S, typename T> struct SameType {
+    static constexpr bool value = false;
+};
+
+template <typename T> struct SameType<T, T> {
+    static constexpr bool value = true;
+};
+
+template <typename T> __host__ __device__ vec<T> ceil(const vec<T> &lhs) {
+    if constexpr (SameType<T, float>::value) {
+        return vec<T>(ceilf(lhs.x), ceilf(lhs.y), ceilf(lhs.z));
+    } else if constexpr (SameType<T, double>::value) {
+        return vec<T>(::ceil(lhs.x), ::ceil(lhs.y), ::ceil(lhs.z));
+    } else {
+        return lhs;
+    }
+}
+
+template <typename T> __host__ __device__ vec<T> floor(const vec<T> &lhs) {
+    if constexpr (SameType<T, float>::value) {
+        return vec<T>(floorf(lhs.x), floorf(lhs.y), floorf(lhs.z));
+    } else if constexpr (SameType<T, double>::value) {
+        return vec<T>(::floor(lhs.x), ::floor(lhs.y), ::floor(lhs.z));
+    } else {
+        return lhs;
+    }
+}
 
 typedef vec<float> fvec;
 typedef vec<double> dvec;
