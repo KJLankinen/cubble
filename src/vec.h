@@ -46,11 +46,6 @@ template <typename T> struct vec {
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &&o) {
-        copy += o;
-        return copy;
-    }
-
     __host__ __device__ friend vec<T> operator+(vec<T> copy, T s) {
         copy += s;
         return copy;
@@ -58,11 +53,6 @@ template <typename T> struct vec {
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     __host__ __device__ friend vec<T> operator-(vec<T> copy, const vec<T> &o) {
-        copy -= o;
-        return copy;
-    }
-
-    __host__ __device__ friend vec<T> operator-(vec<T> copy, const vec<T> &&o) {
         copy -= o;
         return copy;
     }
@@ -83,11 +73,6 @@ template <typename T> struct vec {
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator*(vec<T> copy, const vec<T> &&o) {
-        copy *= o;
-        return copy;
-    }
-
     __host__ __device__ friend vec<T> operator*(vec<T> copy, T s) {
         copy *= s;
         return copy;
@@ -100,11 +85,6 @@ template <typename T> struct vec {
 
     // / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
     __host__ __device__ friend vec<T> operator/(vec<T> copy, const vec<T> &o) {
-        copy /= o;
-        return copy;
-    }
-
-    __host__ __device__ friend vec<T> operator/(vec<T> copy, const vec<T> &&o) {
         copy /= o;
         return copy;
     }
@@ -125,11 +105,6 @@ template <typename T> struct vec {
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator%(vec<T> copy, const vec<T> &&o) {
-        copy %= o;
-        return copy;
-    }
-
     __host__ __device__ friend vec<T> operator%(vec<T> copy, T s) {
         copy %= s;
         return copy;
@@ -137,12 +112,6 @@ template <typename T> struct vec {
 
     // += += += += += += += += += += += += += += += += += += += += += +=
     __host__ __device__ friend void operator+=(vec<T> &t, const vec<T> &o) {
-        t.x += o.x;
-        t.y += o.y;
-        t.z += o.z;
-    }
-
-    __host__ __device__ friend void operator+=(vec<T> &t, const vec<T> &&o) {
         t.x += o.x;
         t.y += o.y;
         t.z += o.z;
@@ -161,12 +130,6 @@ template <typename T> struct vec {
         t.z -= o.z;
     }
 
-    __host__ __device__ friend void operator-=(vec<T> &t, const vec<T> &&o) {
-        t.x -= o.x;
-        t.y -= o.y;
-        t.z -= o.z;
-    }
-
     __host__ __device__ friend void operator-=(vec<T> &t, T s) {
         t.x -= s;
         t.y -= s;
@@ -175,12 +138,6 @@ template <typename T> struct vec {
 
     // *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *=
     __host__ __device__ friend void operator*=(vec<T> &t, const vec<T> &o) {
-        t.x *= o.x;
-        t.y *= o.y;
-        t.z *= o.z;
-    }
-
-    __host__ __device__ friend void operator*=(vec<T> &t, const vec<T> &&o) {
         t.x *= o.x;
         t.y *= o.y;
         t.z *= o.z;
@@ -199,12 +156,6 @@ template <typename T> struct vec {
         t.z /= o.z;
     }
 
-    __host__ __device__ friend void operator/=(vec<T> &t, const vec<T> &&o) {
-        t.x /= o.x;
-        t.y /= o.y;
-        t.z /= o.z;
-    }
-
     __host__ __device__ friend void operator/=(vec<T> &t, T s) {
         t.x /= s;
         t.y /= s;
@@ -213,12 +164,6 @@ template <typename T> struct vec {
 
     // %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %=
     __host__ __device__ friend void operator%=(vec<T> &t, vec<T> &o) {
-        t.x %= o.x;
-        t.y %= o.y;
-        t.z %= o.z;
-    }
-
-    __host__ __device__ friend void operator%=(vec<T> &t, vec<T> &&o) {
         t.x %= o.x;
         t.y %= o.y;
         t.z %= o.z;
@@ -235,24 +180,6 @@ template <typename T> struct vec {
         x = copy.x;
         y = copy.y;
         z = copy.z;
-    }
-
-    // == == == == == == == == == == == == == == == == == == == == == ==
-    __host__ __device__ friend bool operator==(const vec<T> &t,
-                                               const vec<T> &o) {
-        const T epsilon = static_cast<T>(1.0 / 1e6);
-        bool equal = true;
-        equal &= t.x - epsilon <= o.x && t.x + epsilon >= o.x;
-        equal &= t.y - epsilon <= o.y && t.y + epsilon >= o.y;
-        equal &= t.z - epsilon <= o.z && t.z + epsilon >= o.z;
-
-        return equal;
-    }
-
-    // != != != != != != != != != != != != != != != != != != != != != !=
-    __host__ __device__ friend bool operator!=(const vec<T> &t,
-                                               const vec<T> &o) {
-        return !(t == o);
     }
 
     // << << << << << << << << << << << << << << << << << << << << << <<
@@ -339,6 +266,16 @@ template <typename T> __host__ __device__ vec<T> floor(const vec<T> &lhs) {
     } else {
         return lhs;
     }
+}
+
+template <typename T>
+__host__ __device__ bool operator==(const vec<T> &lhs, const vec<T> &rhs) {
+    return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
+}
+
+template <typename T>
+__host__ __device__ bool operator!=(const vec<T> &lhs, const vec<T> &rhs) {
+    return !(lhs == rhs);
 }
 
 typedef vec<float> fvec;
