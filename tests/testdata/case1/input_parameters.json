@@ -1,0 +1,130 @@
+{
+  "bubbles": {
+    "comments": [
+      "How many bubbles of what size to simulate and when to stop.",
+      "The end number is an end condition for the simulation.",
+      "The simulation will stop once the number of bubbles left",
+      "in the simulation drops below the given value."
+    ],
+    "numStart": 1e5,
+    "numEnd": 1e3,
+    "radius": {
+      "comment": "Mean and standard deviation of radius of bubbles at start.",
+      "mean": 1.0,
+      "std": 0.21
+    }
+  },
+  "box": {
+    "comments": [
+      "What is the size, periodicity and dimensionality of the simulation box.",
+      "Relative dimensions defines the shape of the simulation box,",
+      "while the amount and average radius of bubbles define the actual size."
+    ],
+    "dimensionality" : 2,
+    "relativeDimensions": {
+      "x": 1.0,
+      "y": 1.0,
+      "z": 1.0
+    },
+    "wall": {
+      "comments": [
+        "Which axes have walls (as opposed to periodic boundaries)",
+        "and what is the drag coefficient, if a bubble is in contact",
+        "with a wall."
+      ],
+      "drag": 0.1,
+      "x": 0,
+      "y": 0,
+      "z": 0
+    }
+  },
+  "flow": {
+    "comments": [
+      "Should flow be imposed or not. If true, a flow with the given velocity",
+      "is imposed on the bubbles inside the given box. The coordinates of the",
+      "flow box are relative to the simulation box, i.e. 0.5 means the center",
+      "of the simulation box."
+    ],
+    "impose": 0,
+    "velocity": {
+      "x": 0.01,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "lbb": {
+      "comment": "Lower, back, bottom coordinates of the flow area.",
+      "x": 0.0,
+      "y": 0.475,
+      "z": 0.0
+    },
+    "tfr": {
+      "comment": "Top, front, right coordinates of the flow area.",
+      "x": 0.4,
+      "y": 0.525,
+      "z": 0.0
+    }
+  },
+  "constants": {
+    "comment": "Physical constants used by the simulation",
+    "phi": {
+      "comment": "The target gas fraction of the foam",
+      "value": 0.9
+    },
+    "mu": {
+      "comment": "Viscosity of the fluid",
+      "value": 1.0
+    },
+    "sigma": {
+      "comment": "Surface tension of the fluid",
+      "value": 1.0
+    },
+    "kappa": {
+      "comments": [
+        "Strenght of liquid intermediated diffusion, relative to the",
+        "diffusion through thin films."
+      ],
+      "value": 0.1
+    },
+    "K": {
+      "comments": [
+        "A bundle of constants related to gas exchange.",
+        "Should be small relative to the mean of the input radius of bubbles.",
+        "See the paper by Robert Lemlich for details:",
+        "Prediction of changes in bubble size distribution due to",
+        "interbubble gas diffusion in foam.",
+        "Industrial & Engineering Chemistry Fundamentals 17.2 (1978): 89-93."
+      ],
+      "value": 0.001
+    }
+  },
+  "errorTolerance": {
+    "comment": "The error tolerance level for the integration.",
+    "value": 1e-5
+  },
+  "rngSeed": {
+    "comment": "The seed for the RNG.",
+    "value": 426
+  },
+  "stabilization": {
+    "comments": [
+      "Number of integration steps per stabilization round.",
+      "Maximum allowed change in energy between stabilization rounds.",
+      "Stabilization continues until the energy between stabilization rounds",
+      "changes less than this treshold."
+    ],
+    "steps": 1e4,
+    "maxDeltaEnergy": 1e-5
+  },
+  "snapShot":{
+    "comments": [
+      "Name of the file where snapshots of the bubbles in the simulation",
+      "will be stored to. Full filenames will have .csv.N appended after",
+      "the given name. Frequency of 0 means no snapshots are saved,",
+      "whereas 8.5 means 8.5 snapshots are saved per (scaled)",
+      "simulation time step, i.e. a snapshot will be saved every",
+      "1/8.5th time step."
+    ],
+    "filename": "bubbles",
+    "frequency": 0.0
+  }
+}
