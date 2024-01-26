@@ -19,6 +19,8 @@ target_sources(
     device_globals.cu
     free_functions.cu
     kernels.cu
+    parsing.cpp
+    simulation_parameters.cpp
     simulator.cu
     )
 

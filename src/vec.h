@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "macros.h"
 #include "nlohmann/json.hpp"
 
 namespace cubble {
@@ -26,157 +27,157 @@ template <typename T> struct vec {
     T y = 0;
     T z = 0;
 
-    __host__ __device__ vec() {}
+    HOST DEVICE vec() {}
 
-    __host__ __device__ vec(T x) : x(x), y(x), z(x) {}
+    HOST DEVICE vec(T t) : x(t), y(t), z(t) {}
 
-    template <typename T2> __host__ __device__ vec(const vec<T2> &o) {
+    template <typename T2> HOST DEVICE vec(const vec<T2> &o) {
         x = static_cast<T>(o.x);
         y = static_cast<T>(o.y);
         z = static_cast<T>(o.z);
     }
 
-    __host__ __device__ vec(T x, T y, T z) : x(x), y(y), z(z) {}
+    HOST DEVICE vec(T t1, T t2, T t3) : x(t1), y(t2), z(t3) {}
 
-    __host__ __device__ ~vec() {}
+    HOST DEVICE ~vec() {}
 
     // + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + +
-    __host__ __device__ friend vec<T> operator+(vec<T> copy, const vec<T> &o) {
+    HOST DEVICE friend vec<T> operator+(vec<T> copy, const vec<T> &o) {
         copy += o;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator+(vec<T> copy, T s) {
+    HOST DEVICE friend vec<T> operator+(vec<T> copy, T s) {
         copy += s;
         return copy;
     }
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    __host__ __device__ friend vec<T> operator-(vec<T> copy, const vec<T> &o) {
+    HOST DEVICE friend vec<T> operator-(vec<T> copy, const vec<T> &o) {
         copy -= o;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator-(vec<T> copy, T s) {
+    HOST DEVICE friend vec<T> operator-(vec<T> copy, T s) {
         copy -= s;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator-(vec<T> copy) {
+    HOST DEVICE friend vec<T> operator-(vec<T> copy) {
         copy -= (T)2 * copy;
         return copy;
     }
 
     // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-    __host__ __device__ friend vec<T> operator*(vec<T> copy, const vec<T> &o) {
+    HOST DEVICE friend vec<T> operator*(vec<T> copy, const vec<T> &o) {
         copy *= o;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator*(vec<T> copy, T s) {
+    HOST DEVICE friend vec<T> operator*(vec<T> copy, T s) {
         copy *= s;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator*(T s, vec<T> copy) {
+    HOST DEVICE friend vec<T> operator*(T s, vec<T> copy) {
         copy *= s;
         return copy;
     }
 
     // / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
-    __host__ __device__ friend vec<T> operator/(vec<T> copy, const vec<T> &o) {
+    HOST DEVICE friend vec<T> operator/(vec<T> copy, const vec<T> &o) {
         copy /= o;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator/(vec<T> copy, T s) {
+    HOST DEVICE friend vec<T> operator/(vec<T> copy, T s) {
         copy /= s;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator/(T s, vec<T> copy) {
+    HOST DEVICE friend vec<T> operator/(T s, vec<T> copy) {
         copy = vec<T>(s / copy.x, s / copy.y, s / copy.z);
         return copy;
     }
 
     // % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % % %
-    __host__ __device__ friend vec<T> operator%(vec<T> copy, const vec<T> &o) {
+    HOST DEVICE friend vec<T> operator%(vec<T> copy, const vec<T> &o) {
         copy %= o;
         return copy;
     }
 
-    __host__ __device__ friend vec<T> operator%(vec<T> copy, T s) {
+    HOST DEVICE friend vec<T> operator%(vec<T> copy, T s) {
         copy %= s;
         return copy;
     }
 
     // += += += += += += += += += += += += += += += += += += += += += +=
-    __host__ __device__ friend void operator+=(vec<T> &t, const vec<T> &o) {
+    HOST DEVICE friend void operator+=(vec<T> &t, const vec<T> &o) {
         t.x += o.x;
         t.y += o.y;
         t.z += o.z;
     }
 
-    __host__ __device__ friend void operator+=(vec<T> &t, T s) {
+    HOST DEVICE friend void operator+=(vec<T> &t, T s) {
         t.x += s;
         t.y += s;
         t.z += s;
     }
 
     // -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -=
-    __host__ __device__ friend void operator-=(vec<T> &t, const vec<T> &o) {
+    HOST DEVICE friend void operator-=(vec<T> &t, const vec<T> &o) {
         t.x -= o.x;
         t.y -= o.y;
         t.z -= o.z;
     }
 
-    __host__ __device__ friend void operator-=(vec<T> &t, T s) {
+    HOST DEVICE friend void operator-=(vec<T> &t, T s) {
         t.x -= s;
         t.y -= s;
         t.z -= s;
     }
 
     // *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *= *=
-    __host__ __device__ friend void operator*=(vec<T> &t, const vec<T> &o) {
+    HOST DEVICE friend void operator*=(vec<T> &t, const vec<T> &o) {
         t.x *= o.x;
         t.y *= o.y;
         t.z *= o.z;
     }
 
-    __host__ __device__ friend void operator*=(vec<T> &t, T s) {
+    HOST DEVICE friend void operator*=(vec<T> &t, T s) {
         t.x *= s;
         t.y *= s;
         t.z *= s;
     }
 
     // /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /= /=
-    __host__ __device__ friend void operator/=(vec<T> &t, const vec<T> &o) {
+    HOST DEVICE friend void operator/=(vec<T> &t, const vec<T> &o) {
         t.x /= o.x;
         t.y /= o.y;
         t.z /= o.z;
     }
 
-    __host__ __device__ friend void operator/=(vec<T> &t, T s) {
+    HOST DEVICE friend void operator/=(vec<T> &t, T s) {
         t.x /= s;
         t.y /= s;
         t.z /= s;
     }
 
     // %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %= %=
-    __host__ __device__ friend void operator%=(vec<T> &t, vec<T> &o) {
+    HOST DEVICE friend void operator%=(vec<T> &t, vec<T> &o) {
         t.x %= o.x;
         t.y %= o.y;
         t.z %= o.z;
     }
 
-    __host__ __device__ friend void operator%=(vec<T> &t, T s) {
+    HOST DEVICE friend void operator%=(vec<T> &t, T s) {
         t.x %= s;
         t.y %= s;
         t.z %= s;
     }
 
     // = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-    __host__ __device__ void operator=(vec<T> copy) {
+    HOST DEVICE void operator=(vec<T> copy) {
         x = copy.x;
         y = copy.y;
         z = copy.z;
@@ -188,22 +189,23 @@ template <typename T> struct vec {
 
         return os;
     }
-
-    // .json .json .json .json .json .json .json .json .json .json .json
-    friend void to_json(nlohmann::json &j, const vec<T> &v) {
-        j["x"] = v.x;
-        j["y"] = v.y;
-        j["z"] = v.z;
-    }
-
-    friend void from_json(const nlohmann::json &j, vec<T> &v) {
-        v.x = j["x"];
-        v.y = j["y"];
-        v.z = j["z"];
-    }
 };
 
-template <typename T> __host__ __device__ T lengthSq(const vec<T> &lhs) {
+template <typename T> void to_json(nlohmann::json &j, const vec<T> &v) {
+    j = nlohmann::json{
+        {"x", v.x},
+        {"y", v.y},
+        {"z", v.z},
+    };
+}
+
+template <typename T> void from_json(const nlohmann::json &j, vec<T> &v) {
+    j.at("x").get_to(v.x);
+    j.at("y").get_to(v.y);
+    j.at("z").get_to(v.z);
+}
+
+template <typename T> HOST DEVICE T lengthSq(const vec<T> &lhs) {
     T temp = 0;
 
     temp += lhs.x * lhs.x;
@@ -213,11 +215,11 @@ template <typename T> __host__ __device__ T lengthSq(const vec<T> &lhs) {
     return temp;
 }
 
-template <typename T> __host__ __device__ T length(const vec<T> &lhs) {
+template <typename T> HOST DEVICE T length(const vec<T> &lhs) {
     return sqrt(lengthSq(lhs));
 }
 
-template <typename T> __host__ __device__ vec<T> abs(const vec<T> &lhs) {
+template <typename T> HOST DEVICE vec<T> abs(const vec<T> &lhs) {
     vec<T> v;
     v.x = lhs.x < 0 ? -lhs.x : lhs.x;
     v.y = lhs.y < 0 ? -lhs.y : lhs.y;
@@ -226,16 +228,16 @@ template <typename T> __host__ __device__ vec<T> abs(const vec<T> &lhs) {
     return v;
 }
 
-template <typename T> __host__ __device__ vec<T> normalize(const vec<T> &v) {
+template <typename T> HOST DEVICE vec<T> normalize(const vec<T> &v) {
     return v / length(v);
 }
 
-template <typename T> __host__ __device__ T maxComponent(const vec<T> &lhs) {
+template <typename T> HOST DEVICE T maxComponent(const vec<T> &lhs) {
     return lhs.x > lhs.y ? (lhs.x > lhs.z ? lhs.x : lhs.z)
                          : (lhs.y > lhs.z ? lhs.y : lhs.z);
 }
 
-template <typename T> __host__ __device__ T minComponent(const vec<T> &lhs) {
+template <typename T> HOST DEVICE T minComponent(const vec<T> &lhs) {
     return lhs.x < lhs.y ? (lhs.x < lhs.z ? lhs.x : lhs.z)
                          : (lhs.y < lhs.z ? lhs.y : lhs.z);
 }
@@ -248,7 +250,7 @@ template <typename T> struct SameType<T, T> {
     static constexpr bool value = true;
 };
 
-template <typename T> __host__ __device__ vec<T> ceil(const vec<T> &lhs) {
+template <typename T> HOST DEVICE vec<T> ceil(const vec<T> &lhs) {
     if constexpr (SameType<T, float>::value) {
         return vec<T>(ceilf(lhs.x), ceilf(lhs.y), ceilf(lhs.z));
     } else if constexpr (SameType<T, double>::value) {
@@ -258,7 +260,7 @@ template <typename T> __host__ __device__ vec<T> ceil(const vec<T> &lhs) {
     }
 }
 
-template <typename T> __host__ __device__ vec<T> floor(const vec<T> &lhs) {
+template <typename T> HOST DEVICE vec<T> floor(const vec<T> &lhs) {
     if constexpr (SameType<T, float>::value) {
         return vec<T>(floorf(lhs.x), floorf(lhs.y), floorf(lhs.z));
     } else if constexpr (SameType<T, double>::value) {
@@ -269,12 +271,12 @@ template <typename T> __host__ __device__ vec<T> floor(const vec<T> &lhs) {
 }
 
 template <typename T>
-__host__ __device__ bool operator==(const vec<T> &lhs, const vec<T> &rhs) {
+HOST DEVICE bool operator==(const vec<T> &lhs, const vec<T> &rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
 }
 
 template <typename T>
-__host__ __device__ bool operator!=(const vec<T> &lhs, const vec<T> &rhs) {
+HOST DEVICE bool operator!=(const vec<T> &lhs, const vec<T> &rhs) {
     return !(lhs == rhs);
 }
 

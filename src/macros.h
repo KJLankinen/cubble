@@ -16,20 +16,16 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
-#include "parsing.h"
-#include "result.h"
-#include <cstdint>
+#pragma once
 
-namespace cubble {
-int32_t run(int32_t argc, char **argv);
-}
+#ifdef __NVCC__
+#define HOST __host__
+#define DEVICE __device__
+#else
+#define HOST
+#define DEVICE
+#endif
 
-int32_t main(int32_t argc, char **argv) {
-    // TEMP
-    {
-        cubble::Result<cubble::Config> result = cubble::parse(argc, argv);
-        printf("result: %d, with message %s\n", result.ok, result.msg.c_str());
-    }
-    return cubble::run(argc, argv);
-}
+#define ASSERT_SIZE(struct, bytes)                                             \
+    static_assert(sizeof(struct) == bytes,                                     \
+                  "size of " #struct " must be equal to " #bytes)

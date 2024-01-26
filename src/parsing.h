@@ -1,6 +1,6 @@
 /*
     Cubble
-    Copyright (C) 2019  Juhana Lankinen
+    Copyright (C) 2024  Juhana Lankinen
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,20 +16,20 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
-#include "parsing.h"
+#pragma once
+
 #include "result.h"
+
 #include <cstdint>
+#include <string>
 
 namespace cubble {
-int32_t run(int32_t argc, char **argv);
-}
+// Forward declare
+struct Config;
 
-int32_t main(int32_t argc, char **argv) {
-    // TEMP
-    {
-        cubble::Result<cubble::Config> result = cubble::parse(argc, argv);
-        printf("result: %d, with message %s\n", result.ok, result.msg.c_str());
-    }
-    return cubble::run(argc, argv);
-}
+// Takes in input and output filenames, produces an input object
+Result<Config> parse(std::string, std::string);
+
+// Takes in command line arguments, produces an input object
+Result<Config> parse(int32_t, char **);
+} // namespace cubble

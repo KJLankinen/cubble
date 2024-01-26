@@ -1,0 +1,110 @@
+{
+    "comments_md": [
+        "# Input parameters",
+        "## Bubbles",
+        "-How many bubbles of what size to simulate and when to stop",
+        "-The end number is an end condition for the simulation",
+        "-The simulation will stop once the number of bubbles left ",
+        "in the simulation is less than or equal to the given value",
+        
+        "## Box",
+        "-What is the size, periodicity and dimensionality of the simulation box",
+        "-Relative dimensions defines the shape of the simulation box, ",
+        "while the amount and average radius of bubbles define the actual size",
+
+        "## Wall",
+        "-Which axes have walls (as opposed to periodic boundaries)",
+        "-The drag coefficient of a wall",
+
+        "## Flow",
+        "-Should flow be imposed or not",
+        "-If true, a flow with the given velocity is imposed on the bubbles inside the given box",
+        "-The coordinates of the flow box are relative to the simulation box, ",
+        "i.e. 0.5 means the center of the simulation box",
+
+        "## Physical constants",
+        "-phi: target gas fraction of the foam",
+        "-mu: Viscosity of the fluid",
+        "-sigma: Surface tension of the fluid",
+        "-kappa: Strenght of liquid intermediated diffusion, relative to the ",
+        "diffusion through thin films",
+        "-K: A bundle of constants related to gas exchange",
+        "-Should be small relative to the mean of the input radius of bubbles",
+        "-See the paper by Robert Lemlich for details: ",
+        "Prediction of changes in bubble size distribution due to ",
+        "interbubble gas diffusion in foam.",
+        "Industrial & Engineering Chemistry Fundamentals 17.2 (1978): 89-93.",
+
+        "## Error tolerance",
+        "-The error tolerance level for the integration",
+
+        "## Random number generator seed",
+        "-The seed for the RNG",
+
+        "## Stabilization",
+        "- Number of integration steps per stabilization round",
+        "- Maximum allowed change in energy between stabilization rounds",
+        "- Stabilization continues until the energy between stabilization rounds ",
+        "changes less than this treshold",
+
+        "## Snapshots",
+        "-Name of the file where snapshots of the bubbles in the simulation ",
+        "will be stored to",
+        "-Full filenames will have .csv.N appended after the given name",
+        "-Frequency of 0 means no snapshots are saved, whereas 8.5 means ",
+        "8.5 snapshots are saved per (scaled) simulation time step, ",
+        "i.e. a snapshot will be saved every 1/8.5th time step"
+
+    ],
+    "bubble": {
+        "num_start": 1e5,
+        "num_end": 1e3,
+        "radius_mean": 1.0,
+        "radius_std": 0.21
+    },
+    "box": {
+        "dimensionality" : 2,
+        "relative_dimensions": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+    },
+    "wall": {
+       "drag": 0.1,
+       "x": false,
+       "y": false,
+       "z": false
+    },
+    "flow": {
+      "impose": false,
+      "velocity": {
+        "x": 0.01,
+        "y": 0.0,
+        "z": 0.0
+      },
+      "left_bottom_back": {
+        "x": 0.0,
+        "y": 0.475,
+        "z": 0.0
+      },
+      "right_top_front": {
+        "x": 0.4,
+        "y": 0.525,
+        "z": 0.0
+      }
+    },
+    "constants": {
+      "phi": 0.9,
+      "mu": 1.0,
+      "sigma": 1.0,
+      "kappa": 0.1,
+      "K": 0.001
+    },
+    "error_tolerance": 1e-5,
+    "rng_seed": 426,
+    "stabilization_steps": 1e4,
+    "stabilization_max_delta_energy": 1e-5,
+    "snap_shot_filename": "bubbles",
+    "snap_shot_frequency": 0.0
+}

@@ -1,6 +1,6 @@
 /*
     Cubble
-    Copyright (C) 2019  Juhana Lankinen
+    Copyright (C) 2024  Juhana Lankinen
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,20 +16,27 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
-#include "parsing.h"
-#include "result.h"
-#include <cstdint>
+#pragma once
 
+#include <string>
+
+// This is wasteful in terms of space, but simple
 namespace cubble {
-int32_t run(int32_t argc, char **argv);
-}
+template <typename T>
+struct Result {
+    T t = {};
+    const std::string msg = "";
+    const bool ok = false;
 
-int32_t main(int32_t argc, char **argv) {
-    // TEMP
-    {
-        cubble::Result<cubble::Config> result = cubble::parse(argc, argv);
-        printf("result: %d, with message %s\n", result.ok, result.msg.c_str());
+  private:
+    uint8_t padding[7] = {};
+
+  public:
+    Result<T>(T ty, const std::string &m, bool success)
+        : t(ty), msg(m), ok(success) {}
+    static Result<T> Ok(const T &t) { return Result<T>{t, "", true}; }
+    static Result<T> Err(const std::string &msg) {
+        return Result<T>{T{}, msg, false};
     }
-    return cubble::run(argc, argv);
-}
+};
+} // namespace cubble
