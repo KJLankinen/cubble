@@ -1,6 +1,6 @@
 /*
     Cubble
-    Copyright (C) 2019  Juhana Lankinen
+    Copyright (C) 2024  Juhana Lankinen
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,30 +16,13 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "config.h"
-#include "parsing.h"
-#include "util.h"
-#include <cstdint>
-#include <cstdlib>
+#pragma once
+
+#include <nlohmann/json.hpp>
 
 namespace cubble {
-int32_t run(int32_t argc, char **argv);
+template <typename T> void print(const T &t) {
+    const nlohmann::json j = t;
+    printf("%s\n", j.dump(4).c_str());
 }
-
-int32_t main(int32_t argc, char **argv) {
-    // TEMP
-    {
-        auto [config, msg, ok, _] = cubble::parse(argc, argv);
-        if (ok) {
-            cubble::print(config);
-            // TODO, proceed with config, create correct structures
-
-            return EXIT_SUCCESS;
-        } else {
-            printf("Input parsing failed: %s\n", msg.c_str());
-            return EXIT_FAILURE;
-        }
-    }
-
-    return cubble::run(argc, argv);
 }

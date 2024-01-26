@@ -27,8 +27,6 @@ struct Result {
     T t = {};
     const std::string msg = "";
     const bool ok = false;
-
-  private:
     uint8_t padding[7] = {};
 
   public:

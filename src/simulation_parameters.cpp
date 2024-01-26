@@ -38,7 +38,7 @@ void to_json(nlohmann::json &j, const Wall &from) {
 
 void to_json(nlohmann::json &j, const Flow &from) {
     j = nlohmann::json{{"impose", from.impose},
-                       {"relative_dimensions", from.relative_dimensions},
+                       {"velocity", from.velocity},
                        {"left_bottom_back", from.left_bottom_back},
                        {"right_top_front", from.right_top_front}};
 }
@@ -88,7 +88,7 @@ void from_json(const nlohmann::json &j, Wall &to) {
 
 void from_json(const nlohmann::json &j, Flow &to) {
     j.at("impose").get_to(to.impose);
-    j.at("relative_dimensions").get_to(to.relative_dimensions);
+    j.at("velocity").get_to(to.velocity);
     j.at("left_bottom_back").get_to(to.left_bottom_back);
     j.at("right_top_front").get_to(to.right_top_front);
 }

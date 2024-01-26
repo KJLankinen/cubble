@@ -38,7 +38,8 @@ Result<Config> parse(std::string inputFilename, std::string outputFilename) {
                    << "'. Exception thrown: " << e.what();
         }
     } else {
-        errmsg << "Error opening input filename with name " << inputFilename;
+        errmsg << "Error opening input filename with name '" << inputFilename
+               << "'";
     }
 
     return Result<Config>::Err(errmsg.str());

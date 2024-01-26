@@ -20,6 +20,7 @@
 
 #include "vec.h"
 #include <cstdint>
+#include <cstdio>
 #include <nlohmann/json.hpp>
 
 namespace cubble {
@@ -49,7 +50,7 @@ struct Wall {
 ASSERT_SIZE(Wall, 16);
 
 struct Flow {
-    dvec relative_dimensions = dvec(0.0);
+    dvec velocity = dvec(0.0);
     dvec left_bottom_back = dvec(0.0);
     dvec right_top_front = dvec(0.0);
     bool impose = false;
@@ -73,7 +74,7 @@ struct SimulationParameters {
     Bubble bubble = {};
     Wall wall = {};
     // 192 + 32
-    std::string comments_md = "";
+    std::vector<std::string> comments_md = {};
     std::string snap_shot_filename = "bubbles";
     double error_tolerance = 0.0;
     double stabilization_max_delta_energy = 1e-5;
@@ -81,7 +82,8 @@ struct SimulationParameters {
     uint32_t rng_seed = 426;
     uint32_t stabilization_steps = 1e4;
 };
-constexpr size_t bytes = 224 + 2 * sizeof(std::string);
+constexpr size_t bytes =
+    224 + sizeof(std::string) + sizeof(std::vector<std::string>);
 ASSERT_SIZE(SimulationParameters, bytes);
 
 void to_json(nlohmann::json &, const Bubble &);

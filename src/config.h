@@ -23,7 +23,9 @@
 
 namespace cubble {
     struct Config{
-        SimulationParameters simParams = {};
-        std::string outputFilename = "";
+        SimulationParameters simulation_parameters = {};
+        std::string output_filename = "";
     };
+    void to_json(nlohmann::json &, const Config &);
+    void from_json(const nlohmann::json &, Config &);
 } // namespace cubble

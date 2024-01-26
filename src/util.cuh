@@ -28,44 +28,6 @@
 #include <sstream>
 #include <stdexcept>
 
-#define CUDA_CALL(call)                                                        \
-    cubble::cudaCallAndLog((call), #call, __FILE__, __LINE__)
-#define CUDA_ASSERT(call)                                                      \
-    cubble::cudaCallAndThrow((call), #call, __FILE__, __LINE__)
-#define CURAND_CALL(call)                                                      \
-    cubble::curandCallAndLog((call), #call, __FILE__, __LINE__)
-#define KERNEL_LAUNCH(kernel, ...)                                             \
-    cubble::cudaLaunch(#kernel, __FILE__, __LINE__, kernel, __VA_ARGS__)
-#define CUB_LAUNCH(...) cubble::cubLaunch(__FILE__, __LINE__, __VA_ARGS__)
-
-#ifdef PROFILE
-#define CUBBLE_PROFILE(start)                                                  \
-    if (start) {                                                               \
-        cudaProfilerStart();                                                   \
-    } else {                                                                   \
-        bool stopProfiling = 1000 == params.hostData.numStepsInTimeStep;       \
-        stopProfiling |= 2 == params.hostData.timesPrinted &&                  \
-                         1 == params.hostData.numStepsInTimeStep;              \
-        if (stopProfiling) {                                                   \
-            cudaProfilerStop();                                                \
-        }                                                                      \
-    }
-#else
-#define CUBBLE_PROFILE(start)
-#endif
-
-// Macro for device assert.
-#ifdef CUBBLE_DEBUG
-#define DEVICE_ASSERT(statement, msg)                                          \
-    cubble::logError(statement, #statement, msg)
-#else
-#define DEVICE_ASSERT(statement, msg)
-#endif
-
-// Need to be usable from kernels
-#define CUBBLE_PI 3.1415926535897932384626433832795028841971693993
-#define CUBBLE_I_PI 1.0 / CUBBLE_PI
-
 namespace cubble {
 inline void handleException(const std::exception_ptr pExc) {
     try {

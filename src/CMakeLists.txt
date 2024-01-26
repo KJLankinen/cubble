@@ -16,6 +16,7 @@ add_executable(${binary})
 target_sources(
     ${objs}
     PRIVATE
+    config.cpp
     device_globals.cu
     free_functions.cu
     kernels.cu
