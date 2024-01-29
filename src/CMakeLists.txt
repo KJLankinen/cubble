@@ -44,6 +44,12 @@ set_target_properties(${binary} PROPERTIES CUDA_ARCHITECTURES "${cuda_archs}")
 target_link_libraries(${static_library} PUBLIC ${objs} nvToolsExt pthread curand)
 target_link_libraries(${binary} PUBLIC ${static_library})
 
+add_custom_target(
+    clang-tidy-check clang-tidy -p ${CMAKE_BINARY_DIR}/compile_commands.json --fix --fix-errors --format-style='file' --config-file=${PROJECT_SOURCE_DIR}/.clang-tidy --header-filter=${PROJECT_SOURCE_DIR}/src/*.*h --export-fixes=fixes.yaml ${PROJECT_SOURCE_DIR}/src/*.c*
+    DEPENDS ${binary})
+
+add_custom_target(check DEPENDS clang-tidy-check)
+
 install(
     TARGETS ${static_library} ${binary}
     CONFIGURATIONS Release RelWithDebInfo Debug
