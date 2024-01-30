@@ -195,7 +195,7 @@ void cudaLaunch(const char *kernelNameStr, const char *file, int32_t line,
     assertGridSizeBelowLimit(kernelNameStr, file, line, params.blockGrid);
 #endif
 
-    f<<<params.blockGrid, params.threadBlock, sharedMemBytes, stream>>>(
+    f<<<params.block_grid, params.thread_block, sharedMemBytes, stream>>>(
         args...);
 
 #ifdef CUBBLE_DEBUG
@@ -222,16 +222,16 @@ template <typename... Arguments>
 void cubLaunch(const char *file, int32_t line,
                cudaError_t (*func)(void *, size_t &, Arguments...),
                void *tempMem, uint64_t maxMem, Arguments... args) {
-    uint64_t tempMemReq = 0;
-    (*func)(NULL, tempMemReq, args...);
-    if (tempMemReq > maxMem) {
+    uint64_t temp_mem_req = 0;
+    (*func)(NULL, temp_mem_req, args...);
+    if (temp_mem_req > maxMem) {
         std::stringstream ss;
         ss << "Not enough temporary memory for cub function call @" << file
-           << ":" << line << ".\nRequested " << tempMemReq
+           << ":" << line << ".\nRequested " << temp_mem_req
            << " bytes, maximum is " << maxMem << " bytes.";
         throw std::runtime_error(ss.str());
     }
-    (*func)(tempMem, tempMemReq, args...);
+    (*func)(tempMem, temp_mem_req, args...);
 }
 
 } // namespace cubble

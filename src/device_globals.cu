@@ -19,16 +19,16 @@
 #include "device_globals.cuh"
 
 namespace cubble {
-__device__ Constants *dConstants;
-__device__ double dTotalArea;
-__device__ double dTotalOverlapArea;
-__device__ double dTotalOverlapAreaPerRadius;
-__device__ double dTotalAreaPerRadius;
-__device__ double dTotalVolumeNew;
-__device__ double dMaxRadius;
-__device__ bool dErrorEncountered;
-__device__ int32_t dNumPairs;
-__device__ int32_t dNumPairsNew;
-__device__ int32_t dNumToBeDeleted;
+__device__ Constants *d_constants;
+__device__ double d_total_area;
+__device__ double d_total_overlap_area;
+__device__ double d_total_overlap_area_per_radius;
+__device__ double d_total_area_per_radius;
+__device__ double d_total_volume_new;
+__device__ double d_max_radius;
+__device__ bool d_error_encountered;
+__device__ int32_t d_num_pairs;
+__device__ int32_t d_num_pairs_new;
+__device__ int32_t d_num_to_be_deleted;
 }; // namespace cubble
 

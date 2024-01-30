@@ -48,7 +48,7 @@ void to_json(nlohmann::json &j, const Constants &from) {
                        {"mu", from.mu},
                        {"sigma", from.sigma},
                        {"kappa", from.kappa},
-                       {"K", from.K}};
+                       {"k", from.k}};
 }
 
 void to_json(nlohmann::json &j, const SimulationParameters &from) {
@@ -98,7 +98,7 @@ void from_json(const nlohmann::json &j, Constants &to) {
     j.at("mu").get_to(to.mu);
     j.at("sigma").get_to(to.sigma);
     j.at("kappa").get_to(to.kappa);
-    j.at("K").get_to(to.K);
+    j.at("k").get_to(to.k);
 }
 
 void from_json(const nlohmann::json &j, SimulationParameters &to) {

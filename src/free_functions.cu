@@ -32,70 +32,70 @@ __device__ double correct(int32_t i, double ts, double *pp, double *p,
 }
 
 __device__ void addFlowVelocity(Bubbles &bubbles, int32_t i) {
-    double multiplier = bubbles.numNeighbors[i];
+    double multiplier = bubbles.num_neighbors[i];
     multiplier = (multiplier > 0 ? 1.0 / multiplier : 0.0);
     const double xi = bubbles.xp[i];
     const double yi = bubbles.yp[i];
-    double riSq = bubbles.rp[i];
-    riSq *= riSq;
+    double ri_sq = bubbles.rp[i];
+    ri_sq *= ri_sq;
 
-    int32_t inside =
-        (int32_t)((xi < dConstants->flowTfr.x && xi > dConstants->flowLbb.x) ||
-                  ((dConstants->flowLbb.x - xi) *
-                       (dConstants->flowLbb.x - xi) <=
-                   riSq) ||
-                  ((dConstants->flowTfr.x - xi) *
-                       (dConstants->flowTfr.x - xi) <=
-                   riSq));
+    int32_t inside = (int32_t)((xi < d_constants->flow_tfr.x &&
+                                xi > d_constants->flow_lbb.x) ||
+                               ((d_constants->flow_lbb.x - xi) *
+                                    (d_constants->flow_lbb.x - xi) <=
+                                ri_sq) ||
+                               ((d_constants->flow_tfr.x - xi) *
+                                    (d_constants->flow_tfr.x - xi) <=
+                                ri_sq));
 
-    inside *=
-        (int32_t)((yi < dConstants->flowTfr.y && yi > dConstants->flowLbb.y) ||
-                  ((dConstants->flowLbb.y - yi) *
-                       (dConstants->flowLbb.y - yi) <=
-                   riSq) ||
-                  ((dConstants->flowTfr.y - yi) *
-                       (dConstants->flowTfr.y - yi) <=
-                   riSq));
+    inside *= (int32_t)((yi < d_constants->flow_tfr.y &&
+                         yi > d_constants->flow_lbb.y) ||
+                        ((d_constants->flow_lbb.y - yi) *
+                             (d_constants->flow_lbb.y - yi) <=
+                         ri_sq) ||
+                        ((d_constants->flow_tfr.y - yi) *
+                             (d_constants->flow_tfr.y - yi) <=
+                         ri_sq));
 
-    if (dConstants->dimensionality == 3) {
+    if (d_constants->dimensionality == 3) {
         const double zi = bubbles.zp[i];
-        inside *= (int32_t)((zi < dConstants->flowTfr.z &&
-                             zi > dConstants->flowLbb.z) ||
-                            ((dConstants->flowLbb.z - zi) *
-                                 (dConstants->flowLbb.z - zi) <=
-                             riSq) ||
-                            ((dConstants->flowTfr.z - zi) *
-                                 (dConstants->flowTfr.z - zi) <=
-                             riSq));
+        inside *= (int32_t)((zi < d_constants->flow_tfr.z &&
+                             zi > d_constants->flow_lbb.z) ||
+                            ((d_constants->flow_lbb.z - zi) *
+                                 (d_constants->flow_lbb.z - zi) <=
+                             ri_sq) ||
+                            ((d_constants->flow_tfr.z - zi) *
+                                 (d_constants->flow_tfr.z - zi) <=
+                             ri_sq));
 
-        bubbles.dzdtp[i] += !inside * multiplier * bubbles.flowVz[i] +
-                            dConstants->flowVel.z * inside;
+        bubbles.dzdtp[i] += !inside * multiplier * bubbles.flow_vz[i] +
+                            d_constants->flow_vel.z * inside;
     }
 
     // Either add the average velocity of neighbors or the imposed flow,
     // if the bubble is inside the flow area
-    bubbles.dxdtp[i] += !inside * multiplier * bubbles.flowVx[i] +
-                        dConstants->flowVel.x * inside;
-    bubbles.dydtp[i] += !inside * multiplier * bubbles.flowVy[i] +
-                        dConstants->flowVel.y * inside;
+    bubbles.dxdtp[i] += !inside * multiplier * bubbles.flow_vx[i] +
+                        d_constants->flow_vel.x * inside;
+    bubbles.dydtp[i] += !inside * multiplier * bubbles.flow_vy[i] +
+                        d_constants->flow_vel.y * inside;
 }
 
 __device__ void addWallVelocity(Bubbles &bubbles, int32_t i) {
-    const double drag = 1.0 - dConstants->wallDragStrength;
+    const double drag = 1.0 - d_constants->wall_drag_strength;
     const double rad = bubbles.rp[i];
-    double xDrag = 1.0;
-    double yDrag = 1.0;
+    double x_drag = 1.0;
+    double y_drag = 1.0;
     double velocity = 0.0;
 
-    auto touchesWall = [&i, &rad, &velocity](double x, double low,
-                                             double high) -> bool {
+    auto touches_wall = [&i, &rad, &velocity](double x, double low,
+                                              double high) -> bool {
         double d1 = x - low;
         double d2 = x - high;
         d1 = d1 * d1 < d2 * d2 ? d1 : d2;
         if (rad * rad >= d1 * d1) {
             d2 = d1 < 0.0 ? -1.0 : 1.0;
             d1 *= d2;
-            velocity = d2 * dConstants->fZeroPerMuZero * (1.0 - d1 / rad);
+            velocity = d2 * d_constants->f_zero_per_mu_zero * (1.0 - d1 / rad);
             return true;
         }
 
@@ -103,46 +103,46 @@ __device__ void addWallVelocity(Bubbles &bubbles, int32_t i) {
     };
 
     velocity = 0.0;
-    if (dConstants->xWall &&
-        touchesWall(bubbles.xp[i], dConstants->lbb.x, dConstants->tfr.x)) {
+    if (d_constants->x_wall &&
+        touches_wall(bubbles.xp[i], d_constants->lbb.x, d_constants->tfr.x)) {
         bubbles.dxdtp[i] += velocity;
         bubbles.dydtp[i] *= drag;
         bubbles.dzdtp[i] *= drag;
-        xDrag = drag;
+        x_drag = drag;
     }
 
     velocity = 0.0;
-    if (dConstants->yWall &&
-        touchesWall(bubbles.yp[i], dConstants->lbb.y, dConstants->tfr.y)) {
+    if (d_constants->y_wall &&
+        touches_wall(bubbles.yp[i], d_constants->lbb.y, d_constants->tfr.y)) {
         bubbles.dxdtp[i] *= drag;
-        bubbles.dydtp[i] += velocity * xDrag;
+        bubbles.dydtp[i] += velocity * x_drag;
         bubbles.dzdtp[i] *= drag;
-        yDrag = drag;
+        y_drag = drag;
     }
 
     velocity = 0.0;
-    if (dConstants->zWall &&
-        touchesWall(bubbles.zp[i], dConstants->lbb.z, dConstants->tfr.z)) {
+    if (d_constants->z_wall &&
+        touches_wall(bubbles.zp[i], d_constants->lbb.z, d_constants->tfr.z)) {
         bubbles.dxdtp[i] *= drag;
         bubbles.dydtp[i] *= drag;
-        bubbles.dzdtp[i] += velocity * xDrag * yDrag;
+        bubbles.dzdtp[i] += velocity * x_drag * y_drag;
     }
 }
 
 __device__ void comparePair(int32_t idx1, int32_t idx2, int32_t *histogram,
                             int32_t *pairI, int32_t *pairJ, Bubbles &bubbles) {
-    const double maxDistance =
-        bubbles.r[idx1] + bubbles.r[idx2] + dConstants->skinRadius;
+    const double max_distance =
+        bubbles.r[idx1] + bubbles.r[idx2] + d_constants->skin_radius;
     if (lengthSq(wrappedDifference(
             bubbles.x[idx1], bubbles.y[idx1], bubbles.z[idx1], bubbles.x[idx2],
-            bubbles.y[idx2], bubbles.z[idx2])) < maxDistance * maxDistance) {
+            bubbles.y[idx2], bubbles.z[idx2])) < max_distance * max_distance) {
         // Set the smaller idx to idx1 and larger to idx2
         int32_t id = idx1 > idx2 ? idx1 : idx2;
         idx1 = idx1 < idx2 ? idx1 : idx2;
         idx2 = id;
 
         atomicAdd(&histogram[idx1], 1);
-        id = atomicAdd(&dNumPairs, 1);
+        id = atomicAdd(&d_num_pairs, 1);
         pairI[id] = idx1;
         pairJ[id] = idx2;
     }
@@ -159,25 +159,25 @@ __device__ void logError(bool condition, const char *statement,
                statement, errMsg, threadIdx.x, threadIdx.y, threadIdx.z,
                blockIdx.x, blockIdx.y, blockIdx.z);
 
-        dErrorEncountered = true;
+        d_error_encountered = true;
     }
 }
 
 __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
                                   double y2, double z2) {
     dvec d1 = dvec(x1 - x2, y1 - y2, 0.0);
-    if (3 == dConstants->dimensionality) {
+    if (3 == d_constants->dimensionality) {
         d1.z = z1 - z2;
     }
     dvec d2 = d1;
-    dvec temp = dConstants->interval - abs(d1);
-    if (!dConstants->xWall && temp.x * temp.x < d1.x * d1.x) {
+    dvec temp = d_constants->interval - abs(d1);
+    if (!d_constants->x_wall && temp.x * temp.x < d1.x * d1.x) {
         d2.x = temp.x * (d1.x < 0 ? 1.0 : -1.0);
     }
-    if (!dConstants->yWall && temp.y * temp.y < d1.y * d1.y) {
+    if (!d_constants->y_wall && temp.y * temp.y < d1.y * d1.y) {
         d2.y = temp.y * (d1.y < 0 ? 1.0 : -1.0);
     }
-    if (3 == dConstants->dimensionality && !dConstants->zWall &&
+    if (3 == d_constants->dimensionality && !d_constants->z_wall &&
         temp.z * temp.z < d1.z * d1.z) {
         d2.z = temp.z * (d1.z < 0 ? 1.0 : -1.0);
     }
@@ -187,87 +187,87 @@ __device__ dvec wrappedDifference(double x1, double y1, double z1, double x2,
 
 __device__ int32_t getNeighborCellIndex(int32_t cellIdx, ivec dim,
                                         int32_t neighborNum) {
-    ivec idxVec = get3DIdxFrom1DIdx(cellIdx, dim);
+    ivec idx_vec = get3DIdxFrom1DIdx(cellIdx, dim);
     switch (neighborNum) {
     case 0:
         // self
         break;
     case 1:
-        idxVec += ivec(-1, 1, 0);
+        idx_vec += ivec(-1, 1, 0);
         break;
     case 2:
-        idxVec += ivec(-1, 0, 0);
+        idx_vec += ivec(-1, 0, 0);
         break;
     case 3:
-        idxVec += ivec(-1, -1, 0);
+        idx_vec += ivec(-1, -1, 0);
         break;
     case 4:
-        idxVec += ivec(0, -1, 0);
+        idx_vec += ivec(0, -1, 0);
         break;
     case 5:
-        idxVec += ivec(-1, 1, -1);
+        idx_vec += ivec(-1, 1, -1);
         break;
     case 6:
-        idxVec += ivec(-1, 0, -1);
+        idx_vec += ivec(-1, 0, -1);
         break;
     case 7:
-        idxVec += ivec(-1, -1, -1);
+        idx_vec += ivec(-1, -1, -1);
         break;
     case 8:
-        idxVec += ivec(0, 1, -1);
+        idx_vec += ivec(0, 1, -1);
         break;
     case 9:
-        idxVec += ivec(0, 0, -1);
+        idx_vec += ivec(0, 0, -1);
         break;
     case 10:
-        idxVec += ivec(0, -1, -1);
+        idx_vec += ivec(0, -1, -1);
         break;
     case 11:
-        idxVec += ivec(1, 1, -1);
+        idx_vec += ivec(1, 1, -1);
         break;
     case 12:
-        idxVec += ivec(1, 0, -1);
+        idx_vec += ivec(1, 0, -1);
         break;
     case 13:
-        idxVec += ivec(1, -1, -1);
+        idx_vec += ivec(1, -1, -1);
         break;
     default:
         printf("Should never end up here!\n");
         break;
     }
 
-    if (!dConstants->xWall) {
-        idxVec.x += dim.x;
-        idxVec.x %= dim.x;
-    } else if (idxVec.x < 0 || idxVec.x >= dim.x) {
+    if (!d_constants->x_wall) {
+        idx_vec.x += dim.x;
+        idx_vec.x %= dim.x;
+    } else if (idx_vec.x < 0 || idx_vec.x >= dim.x) {
         return -1;
     }
 
-    if (!dConstants->yWall) {
-        idxVec.y += dim.y;
-        idxVec.y %= dim.y;
-    } else if (idxVec.y < 0 || idxVec.y >= dim.y) {
+    if (!d_constants->y_wall) {
+        idx_vec.y += dim.y;
+        idx_vec.y %= dim.y;
+    } else if (idx_vec.y < 0 || idx_vec.y >= dim.y) {
         return -1;
     }
 
-    if (!dConstants->zWall) {
-        idxVec.z += dim.z;
-        idxVec.z %= dim.z;
-    } else if (idxVec.z < 0 || idxVec.z >= dim.z) {
+    if (!d_constants->z_wall) {
+        idx_vec.z += dim.z;
+        idx_vec.z %= dim.z;
+    } else if (idx_vec.z < 0 || idx_vec.z >= dim.z) {
         return -1;
     }
 
-    return get1DIdxFrom3DIdx(idxVec, dim);
+    return get1DIdxFrom3DIdx(idx_vec, dim);
 }
 
 __device__ int32_t getCellIdxFromPos(double x, double y, double z,
                                      ivec cellDim) {
-    const dvec lbb = dConstants->lbb;
-    const dvec interval = dConstants->interval;
+    const dvec lbb = d_constants->lbb;
+    const dvec interval = d_constants->interval;
     const int32_t xid = ::floor(cellDim.x * (x - lbb.x) / interval.x);
     const int32_t yid = ::floor(cellDim.y * (y - lbb.y) / interval.y);
     int32_t zid = 0;
-    if (dConstants->dimensionality == 3) {
+    if (d_constants->dimensionality == 3) {
         zid = ::floor(cellDim.z * (z - lbb.z) / interval.z);
     }
 
@@ -280,26 +280,26 @@ __device__ int32_t get1DIdxFrom3DIdx(ivec idxVec, ivec cellDim) {
 }
 
 __device__ ivec get3DIdxFrom1DIdx(int32_t idx, ivec cellDim) {
-    ivec idxVec(0, 0, 0);
+    ivec idx_vec(0, 0, 0);
     // Linear decoding
-    idxVec.x = idx % cellDim.x;
-    idxVec.y = (idx / cellDim.x) % cellDim.y;
-    if (dConstants->dimensionality == 3) {
-        idxVec.z = idx / (cellDim.x * cellDim.y);
+    idx_vec.x = idx % cellDim.x;
+    idx_vec.y = (idx / cellDim.x) % cellDim.y;
+    if (d_constants->dimensionality == 3) {
+        idx_vec.z = idx / (cellDim.x * cellDim.y);
     }
 
-    return idxVec;
+    return idx_vec;
 }
 
 __device__ void resetDeviceGlobals() {
-    dTotalArea = 0.0;
-    dTotalOverlapArea = 0.0;
-    dTotalOverlapAreaPerRadius = 0.0;
-    dTotalAreaPerRadius = 0.0;
-    dTotalVolumeNew = 0.0;
-    dMaxRadius = 0.0;
-    dNumToBeDeleted = 0;
-    dNumPairsNew = dNumPairs;
-    dErrorEncountered = false;
+    d_total_area = 0.0;
+    d_total_overlap_area = 0.0;
+    d_total_overlap_area_per_radius = 0.0;
+    d_total_area_per_radius = 0.0;
+    d_total_volume_new = 0.0;
+    d_max_radius = 0.0;
+    d_num_to_be_deleted = 0;
+    d_num_pairs_new = d_num_pairs;
+    d_error_encountered = false;
 }
 } // namespace cubble

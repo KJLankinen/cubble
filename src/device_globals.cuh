@@ -21,15 +21,15 @@
 #include "data_definitions.h"
 
 namespace cubble {
-extern __device__ Constants *dConstants;
-extern __device__ double dTotalArea;
-extern __device__ double dTotalOverlapArea;
-extern __device__ double dTotalOverlapAreaPerRadius;
-extern __device__ double dTotalAreaPerRadius;
-extern __device__ double dTotalVolumeNew;
-extern __device__ double dMaxRadius;
-extern __device__ bool dErrorEncountered;
-extern __device__ int32_t dNumPairs;
-extern __device__ int32_t dNumPairsNew;
-extern __device__ int32_t dNumToBeDeleted;
+extern __device__ Constants *d_constants;
+extern __device__ double d_total_area;
+extern __device__ double d_total_overlap_area;
+extern __device__ double d_total_overlap_area_per_radius;
+extern __device__ double d_total_area_per_radius;
+extern __device__ double d_total_volume_new;
+extern __device__ double d_max_radius;
+extern __device__ bool d_error_encountered;
+extern __device__ int32_t d_num_pairs;
+extern __device__ int32_t d_num_pairs_new;
+extern __device__ int32_t d_num_to_be_deleted;
 }; // namespace cubble

@@ -63,7 +63,7 @@ struct Constants {
     double mu = 0.0;
     double sigma = 0.0;
     double kappa = 0.0;
-    double K = 0.0;
+    double k = 0.0;
 };
 ASSERT_SIZE(Constants, 40);
 

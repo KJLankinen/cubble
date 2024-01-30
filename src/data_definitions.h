@@ -64,23 +64,23 @@ struct Bubbles {
     double *drdto = nullptr;
 
     double *path = nullptr;
-    double *pathNew = nullptr;
+    double *path_new = nullptr;
     double *error = nullptr;
 
-    double *flowVx = nullptr;
-    double *flowVy = nullptr;
-    double *flowVz = nullptr;
+    double *flow_vx = nullptr;
+    double *flow_vy = nullptr;
+    double *flow_vz = nullptr;
 
-    double *savedX = nullptr;
-    double *savedY = nullptr;
-    double *savedZ = nullptr;
-    double *savedR = nullptr;
+    double *saved_x = nullptr;
+    double *saved_y = nullptr;
+    double *saved_z = nullptr;
+    double *saved_r = nullptr;
 
-    int32_t *wrapCountX = nullptr;
-    int32_t *wrapCountY = nullptr;
-    int32_t *wrapCountZ = nullptr;
+    int32_t *wrap_count_x = nullptr;
+    int32_t *wrap_count_y = nullptr;
+    int32_t *wrap_count_z = nullptr;
     int32_t *index = nullptr;
-    int32_t *numNeighbors = nullptr;
+    int32_t *num_neighbors = nullptr;
 
     // Count is the total number of bubbles
     int32_t count = 0;
@@ -91,11 +91,11 @@ struct Bubbles {
     uint64_t stride = 0;
 
     // How many pointers of each type do we have in this struct
-    const uint64_t numDP = 30;
-    const uint64_t numIP = 5;
+    const uint64_t num_dp = 30;
+    const uint64_t num_ip = 5;
 
     uint64_t getMemReq() const {
-        return stride * (sizeof(double) * numDP + sizeof(int32_t) * numIP);
+        return stride * (sizeof(double) * num_dp + sizeof(int32_t) * num_ip);
     }
 
     void *setupPointers(void *start) {
@@ -123,29 +123,29 @@ struct Bubbles {
         setIncr(&dzdto, &prev, stride);
         setIncr(&drdto, &prev, stride);
         setIncr(&path, &prev, stride);
-        setIncr(&pathNew, &prev, stride);
+        setIncr(&path_new, &prev, stride);
         setIncr(&error, &prev, stride);
-        setIncr(&flowVx, &prev, stride);
-        setIncr(&flowVy, &prev, stride);
-        setIncr(&flowVz, &prev, stride);
-        setIncr(&savedX, &prev, stride);
-        setIncr(&savedY, &prev, stride);
-        setIncr(&savedZ, &prev, stride);
-        setIncr(&savedR, &prev, stride);
+        setIncr(&flow_vx, &prev, stride);
+        setIncr(&flow_vy, &prev, stride);
+        setIncr(&flow_vz, &prev, stride);
+        setIncr(&saved_x, &prev, stride);
+        setIncr(&saved_y, &prev, stride);
+        setIncr(&saved_z, &prev, stride);
+        setIncr(&saved_r, &prev, stride);
 
-        int32_t *prevI = reinterpret_cast<int32_t *>(prev);
-        setIncr(&wrapCountX, &prevI, stride);
-        setIncr(&wrapCountY, &prevI, stride);
-        setIncr(&wrapCountZ, &prevI, stride);
-        setIncr(&index, &prevI, stride);
-        setIncr(&numNeighbors, &prevI, stride);
+        int32_t *prev_i = reinterpret_cast<int32_t *>(prev);
+        setIncr(&wrap_count_x, &prev_i, stride);
+        setIncr(&wrap_count_y, &prev_i, stride);
+        setIncr(&wrap_count_z, &prev_i, stride);
+        setIncr(&index, &prev_i, stride);
+        setIncr(&num_neighbors, &prev_i, stride);
 
         assert(static_cast<char *>(start) +
                    stride *
                        (sizeof(double) * numDP + sizeof(int32_t) * numIP) ==
                reinterpret_cast<char *>(prevI));
 
-        return static_cast<void *>(prevI);
+        return static_cast<void *>(prev_i);
     }
 
     void print() { printf("\t#bubbles: %i, stride: %li\n", count, stride); }
@@ -183,87 +183,90 @@ struct Constants {
     dvec lbb = dvec(0.0, 0.0, 0.0);
     dvec tfr = dvec(0.0, 0.0, 0.0);
     dvec interval = dvec(0.0, 0.0, 0.0);
-    dvec flowLbb = dvec(0.0, 0.0, 0.0);
-    dvec flowTfr = dvec(0.0, 0.0, 0.0);
-    dvec flowVel = dvec(0.0, 0.0, 0.0);
+    dvec flow_lbb = dvec(0.0, 0.0, 0.0);
+    dvec flow_tfr = dvec(0.0, 0.0, 0.0);
+    dvec flow_vel = dvec(0.0, 0.0, 0.0);
 
-    double averageSurfaceAreaIn = 0.0;
-    double minRad = 0.0;
-    double fZeroPerMuZero = 0.0;
-    double kParameter = 0.0;
+    double average_surface_area_in = 0.0;
+    double min_rad = 0.0;
+    double f_zero_per_mu_zero = 0.0;
+    double k_parameter = 0.0;
     double kappa = 0.0;
-    double wallDragStrength = 0.0;
-    double skinRadius = 0.3;
-    double bubbleVolumeMultiplier = 0.0;
+    double wall_drag_strength = 0.0;
+    double skin_radius = 0.3;
+    double bubble_volume_multiplier = 0.0;
 
     int32_t dimensionality = 0;
 
-    bool xWall = false;
-    bool yWall = false;
-    bool zWall = false;
+    bool x_wall = false;
+    bool y_wall = false;
+    bool z_wall = false;
 
     void print() {
         printf("\tlower back bottom: (%g, %g, %g)", lbb.x, lbb.y, lbb.z);
         printf("\n\ttop front right: (%g, %g, %g)", tfr.x, tfr.y, tfr.z);
         printf("\n\tinterval: (%g, %g, %g)", interval.x, interval.y,
                interval.z);
-        printf("\n\tflow lbb: (%g, %g, %g)", flowLbb.x, flowLbb.y, flowLbb.z);
-        printf("\n\tflow tfr: (%g, %g, %g)", flowTfr.x, flowTfr.y, flowTfr.z);
-        printf("\n\tflow vel: (%g, %g, %g)", flowVel.x, flowVel.y, flowVel.z);
-        printf("\n\tminimum radius: %g", minRad);
-        printf("\n\tf0/mu0: %g", fZeroPerMuZero);
-        printf("\n\tk parameter: %g", kParameter);
+        printf("\n\tflow lbb: (%g, %g, %g)", flow_lbb.x, flow_lbb.y,
+               flow_lbb.z);
+        printf("\n\tflow tfr: (%g, %g, %g)", flow_tfr.x, flow_tfr.y,
+               flow_tfr.z);
+        printf("\n\tflow vel: (%g, %g, %g)", flow_vel.x, flow_vel.y,
+               flow_vel.z);
+        printf("\n\tminimum radius: %g", min_rad);
+        printf("\n\tf0/mu0: %g", f_zero_per_mu_zero);
+        printf("\n\tk parameter: %g", k_parameter);
         printf("\n\tkappa: %g", kappa);
-        printf("\n\twall drag: %g", wallDragStrength);
-        printf("\n\tskin radius: %g", skinRadius);
+        printf("\n\twall drag: %g", wall_drag_strength);
+        printf("\n\tskin radius: %g", skin_radius);
         printf("\n\tdimensions: %d", dimensionality);
-        printf("\n\tx has wall: %d", xWall);
-        printf("\n\ty has wall: %d", yWall);
-        printf("\n\tz has wall: %d\n", zWall);
+        printf("\n\tx has wall: %d", x_wall);
+        printf("\n\ty has wall: %d", y_wall);
+        printf("\n\tz has wall: %d\n", z_wall);
     }
 };
 
 struct IntegrationParams {
-    bool useGasExchange = false;
-    bool useFlow = false;
-    bool incrementPath = false;
-    bool errorTooLarge = true;
-    double maxRadius = 0.0;
-    double maxExpansion = 0.0;
-    double maxError = 0.0;
-    int32_t *hNumToBeDeleted = nullptr;
+    bool use_gas_exchange = false;
+    bool use_flow = false;
+    bool increment_path = false;
+    bool error_too_large = true;
+    double max_radius = 0.0;
+    double max_expansion = 0.0;
+    double max_error = 0.0;
+    int32_t *h_num_to_be_deleted = nullptr;
 };
 
 // Only accessed by host
 struct HostData {
-    uint64_t numIntegrationSteps = 0;
-    uint64_t numNeighborsSearched = 0;
-    uint64_t numStepsInTimeStep = 0;
+    uint64_t num_integration_steps = 0;
+    uint64_t num_neighbors_searched = 0;
+    uint64_t num_steps_in_time_step = 0;
 
-    uint64_t timeInteger = 0;
-    double timeFraction = 0.0;
-    double timeScalingFactor = 0.0;
-    double timeStep = 0.0001;
+    uint64_t time_integer = 0;
+    double time_fraction = 0.0;
+    double time_scaling_factor = 0.0;
+    double time_step = 0.0001;
 
     double energy1 = 0.0;
     double energy2 = 0.0;
 
-    double errorTolerance = 0.0;
-    double snapshotFrequency = 0.0;
-    double avgRad = 0.0;
-    double maxBubbleRadius = 0.0;
-    int32_t minNumBubbles = 0;
-    uint32_t timesPrinted = 0;
-    uint32_t numSnapshots = 0;
+    double error_tolerance = 0.0;
+    double snapshot_frequency = 0.0;
+    double avg_rad = 0.0;
+    double max_bubble_radius = 0.0;
+    int32_t min_num_bubbles = 0;
+    uint32_t times_printed = 0;
+    uint32_t num_snapshots = 0;
 
-    bool addFlow = false;
+    bool add_flow = false;
 
     void print() {
-        printf("\terror tolerance: %g", errorTolerance);
-        printf("\n\tsnapshot frequency: %g", snapshotFrequency);
-        printf("\n\taverage radius: %g", avgRad);
-        printf("\n\tminimum number of bubbles: %d", minNumBubbles);
-        printf("\n\timpose flow: %d\n", addFlow);
+        printf("\terror tolerance: %g", error_tolerance);
+        printf("\n\tsnapshot frequency: %g", snapshot_frequency);
+        printf("\n\taverage radius: %g", avg_rad);
+        printf("\n\tminimum number of bubbles: %d", min_num_bubbles);
+        printf("\n\timpose flow: %d\n", add_flow);
     }
 };
 
@@ -282,9 +285,9 @@ struct SnapshotParams {
     double *error = nullptr;
     double *energy = nullptr;
     int32_t *index = nullptr;
-    int32_t *wrapCountX = nullptr;
-    int32_t *wrapCountY = nullptr;
-    int32_t *wrapCountZ = nullptr;
+    int32_t *wrap_count_x = nullptr;
+    int32_t *wrap_count_y = nullptr;
+    int32_t *wrap_count_z = nullptr;
 
     dvec interval = {};
 
@@ -299,40 +302,40 @@ struct SnapshotParams {
 };
 
 struct Params {
-    Constants hostConstants = {};
-    Constants *deviceConstants = nullptr;
-    HostData hostData = {};
-    SnapshotParams snapshotParams = {};
+    Constants host_constants = {};
+    Constants *device_constants = nullptr;
+    HostData host_data = {};
+    SnapshotParams snapshot_params = {};
 
     Bubbles bubbles = {};
     Pairs pairs = {};
 
-    std::thread ioThread = {};
+    std::thread io_thread = {};
 
-    dim3 blockGrid = dim3(GRID_SIZE, 1, 1);
-    dim3 threadBlock = dim3(BLOCK_SIZE, 1, 1);
+    dim3 block_grid = dim3(GRID_SIZE, 1, 1);
+    dim3 thread_block = dim3(BLOCK_SIZE, 1, 1);
 
     void *memory = nullptr;
-    void *pinnedMemory = nullptr;
+    void *pinned_memory = nullptr;
 
-    double *tempD1 = nullptr;
-    double *blockMax = nullptr;
-    int32_t *tempI = nullptr;
-    int32_t *tempPair1 = nullptr;
-    int32_t *tempPair2 = nullptr;
+    double *temp_d1 = nullptr;
+    double *block_max = nullptr;
+    int32_t *temp_i = nullptr;
+    int32_t *temp_pair1 = nullptr;
+    int32_t *temp_pair2 = nullptr;
 
-    std::vector<double> previousX = {};
-    std::vector<double> previousY = {};
-    std::vector<double> previousZ = {};
-    std::vector<uint8_t> hostMemory = {};
+    std::vector<double> previous_x = {};
+    std::vector<double> previous_y = {};
+    std::vector<double> previous_z = {};
+    std::vector<uint8_t> host_memory = {};
     std::vector<double> maximums = {};
 
     void setTempPointers(void *ptr) {
-        tempPair1 = static_cast<int32_t *>(ptr);
-        tempPair2 = tempPair1 + pairs.stride;
-        tempI = tempPair2 + pairs.stride;
-        tempD1 = reinterpret_cast<double *>(tempI + bubbles.stride);
-        blockMax = tempD1 + bubbles.stride;
+        temp_pair1 = static_cast<int32_t *>(ptr);
+        temp_pair2 = temp_pair1 + pairs.stride;
+        temp_i = temp_pair2 + pairs.stride;
+        temp_d1 = reinterpret_cast<double *>(temp_i + bubbles.stride);
+        block_max = temp_d1 + bubbles.stride;
     }
 
     uint64_t getTempMemReq() const {
