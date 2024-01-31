@@ -890,7 +890,7 @@ __global__ void calculateVolumes(Bubbles bubbles, double *volumes) {
     }
 }
 
-__global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
+__global__ void assignDataToBubbles(uvec bubblesPerDim, double avgRad,
                                     Bubbles bubbles) {
     const dvec interval = d_constants->interval;
     const dvec lbb = d_constants->lbb;

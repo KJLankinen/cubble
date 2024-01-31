@@ -20,6 +20,7 @@
 #include "device_globals.cuh"
 #include "kernels.cuh"
 #include "macros.h"
+#include "particle_box.h"
 #include "util.cuh"
 #include "vec.h"
 
@@ -579,67 +580,42 @@ void init(const char *inputFileName, Params &params) {
     auto wall = box["wall"];
     auto flow = input_json["flow"];
 
-    const int32_t stabilization_steps = input_json["stabilization"]["steps"];
-
-    params.host_data.avg_rad = bubbles["radius"]["mean"];
-    params.host_data.min_num_bubbles = bubbles["numEnd"];
-    params.host_constants.skin_radius *= params.host_data.avg_rad;
-
-    const double mu = constants["mu"]["value"];
-    const double phi = constants["phi"]["value"];
-    params.host_constants.min_rad = 0.1 * params.host_data.avg_rad;
+    params.host_constants.skin_radius *= (double)bubbles["radius"]["mean"];
+    params.host_constants.min_rad = 0.1 * (double)bubbles["radius"]["mean"];
     params.host_constants.f_zero_per_mu_zero =
-        (float)constants["sigma"]["value"] * params.host_data.avg_rad / mu;
+        (double)constants["sigma"]["value"] *
+        (double)bubbles["radius"]["mean"] / (double)constants["mu"]["value"];
     params.host_constants.k_parameter = constants["K"]["value"];
     params.host_constants.kappa = constants["kappa"]["value"];
-    params.host_data.time_scaling_factor =
-        params.host_constants.k_parameter /
-        (params.host_data.avg_rad * params.host_data.avg_rad);
-
-    params.host_data.add_flow = 1 == flow["impose"];
     params.host_constants.flow_lbb = flow["lbb"];
     params.host_constants.flow_tfr = flow["tfr"];
     params.host_constants.flow_vel = flow["velocity"];
     params.host_constants.flow_vel *= params.host_constants.f_zero_per_mu_zero;
-
-    params.host_data.error_tolerance = input_json["errorTolerance"]["value"];
-    params.host_data.snapshot_frequency = input_json["snapShot"]["frequency"];
-    params.snapshot_params.name = input_json["snapShot"]["filename"];
-
     params.host_constants.wall_drag_strength = wall["drag"];
     params.host_constants.x_wall = 1 == wall["x"];
     params.host_constants.y_wall = 1 == wall["y"];
     params.host_constants.z_wall = 1 == wall["z"];
     params.host_constants.dimensionality = box["dimensionality"];
 
+    params.host_data.avg_rad = bubbles["radius"]["mean"];
+    params.host_data.min_num_bubbles = bubbles["numEnd"];
+    params.host_data.time_scaling_factor =
+        params.host_constants.k_parameter /
+        (params.host_data.avg_rad * params.host_data.avg_rad);
+    params.host_data.add_flow = 1 == flow["impose"];
+    params.host_data.error_tolerance = input_json["errorTolerance"]["value"];
+    params.host_data.snapshot_frequency = input_json["snapShot"]["frequency"];
+
+    params.snapshot_params.name = input_json["snapShot"]["filename"];
+
     // Calculate the size of the box and the starting number of bubbles
     const float d = 2 * params.host_data.avg_rad;
-    float n = (float)bubbles["numStart"];
-    dvec rel_dim = box["relativeDimensions"];
-    ivec bubbles_per_dim = ivec(0, 0, 0);
+    const ParticleBox particle_box(box["relativeDimensions"],
+                                   bubbles["numStart"], box["dimensionality"]);
+    params.bubbles.count = particle_box.num_particles;
 
-    if (params.host_constants.dimensionality == 3) {
-        n = std::cbrt(n);
-        const float a = std::cbrt(rel_dim.x / rel_dim.y);
-        const float b = std::cbrt(rel_dim.x / rel_dim.z);
-        const float c = std::cbrt(rel_dim.y / rel_dim.z);
-        bubbles_per_dim.x = (int32_t)std::ceil(n * a * b);
-        bubbles_per_dim.y = (int32_t)std::ceil(n * c / a);
-        bubbles_per_dim.z = (int32_t)std::ceil(n / (b * c));
-
-        params.bubbles.count =
-            bubbles_per_dim.x * bubbles_per_dim.y * bubbles_per_dim.z;
-    } else {
-        n = std::sqrt(n);
-        const float a = std::sqrt(rel_dim.x / rel_dim.y);
-        bubbles_per_dim.x = (int32_t)std::ceil(n * a);
-        bubbles_per_dim.y = (int32_t)std::ceil(n / a);
-
-        params.bubbles.count = bubbles_per_dim.x * bubbles_per_dim.y;
-    }
-
-    params.host_constants.tfr =
-        d * dvec(bubbles_per_dim) + params.host_constants.lbb;
+    params.host_constants.tfr = d * dvec(particle_box.particles_per_dimension) +
+                                params.host_constants.lbb;
     params.host_constants.interval =
         params.host_constants.tfr - params.host_constants.lbb;
 
@@ -740,7 +716,8 @@ void init(const char *inputFileName, Params &params) {
         params.host_data.avg_rad, bubbles["radius"]["std"]));
     CURAND_CALL(curandDestroyGenerator(generator));
 
-    KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0, bubbles_per_dim,
+    KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0,
+                  particle_box.particles_per_dimension,
                   params.host_data.avg_rad, params.bubbles);
 
     // Get the average input surface area and maximum bubble radius
@@ -826,16 +803,19 @@ void init(const char *inputFileName, Params &params) {
     params.bubbles.dzdtp = swapper;
 
     printf("Stabilizing a few rounds after creation\n");
+    const int32_t stabilization_steps = input_json["stabilization"]["steps"];
     for (uint32_t i = 0; i < 5; ++i)
         stabilize(params, stabilization_steps);
 
     printf("Scaling the simulation box\n");
     const double bubble_volume = totalVolume(params);
+    const double phi = constants["phi"]["value"];
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubble_volume / boxVolume(params), phi);
 
     KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
 
+    dvec rel_dim = box["relativeDimensions"];
     double t = bubble_volume / (phi * rel_dim.x * rel_dim.y);
     if (params.host_constants.dimensionality == 3) {
         t /= rel_dim.z;

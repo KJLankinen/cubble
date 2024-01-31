@@ -28,11 +28,15 @@ int32_t run(int32_t argc, char **argv);
 
 int32_t main(int32_t argc, char **argv) {
     // TEMP
+    /*
     {
         auto [config, msg, ok, _] = cubble::parse(argc, argv);
         if (ok) {
             cubble::print(config);
-            // TODO, proceed with config, create correct structures
+            // TODO
+            // Make a more device agnostic device availability check?
+            // Generate structures from the input config
+            // Start simulation
 
             return EXIT_SUCCESS;
         } else {
@@ -40,6 +44,7 @@ int32_t main(int32_t argc, char **argv) {
             return EXIT_FAILURE;
         }
     }
+    */
 
     return cubble::run(argc, argv);
 }

@@ -22,7 +22,7 @@ set(gcc_warn ${gcc_warn};-Wredundant-decls;-Wformat=2;)
 set(gcc_warn ${gcc_warn};-Wformat-security;-Wformat-nonliteral;)
 set(gcc_warn ${gcc_warn};-Wnull-dereference;-Winit-self;-Wuninitialized;)
 set(gcc_warn ${gcc_warn};-Warith-conversion;-Wduplicated-branches;)
-set(gcc_warn ${gcc_warn};-Wshadow;-Wpointer-arith;-Wundef;)
+set(gcc_warn ${gcc_warn};-Wpointer-arith;-Wundef;)
 set(gcc_warn ${gcc_warn};-Wduplicated-cond;-Wformat-signedness;)
 
 set(gcc_deb_opt -Og;)

@@ -55,7 +55,7 @@ __global__ void euler(double ts, Bubbles bubbles);
 __global__ void transformPositions(bool normalize, Bubbles bubbles);
 __global__ void wrapOverPeriodicBoundaries(Bubbles bubbles);
 __global__ void calculateVolumes(Bubbles bubbles, double *volumes);
-__global__ void assignDataToBubbles(ivec bubblesPerDim, double avgRad,
+__global__ void assignDataToBubbles(uvec bubblesPerDim, double avgRad,
                                     Bubbles bubbles);
 __global__ void initGlobals();
 template <typename T, typename... Args>
