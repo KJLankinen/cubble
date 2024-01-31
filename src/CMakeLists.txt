@@ -21,7 +21,7 @@ target_sources(
     free_functions.cu
     kernels.cu
     parsing.cpp
-    simulation_parameters.cpp
+    input_parameters.cpp
     simulator.cu
     )
 

@@ -58,22 +58,21 @@ struct Flow {
 };
 ASSERT_SIZE(Flow, 80);
 
-struct Constants {
+struct InputConstants {
     double phi = 0.0;
     double mu = 0.0;
     double sigma = 0.0;
     double kappa = 0.0;
     double k = 0.0;
 };
-ASSERT_SIZE(Constants, 40);
+ASSERT_SIZE(InputConstants, 40);
 
-struct SimulationParameters {
+struct InputParameters {
     Flow flow = {};
-    Constants constants = {};
+    InputConstants input_constants = {};
     Box box = {};
     Bubble bubble = {};
     Wall wall = {};
-    // 192 + 32
     std::vector<std::string> comments_md = {};
     std::string snap_shot_filename = "bubbles";
     double error_tolerance = 0.0;
@@ -84,18 +83,18 @@ struct SimulationParameters {
 };
 constexpr size_t bytes =
     224 + sizeof(std::string) + sizeof(std::vector<std::string>);
-ASSERT_SIZE(SimulationParameters, bytes);
+ASSERT_SIZE(InputParameters, bytes);
 
 void to_json(nlohmann::json &, const Bubble &);
 void to_json(nlohmann::json &, const Box &);
 void to_json(nlohmann::json &, const Wall &);
 void to_json(nlohmann::json &, const Flow &);
-void to_json(nlohmann::json &, const Constants &);
-void to_json(nlohmann::json &, const SimulationParameters &);
+void to_json(nlohmann::json &, const InputConstants &);
+void to_json(nlohmann::json &, const InputParameters &);
 void from_json(const nlohmann::json &, Bubble &);
 void from_json(const nlohmann::json &, Box &);
 void from_json(const nlohmann::json &, Wall &);
 void from_json(const nlohmann::json &, Flow &);
-void from_json(const nlohmann::json &, Constants &);
-void from_json(const nlohmann::json &, SimulationParameters &);
+void from_json(const nlohmann::json &, InputConstants &);
+void from_json(const nlohmann::json &, InputParameters &);
 } // namespace cubble

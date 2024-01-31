@@ -18,12 +18,12 @@
 
 #pragma once
 
-#include "simulation_parameters.h"
+#include "input_parameters.h"
 #include <string>
 
 namespace cubble {
     struct Config{
-        SimulationParameters simulation_parameters = {};
+        InputParameters input_parameters = {};
         std::string output_filename = "";
     };
     void to_json(nlohmann::json &, const Config &);

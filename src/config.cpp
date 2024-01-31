@@ -20,13 +20,12 @@
 
 namespace cubble {
     void to_json(nlohmann::json &j, const Config &from) {
-        j = nlohmann::json{
-            {"output_filename", from.output_filename},
-            {"simulation_parameters", from.simulation_parameters}};
+        j = nlohmann::json{{"output_filename", from.output_filename},
+                           {"simulation_parameters", from.input_parameters}};
     }
 
     void from_json(const nlohmann::json &j, Config &to) {
         j.at("output_filename").get_to(to.output_filename);
-        j.at("simulation_parameters").get_to(to.simulation_parameters);
+        j.at("simulation_parameters").get_to(to.input_parameters);
     }
 }

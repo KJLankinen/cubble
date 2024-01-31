@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "input_parameters.h"
 #include "vec.h"
 #include <cmath>
 #include <cstdint>
@@ -30,6 +31,7 @@ namespace cubble {
         const uint32_t num_particles;
         const uint32_t dimensionality;
 
+        // Old way
         ParticleBox(const dvec &shape, uint32_t num_requested,
                     uint32_t dimensionality)
             : shape(shape),
@@ -41,6 +43,18 @@ namespace cubble {
                   (particles_per_dimension.z > 0 ? particles_per_dimension.z
                                                  : 1)),
               dimensionality(dimensionality) {}
+
+        // New way
+        ParticleBox(const InputParameters &ip)
+            : shape(ip.box.relative_dimensions),
+              particles_per_dimension(computeParticlesPerDimension(
+                  shape, ip.bubble.num_start, ip.box.dimensionality)),
+              num_requested(ip.bubble.num_start),
+              num_particles(
+                  particles_per_dimension.x * particles_per_dimension.y *
+                  (particles_per_dimension.z > 0 ? particles_per_dimension.z
+                                                 : 1)),
+              dimensionality(ip.box.dimensionality) {}
 
       private:
         static uvec computeParticlesPerDimension(const dvec &shape,

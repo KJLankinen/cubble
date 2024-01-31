@@ -94,7 +94,7 @@
         "z": 0.0
       }
     },
-    "constants": {
+    "input_constants": {
       "phi": 0.9,
       "mu": 1.0,
       "sigma": 1.0,

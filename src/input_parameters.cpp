@@ -16,7 +16,7 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "simulation_parameters.h"
+#include "input_parameters.h"
 
 namespace cubble {
 void to_json(nlohmann::json &j, const Bubble &from) {
@@ -43,7 +43,7 @@ void to_json(nlohmann::json &j, const Flow &from) {
                        {"right_top_front", from.right_top_front}};
 }
 
-void to_json(nlohmann::json &j, const Constants &from) {
+void to_json(nlohmann::json &j, const InputConstants &from) {
     j = nlohmann::json{{"phi", from.phi},
                        {"mu", from.mu},
                        {"sigma", from.sigma},
@@ -51,14 +51,14 @@ void to_json(nlohmann::json &j, const Constants &from) {
                        {"k", from.k}};
 }
 
-void to_json(nlohmann::json &j, const SimulationParameters &from) {
+void to_json(nlohmann::json &j, const InputParameters &from) {
     j = nlohmann::json{
         {"comments_md", from.comments_md},
         {"bubble", from.bubble},
         {"box", from.box},
         {"wall", from.wall},
         {"flow", from.flow},
-        {"constants", from.constants},
+        {"input_constants", from.input_constants},
         {"error_tolerance", from.error_tolerance},
         {"rng_seed", from.rng_seed},
         {"stabilization_steps", from.stabilization_steps},
@@ -93,7 +93,7 @@ void from_json(const nlohmann::json &j, Flow &to) {
     j.at("right_top_front").get_to(to.right_top_front);
 }
 
-void from_json(const nlohmann::json &j, Constants &to) {
+void from_json(const nlohmann::json &j, InputConstants &to) {
     j.at("phi").get_to(to.phi);
     j.at("mu").get_to(to.mu);
     j.at("sigma").get_to(to.sigma);
@@ -101,13 +101,13 @@ void from_json(const nlohmann::json &j, Constants &to) {
     j.at("k").get_to(to.k);
 }
 
-void from_json(const nlohmann::json &j, SimulationParameters &to) {
+void from_json(const nlohmann::json &j, InputParameters &to) {
     j.at("comments_md").get_to(to.comments_md);
     j.at("bubble").get_to(to.bubble);
     j.at("box").get_to(to.box);
     j.at("wall").get_to(to.wall);
     j.at("flow").get_to(to.flow);
-    j.at("constants").get_to(to.constants);
+    j.at("input_constants").get_to(to.input_constants);
     j.at("error_tolerance").get_to(to.error_tolerance);
     j.at("rng_seed").get_to(to.rng_seed);
     j.at("stabilization_steps").get_to(to.stabilization_steps);

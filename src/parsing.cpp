@@ -32,7 +32,7 @@ Result<Config> parse(std::string inputFilename, std::string outputFilename) {
         try {
             file >> j;
             return Result<Config>::Ok(
-                Config{j.template get<SimulationParameters>(), outputFilename});
+                Config{j.template get<InputParameters>(), outputFilename});
         } catch (const nlohmann::json::exception &e) {
             errmsg << "Error parsing input with filename '" << inputFilename
                    << "'. Exception thrown: " << e.what();
