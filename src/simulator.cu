@@ -1208,9 +1208,9 @@ int32_t run(int32_t argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    int32_t num_gp_us = 0;
-    CUDA_CALL(cudaGetDeviceCount(&num_gp_us));
-    if (num_gp_us < 1) {
+    int32_t num_gpu = 0;
+    CUDA_CALL(cudaGetDeviceCount(&num_gpu));
+    if (num_gpu < 1) {
         printf("No CUDA capable devices found.\n");
         return EXIT_FAILURE;
     }
