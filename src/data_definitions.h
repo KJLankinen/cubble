@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "particle_box.h"
 #include "vec.h"
 #include <cstdint>
 #include <string>
@@ -329,6 +330,8 @@ struct Params {
     std::vector<double> previous_z = {};
     std::vector<uint8_t> host_memory = {};
     std::vector<double> maximums = {};
+
+    uvec particles_per_dimension = {};
 
     void setTempPointers(void *ptr) {
         temp_pair1 = static_cast<int32_t *>(ptr);

@@ -717,8 +717,7 @@ void trackTimeStep(double &ts, double &min_timestep, double &max_timestep,
     avg_timestep += ts;
 }
 
-void init(const char *inputFileName, Params &params) {
-    printf("==============\nInitialization\n==============\n");
+nlohmann::json parse(const char *inputFileName) {
     printf("Reading inputs from %s\n", inputFileName);
     nlohmann::json input_json;
     std::fstream file(inputFileName, std::ios::in);
@@ -728,11 +727,15 @@ void init(const char *inputFileName, Params &params) {
         throw std::runtime_error("Couldn't open input file!");
     }
 
-    auto constants = input_json["constants"];
-    auto bubbles = input_json["bubbles"];
-    auto box = input_json["box"];
-    auto wall = box["wall"];
-    auto flow = input_json["flow"];
+    return input_json;
+}
+
+void initializeHostConstants(Params &params, const nlohmann::json &input_json) {
+    const auto constants = input_json["constants"];
+    const auto bubbles = input_json["bubbles"];
+    const auto box = input_json["box"];
+    const auto wall = box["wall"];
+    const auto flow = input_json["flow"];
 
     params.host_constants.skin_radius *= (double)bubbles["radius"]["mean"];
     params.host_constants.min_rad = 0.1 * (double)bubbles["radius"]["mean"];
@@ -750,6 +753,11 @@ void init(const char *inputFileName, Params &params) {
     params.host_constants.y_wall = 1 == wall["y"];
     params.host_constants.z_wall = 1 == wall["z"];
     params.host_constants.dimensionality = box["dimensionality"];
+}
+
+void initializeHostData(Params &params, const nlohmann::json &input_json) {
+    const auto bubbles = input_json["bubbles"];
+    const auto flow = input_json["flow"];
 
     params.host_data.avg_rad = bubbles["radius"]["mean"];
     params.host_data.min_num_bubbles = bubbles["numEnd"];
@@ -761,6 +769,11 @@ void init(const char *inputFileName, Params &params) {
     params.host_data.snapshot_frequency = input_json["snapShot"]["frequency"];
 
     params.snapshot_params.name = input_json["snapShot"]["filename"];
+}
+
+void computeSizeOfBox(Params &params, const nlohmann::json &input_json) {
+    const auto bubbles = input_json["bubbles"];
+    const auto box = input_json["box"];
 
     // Calculate the size of the box and the starting number of bubbles
     const float d = 2 * params.host_data.avg_rad;
@@ -772,7 +785,10 @@ void init(const char *inputFileName, Params &params) {
                                 params.host_constants.lbb;
     params.host_constants.interval =
         params.host_constants.tfr - params.host_constants.lbb;
+    params.particles_per_dimension = particle_box.particles_per_dimension;
+}
 
+void computeBubbleDataSize(Params &params) {
     // Calculate the length of 'rows'.
     // Make it divisible by 32, as that's the warp size.
     params.bubbles.stride =
@@ -786,14 +802,18 @@ void init(const char *inputFileName, Params &params) {
     const uint32_t avg_num_neighbors =
         (params.host_constants.dimensionality == 3) ? 12 : 4;
     params.pairs.stride = avg_num_neighbors * params.bubbles.stride;
+}
 
+void printStartingParameters(Params &params) {
     printf("---------------Starting parameters---------------\n");
     params.host_constants.print();
     params.host_data.print();
     params.bubbles.print();
     params.pairs.print();
     printf("-------------------------------------------------\n");
+}
 
+void allocateCopyConstansToGPU(Params &params) {
     // Allocate and copy constants to GPU
     CUDA_ASSERT(cudaMalloc(reinterpret_cast<void **>(&params.device_constants),
                            sizeof(Constants)));
@@ -806,20 +826,22 @@ void init(const char *inputFileName, Params &params) {
 
     CUDA_CALL(
         cudaEventCreate(&params.snapshot_params.event, cudaEventDisableTiming));
+
     printRelevantInfoOfCurrentDevice();
 
-    // Set device globals to zero
     int32_t zero = 0;
     CUDA_CALL(cudaMemcpyToSymbol(d_num_pairs, static_cast<void *>(&zero),
                                  sizeof(int32_t)));
     KERNEL_LAUNCH(initGlobals, params, 0, 0);
+}
 
+void reserveDeviceMemore(Params &params) {
     printf("Reserving device memory\n");
     CUDA_CALL(cudaMallocHost(&params.pinned_memory, sizeof(int32_t)));
 
     // Total memory: memory for bubble data, memory for pair data and memory for
     // temporary arrays
-    uint64_t bytes = params.bubbles.getMemReq();
+    size_t bytes = params.bubbles.getMemReq();
     bytes += params.pairs.getMemReq();
     bytes += params.getTempMemReq();
     CUDA_ASSERT(cudaMalloc(&params.memory, bytes));
@@ -850,15 +872,18 @@ void init(const char *inputFileName, Params &params) {
     bytes = (bytes - megs * 1024 * 1024 - kilos * 1024);
     printf("Allocated %ld MB %ld KB %ld B of global device memory.\n", megs,
            kilos, bytes);
+}
 
+void generateStartingData(Params &params, const nlohmann::json &input_json) {
     printf("Generating starting data\n");
     curandGenerator_t generator;
     CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
     CURAND_CALL(curandSetPseudoRandomGeneratorSeed(
         generator, input_json["rngSeed"]["value"]));
-    if (params.host_constants.dimensionality == 3)
+    if (params.host_constants.dimensionality == 3) {
         CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.z,
                                                 params.bubbles.count));
+    }
     CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.x,
                                             params.bubbles.count));
     CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.y,
@@ -867,12 +892,12 @@ void init(const char *inputFileName, Params &params) {
                                             params.bubbles.count));
     CURAND_CALL(curandGenerateNormalDouble(
         generator, params.bubbles.r, params.bubbles.count,
-        params.host_data.avg_rad, bubbles["radius"]["std"]));
+        params.host_data.avg_rad, input_json["bubbles"]["radius"]["std"]));
     CURAND_CALL(curandDestroyGenerator(generator));
 
     KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0,
-                  particle_box.particles_per_dimension,
-                  params.host_data.avg_rad, params.bubbles);
+                  params.particles_per_dimension, params.host_data.avg_rad,
+                  params.bubbles);
 
     // Get the average input surface area and maximum bubble radius
     void *cub_ptr = static_cast<void *>(params.temp_pair2);
@@ -890,14 +915,16 @@ void init(const char *inputFileName, Params &params) {
                params.bubbles.r, static_cast<double *>(cub_output),
                params.bubbles.count, (cudaStream_t)0, false);
     CUDA_CALL(cudaMemcpyFromSymbol(out, d_max_radius, sizeof(double)));
+}
 
+void performFirstNeigborSearch(Params &params) {
     printf("First neighbor search\n");
     searchNeighbors(params);
 
     // After searchNeighbors x, y, z, r are correct,
     // but all predicted are trash. pairwiseInteraction always uses
     // predicted values, so copy currents to predicteds
-    bytes = params.bubbles.stride * sizeof(double);
+    size_t bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.xp),
                               static_cast<void *>(params.bubbles.x), bytes,
                               cudaMemcpyDefault, 0));
@@ -910,7 +937,9 @@ void init(const char *inputFileName, Params &params) {
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDefault, 0));
+}
 
+void performInitialVelocityComputation(Params &params) {
     printf("Calculating initial velocities for Adams-Bashforth-Moulton\n");
     KERNEL_LAUNCH(
         resetArrays, params, 0, 0, 0.0, params.bubbles.count, false,
@@ -947,29 +976,32 @@ void init(const char *inputFileName, Params &params) {
     swapper = params.bubbles.dxdto;
     params.bubbles.dxdto = params.bubbles.dxdtp;
     params.bubbles.dxdtp = swapper;
-
     swapper = params.bubbles.dydto;
     params.bubbles.dydto = params.bubbles.dydtp;
     params.bubbles.dydtp = swapper;
-
     swapper = params.bubbles.dzdto;
     params.bubbles.dzdto = params.bubbles.dzdtp;
     params.bubbles.dzdtp = swapper;
+}
 
+void stabilizeAfterCreate(Params &params, const nlohmann::json &input_json) {
     printf("Stabilizing a few rounds after creation\n");
     const int32_t stabilization_steps = input_json["stabilization"]["steps"];
-    for (uint32_t i = 0; i < 5; ++i)
+    for (uint32_t i = 0; i < 5; ++i) {
         stabilize(params, stabilization_steps);
+    }
+}
 
+void scaleAfterStabilize(Params &params, const nlohmann::json &input_json) {
     printf("Scaling the simulation box\n");
     const double bubble_volume = totalVolume(params);
-    const double phi = constants["phi"]["value"];
+    const double phi = input_json["constants"]["phi"]["value"];
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubble_volume / boxVolume(params), phi);
 
     KERNEL_LAUNCH(transformPositions, params, 0, 0, true, params.bubbles);
 
-    dvec rel_dim = box["relativeDimensions"];
+    dvec rel_dim = input_json["box"]["relativeDimensions"];
     double t = bubble_volume / (phi * rel_dim.x * rel_dim.y);
     if (params.host_constants.dimensionality == 3) {
         t /= rel_dim.z;
@@ -1007,21 +1039,29 @@ void init(const char *inputFileName, Params &params) {
 
     printf("Current phi: %.9g, target phi: %.9g\n",
            bubble_volume / boxVolume(params), phi);
+}
 
+void performSecondNeighborSearch(Params &params,
+                                 const nlohmann::json &input_json) {
     printf("Neighbor search after scaling\n");
     searchNeighbors(params);
     // After searchNeighbors r is correct,
     // but rp is trash. pairwiseInteraction always uses
     // predicted values, so copy r to rp
-    bytes = params.bubbles.stride * sizeof(double);
+    size_t bytes = params.bubbles.stride * sizeof(double);
     CUDA_CALL(cudaMemcpyAsync(static_cast<void *>(params.bubbles.rp),
                               static_cast<void *>(params.bubbles.r), bytes,
                               cudaMemcpyDefault, 0));
 
     printf("Stabilizing a few rounds after scaling\n");
-    for (uint32_t i = 0; i < 5; ++i)
+    const int32_t stabilization_steps = input_json["stabilization"]["steps"];
+    for (uint32_t i = 0; i < 5; ++i) {
         stabilize(params, stabilization_steps);
+    }
+}
 
+void performFinalStabilization(Params &params,
+                               const nlohmann::json &input_json) {
     printf("\n=============\nStabilization\n=============\n");
     params.host_data.num_neighbors_searched = 0;
     int32_t num_steps = 0;
@@ -1031,6 +1071,8 @@ void init(const char *inputFileName, Params &params) {
            "#searches");
     const double &e1 = params.host_data.energy1;
     const double &e2 = params.host_data.energy2;
+    const int32_t stabilization_steps = input_json["stabilization"]["steps"];
+
     while (true) {
         params.host_data.time_integer = 0;
         params.host_data.time_fraction = 0.0;
@@ -1112,7 +1154,7 @@ void init(const char *inputFileName, Params &params) {
 
     // Reset wrap counts to 0
     // Avoiding batched memset, because the pointers might not be in order
-    bytes = sizeof(int32_t) * params.bubbles.stride;
+    size_t bytes = sizeof(int32_t) * params.bubbles.stride;
     CUDA_CALL(cudaMemset(params.bubbles.wrap_count_x, 0, bytes));
     CUDA_CALL(cudaMemset(params.bubbles.wrap_count_y, 0, bytes));
     CUDA_CALL(cudaMemset(params.bubbles.wrap_count_z, 0, bytes));
@@ -1126,6 +1168,26 @@ void init(const char *inputFileName, Params &params) {
     params.host_data.time_fraction = 0.0;
     params.host_data.times_printed = 1;
     params.host_data.num_integration_steps = 0;
+}
+
+void init(const char *inputFileName, Params &params) {
+    printf("==============\nInitialization\n==============\n");
+    const auto input_json = parse(inputFileName);
+
+    initializeHostConstants(params, input_json);
+    initializeHostData(params, input_json);
+    computeSizeOfBox(params, input_json);
+    computeBubbleDataSize(params);
+    printStartingParameters(params);
+    allocateCopyConstansToGPU(params);
+    reserveDeviceMemore(params);
+    generateStartingData(params, input_json);
+    performFirstNeigborSearch(params);
+    performInitialVelocityComputation(params);
+    stabilizeAfterCreate(params, input_json);
+    scaleAfterStabilize(params, input_json);
+    performSecondNeighborSearch(params, input_json);
+    performFinalStabilization(params, input_json);
 }
 
 void simulate(std::string &&inputFileName) {
