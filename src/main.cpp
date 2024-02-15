@@ -1,6 +1,6 @@
 /*
     Cubble
-    Copyright (C) 2019  Juhana Lankinen
+    Copyright (C) 2024  Juhana Lankinen
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 #include "config.h"
 #include "parsing.h"
-#include "util.h"
+#include "simulation.h"
 #include <cstdint>
 #include <cstdlib>
 
@@ -26,25 +26,19 @@ namespace cubble {
 int32_t run(int32_t argc, char **argv);
 }
 
-int32_t main(int32_t argc, char **argv) {
-    // TEMP
-    /*
-    {
-        auto [config, msg, ok, _] = cubble::parse(argc, argv);
-        if (ok) {
-            cubble::print(config);
-            // TODO
-            // Make a more device agnostic device availability check?
-            // Generate structures from the input config
-            // Start simulation
+int32_t newPath(int32_t argc, char **argv) {
+    auto [config, msg, ok, _] = cubble::parse(argc, argv);
+    if (ok) {
+        cubble::Simulation simulation(std::move(config));
+        simulation.run();
 
-            return EXIT_SUCCESS;
-        } else {
-            printf("Input parsing failed: %s\n", msg.c_str());
-            return EXIT_FAILURE;
-        }
+        return EXIT_SUCCESS;
+    } else {
+        printf("Input parsing failed: %s\n", msg.c_str());
+        return EXIT_FAILURE;
     }
-    */
-
-    return cubble::run(argc, argv);
 }
+
+int32_t oldPath(int32_t argc, char **argv) { return cubble::run(argc, argv); }
+
+int32_t main(int32_t argc, char **argv) { oldPath(argc, argv); }
