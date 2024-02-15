@@ -519,7 +519,47 @@ void saveSnapshot(Params &params) {
                     params.previous_y.data(), params.previous_z.data());
 }
 
-void end(Params &params) {
+void checkSnapshot(Params &params) {
+    if (params.host_data.snapshot_frequency > 0.0) {
+        const double next_snapshot_time =
+            params.host_data.num_snapshots /
+            (params.host_data.snapshot_frequency *
+             params.host_data.time_scaling_factor);
+        const uint64_t next_snapshot_time_integer =
+            (uint64_t)next_snapshot_time;
+        const double next_snapshot_time_fraction =
+            next_snapshot_time - next_snapshot_time_integer;
+
+        const bool is_snapshot_time =
+            params.host_data.time_integer > next_snapshot_time_integer ||
+            (params.host_data.time_integer == next_snapshot_time_integer &&
+             params.host_data.time_fraction >= next_snapshot_time_fraction);
+
+        if (is_snapshot_time) {
+            saveSnapshot(params);
+        }
+    }
+}
+
+void end(Params &params, double min_interval) {
+    if (params.bubbles.count <= params.host_data.min_num_bubbles) {
+        printf("Stopping simulation, since the number of bubbles left in the "
+               "simulation (%d) is less than or equal to the specified minimum "
+               "(%d)\n",
+               params.bubbles.count, params.host_data.min_num_bubbles);
+    } else if (params.host_data.max_bubble_radius > min_interval) {
+        dvec temp = params.host_constants.interval;
+        printf("Stopping simulation, since the radius of the largest bubble "
+               "(%g) is greater than the simulation box (%g, %g, %g)\n",
+               params.host_data.max_bubble_radius, temp.x, temp.y, temp.z);
+    } else {
+        printf("Stopping simulation for an unknown reason...\n");
+    }
+
+    if (params.host_data.snapshot_frequency > 0.0) {
+        saveSnapshot(params);
+    }
+
     printf("Cleaning up...\n");
     if (params.io_thread.joinable()) {
         params.io_thread.join();
@@ -530,6 +570,11 @@ void end(Params &params) {
     CUDA_CALL(cudaFree(static_cast<void *>(params.device_constants)));
     CUDA_CALL(cudaFree(params.memory));
     CUDA_CALL(cudaFreeHost(static_cast<void *>(params.pinned_memory)));
+}
+
+bool checkEndConditions(Params &params, double min_interval) {
+    return params.bubbles.count > params.host_data.min_num_bubbles &&
+           params.host_data.max_bubble_radius < min_interval;
 }
 
 void printRelevantInfoOfCurrentDevice() {
@@ -561,6 +606,115 @@ void printRelevantInfoOfCurrentDevice() {
            "\n'Device Management' section of the CUDA Runtime API docs."
            "\n---------------------------------------------------------\n",
            __FILE__, __LINE__);
+}
+
+void printProgress(Params &params, double &min_timestep, double &max_timestep,
+                   double &avg_timestep, bool &reset_errors, bool first) {
+    if (first) {
+        printf("\n===========\nIntegration\n===========\n");
+        printf("%-5s ", "T");
+        printf("%-8s ", "phi");
+        printf("%-6s ", "R");
+        printf("%-11s ", "dE");
+        printf("%9s ", "#b   ");
+        printf("%10s ", "#pairs");
+        printf("%-6s ", "#steps");
+        printf("%-9s ", "#searches");
+        printf("%-11s ", "min ts");
+        printf("%-11s ", "max ts");
+        printf("%-11s \n", "avg ts");
+
+    } else {
+        const double &e1 = params.host_data.energy1;
+        const double &e2 = params.host_data.energy2;
+
+        const double next_print_time = params.host_data.times_printed /
+                                       params.host_data.time_scaling_factor;
+        const uint64_t next_print_time_integer = (uint64_t)next_print_time;
+        const double next_print_time_fraction =
+            next_print_time - next_print_time_integer;
+        const bool print =
+            params.host_data.time_integer > next_print_time_integer ||
+            (params.host_data.time_integer == next_print_time_integer &&
+             params.host_data.time_fraction >= next_print_time_fraction);
+        if (print) {
+            // Define lambda for calculating averages of some values
+            auto get_avg = [&params](double *p, Bubbles &bubbles) -> double {
+                void *cub_ptr = static_cast<void *>(params.temp_pair2);
+                void *cub_output = nullptr;
+                double total = 0.0;
+                CUDA_CALL(cudaGetSymbolAddress(&cub_output, d_max_radius));
+                CUB_LAUNCH(&cub::DeviceReduce::Sum, cub_ptr,
+                           params.pairs.getMemReq() / 2, p,
+                           static_cast<double *>(cub_output),
+                           params.bubbles.count, (cudaStream_t)0, false);
+                CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
+                                               d_max_radius, sizeof(double)));
+
+                return total / bubbles.count;
+            };
+
+            params.host_data.energy2 = totalEnergy(params);
+
+            double de = std::abs(e2 - e1);
+            if (de > 0.0) {
+                de *= 2.0 / (e2 + e1);
+            }
+            const double rel_rad = get_avg(params.bubbles.r, params.bubbles) /
+                                   params.host_data.avg_rad;
+
+            // Add values to data stream
+            std::ofstream result_file("results.dat", std::ios_base::app);
+            if (result_file.is_open()) {
+                const double vx = get_avg(params.bubbles.dxdt, params.bubbles);
+                const double vy = get_avg(params.bubbles.dydt, params.bubbles);
+                const double vz = get_avg(params.bubbles.dzdt, params.bubbles);
+                const double vr = get_avg(params.bubbles.drdt, params.bubbles);
+
+                result_file << params.host_data.times_printed << " " << rel_rad
+                            << " " << params.bubbles.count << " "
+                            << get_avg(params.bubbles.path, params.bubbles)
+                            << " " << params.host_data.energy2 << " " << de
+                            << " " << vx << " " << vy << " " << vz << " "
+                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
+                            << "\n";
+            } else {
+                printf("Couldn't open file stream to append results to!\n");
+            }
+
+            const double phi = totalVolume(params) / boxVolume(params);
+
+            printf("%-5d ", params.host_data.times_printed);
+            printf("%-#8.6g ", phi);
+            printf("%-#6.4g ", rel_rad);
+            printf("%-9.5e ", de);
+            printf("%9d ", params.bubbles.count);
+            printf("%10d ", params.pairs.count);
+            printf("%6ld ", params.host_data.num_steps_in_time_step);
+            printf("%-9ld ", params.host_data.num_neighbors_searched);
+            printf("%-9.5e ", min_timestep);
+            printf("%-9.5e ", max_timestep);
+            printf("%-9.5e \n",
+                   avg_timestep / params.host_data.num_steps_in_time_step);
+
+            ++params.host_data.times_printed;
+            params.host_data.num_steps_in_time_step = 0;
+            params.host_data.energy1 = params.host_data.energy2;
+            params.host_data.num_neighbors_searched = 0;
+
+            min_timestep = 9999999.9;
+            max_timestep = -1.0;
+            avg_timestep = 0.0;
+            reset_errors = true;
+        }
+    }
+}
+
+void trackTimeStep(double &ts, double &min_timestep, double &max_timestep,
+                   double &avg_timestep) {
+    min_timestep = ts < min_timestep ? ts : min_timestep;
+    max_timestep = ts > max_timestep ? ts : max_timestep;
+    avg_timestep += ts;
 }
 
 void init(const char *inputFileName, Params &params) {
@@ -982,25 +1136,16 @@ void simulate(std::string &&inputFileName) {
         saveSnapshot(params);
     }
 
-    printf("\n===========\nIntegration\n===========\n");
-    printf("%-5s ", "T");
-    printf("%-8s ", "phi");
-    printf("%-6s ", "R");
-    printf("%-11s ", "dE");
-    printf("%9s ", "#b   ");
-    printf("%10s ", "#pairs");
-    printf("%-6s ", "#steps");
-    printf("%-9s ", "#searches");
-    printf("%-11s ", "min ts");
-    printf("%-11s ", "max ts");
-    printf("%-11s \n", "avg ts");
-
     bool continue_simulation = true;
     double min_timestep = 9999999.9;
     double max_timestep = -1.0;
     double avg_timestep = 0.0;
     bool reset_errors = false;
     double &ts = params.host_data.time_step;
+
+    printProgress(params, min_timestep, max_timestep, avg_timestep,
+                  reset_errors, true);
+
     const double min_interval =
         3 == params.host_constants.dimensionality
             ? 0.5 * minComponent(params.host_constants.interval)
@@ -1021,130 +1166,14 @@ void simulate(std::string &&inputFileName) {
     ip.max_error = 0.0;
     ip.h_num_to_be_deleted = static_cast<int32_t *>(params.pinned_memory);
 
-    const double &e1 = params.host_data.energy1;
-    const double &e2 = params.host_data.energy2;
-
     while (continue_simulation) {
         CUBBLE_PROFILE(false);
-
         integrate(params, ip);
-
-        // Continue if there are more than the specified minimum number of
-        // bubbles left in the simulation and if the largest bubble is smaller
-        // than the simulation box in every dimension
-        continue_simulation =
-            params.bubbles.count > params.host_data.min_num_bubbles &&
-            params.host_data.max_bubble_radius < min_interval;
-
-        // Track timestep
-        min_timestep = ts < min_timestep ? ts : min_timestep;
-        max_timestep = ts > max_timestep ? ts : max_timestep;
-        avg_timestep += ts;
-
-        // Here we compare potentially very large integers (> 10e6) to each
-        // other and small doubles (<= 1.0) to each other to preserve precision.
-        const double next_print_time = params.host_data.times_printed /
-                                       params.host_data.time_scaling_factor;
-        const uint64_t next_print_time_integer = (uint64_t)next_print_time;
-        const double next_print_time_fraction =
-            next_print_time - next_print_time_integer;
-
-        // Print stuff to stdout at the earliest possible moment
-        // when simulation time is larger than scaled time
-        const bool print =
-            params.host_data.time_integer > next_print_time_integer ||
-            (params.host_data.time_integer == next_print_time_integer &&
-             params.host_data.time_fraction >= next_print_time_fraction);
-        if (print) {
-            // Define lambda for calculating averages of some values
-            auto get_avg = [&params](double *p, Bubbles &bubbles) -> double {
-                void *cub_ptr = static_cast<void *>(params.temp_pair2);
-                void *cub_output = nullptr;
-                double total = 0.0;
-                CUDA_CALL(cudaGetSymbolAddress(&cub_output, d_max_radius));
-                CUB_LAUNCH(&cub::DeviceReduce::Sum, cub_ptr,
-                           params.pairs.getMemReq() / 2, p,
-                           static_cast<double *>(cub_output),
-                           params.bubbles.count, (cudaStream_t)0, false);
-                CUDA_CALL(cudaMemcpyFromSymbol(static_cast<void *>(&total),
-                                               d_max_radius, sizeof(double)));
-
-                return total / bubbles.count;
-            };
-
-            params.host_data.energy2 = totalEnergy(params);
-
-            double de = std::abs(e2 - e1);
-            if (de > 0.0) {
-                de *= 2.0 / (e2 + e1);
-            }
-            const double rel_rad = get_avg(params.bubbles.r, params.bubbles) /
-                                   params.host_data.avg_rad;
-
-            // Add values to data stream
-            std::ofstream result_file("results.dat", std::ios_base::app);
-            if (result_file.is_open()) {
-                const double vx = get_avg(params.bubbles.dxdt, params.bubbles);
-                const double vy = get_avg(params.bubbles.dydt, params.bubbles);
-                const double vz = get_avg(params.bubbles.dzdt, params.bubbles);
-                const double vr = get_avg(params.bubbles.drdt, params.bubbles);
-
-                result_file << params.host_data.times_printed << " " << rel_rad
-                            << " " << params.bubbles.count << " "
-                            << get_avg(params.bubbles.path, params.bubbles)
-                            << " " << params.host_data.energy2 << " " << de
-                            << " " << vx << " " << vy << " " << vz << " "
-                            << sqrt(vx * vx + vy * vy + vz * vz) << " " << vr
-                            << "\n";
-            } else {
-                printf("Couldn't open file stream to append results to!\n");
-            }
-
-            const double phi = totalVolume(params) / boxVolume(params);
-
-            printf("%-5d ", params.host_data.times_printed);
-            printf("%-#8.6g ", phi);
-            printf("%-#6.4g ", rel_rad);
-            printf("%-9.5e ", de);
-            printf("%9d ", params.bubbles.count);
-            printf("%10d ", params.pairs.count);
-            printf("%6ld ", params.host_data.num_steps_in_time_step);
-            printf("%-9ld ", params.host_data.num_neighbors_searched);
-            printf("%-9.5e ", min_timestep);
-            printf("%-9.5e ", max_timestep);
-            printf("%-9.5e \n",
-                   avg_timestep / params.host_data.num_steps_in_time_step);
-
-            ++params.host_data.times_printed;
-            params.host_data.num_steps_in_time_step = 0;
-            params.host_data.energy1 = params.host_data.energy2;
-            params.host_data.num_neighbors_searched = 0;
-            min_timestep = 9999999.9;
-            max_timestep = -1.0;
-            avg_timestep = 0.0;
-            reset_errors = true;
-        }
-
-        // Save snapshot
-        if (params.host_data.snapshot_frequency > 0.0) {
-            const double next_snapshot_time =
-                params.host_data.num_snapshots /
-                (params.host_data.snapshot_frequency *
-                 params.host_data.time_scaling_factor);
-            const uint64_t next_snapshot_time_integer =
-                (uint64_t)next_snapshot_time;
-            const double next_snapshot_time_fraction =
-                next_snapshot_time - next_snapshot_time_integer;
-
-            const bool is_snapshot_time =
-                params.host_data.time_integer > next_snapshot_time_integer ||
-                (params.host_data.time_integer == next_snapshot_time_integer &&
-                 params.host_data.time_fraction >= next_snapshot_time_fraction);
-
-            if (is_snapshot_time) {
-                saveSnapshot(params);
-            }
-        }
+        continue_simulation = checkEndConditions(params, min_interval);
+        trackTimeStep(ts, min_timestep, max_timestep, avg_timestep);
+        printProgress(params, min_timestep, max_timestep, avg_timestep,
+                      reset_errors, false);
+        checkSnapshot(params);
 
         if (reset_errors) {
             KERNEL_LAUNCH(resetArrays, params, 0, 0, 0.0, params.bubbles.count,
@@ -1155,25 +1184,7 @@ void simulate(std::string &&inputFileName) {
         ++params.host_data.num_steps_in_time_step;
     }
 
-    if (params.bubbles.count <= params.host_data.min_num_bubbles) {
-        printf("Stopping simulation, since the number of bubbles left in the "
-               "simulation (%d) is less than or equal to the specified minimum "
-               "(%d)\n",
-               params.bubbles.count, params.host_data.min_num_bubbles);
-    } else if (params.host_data.max_bubble_radius > min_interval) {
-        dvec temp = params.host_constants.interval;
-        printf("Stopping simulation, since the radius of the largest bubble "
-               "(%g) is greater than the simulation box (%g, %g, %g)\n",
-               params.host_data.max_bubble_radius, temp.x, temp.y, temp.z);
-    } else {
-        printf("Stopping simulation for an unknown reason...\n");
-    }
-
-    if (params.host_data.snapshot_frequency > 0.0) {
-        saveSnapshot(params);
-    }
-
-    end(params);
+    end(params, min_interval);
     printf("Done\n");
 }
 } // namespace
