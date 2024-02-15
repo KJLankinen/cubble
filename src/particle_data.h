@@ -54,4 +54,5 @@ struct ParticleData {
                                                   Coordinate coord);
 };
 
+void to_json(nlohmann::json &, const ParticleData &);
 } // namespace cubble

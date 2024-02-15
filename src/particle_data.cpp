@@ -108,5 +108,13 @@ std::vector<double> ParticleData::generateCoordinate(const ParticleBox &box,
 
     return data;
     }
-}
 
+    void to_json(nlohmann::json &j, const ParticleData &from) {
+        j = nlohmann::json{
+            {"x", from.x},
+            {"y", from.y},
+            {"z", from.z},
+            {"r", from.r},
+        };
+    }
+    } // namespace cubble
