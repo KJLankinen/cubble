@@ -1,6 +1,7 @@
 CompileFlags:
   Add: ['-I/home/jlankine/Code/cubble/include',
-    '--cuda-gpu-arch=sm_70']
+    '--cuda-gpu-arch=sm_70',
+  '--std=c++20']
   Remove: ['--generate-code=arch=compute_70,code=[compute_70,sm_70]',
     '--generate-code=arch=compute_72,code=[compute_72,sm_72]',
     '-forward-unknown-to-host-compiler']
