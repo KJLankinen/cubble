@@ -21,7 +21,6 @@
 #include "kernels.cuh"
 #include "macros.h"
 #include "particle_box.h"
-#include "particles.h"
 #include "util.cuh"
 #include "vec.h"
 
@@ -634,8 +633,6 @@ void init(const char *inputFileName, Params &params) {
         (params.host_constants.dimensionality == 3) ? 12 : 4;
     params.pairs.stride = avg_num_neighbors * params.bubbles.stride;
 
-    // TODO: create particles, scale box, create constants, only then stabilize
-
     printf("---------------Starting parameters---------------\n");
     params.host_constants.print();
     params.host_data.print();
@@ -701,24 +698,44 @@ void init(const char *inputFileName, Params &params) {
            kilos, bytes);
 
     printf("Generating starting data\n");
-    const ParticleData particle_data(
-        particle_box, bubbles["radius"]["mean"], bubbles["radius"]["std"],
-        params.host_constants.min_rad, input_json["rngSeed"]["value"]);
+    curandGenerator_t generator;
+    CURAND_CALL(curandCreateGenerator(&generator, CURAND_RNG_PSEUDO_MTGP32));
+    CURAND_CALL(curandSetPseudoRandomGeneratorSeed(
+        generator, input_json["rngSeed"]["value"]));
+    if (params.host_constants.dimensionality == 3)
+        CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.z,
+                                                params.bubbles.count));
+    CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.x,
+                                            params.bubbles.count));
+    CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.y,
+                                            params.bubbles.count));
+    CURAND_CALL(curandGenerateUniformDouble(generator, params.bubbles.rp,
+                                            params.bubbles.count));
+    CURAND_CALL(curandGenerateNormalDouble(
+        generator, params.bubbles.r, params.bubbles.count,
+        params.host_data.avg_rad, bubbles["radius"]["std"]));
+    CURAND_CALL(curandDestroyGenerator(generator));
 
-    auto copy_data_to_gpu = [](void *dst, const std::vector<double> &v) {
-        CUDA_CALL(cudaMemcpyAsync(dst, static_cast<const void *>(v.data()),
-                                  v.size() * sizeof(decltype(v[0])),
-                                  cudaMemcpyDefault, 0));
-    };
+    KERNEL_LAUNCH(assignDataToBubbles, params, 0, 0,
+                  particle_box.particles_per_dimension,
+                  params.host_data.avg_rad, params.bubbles);
 
-    copy_data_to_gpu(params.bubbles.x, particle_data.x);
-    copy_data_to_gpu(params.bubbles.y, particle_data.y);
-    copy_data_to_gpu(params.bubbles.z, particle_data.z);
-    copy_data_to_gpu(params.bubbles.r, particle_data.r);
+    // Get the average input surface area and maximum bubble radius
+    void *cub_ptr = static_cast<void *>(params.temp_pair2);
+    void *cub_output = nullptr;
+    void *out =
+        static_cast<void *>(&params.host_constants.average_surface_area_in);
+    CUDA_CALL(cudaGetSymbolAddress(&cub_output, d_max_radius));
+    CUB_LAUNCH(&cub::DeviceReduce::Sum, cub_ptr, params.pairs.getMemReq() / 2,
+               params.bubbles.rp, static_cast<double *>(cub_output),
+               params.bubbles.count, (cudaStream_t)0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(out, d_max_radius, sizeof(double)));
 
-    params.host_constants.average_surface_area_in =
-        particle_data.average_input_area;
-    params.host_data.max_bubble_radius = particle_data.max_radius;
+    out = static_cast<void *>(&params.host_data.max_bubble_radius);
+    CUB_LAUNCH(&cub::DeviceReduce::Max, cub_ptr, params.pairs.getMemReq() / 2,
+               params.bubbles.r, static_cast<double *>(cub_output),
+               params.bubbles.count, (cudaStream_t)0, false);
+    CUDA_CALL(cudaMemcpyFromSymbol(out, d_max_radius, sizeof(double)));
 
     printf("First neighbor search\n");
     searchNeighbors(params);
