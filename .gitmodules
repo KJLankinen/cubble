@@ -1,0 +1,3 @@
+[submodule "include/aosoa"]
+	path = include/aosoa
+	url = https://github.com/KJLankinen/aosoa
