@@ -29,8 +29,15 @@ Simulation::Simulation(Config &&config)
                                  config.input_parameters.bubble.radius_mean,
                                  config.input_parameters.bubble.radius_std,
                                  config.input_parameters.rng_seed)) {
+    // ParticleData is used to initialize the positions of the particles
+    const cubble::ParticleData p_data(
+        p_box, constants.rtf, constants.lbb,
+        config.input_parameters.bubble.radius_mean,
+        config.input_parameters.bubble.radius_std,
+        config.input_parameters.rng_seed);
+
     cubble::print(config);
-    // const cubble::ParticleData p_data(p_box, constants.rtf, constants.lbb);
+    cubble::print(constants);
 }
 
 void Simulation::run() {
