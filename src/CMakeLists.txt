@@ -17,11 +17,14 @@ target_sources(
     ${objs}
     PRIVATE
     config.cpp
+    constants.cpp
     device_globals.cu
     free_functions.cu
+    input_parameters.cpp
     kernels.cu
     parsing.cpp
-    input_parameters.cpp
+    particle_box.cpp
+    particle_data.cpp
     simulator.cu
     )
 
