@@ -176,13 +176,6 @@ template <typename T> struct vec {
         t.z %= s;
     }
 
-    // = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-    HOST DEVICE void operator=(vec<T> copy) {
-        x = copy.x;
-        y = copy.y;
-        z = copy.z;
-    }
-
     // << << << << << << << << << << << << << << << << << << << << << <<
     friend std::ostream &operator<<(std::ostream &os, const vec<T> &v) {
         os << v.x << ", " << v.y << ", " << v.z;
