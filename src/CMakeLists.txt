@@ -25,6 +25,7 @@ target_sources(
     parsing.cpp
     particle_box.cpp
     particle_data.cpp
+    simulation.cpp
     simulator.cu
     )
 
