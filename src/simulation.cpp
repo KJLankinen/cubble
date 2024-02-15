@@ -38,6 +38,12 @@ Simulation::Simulation(Config &&config)
 
     cubble::print(config);
     cubble::print(constants);
+    cubble::print(p_data);
+
+    // Move data to GPU structures
+    // Do neighbor search
+    // Stabilize
+    // Then ready to run
 }
 
 void Simulation::run() {
