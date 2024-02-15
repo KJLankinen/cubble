@@ -18,66 +18,29 @@
 
 #pragma once
 
-#include "input_parameters.h"
 #include "vec.h"
-#include <cmath>
 #include <cstdint>
 
 namespace cubble {
-    struct ParticleBox {
-        const dvec shape;
-        const uvec particles_per_dimension;
-        const uint32_t num_requested;
-        const uint32_t num_particles;
-        const uint32_t dimensionality;
 
-        // Old way
-        ParticleBox(const dvec &shape, uint32_t num_requested,
-                    uint32_t dimensionality)
-            : shape(shape),
-              particles_per_dimension(computeParticlesPerDimension(
-                  shape, num_requested, dimensionality)),
-              num_requested(num_requested),
-              num_particles(
-                  particles_per_dimension.x * particles_per_dimension.y *
-                  (particles_per_dimension.z > 0 ? particles_per_dimension.z
-                                                 : 1)),
-              dimensionality(dimensionality) {}
+struct InputParameters;
 
-        // New way
-        ParticleBox(const InputParameters &ip)
-            : shape(ip.box.relative_dimensions),
-              particles_per_dimension(computeParticlesPerDimension(
-                  shape, ip.bubble.num_start, ip.box.dimensionality)),
-              num_requested(ip.bubble.num_start),
-              num_particles(
-                  particles_per_dimension.x * particles_per_dimension.y *
-                  (particles_per_dimension.z > 0 ? particles_per_dimension.z
-                                                 : 1)),
-              dimensionality(ip.box.dimensionality) {}
+struct ParticleBox {
+    const dvec shape;
+    const uvec particles_per_dimension;
+    const uint32_t num_requested;
+    const uint32_t num_particles;
+    const uint32_t dimensionality;
 
-      private:
-        static uvec computeParticlesPerDimension(const dvec &shape,
-                                                 uint32_t num_requested,
-                                                 uint32_t dimensionality) {
-            uvec particles_per_dim;
-            if (dimensionality == 3) {
-                const double n = std::cbrt(num_requested);
-                const double a = std::cbrt(shape.x / shape.y);
-                const double b = std::cbrt(shape.x / shape.z);
-                const double c = std::cbrt(shape.y / shape.z);
-                particles_per_dim.x = (uint32_t)std::ceil(n * a * b);
-                particles_per_dim.y = (uint32_t)std::ceil(n * c / a);
-                particles_per_dim.z = (uint32_t)std::ceil(n / (b * c));
-            } else {
-                const double n = std::sqrt(num_requested);
-                const double a = std::sqrt(shape.x / shape.y);
-                particles_per_dim.x = (uint32_t)std::ceil(n * a);
-                particles_per_dim.y = (uint32_t)std::ceil(n / a);
-                particles_per_dim.z = 0U;
-            }
+    // Old way
+    ParticleBox(const dvec &shape, uint32_t num_requested,
+                uint32_t dimensionality);
+    // New way
+    ParticleBox(const InputParameters &ip);
 
-            return particles_per_dim;
-        }
+  private:
+    static uvec computeParticlesPerDimension(const dvec &shape,
+                                             uint32_t num_requested,
+                                             uint32_t dimensionality);
     };
 }
