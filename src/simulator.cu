@@ -78,6 +78,7 @@ void searchNeighbors(Params &params) {
     cell_dim.z = cell_dim.z > 0 ? cell_dim.z : 1;
     const int32_t num_cells = cell_dim.x * cell_dim.y * cell_dim.z;
 
+    // TODO use dedicated temporary memory
     // Note that these pointers alias memory, that is used by this function.
     // Don't fiddle with these, unless you know what you're doing.
     int32_t *cell_offsets = params.pairs.i;
@@ -189,6 +190,8 @@ void removeBubbles(Params &params, int32_t numToBeDeleted) {
     KERNEL_LAUNCH(addVolumeFixPairs, params, 0, 0, params.bubbles, params.pairs,
                   params.temp_i);
 
+    // The number of bubbles decreases, how to reflect this on the Soa
+    // structure?
     params.bubbles.count -= numToBeDeleted;
     nvtxRangePop();
 }
